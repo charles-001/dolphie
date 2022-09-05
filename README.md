@@ -6,7 +6,7 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 
 ## Requirements
 1. Python 3.6+
-2. pip3 install rich pymysql charset_normalizer myloginpath
+2. Packages: rich, pymysql, charset_normalizer, myloginpath
 3. Unix systems (Windows may work, haven't tested)
 
 ## Supported MySQL versions
