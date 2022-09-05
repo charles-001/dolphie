@@ -1,6 +1,6 @@
 # Dolphie
 <p align="center">
-<img src="https://user-images.githubusercontent.com/13244625/187600748-19d2ad15-42e8-4f9c-ada5-a153cdcf4070.png" width="150"><br>
+<img src="https://user-images.githubusercontent.com/13244625/187600748-19d2ad15-42e8-4f9c-ada5-a153cdcf4070.png" width="120"><br>
 An intuitive feature-rich top tool for monitoring MySQL in real time
 </p>
 
