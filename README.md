@@ -37,6 +37,7 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
   - `SHOW SLAVE STATUS`
 - Supports encrypted login credentials via `mysql_config_editor`
 - Automatic conversion of large numbers & bytes to human-readable
+- Notifies when new version is available
 - Many commands at your fingertips (see Help screenshot)
 - Many valuable statisitics across the available panels that can help you troubleshoot issues and be proactive against them
 

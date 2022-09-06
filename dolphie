@@ -1,0 +1,3322 @@
+#!/usr/bin/env python3
+
+# ****************************
+# *        Dolphie           *
+# * Author: Charles Thompson *
+# ****************************
+import atexit
+import ipaddress
+import os
+import re
+import sys
+import myloginpath
+import termios
+import string
+import pymysql
+import socket
+
+from argparse import ArgumentParser, RawTextHelpFormatter
+from charset_normalizer import detect
+from configparser import ConfigParser
+from datetime import datetime, timedelta
+from decimal import Decimal
+from os import system
+from packaging.version import parse as parse_version
+from select import select
+from time import sleep
+from rich import box
+from rich.align import Align
+from rich.console import Console, Group
+from rich.layout import Layout
+from rich.live import Live
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.style import Style
+from rich.syntax import Syntax
+from rich.table import Table
+from rich.text import Text
+from urllib.request import urlopen
+
+# //////////////////////////////////
+# //       Default Settings       //
+# //////////////////////////////////
+current_version = "1.0.0"
+
+base_title = "[b steel_blue1]dolphie :dolphin: v%s[/b steel_blue1]" % current_version
+title = "%s[grey62] press ? for help" % base_title
+
+config = {
+    "user": "",
+    "password": "",
+    "host": "",
+    "port": 3306,
+    "socket": "",
+    "ssl": {},
+    "config_file": "",
+    "refresh_interval": 1,
+    "dashboard": True,
+    "use_processlist": False,
+    "show_idle_queries": False,
+    "show_trxs_only": False,
+    "show_additional_query_columns": False,
+    "show_last_executed_query": False,
+    "sort_by_time_descending": True,
+    "heartbeat_table": None,
+    "user_filter": "",
+    "db_filter": "",
+    "host_filter": "",
+    "time_filter": 0,
+    "query_filter": "",
+}
+
+# MySQL queries used
+dolphie_queries = {
+    "pl_query": """
+        /* dolphie */ SELECT
+            id,
+            IFNULL(User, "")                    AS user,
+            IFNULL(Host, "")                    AS host,
+            IFNULL(db, "")                      AS db,
+            IFNULL(Command, "")                 As command,
+            IFNULL(Time, "0")                   AS time,
+            IFNULL(Info, "")                    AS query,
+            IFNULL(State, "")                   AS state,
+            IFNULL(trx_query, "")               AS trx_query,
+            IFNULL(trx_state, "")               AS trx_state,
+            IFNULL(trx_operation_state, "")     AS trx_operation_state,
+            IFNULL(trx_rows_locked, "0")        AS trx_rows_locked,
+            IFNULL(trx_rows_modified, "0")      AS trx_rows_modified,
+            IFNULL(trx_concurrency_tickets, "") AS trx_concurrency_tickets
+        FROM
+            information_schema.PROCESSLIST pl
+            LEFT JOIN information_schema.innodb_trx ON trx_mysql_thread_id = pl.Id
+        WHERE 1 $placeholder
+    """,
+    "ps_query": """
+        /* dolphie */ SELECT
+            processlist_id                      AS id,
+            IFNULL(processlist_user, "")        AS user,
+            IFNULL(processlist_host, "")        AS host,
+            IFNULL(processlist_db, "")          AS db,
+            IFNULL(processlist_command, "")     As command,
+            IFNULL(processlist_time, "0")       AS time,
+            IFNULL(processlist_info, "")        AS query,
+            IFNULL(processlist_state, "")       AS state,
+            IFNULL(trx_query, "")               AS trx_query,
+            IFNULL(trx_state, "")               AS trx_state,
+            IFNULL(trx_operation_state, "")     AS trx_operation_state,
+            IFNULL(trx_rows_locked, "0")        AS trx_rows_locked,
+            IFNULL(trx_rows_modified, "0")      AS trx_rows_modified,
+            IFNULL(trx_concurrency_tickets, "") AS trx_concurrency_tickets
+        FROM
+            performance_schema.threads t
+            LEFT JOIN information_schema.innodb_trx tx ON trx_mysql_thread_id = t.processlist_id
+        WHERE
+            processlist_id IS NOT NULL AND
+            processlist_time IS NOT NULL AND
+            processlist_command != 'Daemon'
+            $placeholder
+    """,
+    "locks_query-5": """
+        /* dolphie */ SELECT
+            IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
+            IFNULL(r.trx_query, "")                                      AS waiting_query,
+            IFNULL(r.trx_rows_modified, "")                              AS waiting_rows_modified,
+            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_started, NOW()), "")      AS waiting_age,
+            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()), "") AS waiting_wait_secs,
+            IFNULL(b.trx_mysql_thread_id, "")                            AS blocking_thread,
+            IFNULL(b.trx_query, "")                                      AS blocking_query,
+            IFNULL(b.trx_rows_modified, "")                              AS blocking_rows_modified,
+            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_started, NOW()), "")      AS blocking_age,
+            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_wait_started, NOW()), "") AS blocking_wait_secs,
+            IFNULL(lock_mode, "")                                        AS lock_mode,
+            IFNULL(lock_type, "")                                        AS lock_type
+        FROM
+            INFORMATION_SCHEMA.INNODB_LOCK_WAITS w
+            JOIN INFORMATION_SCHEMA.INNODB_TRX b   ON b.trx_id  = w.blocking_trx_id
+            JOIN INFORMATION_SCHEMA.INNODB_TRX r   ON r.trx_id  = w.requesting_trx_id
+            JOIN INFORMATION_SCHEMA.INNODB_LOCKS l ON l.lock_id = w.requested_lock_id
+        ORDER BY
+            TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
+    """,
+    "locks_query-8": """
+        /* dolphie */ SELECT
+            IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
+            IFNULL(r.trx_query, "")                                      AS waiting_query,
+            IFNULL(r.trx_rows_modified, "")                              AS waiting_rows_modified,
+            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_started, NOW()), "")      AS waiting_age,
+            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()), "") AS waiting_wait_secs,
+            IFNULL(b.trx_mysql_thread_id, "")                            AS blocking_thread,
+            IFNULL(b.trx_query, "")                                      AS blocking_query,
+            IFNULL(b.trx_rows_modified, "")                              AS blocking_rows_modified,
+            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_started, NOW()), "")      AS blocking_age,
+            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_wait_started, NOW()), "") AS blocking_wait_secs,
+            IFNULL(lock_mode, "")                                        AS lock_mode,
+            IFNULL(lock_type, "")                                        AS lock_type
+        FROM
+            performance_schema.data_lock_waits w
+            JOIN INFORMATION_SCHEMA.INNODB_TRX b ON b.trx_id         = w.blocking_engine_transaction_id
+            JOIN INFORMATION_SCHEMA.INNODB_TRX r ON r.trx_id         = w.requesting_engine_transaction_id
+            JOIN performance_schema.data_locks l ON l.engine_lock_id = w.requesting_engine_lock_id
+        ORDER BY
+            TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
+    """,
+    "ps_replica_lag": """
+        /* dolphie */ SELECT
+            IFNULL(TIMESTAMPDIFF(
+                SECOND,
+                MIN(APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP),
+            NOW()), "0") AS secs_behind
+        FROM
+            performance_schema.replication_applier_status_by_worker
+        WHERE
+            APPLYING_TRANSACTION != ''
+    """,
+    "heartbeat_replica_lag": """
+        /* dolphie */ SELECT
+            TIMESTAMPDIFF(SECOND, MAX(ts), NOW()) AS secs_behind
+        FROM
+            $placeholder
+    """,
+    "ps_find_slaves": """
+        /* dolphie */ SELECT
+            processlist_id   AS id,
+            processlist_user AS user,
+            processlist_host AS host
+        FROM
+            performance_schema.threads
+        WHERE
+            processlist_command LIKE 'Binlog Dump%'
+    """,
+    "pl_find_slaves": """
+        /* dolphie */ SELECT
+            Id   AS id,
+            User AS user,
+            Host AS host
+        FROM
+            information_schema.PROCESSLIST
+        WHERE
+            Command Like 'Binlog Dump%'
+    """,
+    "ps_user_statisitics": """
+        /* dolphie */ SELECT
+            u.user AS user,
+            total_connections,
+            current_connections,
+            sum_rows_affected,
+            sum_rows_sent,
+            sum_rows_examined,
+            sum_created_tmp_disk_tables,
+            sum_created_tmp_tables
+        FROM
+            performance_schema.users u
+            JOIN performance_schema.events_statements_summary_by_user_by_event_name ess ON u.user = ess.user
+        WHERE
+            current_connections != 0
+        ORDER BY
+            current_connections DESC
+    """,
+    "userstat_user_statisitics": """
+        /* dolphie */ SELECT
+            user,
+            total_connections,
+            concurrent_connections,
+            denied_connections,
+            binlog_bytes_written,
+            rows_fetched,
+            rows_updated,
+            table_rows_read,
+            select_commands,
+            update_commands,
+            other_commands,
+            commit_transactions,
+            rollback_transactions,
+            access_denied
+        FROM
+            information_schema.user_statistics
+        WHERE
+            concurrent_connections != 0
+        ORDER BY
+            concurrent_connections DESC
+    """,
+    "status": "/* dolphie */ SHOW GLOBAL STATUS",
+    "variables": "/* dolphie */ SHOW GLOBAL VARIABLES",
+    "master_status": "/* dolphie */ SHOW MASTER STATUS",
+    "slave_status": "/* dolphie */ SHOW SLAVE STATUS",
+    "databases": "/* dolphie */ SHOW DATABASES",
+    "innodb_status": "/* dolphie */ SHOW ENGINE INNODB STATUS",
+}
+
+
+class KBHit:
+    def __init__(self):
+        """
+        Creates a KBHit object that you can call to do various keyboard things.
+        """
+
+        # Save the terminal settings
+        self.fd = sys.stdin.fileno()
+        self.new_term = termios.tcgetattr(self.fd)
+        self.old_term = termios.tcgetattr(self.fd)
+
+        # New terminal setting unbuffered
+        self.new_term[3] = self.new_term[3] & ~termios.ICANON & ~termios.ECHO
+        termios.tcsetattr(self.fd, termios.TCSANOW, self.new_term)
+
+        # Support normal-terminal reset at exit
+        atexit.register(self.set_normal_term)
+
+    def set_new_term(self):
+        """
+        Sets terminal up to catch keys
+        """
+
+        self.new_term[3] = self.new_term[3] & ~termios.ICANON & ~termios.ECHO
+        termios.tcsetattr(self.fd, termios.TCSANOW, self.new_term)
+
+    def set_normal_term(self):
+        """
+        Resets to normal terminal.
+        """
+
+        termios.tcsetattr(self.fd, termios.TCSANOW, self.old_term)
+
+    def getch(self):
+        """
+        Returns a keyboard character after kbhit() has been called.
+        Should not be called in the same program as getarrow().
+        """
+
+        return sys.stdin.read(1)
+
+    def getarrow(self):
+        """
+        Returns an arrow-key code after kbhit() has been called. Codes are
+        0 : up
+        1 : right
+        2 : down
+        3 : left
+        Should not be called in the same program as getch().
+        """
+
+        c = sys.stdin.read(3)[2]
+        vals = [65, 67, 66, 68]
+
+        return vals.index(ord(c.decode("utf-8")))
+
+    def key_press(self):
+        """
+        Returns True if keyboard character was hit, False otherwise.
+        """
+
+        dr, dw, de = select([sys.stdin], [], [], 0)
+        return dr != []
+
+    def key_press_blocking(self):
+        self.set_new_term()
+
+        try:
+            return sys.stdin.read(1)
+        except IOError:
+            return 0
+
+
+def make_layout() -> Layout:
+    layout = Layout(name="root")
+
+    layout.split_column(
+        Layout(name="header", size=1),
+        Layout(name="dashboard", size=13),
+        Layout(name="innodb_io", visible=False),
+        Layout(name="replicas", visible=False),
+        Layout(name="innodb_locks", visible=False),
+        Layout(name="processlist"),
+        Layout(name="footer", size=1, visible=False),
+    )
+
+    return layout
+
+
+def block_refresh_for_key_command(refresh=False, block_only=False):
+    if refresh:
+        layout["footer"].visible = True
+        layout["footer"].update(Align.center("[b]Paused![/b] Press any key to resume", style="steel_blue1"))
+        live.update(layout, refresh=True)
+    else:
+        console.print(Align.center("\n[b]Paused![/b] Press any key to resume", style="steel_blue1"))
+
+    key = kb.key_press_blocking()
+    if key:
+        layout["footer"].update("")
+        layout["footer"].visible = False
+        return
+
+
+def update_footer(output):
+    layout["footer"].visible = True
+
+    layout["footer"].update(output)
+    live.update(layout, refresh=True)
+    sleep(1.5)
+    layout["footer"].update("")
+
+    layout["footer"].visible = False
+
+
+def format_bytes(num):
+    if num == 0:
+        return "0"
+
+    for x in ["b", "K", "M", "G", "T"]:
+        if num < 1024.0:
+            return "%3.2f[steel_blue1]%s" % (num, x)
+        num /= 1024.0
+
+
+def detect_encoding(text):
+    # Since BLOB/BINARY data can be involved, we need to auto-detect what the encoding is
+    # for queries since it can be anything. If I let pymsql use unicode by default I got
+    # consistent crashes due to unicode errors for utf8 so we have to go this route
+    encoding = detect(text)["encoding"]
+
+    # If there isn't an encoding detected, use latin1 by default
+    if encoding is None:
+        encoding = "latin1"
+
+    return encoding
+
+
+def round_num(n, decimal=2):
+    n = Decimal(n)
+    return n.to_integral() if n == n.to_integral() else round(n.normalize(), decimal)
+
+
+# This is from https://pypi.org/project/numerize
+def format_number(n, decimal=2):
+    sufixes = ["", "K", "M", "B", "T", "Qa", "Qu"]
+
+    # Some things we send to this function shouldn't be 0
+    if n is None:
+        return "0"
+    elif n == "":
+        return ""
+
+    # Convert string to a number format if needed
+    if isinstance(n, str):
+        if "." in n:
+            n = float(n)
+        elif n.isnumeric():
+            n = int(n)
+        else:
+            # If it isn't float/int, return back the original string
+            return n
+
+    sci_expr = [1e0, 1e3, 1e6, 1e9, 1e12, 1e15, 1e18]
+    minus_buff = n
+    n = abs(n)
+    for x in range(len(sci_expr)):
+        if n >= sci_expr[x] and n < sci_expr[x + 1]:
+            sufix = sufixes[x]
+            if n >= 1e3:
+                num = str(round_num(n / sci_expr[x], decimal))
+            else:
+                num = str(n)
+            return num + "[steel_blue1]" + sufix if minus_buff > 0 else "-" + num + "[steel_blue1]" + sufix
+
+    return str(0)
+
+
+def get_hostname(ip_address):
+    if ip_address not in hosts_cache:
+        try:
+            # Test to see if it's IP address
+            ipaddress.IPv4Network(ip_address)
+
+            # Lookup IP to associate a hostname
+            hostname = socket.gethostbyaddr(ip_address)[0]
+
+            # Add IP to cache with an associated address
+            hosts_cache[ip_address] = hostname
+        except (ValueError, socket.error):
+            hostname = ip_address
+    else:
+        hostname = hosts_cache[ip_address]
+
+    return hostname
+
+
+def format_replication_data(data, db_cursor, list_replica_sbm=None):
+    formatted_data = {}
+
+    # This is for the replica view
+    if list_replica_sbm is not None:
+        replica_previous_slave_sbm = list_replica_sbm
+    else:
+        replica_previous_slave_sbm = previous_slave_sbm
+
+    if data["Slave_IO_Running"].lower() == "no":
+        formatted_data["io_running"] = "[bright_red]NO[/bright_red]"
+    else:
+        formatted_data["io_running"] = "[bright_green]Yes[/bright_green]"
+
+    if data["Slave_SQL_Running"].lower() == "no":
+        formatted_data["sql_running"] = "[bright_red]NO[/bright_red]"
+    else:
+        formatted_data["sql_running"] = "[bright_green]Yes[/bright_green]"
+
+    formatted_data["sbm_source"] = "Slave"
+    # Use performance schema for seconds behind if server is MySQL 8
+    if full_version.startswith("8") and performance_schema_enabled:
+        db_cursor.execute(dolphie_queries["ps_replica_lag"])
+        replica_lag_data = db_cursor.fetchone()
+
+        formatted_data["sbm_source"] = "PS"
+        if replica_lag_data["secs_behind"]:
+            data["Seconds_Behind_Master"] = int(replica_lag_data["secs_behind"])
+        else:
+            data["Seconds_Behind_Master"] = 0
+    # Use heartbeat table from pt-toolkit if specified
+    elif config["heartbeat_table"]:
+        try:
+            db_cursor.execute(dolphie_queries["heartbeat_replica_lag"])
+            replica_lag_data = db_cursor.fetchone()
+
+            if replica_lag_data["secs_behind"] is not None:
+                formatted_data["sbm_source"] = "HB"
+                data["Seconds_Behind_Master"] = int(replica_lag_data["secs_behind"])
+        except pymysql.Error:
+            pass
+
+    formatted_data["speed"] = 0
+    formatted_data["seconds_behind"] = ""
+    if data["Seconds_Behind_Master"] is not None:
+        slave_sbm = data["Seconds_Behind_Master"]
+
+        if replica_previous_slave_sbm and slave_sbm < replica_previous_slave_sbm:
+            formatted_data["speed"] = round((replica_previous_slave_sbm - slave_sbm) / config["refresh_interval"])
+
+        if slave_sbm != 0:
+            if slave_sbm > 20:
+                formatted_data["seconds_behind"] = "[bright_red]%s" % "{:0>8}".format(str(timedelta(seconds=slave_sbm)))
+            elif slave_sbm > 10:
+                formatted_data["seconds_behind"] = "[bright_yellow]%s" % "{:0>8}".format(
+                    str(timedelta(seconds=slave_sbm))
+                )
+            else:
+                formatted_data["seconds_behind"] = "[bright_green]%s" % "{:0>8}".format(
+                    str(timedelta(seconds=slave_sbm))
+                )
+        elif slave_sbm == 0:
+            formatted_data["seconds_behind"] = "[bright_green]00:00:00"
+
+    formatted_data["Master_Host"] = get_hostname(data["Master_Host"])
+    formatted_data["Master_User"] = data["Master_User"]
+    formatted_data["Master_Log_File"] = data["Master_Log_File"]
+    formatted_data["Relay_Master_Log_File"] = data["Relay_Master_Log_File"]
+    formatted_data["Relay_Log_File"] = data["Relay_Log_File"]
+    formatted_data["Read_Master_Log_Pos"] = data["Read_Master_Log_Pos"]
+    formatted_data["Exec_Master_Log_Pos"] = data["Exec_Master_Log_Pos"]
+    formatted_data["Relay_Log_Pos"] = data["Relay_Log_Pos"]
+    formatted_data["Last_Error"] = data["Last_Error"]
+
+    # MariaDB Support
+    if "Auto_Position" in data:
+        formatted_data["Auto_Position"] = data["Auto_Position"]
+    if "Retrieved_Gtid_Set" in data:
+        formatted_data["Retrieved_Gtid_Set"] = data["Retrieved_Gtid_Set"]
+    if "Executed_Gtid_Set" in data:
+        if data["Executed_Gtid_Set"]:
+            formatted_data["gtid"] = "ON"
+        else:
+            formatted_data["gtid"] = "OFF"
+
+        formatted_data["Executed_Gtid_Set"] = data["Executed_Gtid_Set"]
+    else:
+        if "Using_Gtid" in data:
+            formatted_data["gtid"] = data["Using_Gtid"]
+            formatted_data["Gtid_IO_Pos"] = data["Gtid_IO_Pos"]
+
+    return formatted_data
+
+
+def create_dashboard_panel():
+    tables_to_add = []
+    uptime = str(timedelta(seconds=statuses["Uptime"]))
+
+    dashboard_grid = Table.grid()
+    dashboard_grid.add_column()
+    dashboard_grid.add_column()
+    dashboard_grid.add_column()
+
+    row_style = Style(color="gray78")
+    table_title_style = Style(color="grey93", bold=True)
+    table_box = box.ROUNDED
+    table_line_color = "grey78"
+
+    ################
+    # Information #
+    ###############
+    table_information = Table(
+        show_header=False,
+        box=box.ROUNDED,
+        title="Host Information",
+        title_style=table_title_style,
+        style=table_line_color,
+    )
+
+    if loop_duration_seconds < 1:
+        refresh_latency = 0
+    else:
+        refresh_latency = str(round(loop_duration_seconds - config["refresh_interval"], 2))
+
+    use_performance_schema_status = "NO"
+    if use_performance_schema:
+        use_performance_schema_status = "YES"
+
+    if variables["read_only"] == "ON":
+        variables["read_only"] = "YES"
+    elif variables["read_only"] == "OFF":
+        variables["read_only"] = "NO"
+
+    runtime = str(datetime.now() - dolphie_start_time).split(".")[0]
+
+    table_information.add_column()
+    table_information.add_column(width=27)
+    table_information.add_row("Name", "[grey93]%s" % config["host"], style=row_style)
+    table_information.add_row("Version", "[grey93]%s %s" % (server_distro, full_version), style=row_style)
+    table_information.add_row("Uptime", "[grey93]%s" % uptime, style=row_style)
+    table_information.add_row(
+        "Runtime", "[grey93]%s [grey78]latency: [grey93]%ss" % (runtime, refresh_latency), style=row_style
+    )
+    table_information.add_row("Read Only", "[grey93]%s" % variables["read_only"], style=row_style)
+    table_information.add_row("Use PS", "[grey93]%s" % (use_performance_schema_status), style=row_style)
+    table_information.add_row(
+        "Threads",
+        "[grey78]con[grey93] %s[steel_blue1]/[grey78]run[grey93] %s[steel_blue1]/[grey78]cac[grey93] %s"
+        % (
+            format_number(statuses["Threads_connected"]),
+            format_number(statuses["Threads_running"]),
+            format_number(statuses["Threads_cached"]),
+        ),
+        style=row_style,
+    )
+    table_information.add_row(
+        "Tables",
+        "[grey78]open[grey93] %s[steel_blue1]/[grey78]opened[grey93] %s"
+        % (
+            format_number(statuses["Open_tables"]),
+            format_number(statuses["Opened_tables"]),
+        ),
+        style=row_style,
+    )
+
+    tables_to_add.append(table_information)
+
+    ###########
+    # InnoDB  #
+    ###########
+    table_innodb = Table(
+        show_header=False,
+        box=table_box,
+        title="InnoDB",
+        title_style=table_title_style,
+        style=table_line_color,
+    )
+
+    table_innodb.add_column()
+    table_innodb.add_column(width=9)
+
+    # Calculate Checkpoint Efficiency
+    innodb_log_file_size = variables["innodb_log_file_size"]
+
+    # MariaDB Support
+    if "innodb_log_files_in_group" in variables:
+        innodb_log_files_in_group = variables["innodb_log_files_in_group"]
+    else:
+        innodb_log_files_in_group = 1
+
+    # Save what percentage of log files InnoDB will start to aggressively flush
+    # to disk due to checkpointing based on version
+    if full_version.startswith("8"):
+        version_threshold = 0.875
+    else:
+        version_threshold = 0.81
+
+    checkpoint_efficiency = "N/A"
+    log_sequence_number_match = re.search(r"Log sequence number\s*(\d+)", innodb_status["status"])
+    last_checkpoint_match = re.search(r"Last checkpoint at\s*(\d+)", innodb_status["status"])
+    if log_sequence_number_match and last_checkpoint_match:
+        checkpoint_age = int(log_sequence_number_match.group(1)) - int(last_checkpoint_match.group(1))
+
+        max_checkpoint_age = innodb_log_file_size * innodb_log_files_in_group * version_threshold
+        if checkpoint_age >= max_checkpoint_age:
+            checkpoint_efficiency = "[bright_red]0.00%"
+        elif max_checkpoint_age > checkpoint_age:
+            checkpoint_efficiency = round(100 - (checkpoint_age / max_checkpoint_age * 100), 2)
+
+            if checkpoint_efficiency > 40:
+                checkpoint_efficiency = "[bright_green]%s%%" % checkpoint_efficiency
+            elif checkpoint_efficiency > 20:
+                checkpoint_efficiency = "[bright_yellow]%s%%" % checkpoint_efficiency
+            else:
+                checkpoint_efficiency = "[bright_red]%s%%" % checkpoint_efficiency
+
+    # Get history list length
+    output = re.search(r"History list length (\d+)", innodb_status["status"])
+    if output:
+        history_list_length = output.group(1)
+    else:
+        history_list_length = "N/A"
+
+    # Calculate AIO reads
+    total_pending_aio_reads = 0
+    total_pending_aio_writes = 0
+    output = re.search(
+        r"Pending normal aio reads: (?:\d+\s)?\[(.*?)\] , aio writes: (?:\d+\s)?\[(.*?)\]", innodb_status["status"]
+    )
+    if output:
+        match = output.group(1).split(",")
+
+        for aio_read in match:
+            total_pending_aio_reads += int(aio_read)
+
+        match = output.group(2).split(",")
+        for aio_write in match:
+            total_pending_aio_writes += int(aio_write)
+    else:
+        total_pending_aio_reads = "N/A"
+        total_pending_aio_writes = "N/A"
+
+    # Calculate InnoDB memory read hit efficiency
+    innodb_efficiency = "N/A"
+
+    ib_pool_disk_reads = statuses["Innodb_buffer_pool_reads"]
+    ib_pool_mem_reads = statuses["Innodb_buffer_pool_read_requests"]
+    if ib_pool_disk_reads >= ib_pool_mem_reads:
+        innodb_efficiency = "[bright_red]0.00%"
+    elif ib_pool_mem_reads > ib_pool_disk_reads:
+        innodb_efficiency = round(100 - (ib_pool_disk_reads / ib_pool_mem_reads * 100), 2)
+
+        if innodb_efficiency > 90:
+            innodb_efficiency = "[bright_green]%s%%" % innodb_efficiency
+        elif innodb_efficiency > 80:
+            innodb_efficiency = "[bright_yellow]%s%%" % innodb_efficiency
+        else:
+            innodb_efficiency = "[bright_red]%s%%" % innodb_efficiency
+
+    # Calculate AHI Hit efficiency
+    hash_searches = 0
+    non_hash_searches = 0
+    if variables["innodb_adaptive_hash_index"] == "ON":
+        output = re.search(r"(\d+\.?\d+) hash searches\/s, (\d+\.?\d+) non-hash searches\/s", innodb_status["status"])
+        if output:
+            hash_searches = float(output.group(1))
+            non_hash_searches = float(output.group(2))
+
+            if non_hash_searches == 0 and hash_searches == 0:
+                hash_search_efficiency = "Inactive"
+            elif non_hash_searches >= hash_searches:
+                hash_search_efficiency = "[bright_red]0.00%"
+            elif hash_searches > non_hash_searches:
+                hash_search_efficiency = round(100 - (non_hash_searches / hash_searches * 100), 2)
+
+                if hash_search_efficiency > 70:
+                    hash_search_efficiency = "[bright_green]%s%%" % hash_search_efficiency
+                elif hash_search_efficiency > 50:
+                    hash_search_efficiency = "[bright_yellow]%s%%" % hash_search_efficiency
+                else:
+                    hash_search_efficiency = "[bright_red]%s%%" % hash_search_efficiency
+        else:
+            hash_search_efficiency = "N/A"
+    else:
+        hash_search_efficiency = "OFF"
+
+    # Get queries inside InnoDB
+    output = re.search(r"(\d+) queries inside InnoDB, (\d+) queries in queue", innodb_status["status"])
+    if output:
+        queries_active = int(output.group(1))
+        queries_queued = int(output.group(2))
+    else:
+        queries_active = "N/A"
+        queries_queued = "N/A"
+
+    # Calculate unpurged transactions
+    output = re.search(r"Trx id counter (\d+)", innodb_status["status"])
+    if output:
+        trx_id_counter = int(output.group(1))
+    else:
+        trx_id_counter = None
+
+    output = re.search(r"Purge done for trx's n:o < (\d+)", innodb_status["status"])
+    if output:
+        purge_done_for_trx = int(output.group(1))
+    else:
+        purge_done_for_trx = None
+
+    if trx_id_counter is not None and purge_done_for_trx is not None:
+        unpurged_trx = str(trx_id_counter - purge_done_for_trx)
+    else:
+        trx_id_counter = "N/A"
+
+    # Add data to our table
+    table_innodb.add_row("Read Hit", "[grey93]%s" % innodb_efficiency, style=row_style)
+    table_innodb.add_row("Chkpt Age", "[grey93]%s" % checkpoint_efficiency, style=row_style)
+    table_innodb.add_row("AHI Hit", "[grey93]%s" % (hash_search_efficiency), style=row_style)
+
+    # Don't show thread concurrency information if it isn't set to on, instead show buffer pool stats
+    if "innodb_thread_concurrency" in variables and variables["innodb_thread_concurrency"]:
+        concurrency_ratio = round((queries_active / variables["innodb_thread_concurrency"]) * 100)
+
+        if concurrency_ratio >= 80:
+            queries_active_formatted = "[bright_red]%s" % format_number(queries_active)
+        elif concurrency_ratio >= 60:
+            queries_active_formatted = "[bright_yellow]%s" % format_number(queries_active)
+        else:
+            queries_active_formatted = "[grey93]%s" % format_number(queries_active)
+
+        table_innodb.add_row(
+            "Query Active",
+            "[grey93]%s [steel_blue1]/ [grey93]%s" % (queries_active_formatted, variables["innodb_thread_concurrency"]),
+            style=row_style,
+        )
+        table_innodb.add_row("Query Queued", "[grey93]%s" % format_number(queries_queued), style=row_style)
+    else:
+        table_innodb.add_row(
+            "BP Size", "[grey93]%s" % (format_bytes(float(variables["innodb_buffer_pool_size"]))), style=row_style
+        )
+        table_innodb.add_row(
+            "BP Dirty",
+            "[grey93]%s" % (format_bytes(float(statuses["Innodb_buffer_pool_bytes_dirty"]))),
+            style=row_style,
+        )
+
+    if str(total_pending_aio_reads) == "N/A":
+        table_innodb.add_row(
+            "Pending AIO",
+            "[gray93]N/A",
+            style=row_style,
+        )
+    else:
+        table_innodb.add_row(
+            "Pending AIO",
+            "[gray78]W [grey93]%s [gray78]R [grey93]%s" % (str(total_pending_aio_writes), str(total_pending_aio_reads)),
+            style=row_style,
+        )
+
+    table_innodb.add_row(
+        "History List",
+        "[grey93]%s" % format_number(history_list_length),
+        style=row_style,
+    )
+    table_innodb.add_row("Unpurged TRX", "[grey93]%s" % format_number(unpurged_trx), style=row_style)
+
+    tables_to_add.append(table_innodb)
+
+    ##############
+    # Binary Log #
+    ##############
+    table_master = Table()
+
+    if master_status:
+        table_master = Table(
+            show_header=False,
+            box=table_box,
+            title="Binary Log",
+            title_style=table_title_style,
+            style=table_line_color,
+        )
+
+        if previous_binlog_position == 0:
+            diff_binlog_position = 0
+        elif previous_binlog_position > master_status["Position"]:
+            diff_binlog_position = "Binlog Rotated"
+        else:
+            diff_binlog_position = format_bytes(master_status["Position"] - previous_binlog_position)
+
+        binlog_cache = 100
+        binlog_cache_disk = statuses["Binlog_cache_disk_use"]
+        binlog_cache_mem = statuses["Binlog_cache_use"]
+        if binlog_cache_disk and binlog_cache_mem:
+            if binlog_cache_disk >= binlog_cache_mem:
+                innodb_efficiency = "[bright_red]0.00%"
+            elif binlog_cache_mem > binlog_cache_disk:
+                binlog_cache = round(100 - (binlog_cache_disk / binlog_cache_mem), 2)
+
+        table_master.add_column()
+        table_master.add_column(max_width=40)
+        table_master.add_row("File name", "[grey93]%s" % str(master_status["File"]), style=row_style)
+        table_master.add_row(
+            "Position",
+            "[grey93]%s" % (str(master_status["Position"])),
+            style=row_style,
+        )
+        table_master.add_row(
+            "Size",
+            "[grey93]%s" % format_bytes(master_status["Position"]),
+            style=row_style,
+        )
+        table_master.add_row("Diff", "[grey93]%s" % diff_binlog_position, style=row_style)
+        table_master.add_row("Cache Hit", "[grey93]%s%%" % str(binlog_cache), style=row_style)
+        # MariaDB Support
+        if "gtid_mode" in variables:
+            table_master.add_row("GTID", "[grey93]%s" % str(variables["gtid_mode"]), style=row_style)
+        else:
+            table_master.add_row()
+        table_master.add_row()
+        table_master.add_row()
+
+        tables_to_add.append(table_master)
+
+    ###############
+    # Replication #
+    ###############
+    table_replication = Table()
+
+    if slave_status and layout["replicas"].visible is False:
+        slave_data = format_replication_data(slave_status, db_cursor)
+
+        table_replication = Table(
+            show_header=False,
+            box=table_box,
+            title="Replication",
+            title_style=table_title_style,
+            style=table_line_color,
+        )
+        table_replication.add_column()
+        table_replication.add_column(max_width=20)
+        table_replication.add_row("Master", "[grey93]%s" % slave_data["Master_Host"], style=row_style)
+        table_replication.add_row("User", "[grey93]%s" % slave_data["Master_User"], style=row_style)
+        table_replication.add_row(
+            "Thread",
+            "[grey78]IO [grey93]%s [grey78]SQL [grey93]%s" % (slave_data["io_running"], slave_data["sql_running"]),
+            style=row_style,
+        )
+        if slave_data["seconds_behind"] == "":
+            table_replication.add_row("Lag", "", style=row_style)
+        else:
+            table_replication.add_row(
+                "%s Lag" % slave_data["sbm_source"],
+                "[grey93]%s [grey78]Speed [grey93]%s" % (slave_data["seconds_behind"], slave_data["speed"]),
+                style=row_style,
+            )
+        table_replication.add_row(
+            "Binlog IO",
+            "[grey93]%s" % (slave_data["Master_Log_File"]),
+            style=row_style,
+        )
+        table_replication.add_row(
+            "Binlog SQL",
+            "[grey93]%s" % (slave_data["Relay_Master_Log_File"]),
+            style=row_style,
+        )
+        table_replication.add_row(
+            "Relay Log ",
+            "[grey93]%s" % (slave_data["Relay_Log_File"]),
+            style=row_style,
+        )
+        table_replication.add_row("GTID", "[grey93]%s" % slave_data["gtid"], style=row_style)
+
+        tables_to_add.append(table_replication)
+
+    ###############
+    # Statisitics #
+    ###############
+    table_stats = Table(
+        show_header=False,
+        box=table_box,
+        title="Statisitics/s",
+        title_style=table_title_style,
+        style=table_line_color,
+    )
+
+    table_stats.add_column()
+    table_stats.add_column(min_width=7)
+
+    if loop_duration_seconds == 0:
+        queries_per_second = 0
+        connects_per_second = 0
+        selects_per_second = 0
+        inserts_per_second = 0
+        updates_per_second = 0
+        deletes_per_second = 0
+        replaces_per_second = 0
+        rollbacks_per_second = 0
+    else:
+        queries_per_second = round((statuses["Queries"] - saved_status["Queries"]) / loop_duration_seconds)
+
+        connects_per_second = round((statuses["Connections"] - saved_status["Connections"]) / loop_duration_seconds)
+        selects_per_second = round((statuses["Com_select"] - saved_status["Com_select"]) / loop_duration_seconds)
+        inserts_per_second = round((statuses["Com_insert"] - saved_status["Com_insert"]) / loop_duration_seconds)
+        updates_per_second = round((statuses["Com_update"] - saved_status["Com_update"]) / loop_duration_seconds)
+        deletes_per_second = round((statuses["Com_delete"] - saved_status["Com_delete"]) / loop_duration_seconds)
+        replaces_per_second = round((statuses["Com_replace"] - saved_status["Com_replace"]) / loop_duration_seconds)
+        rollbacks_per_second = round((statuses["Com_rollback"] - saved_status["Com_rollback"]) / loop_duration_seconds)
+
+    table_stats.add_row(
+        "Queries",
+        "[grey93]%s" % format_number(queries_per_second),
+        style=row_style,
+    )
+    table_stats.add_row("SELECT", "[grey93]%s" % format_number(selects_per_second), style=row_style)
+    table_stats.add_row("INSERT", "[grey93]%s" % format_number(inserts_per_second), style=row_style)
+    table_stats.add_row("UPDATE", "[grey93]%s" % format_number(updates_per_second), style=row_style)
+    table_stats.add_row("DELETE", "[grey93]%s" % format_number(deletes_per_second), style=row_style)
+    table_stats.add_row(
+        "REPLACE",
+        "[grey93]%s" % format_number(replaces_per_second),
+        style=row_style,
+    )
+    table_stats.add_row(
+        "ROLLBACK",
+        "[grey93]%s" % format_number(rollbacks_per_second),
+        style=row_style,
+    )
+    table_stats.add_row(
+        "CONNECT",
+        "[grey93]%s" % format_number(connects_per_second),
+        style=row_style,
+    )
+
+    tables_to_add.append(table_stats)
+
+    dashboard_grid.add_row(*tables_to_add)
+
+    dashboard_panel = Panel(
+        Align.center(dashboard_grid),
+        box=box.SIMPLE,
+        border_style="steel_blue1",
+    )
+
+    return dashboard_panel
+
+
+def create_processlist_panel():
+    if config["dashboard"]:
+        table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="steel_blue1")
+    else:
+        table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="steel_blue1")
+
+    columns = {}
+    columns["Thread ID"] = {"field": "id", "width": 11, "format_number": False}
+    columns["Username"] = {"field": "user", "width": 13, "format_number": False}
+
+    if config["show_additional_query_columns"]:
+        columns["Hostname/IP"] = {"field": "host", "width": 16, "format_number": False}
+        columns["Database"] = {"field": "db", "width": 13, "format_number": False}
+
+    columns["Command"] = {"field": "command", "width": 8, "format_number": False}
+    columns["State"] = {"field": "state", "width": 16, "format_number": False}
+    columns["TRX State"] = {"field": "trx_state", "width": 9, "format_number": False}
+    columns["Rows Lock"] = {"field": "trx_rows_locked", "width": 9, "format_number": True}
+    columns["Rows Mod"] = {"field": "trx_rows_modified", "width": 8, "format_number": True}
+
+    if (
+        config["show_additional_query_columns"]
+        and "innodb_thread_concurrency" in variables
+        and variables["innodb_thread_concurrency"]
+    ):
+        columns["Tickets"] = {"field": "trx_concurrency_tickets", "width": 8, "format_number": True}
+
+    columns["Time"] = {"field": "formatted_time", "width": 9, "format_number": False}
+    columns["Query"] = {"field": "shortened_query", "width": None, "format_number": False}
+
+    total_width = 0
+    for column, data in columns.items():
+        if column == "Query":
+            overflow = "crop"
+        else:
+            overflow = "ellipsis"
+
+        if data["width"]:
+            table.add_column(column, width=data["width"], no_wrap=True, overflow=overflow)
+            total_width += data["width"]
+        else:
+            table.add_column(column, no_wrap=True, overflow=overflow)
+
+    # This variable is to cut off query so it's the perfect width for the auto-sized column that matches terminal width
+    query_characters = console.size.width - total_width - ((len(columns) * 3) + 1)
+
+    thread_counter = 0
+    for id, thread in processlist_threads.items():
+        query = thread["query"]
+
+        # Replace strings with [NONPRINTABLE] if they contain non-printable characters
+        for m in re.findall(r"(\"(?:(?!(?<!\\)\").)*\"|'(?:(?!(?<!\\)').)*')", query):
+            test_pattern = re.search(f"[^{re.escape(string.printable)}]", m)
+            if test_pattern:
+                query = query.replace(m, "[NONPRINTABLE]")
+
+        # If no query, pad the query column with spaces so it's sized correctly
+        if not query:
+            query = query.ljust(query_characters)
+
+        # Pad queries with spaces that are not the full size of query column
+        elif len(query) < query_characters:
+            query = query.ljust(console.size.width)
+
+        # Change values to what we want
+        if thread["command"] == "Killed":
+            thread["command"] = "[bright_red]%s" % thread["command"]
+        else:
+            thread["command"] = thread["command"]
+
+        thread["shortened_query"] = query[0:query_characters]
+
+        # Add rows for each thread
+        row_values = []
+        for column, data in columns.items():
+            if data["format_number"]:
+                row_values.append(format_number(thread[data["field"]]))
+            else:
+                row_values.append(thread[data["field"]])
+
+        table.add_row(*row_values, style="grey93")
+
+        thread_counter += 1
+
+    # Add an invisible row to keep query column sized correctly
+    if thread_counter == 0:
+        empty_values = []
+        for column, data in columns.items():
+            if data["width"]:
+                empty_values.append("")
+            else:
+                empty_values.append("".ljust(query_characters))
+
+        table.add_row(*empty_values)
+
+    return table
+
+
+def get_processlist():
+    if use_performance_schema:
+        processlist_query = dolphie_queries["ps_query"]
+    else:
+        processlist_query = dolphie_queries["pl_query"]
+
+    if config["sort_by_time_descending"]:
+        if use_performance_schema:
+            processlist_query = processlist_query + " ORDER BY processlist_time DESC"
+        else:
+            processlist_query = processlist_query + " ORDER BY LENGTH(Time) DESC, Time DESC"
+    else:
+        if use_performance_schema:
+            processlist_query = processlist_query + " ORDER BY processlist_time"
+        else:
+            processlist_query = processlist_query + " ORDER BY LENGTH(Time), Time"
+
+    ########################
+    # WHERE clause filters #
+    ########################
+    where_clause = []
+
+    # Only show running queries
+    if not config["show_idle_queries"]:
+        if use_performance_schema:
+            where_clause.append(
+                "(processlist_command != 'Sleep' AND processlist_command NOT LIKE 'Binlog Dump%') AND "
+                "processlist_info IS NOT NULL AND trx_query IS NOT NULL"
+            )
+        else:
+            where_clause.append(
+                "(Command != 'Sleep' AND Command NOT LIKE 'Binlog Dump%' AND Info IS NOT NULL "
+                "AND trx_query IS NOT NULL)"
+            )
+
+    # Only show running transactions only
+    if config["show_trxs_only"]:
+        where_clause.append("trx_state != ''")
+
+    # Filter user
+    if config["user_filter"]:
+        if use_performance_schema:
+            where_clause.append("processlist_user = '%s'" % config["user_filter"])
+        else:
+            where_clause.append("User = '%s'" % config["user_filter"])
+
+    # Filter database
+    if config["db_filter"]:
+        if use_performance_schema:
+            where_clause.append("processlist_db = '%s'" % config["db_filter"])
+        else:
+            where_clause.append("db = '%s'" % config["db_filter"])
+
+    # Filter hostname/IP
+    if config["host_filter"]:
+        # Have to use LIKE since there's a port at the end
+        if use_performance_schema:
+            where_clause.append("processlist_host LIKE '%s%%'" % config["host_filter"])
+        else:
+            where_clause.append("Host LIKE '%s%%'" % config["host_filter"])
+
+    # Filter time
+    if config["time_filter"]:
+        if use_performance_schema:
+            where_clause.append("processlist_time >= '%s'" % config["time_filter"])
+        else:
+            where_clause.append("Time >= '%s'" % config["time_filter"])
+
+    # Filter query
+    if config["query_filter"]:
+        if use_performance_schema:
+            where_clause.append(
+                "(processlist_info LIKE '%%%s%%' OR trx_query LIKE '%%%s%%')"
+                % (config["query_filter"], config["query_filter"]),
+            )
+        else:
+            where_clause.append("Info LIKE '%%%s%%'" % config["query_filter"])
+
+    # Add in our dynamic WHERE clause for filtering
+    if where_clause:
+        processlist_query = processlist_query.replace("$placeholder", "AND " + " AND ".join(where_clause))
+    else:
+        processlist_query = processlist_query.replace("$placeholder", "")
+
+    # Limit the SELECT query to only retrieve how many lines the terminal has
+    processlist_query = processlist_query + " LIMIT %s" % (console.size.height)
+
+    processlist_threads = {}
+    # Run the processlist query
+    db_cursor.execute(processlist_query)
+    threads = db_cursor.fetchall()
+
+    for thread in threads:
+        # Don't include Dolphie's thread
+        if connection_id == thread["id"]:
+            continue
+
+        command = thread["command"].decode()
+        if use_performance_schema and config["show_last_executed_query"] is False and command == "Sleep":
+            query = ""
+        else:
+            # Use trx_query over Performance Schema query since it's more accurate
+            if use_performance_schema and thread["trx_query"]:
+                query = thread["trx_query"].decode(detect_encoding(thread["trx_query"]))
+            else:
+                query = thread["query"].decode(detect_encoding(thread["query"]))
+
+        # Determine time color
+        time = int(thread["time"])
+        thread_color = "grey93"
+        if "SELECT /*!40001 SQL_NO_CACHE */ *" in query:
+            thread_color = "magenta"
+        elif query and command != "Sleep" and "Binlog Dump" not in command:
+            if time >= 4:
+                thread_color = "bright_red"
+            elif time >= 2:
+                thread_color = "bright_yellow"
+            elif time <= 1:
+                thread_color = "bright_green"
+
+        formatted_time = "[%s]%ss" % (thread_color, time)
+
+        # If after the first loop there's nothing in cache, don't try to resolve anymore.
+        # This is an optimization
+        host = thread["host"].decode().split(":")[0]
+        if first_loop is False:
+            if hosts_cache:
+                host = get_hostname(host)
+        else:
+            host = get_hostname(host)
+
+        processlist_threads[str(thread["id"])] = {
+            "id": str(thread["id"]),
+            "user": thread["user"].decode(),
+            "host": host,
+            "db": thread["db"].decode(),
+            "formatted_time": formatted_time,
+            "time": time,
+            "hhmmss_time": "[{}]{:0>8}".format(thread_color, str(timedelta(seconds=time))),
+            "command": command,
+            "state": thread["state"].decode(),
+            "trx_state": thread["trx_state"].decode(),
+            "trx_operation_state": thread["trx_operation_state"].decode(),
+            "trx_rows_locked": thread["trx_rows_locked"].decode(),
+            "trx_rows_modified": thread["trx_rows_modified"].decode(),
+            "trx_concurrency_tickets": thread["trx_concurrency_tickets"].decode(),
+            "query": re.sub(r"\s+", " ", query),
+        }
+
+    return processlist_threads
+
+
+def create_user_stats_table():
+    # Determine if userstat variable is enabled
+    userstat_enabled = False
+    try:
+        db_cursor.execute("SELECT @@userstat")
+        data = db_cursor.fetchone()
+        userstat = data["@@userstat"]
+
+        if userstat == 1:
+            userstat_enabled = True
+    except pymysql.Error:
+        pass
+
+    table = Table(header_style="bold white", box=box.ROUNDED, style="grey70")
+
+    user_stats = {}
+    columns = {}
+    if userstat_enabled:
+        db_cursor.execute(dolphie_queries["userstat_user_statisitics"])
+        users = db_cursor.fetchall()
+
+        for user in users:
+            username = user["user"].decode()
+            user_stats[username] = {
+                "user": username,
+                "total_connections": user["total_connections"],
+                "concurrent_connections": user["concurrent_connections"],
+                "denied_connections": user["denied_connections"],
+                "binlog_bytes_written": user["binlog_bytes_written"],
+                "rows_fetched": user["rows_fetched"],
+                "rows_updated": user["rows_updated"],
+                "table_rows_read": user["table_rows_read"],
+                "select_commands": user["select_commands"],
+                "update_commands": user["update_commands"],
+                "other_commands": user["other_commands"],
+                "commit_transactions": user["commit_transactions"],
+                "rollback_transactions": user["rollback_transactions"],
+                "access_denied": user["access_denied"],
+            }
+
+        columns["User"] = {"field": "user", "format_number": False}
+        columns["Active"] = {"field": "concurrent_connections", "format_number": True}
+        columns["Total"] = {"field": "total_connections", "format_number": True}
+        columns["Binlog Data"] = {"field": "binlog_bytes_written", "format_number": False}
+        columns["Rows Read"] = {"field": "table_rows_read", "format_number": True}
+        columns["Rows Sent"] = {"field": "rows_fetched", "format_number": True}
+        columns["Rows Updated"] = {"field": "rows_updated", "format_number": True}
+        columns["Selects"] = {"field": "select_commands", "format_number": True}
+        columns["Updates"] = {"field": "update_commands", "format_number": True}
+        columns["Other"] = {"field": "other_commands", "format_number": True}
+        columns["Commit"] = {"field": "commit_transactions", "format_number": True}
+        columns["Rollback"] = {"field": "rollback_transactions", "format_number": True}
+        columns["Access Denied"] = {"field": "access_denied", "format_number": True}
+        columns["Conn Denied"] = {"field": "denied_connections", "format_number": True}
+    elif performance_schema_enabled:
+        db_cursor.execute(dolphie_queries["ps_user_statisitics"])
+
+        users = db_cursor.fetchall()
+        for user in users:
+            username = user["user"].decode()
+
+            if username not in user_stats:
+                user_stats[username] = {
+                    "user": username,
+                    "total_connections": user["total_connections"],
+                    "current_connections": user["current_connections"],
+                    "rows_affected": user["sum_rows_affected"],
+                    "rows_sent": user["sum_rows_sent"],
+                    "rows_read": user["sum_rows_examined"],
+                    "created_tmp_disk_tables": user["sum_created_tmp_disk_tables"],
+                    "created_tmp_tables": user["sum_created_tmp_tables"],
+                }
+            else:
+                # I would use SUM() in the query instead of this, but pymysql doesn't play well with it since I
+                # use use_unicode = 0 in the connection
+                user_stats[username]["rows_affected"] += user["sum_rows_affected"]
+                user_stats[username]["rows_sent"] += user["sum_rows_sent"]
+                user_stats[username]["rows_read"] += user["sum_rows_examined"]
+                user_stats[username]["created_tmp_disk_tables"] += user["sum_created_tmp_disk_tables"]
+                user_stats[username]["created_tmp_tables"] += user["sum_created_tmp_tables"]
+
+        columns["User"] = {"field": "user", "format_number": False}
+        columns["Active"] = {"field": "current_connections", "format_number": True}
+        columns["Total"] = {"field": "total_connections", "format_number": True}
+        columns["Rows Read"] = {"field": "rows_read", "format_number": True}
+        columns["Rows Sent"] = {"field": "rows_sent", "format_number": True}
+        columns["Rows Updated"] = {"field": "rows_affected", "format_number": True}
+        columns["Tmp Tables"] = {"field": "created_tmp_tables", "format_number": True}
+        columns["Tmp Disk Tables"] = {"field": "created_tmp_disk_tables", "format_number": True}
+
+    for column, data in columns.items():
+        table.add_column(column, no_wrap=True)
+
+    for user, user_data in user_stats.items():
+        # Add rows to the table
+        row_values = []
+        for column, data in columns.items():
+            if column == "Binlog Data":
+                row_values.append(format_bytes(user_data[data["field"]]))
+            elif data["format_number"]:
+                row_values.append(format_number(user_data[data["field"]]))
+            else:
+                row_values.append(user_data[data["field"]])
+
+        table.add_row(*row_values, style="grey93")
+
+    if user_stats:
+        return table
+    else:
+        return False
+
+
+def create_innodb_locks_panel():
+    innodb_lock_threads = {}
+
+    db_cursor.execute(innodb_locks_sql)
+    threads = db_cursor.fetchall()
+
+    for counter, thread in enumerate(threads):
+        w_query = re.sub(r"\s+", " ", thread["waiting_query"].decode(detect_encoding(thread["waiting_query"])))
+        b_query = re.sub(r"\s+", " ", thread["blocking_query"].decode(detect_encoding(thread["blocking_query"])))
+
+        innodb_lock_threads[counter] = {
+            "w_thread": thread["waiting_thread"].decode(),
+            "w_query": re.sub(r"\s+", " ", w_query),
+            "w_rows_modified": thread["waiting_rows_modified"].decode(),
+            "w_age": thread["waiting_age"].decode(),
+            "w_wait_secs": thread["waiting_wait_secs"].decode(),
+            "b_thread": thread["blocking_thread"].decode(),
+            "b_query": re.sub(r"\s+", " ", b_query),
+            "b_rows_modified": thread["blocking_rows_modified"].decode(),
+            "b_age": thread["blocking_age"].decode(),
+            "b_wait_secs": thread["blocking_wait_secs"].decode(),
+            "lock_mode": thread["lock_mode"].decode(),
+            "lock_type": thread["lock_type"].decode(),
+        }
+
+    table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="steel_blue1")
+
+    columns = {}
+    columns["[W](W) Thread ID"] = {"field": "w_thread", "width": 13, "format_number": False}
+    columns["[W]Age"] = {"field": "w_age", "width": 4, "format_number": False}
+    columns["[W]Wait"] = {"field": "w_wait_secs", "width": 5, "format_number": False}
+    columns["[W]Query"] = {"field": "w_query", "width": None, "format_number": False}
+    columns["[B](B) Thread ID"] = {"field": "b_thread", "width": 13, "format_number": False}
+    columns["[B]Age"] = {"field": "b_age", "width": 4, "format_number": False}
+    columns["[B]Wait"] = {"field": "b_wait_secs", "width": 5, "format_number": False}
+    columns["[B]Rows Mod"] = {"field": "b_rows_modified", "width": 8, "format_number": True}
+    columns["[B]Query"] = {"field": "b_query", "width": None, "format_number": False}
+    columns["Mode"] = {"field": "lock_mode", "width": 7, "format_number": False}
+    columns["Type"] = {"field": "lock_type", "width": 8, "format_number": False}
+
+    total_width = 0
+    for column, data in columns.items():
+        if "Query" in column:
+            overflow = "crop"
+        else:
+            overflow = "ellipsis"
+
+        if "[B]" in column:
+            column = column.replace("[B]", "")
+            row_style = Style(color="red")
+        elif "[W]" in column:
+            column = column.replace("[W]", "")
+            row_style = Style(color="magenta")
+        else:
+            row_style = Style(color="grey93")
+
+        if data["width"]:
+            table.add_column(column, width=data["width"], no_wrap=True, header_style=row_style, overflow=overflow)
+            total_width += data["width"]
+        else:
+            table.add_column(column, no_wrap=True, header_style=row_style, overflow=overflow)
+
+    # This variable is to cut off query so it's the perfect width for the auto-sized column that matches terminal width
+    query_characters = round((console.size.width / 2) - ((len(columns) * 4) + 6))
+
+    for id, thread in innodb_lock_threads.items():
+        b_wait_secs = "0s"
+        if thread["b_wait_secs"]:
+            b_wait_secs = "%ss" % thread["b_wait_secs"]
+
+        w_wait_secs = "0s"
+        if thread["w_wait_secs"]:
+            w_wait_secs = "%ss" % thread["w_wait_secs"]
+
+        waiting_query = thread["w_query"]
+        if not waiting_query:
+            waiting_query = waiting_query.ljust(query_characters)
+
+        elif len(waiting_query) < query_characters:
+            waiting_query = waiting_query.ljust(console.size.width)
+
+        blocking_query = thread["b_query"]
+        if not blocking_query:
+            blocking_query = blocking_query.ljust(query_characters)
+
+        elif len(blocking_query) < query_characters:
+            blocking_query = blocking_query.ljust(console.size.width)
+
+        # Change values to what we want
+        thread["w_age"] = "%ss" % thread["w_age"]
+        thread["b_age"] = "%ss" % thread["b_age"]
+        thread["w_query"] = waiting_query[0:query_characters]
+        thread["b_query"] = blocking_query[0:query_characters]
+        thread["w_wait_secs"] = w_wait_secs
+        thread["b_wait_secs"] = b_wait_secs
+
+        # Add rows to the table
+        row_values = []
+        for column, data in columns.items():
+            if data["format_number"]:
+                row_values.append(format_number(thread[data["field"]]))
+            else:
+                row_values.append(thread[data["field"]])
+
+        table.add_row(*row_values, style="grey93")
+
+    # Add an invisible row to keep query columns sized correctly
+    if len(innodb_lock_threads) == 0:
+        empty_values = []
+        for column, data in columns.items():
+            if data["width"]:
+                empty_values.append("")
+            else:
+                empty_values.append("".ljust(query_characters))
+
+        table.add_row(*empty_values)
+
+    return table
+
+
+def create_innodb_io_panel():
+    global innodb_status
+
+    row_style = Style(color="grey93")
+    table_title_style = Style(color="grey93", bold=True)
+
+    # Only run this if dashboard isn't turned on
+    if config["dashboard"] is False:
+        innodb_status = fetch_data("innodb_status")
+
+    table_innodb_information = Table(
+        box=box.ROUNDED,
+        style="grey70",
+        title="InnoDB Information",
+        title_style=table_title_style,
+        show_header=False,
+    )
+    table_innodb_information.add_column("")
+    table_innodb_information.add_column("")
+
+    table_innodb_information.add_row(
+        "[grey78]BP Size",
+        format_bytes(float(variables["innodb_buffer_pool_size"])),
+        style=row_style,
+    )
+    table_innodb_information.add_row(
+        "[grey78]BP Available",
+        format_bytes(float(variables["innodb_buffer_pool_size"]) - float(statuses["Innodb_buffer_pool_bytes_data"])),
+        style=row_style,
+    )
+    table_innodb_information.add_row(
+        "[grey78]BP Dirty",
+        format_bytes(float(statuses["Innodb_buffer_pool_bytes_dirty"])),
+        style=row_style,
+    )
+    # MariaDB Support
+    if "innodb_buffer_pool_instances" in variables:
+        bp_instances = str(variables["innodb_buffer_pool_instances"])
+    else:
+        bp_instances = 1
+    table_innodb_information.add_row("[grey78]BP Instances", str(bp_instances), style=row_style)
+
+    # MariaDB Support
+    if "innodb_log_files_in_group" in variables:
+        log_files_in_group = variables["innodb_log_files_in_group"]
+    else:
+        log_files_in_group = 1
+    table_innodb_information.add_row("[grey78]Num Log File", str(log_files_in_group), style=row_style)
+
+    table_innodb_information.add_row(
+        "[grey78]Total Log Size",
+        format_bytes(variables["innodb_log_file_size"] * log_files_in_group),
+        style=row_style,
+    )
+
+    if "innodb_adaptive_hash_index_parts" in variables.keys():
+        table_innodb_information.add_row(
+            "[grey78]Adapt Hash Idx",
+            "%s [grey78]([grey93]%s[grey78])"
+            % (variables["innodb_adaptive_hash_index"], variables["innodb_adaptive_hash_index_parts"]),
+            style=row_style,
+        )
+    else:
+        table_innodb_information.add_row(
+            "[grey78]Adapt Hash Idx",
+            "%s [grey78]" % (variables["innodb_adaptive_hash_index"]),
+            style=row_style,
+        )
+
+    table_io_threads = Table(
+        box=box.ROUNDED,
+        style="grey70",
+        title="InnoDB Threads",
+        title_style=table_title_style,
+    )
+    table_io_threads.add_column("Thread", style=row_style, justify="center")
+    table_io_threads.add_column("Type", style=row_style)
+    table_io_threads.add_column("State", style=row_style)
+
+    # Get the I/O threads
+    pattern = re.compile(r"I/O thread (\d+) state: (.+?) \((.*)\)(?: )?")
+    for m in re.finditer(pattern, innodb_status["status"]):
+        table_io_threads.add_row(m.group(1), m.group(3), m.group(2), style=row_style)
+
+    # Calculate AIO reads
+    total_pending_aio_reads = 0
+    total_pending_aio_writes = 0
+    output = re.search(
+        r"Pending normal aio reads: (?:\d+\s)?\[(.*?)\] , aio writes: (?:\d+\s)?\[(.*?)\]", innodb_status["status"]
+    )
+    if output:
+        match = output.group(1).split(",")
+
+        for aio_read in match:
+            total_pending_aio_reads += int(aio_read)
+
+        match = output.group(2).split(",")
+        for aio_write in match:
+            total_pending_aio_writes += int(aio_write)
+    else:
+        total_pending_aio_reads = "N/A"
+        total_pending_aio_writes = "N/A"
+
+    # Get pending insert buffer, log i/o, and sync i/o
+    pending_ibuf_aio_reads = 0
+    pending_log_ios = 0
+    pending_sync_ios = 0
+
+    search_pattern = re.search(
+        r"ibuf aio reads:\s?(\d+)?, log i/o's:\s?(\d+)?, sync i/o's:\s?(\d+)",
+        innodb_status["status"],
+    )
+    if search_pattern:
+        pending_ibuf_aio_reads = search_pattern.group(1)
+        pending_log_ios = search_pattern.group(2)
+        pending_sync_ios = search_pattern.group(3)
+
+    # Get pending log and buffer pool flushes
+    pending_log_flush = 0
+    pending_buffer_pool_flush = 0
+
+    search_pattern = re.search(r"Pending flushes \(.+?\) log: (\d+); buffer pool: (\d+)", innodb_status["status"])
+    if search_pattern:
+        pending_log_flush = search_pattern.group(1)
+        pending_buffer_pool_flush = search_pattern.group(2)
+
+    table_pending_io = Table(
+        box=box.ROUNDED,
+        style="grey70",
+        title="Pending",
+        title_style=table_title_style,
+        show_header=False,
+    )
+    table_pending_io.add_column("")
+    table_pending_io.add_column("", min_width=5)
+
+    table_pending_io.add_row(
+        "[grey78]Normal AIO Reads",
+        format_number(total_pending_aio_reads),
+        style=row_style,
+    )
+    table_pending_io.add_row(
+        "[grey78]Normal AIO Writes",
+        format_number(total_pending_aio_writes),
+        style=row_style,
+    )
+    table_pending_io.add_row(
+        "[grey78]Insert Buffer Reads",
+        format_number(pending_ibuf_aio_reads),
+        style=row_style,
+    )
+    table_pending_io.add_row("[grey78]Log IO/s", format_number(pending_log_ios), style=row_style)
+    table_pending_io.add_row("[grey78]Sync IO/s", format_number(pending_sync_ios), style=row_style)
+    table_pending_io.add_row("[grey78]Log Flushes", format_number(pending_log_flush), style=row_style)
+    table_pending_io.add_row(
+        "[grey78]Buffer Pool Flushes",
+        format_number(pending_buffer_pool_flush),
+        style=row_style,
+    )
+
+    # Get reads/avg bytes/writes/fsyncs per second
+    reads_s = 0
+    writes_s = 0
+    fsyncs_s = 0
+    bytes_s = 0
+
+    search_pattern = re.search(
+        r"(\d+\.?\d*) reads/s, (\d+\.?\d*) avg bytes/read, (\d+\.?\d*) writes/s, (\d+\.?\d*) fsyncs/s",
+        innodb_status["status"],
+    )
+    if search_pattern:
+        reads_s = search_pattern.group(1)
+        writes_s = search_pattern.group(3)
+        fsyncs_s = search_pattern.group(4)
+        bytes_s = search_pattern.group(2)
+
+    # Get OS file reads, OS file writes, and OS fsyncs
+    os_file_reads = 0
+    os_file_writes = 0
+    os_fsyncs = 0
+
+    search_pattern = re.search(
+        r"(\d+) OS file reads, (\d+) OS file writes, (\d+) OS fsyncs",
+        innodb_status["status"],
+    )
+    if search_pattern:
+        os_file_reads = search_pattern.group(1)
+        os_file_writes = search_pattern.group(2)
+        os_fsyncs = search_pattern.group(3)
+
+    table_file_io = Table(
+        box=box.ROUNDED,
+        style="grey70",
+        title="File",
+        title_style=table_title_style,
+        show_header=False,
+    )
+    table_file_io.add_column("")
+    table_file_io.add_column("", min_width=6)
+
+    table_file_io.add_row("[grey78]OS Reads", format_number(os_file_reads), style=row_style)
+    table_file_io.add_row("[grey78]OS Writes", format_number(os_file_writes), style=row_style)
+    table_file_io.add_row("[grey78]OS fsyncs", format_number(os_fsyncs), style=row_style)
+    table_file_io.add_row("[grey78]Read/s", format_number(reads_s), style=row_style)
+    table_file_io.add_row("[grey78]Write/s", format_number(writes_s), style=row_style)
+    table_file_io.add_row("[grey78]FSync/s", format_number(fsyncs_s), style=row_style)
+    table_file_io.add_row("[grey78]Bytes/s", format_number(bytes_s), style=row_style)
+
+    table_innodb_activity = Table(
+        box=box.ROUNDED,
+        style="grey70",
+        title="Activity",
+        title_style=table_title_style,
+        show_header=False,
+    )
+    table_innodb_activity.add_column("")
+    table_innodb_activity.add_column("", width=7)
+
+    if loop_duration_seconds == 0:
+        reads_mem_per_second = 0
+        reads_disk_per_second = 0
+        writes_per_second = 0
+        log_waits = 0
+        row_lock_waits = 0
+    else:
+        reads_mem_per_second = round(
+            (statuses["Innodb_buffer_pool_read_requests"] - saved_status["Innodb_buffer_pool_read_requests"])
+            / loop_duration_seconds
+        )
+        reads_disk_per_second = round(
+            (statuses["Innodb_buffer_pool_reads"] - saved_status["Innodb_buffer_pool_reads"]) / loop_duration_seconds
+        )
+        writes_per_second = round(
+            (statuses["Innodb_buffer_pool_write_requests"] - saved_status["Innodb_buffer_pool_write_requests"])
+            / loop_duration_seconds
+        )
+
+        log_waits = round((statuses["Innodb_log_waits"] - saved_status["Innodb_log_waits"]) / loop_duration_seconds)
+
+        row_lock_waits = round(
+            (statuses["Innodb_row_lock_waits"] - saved_status["Innodb_row_lock_waits"]) / loop_duration_seconds
+        )
+
+    table_innodb_activity.add_row("[grey78]BP reads/s (mem)", format_number(reads_mem_per_second), style=row_style)
+    table_innodb_activity.add_row("[grey78]BP reads/s (disk)", format_number(reads_disk_per_second), style=row_style)
+    table_innodb_activity.add_row("[grey78]BP writes/s", format_number(writes_per_second), style=row_style)
+    table_innodb_activity.add_row(
+        "[grey78]BP wait clean page", format_number(statuses["Innodb_buffer_pool_wait_free"]), style=row_style
+    )
+    table_innodb_activity.add_row("[grey78]Log waits/s", format_number(log_waits), style=row_style)
+    table_innodb_activity.add_row("[grey78]Row lock waits/s", format_number(row_lock_waits), style=row_style)
+    table_innodb_activity.add_row(
+        "[grey78]Row lock time avg", "%sms" % str(statuses["Innodb_row_lock_time_avg"]), style=row_style
+    )
+
+    table_row_operations = Table(
+        box=box.ROUNDED,
+        style="grey70",
+        title="Row Operations/s",
+        title_style=table_title_style,
+        show_header=False,
+    )
+    table_row_operations.add_column("")
+    table_row_operations.add_column("", min_width=8)
+
+    if loop_duration_seconds == 0:
+        reads_per_second = 0
+        inserts_per_second = 0
+        updates_per_second = 0
+        deletes_per_second = 0
+    else:
+        reads_per_second = round(
+            (statuses["Innodb_rows_read"] - saved_status["Innodb_rows_read"]) / loop_duration_seconds
+        )
+        inserts_per_second = round(
+            (statuses["Innodb_rows_inserted"] - saved_status["Innodb_rows_inserted"]) / loop_duration_seconds
+        )
+        updates_per_second = round(
+            (statuses["Innodb_rows_updated"] - saved_status["Innodb_rows_updated"]) / loop_duration_seconds
+        )
+        deletes_per_second = round(
+            (statuses["Innodb_rows_deleted"] - saved_status["Innodb_rows_deleted"]) / loop_duration_seconds
+        )
+
+    table_row_operations.add_row("[grey78]Reads", format_number(reads_per_second))
+    table_row_operations.add_row("[grey78]Inserts", format_number(inserts_per_second))
+    table_row_operations.add_row("[grey78]Updates", format_number(updates_per_second))
+    table_row_operations.add_row("[grey78]Deletes", format_number(deletes_per_second))
+    table_row_operations.add_row()
+    table_row_operations.add_row()
+    table_row_operations.add_row()
+
+    # Put these two tables side-by-side
+    table_grid = Table.grid()
+    table_grid.add_row(
+        table_innodb_information, table_innodb_activity, table_row_operations, table_pending_io, table_file_io
+    )
+
+    return Group(
+        Align.center(table_grid),
+        Text(""),
+        Align.center(table_io_threads),
+    )
+
+
+def create_replicas_panel(first_run=False):
+    global slave_status
+
+    row_style = Style(color="grey93")
+    table_title_style = Style(color="grey93", bold=True)
+    table_grid = Table.grid()
+    table_replication = Table()
+
+    # Only run this if dashboard isn't turned on
+    if config["dashboard"] is not True:
+        slave_status = fetch_data("slave_status")
+
+    slave_count = 0
+    if first_run:
+        header = Text.from_markup("\nLoading...")
+    else:
+        if slave_status:
+            slave_data = format_replication_data(slave_status, db_cursor)
+
+            table_replication = Table(
+                box=box.MINIMAL,
+                show_header=False,
+                style="grey70",
+                title_style=table_title_style,
+            )
+            table_replication.add_column()
+            table_replication.add_column()
+            table_replication.add_row(
+                "[grey78]Master",
+                "[grey93]%s" % slave_data["Master_Host"],
+                style=row_style,
+            )
+            table_replication.add_row("[grey78]User", slave_data["Master_User"], style=row_style)
+            table_replication.add_row(
+                "[grey78]Thread",
+                "[grey78]IO [grey93]%s [grey78]SQL [grey93]%s" % (slave_data["io_running"], slave_data["sql_running"]),
+                style=row_style,
+            )
+            if slave_data["seconds_behind"] == "":
+                table_replication.add_row("[grey78]Lag", "", style=row_style)
+            else:
+                table_replication.add_row(
+                    "[grey78]%s Lag" % slave_data["sbm_source"],
+                    "[grey93]%s [grey78]Speed [grey93]%s" % (slave_data["seconds_behind"], slave_data["speed"]),
+                    style=row_style,
+                )
+            table_replication.add_row(
+                "[grey78]Binlog IO",
+                "%s ([grey62]%s[/grey62])" % (slave_data["Master_Log_File"], slave_data["Read_Master_Log_Pos"]),
+                style=row_style,
+            )
+            table_replication.add_row(
+                "[grey78]Binlog SQL",
+                "%s ([grey62]%s[/grey62])"
+                % (
+                    slave_data["Relay_Master_Log_File"],
+                    slave_data["Exec_Master_Log_Pos"],
+                ),
+                style=row_style,
+            )
+            table_replication.add_row(
+                "[grey78]Relay Log",
+                "%s ([grey62]%s[/grey62])" % (slave_data["Relay_Log_File"], slave_data["Relay_Log_Pos"]),
+                style=row_style,
+            )
+            table_replication.add_row("[grey78]GTID", "[grey93]%s" % slave_data["gtid"], style=row_style)
+            if slave_data["gtid"] == "ON":
+                table_replication.add_row(
+                    "[grey78]Auto Position",
+                    "[grey93]%s" % slave_data["Auto_Position"],
+                    style=row_style,
+                )
+                table_replication.add_row(
+                    "[grey78]Retrieved GTID Set",
+                    "[grey93]%s" % slave_data["Retrieved_Gtid_Set"],
+                    style=row_style,
+                )
+                table_replication.add_row(
+                    "[grey78]Executed GTID Set",
+                    "[grey93]%s" % slave_data["Executed_Gtid_Set"],
+                    style=row_style,
+                )
+            # MariaDB Support
+            if "Gtid_IO_Pos" in slave_data:
+                table_replication.add_row(
+                    "[grey78]GTID IO Pos ",
+                    "[grey93]%s" % slave_data["Gtid_IO_Pos"],
+                    style=row_style,
+                )
+            if slave_data["Last_Error"]:
+                table_replication.add_row(
+                    "[grey78]Error ",
+                    "[grey93]%s" % slave_data["Last_Error"],
+                    style=row_style,
+                )
+        if use_performance_schema:
+            slave_count = db_cursor.execute(dolphie_queries["ps_find_slaves"])
+        else:
+            slave_count = db_cursor.execute(dolphie_queries["pl_find_slaves"])
+
+        data = db_cursor.fetchall()
+
+        header = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (slave_count))
+
+        table_split_counter = 1
+        tables = []
+        for row in data:
+            thread_id = row["id"]
+
+            # Resolve IPs to addresses and add to cache for fast lookup
+            host = get_hostname(row["host"].decode().split(":")[0])
+
+            table = Table(box=box.ROUNDED, show_header=False, style="grey70")
+            try:
+                if thread_id not in replica_connections:
+                    replica_connections[thread_id] = {
+                        "connection": pymysql.connect(
+                            host=host,
+                            user=config["user"],
+                            passwd=config["password"],
+                            port=config["port"],
+                            ssl=config["ssl"],
+                            autocommit=True,
+                        ),
+                        "previous_sbm": 0,
+                    }
+
+                replica_connection = replica_connections[thread_id]
+                replica_cursor = replica_connection["connection"].cursor(pymysql.cursors.DictCursor)
+                slave_count = replica_cursor.execute("SHOW SLAVE STATUS")
+                replica_data = replica_cursor.fetchone()
+
+                if replica_data:
+                    slave_data = format_replication_data(
+                        replica_data, replica_cursor, replica_connection["previous_sbm"]
+                    )
+
+                    slave_sbm = 0
+                    if replica_data["Seconds_Behind_Master"] is not None:
+                        slave_sbm = replica_data["Seconds_Behind_Master"]
+
+                    replica_connection["previous_sbm"] = slave_sbm
+
+                    table.add_column("")
+                    table.add_column("", max_width=60)
+                    table.add_row("[grey78]Host", host, style=row_style)
+                    table.add_row("[grey78]User", row["user"].decode(), style=row_style)
+                    table.add_row(
+                        "[grey78]Thread",
+                        "[grey78]IO [grey93]%s [grey78]SQL [grey93]%s"
+                        % (slave_data["io_running"], slave_data["sql_running"]),
+                        style=row_style,
+                    )
+                    if slave_data["seconds_behind"] == "":
+                        table.add_row("[grey78]Lag", "", style=row_style)
+                    else:
+                        table.add_row(
+                            "[grey78]%s Lag" % slave_data["sbm_source"],
+                            "[grey93]%s [grey78]Speed [grey93]%s" % (slave_data["seconds_behind"], slave_data["speed"]),
+                            style=row_style,
+                        )
+                    table.add_row(
+                        "[grey78]Binlog IO",
+                        "%s ([grey62]%s[/grey62])"
+                        % (
+                            slave_data["Master_Log_File"],
+                            slave_data["Read_Master_Log_Pos"],
+                        ),
+                        style=row_style,
+                    )
+                    table.add_row(
+                        "[grey78]Binlog SQL",
+                        "%s ([grey62]%s[/grey62])"
+                        % (
+                            slave_data["Relay_Master_Log_File"],
+                            slave_data["Exec_Master_Log_Pos"],
+                        ),
+                        style=row_style,
+                    )
+                    table.add_row(
+                        "[grey78]Relay Log",
+                        "%s ([grey62]%s[/grey62])" % (slave_data["Relay_Log_File"], slave_data["Relay_Log_Pos"]),
+                        style=row_style,
+                    )
+                    table.add_row("[grey78]GTID", slave_data["gtid"], style=row_style)
+                    if slave_data["gtid"] == "ON":
+                        table.add_row(
+                            "[grey78]Auto Position",
+                            "[grey93]%s" % slave_data["Auto_Position"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[grey78]Retrieved GTID Set",
+                            "[grey93]%s" % slave_data["Retrieved_Gtid_Set"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[grey78]Executed GTID Set",
+                            "[grey93]%s" % slave_data["Executed_Gtid_Set"],
+                            style=row_style,
+                        )
+                    # MariaDB Support
+                    if "Gtid_IO_Pos" in slave_data:
+                        table.add_row(
+                            "[grey78]GTID IO Pos ",
+                            "[grey93]%s" % slave_data["Gtid_IO_Pos"],
+                            style=row_style,
+                        )
+                    if slave_data["Last_Error"]:
+                        table.add_row("[grey78]Error", slave_data["Last_Error"], style=row_style)
+
+                    tables.append(table)
+            except pymysql.Error as e:
+                table.add_column()
+                table.add_column(width=30)
+
+                table.add_row("[grey78]Host", host, style=row_style)
+                table.add_row("[grey78]User", row["user"].decode(), style=row_style)
+                table.add_row("[bright_red]Error", e.args[1], style=row_style)
+
+                tables.append(table)
+
+            if table_split_counter == 3:
+                table_grid.add_row(*tables)
+                table_split_counter = 0
+                tables = []
+
+            table_split_counter += 1
+
+        if table_split_counter:
+            table_grid.add_row(*tables)
+
+    if slave_status:
+        # GTID Sets can be very long, so we don't center align it or else table will increase/decrease in size a lot
+        if slave_status["Executed_Gtid_Set"]:
+            panel_data = Group(
+                Align.left(table_replication),
+                Align.center(header),
+                Align.center(table_grid),
+            )
+        else:
+            panel_data = Group(
+                Align.center(table_replication),
+                Align.center(header),
+                Align.center(table_grid),
+            )
+    else:
+        panel_data = Group(Align.center(header), Align.center(table_grid))
+
+    return panel_data
+
+
+def capture_key(key):
+    global pause_refresh, use_performance_schema, replica_connections
+
+    pause_refresh = True
+    valid_key = True
+
+    kb.set_normal_term()
+
+    if key == "1":
+        if use_performance_schema:
+            use_performance_schema = False
+            update_footer("[steel_blue1]Switched to [grey93]Processlist")
+        else:
+            if performance_schema_enabled:
+                use_performance_schema = True
+                update_footer("[steel_blue1]Switched to [grey93]Performance Schema")
+            else:
+                update_footer("[red]You can't switch to Performance Schema because it isn't enabled")
+
+    elif key == "2":
+        system("clear")
+        console.print(Align.center(title))
+
+        console.print(innodb_status["status"])
+
+        block_refresh_for_key_command(block_only=True)
+
+    elif key == "a":
+        if config["show_additional_query_columns"]:
+            config["show_additional_query_columns"] = False
+        else:
+            config["show_additional_query_columns"] = True
+
+    elif key == "c":
+        config["user_filter"] = ""
+        config["db_filter"] = ""
+        config["host_filter"] = ""
+        config["time_filter"] = ""
+        config["query_filter"] = ""
+
+        update_footer("[steel_blue1]Cleared all filters!")
+
+    elif key == "d":
+        if config["dashboard"]:
+            config["dashboard"] = 0
+        else:
+            config["dashboard"] = 1
+
+    elif key == "D":
+        config["db_filter"] = console.input("[steel_blue1]Database to filter by[/steel_blue1]: ")
+
+    elif key == "e":
+        thread_id = console.input("[steel_blue1]Thread ID to explain[/steel_blue1]: ")
+
+        if thread_id:
+            if thread_id in processlist_threads:
+                system("clear")
+                console.print(Align.right(title))
+
+                row_style = Style(color="grey93")
+                table = Table(box=box.ROUNDED, show_header=False, style="grey70")
+                table.add_column("")
+                table.add_column("")
+
+                table.add_row("[gray78]Thread ID", str(thread_id), style=row_style)
+                table.add_row(
+                    "[gray78]User",
+                    processlist_threads[thread_id]["user"],
+                    style=row_style,
+                )
+                table.add_row(
+                    "[gray78]Host",
+                    processlist_threads[thread_id]["host"],
+                    style=row_style,
+                )
+                table.add_row(
+                    "[gray78]Database",
+                    processlist_threads[thread_id]["db"],
+                    style=row_style,
+                )
+                table.add_row(
+                    "[gray78]Command",
+                    processlist_threads[thread_id]["command"],
+                    style=row_style,
+                )
+                table.add_row(
+                    "[gray78]State",
+                    processlist_threads[thread_id]["state"],
+                    style=row_style,
+                )
+                table.add_row(
+                    "[gray78]Time",
+                    processlist_threads[thread_id]["hhmmss_time"],
+                    style=row_style,
+                )
+                table.add_row(
+                    "[gray78]Rows Locked",
+                    processlist_threads[thread_id]["trx_rows_locked"],
+                    style=row_style,
+                )
+                table.add_row(
+                    "[gray78]Rows Modified",
+                    processlist_threads[thread_id]["trx_rows_modified"],
+                    style=row_style,
+                )
+                if variables["innodb_thread_concurrency"]:
+                    table.add_row(
+                        "[gray78]Tickets",
+                        processlist_threads[thread_id]["trx_concurrency_tickets"],
+                        style=row_style,
+                    )
+                table.add_row("", "")
+                table.add_row(
+                    "[gray78]TRX State",
+                    processlist_threads[thread_id]["trx_state"],
+                    style=row_style,
+                )
+                table.add_row(
+                    "[gray78]TRX Operation",
+                    processlist_threads[thread_id]["trx_operation_state"],
+                    style=row_style,
+                )
+
+                console.print(Align.center(table))
+
+                if processlist_threads[thread_id]["query"]:
+                    console.print("")
+                    console.print(
+                        Align.center(
+                            Syntax(
+                                processlist_threads[thread_id]["query"],
+                                "sql",
+                                line_numbers=False,
+                                word_wrap=True,
+                                theme="vim",
+                            )
+                        )
+                    )
+
+                if processlist_threads[thread_id]["query"] and processlist_threads[thread_id]["db"]:
+                    explain_failure = None
+                    explain_data = None
+
+                    console.print("")
+
+                    try:
+                        db_cursor.execute("USE %s" % processlist_threads[thread_id]["db"])
+                        db_cursor.execute("EXPLAIN %s" % processlist_threads[thread_id]["query"])
+
+                        explain_data = db_cursor.fetchall()
+                    except pymysql.Error as e:
+                        explain_failure = "[bright_red]EXPLAIN ERROR:[/bright_red] [red]%s" % e.args[1]
+
+                    if explain_data:
+                        explain_table = Table(box=box.ROUNDED, style="grey70")
+
+                        columns = []
+                        for row in explain_data:
+                            values = []
+                            for column, value in row.items():
+                                # Exclude possbile_keys field since it takes up too much space
+                                if column == "possible_keys":
+                                    continue
+
+                                # Don't duplicate columns
+                                if column not in columns:
+                                    explain_table.add_column(column)
+                                    columns.append(column)
+
+                                if column == "key" and value is None:
+                                    value = "[b bright_red]NONE[/b bright_red]"
+
+                                if column == "rows":
+                                    value = format_number(value)
+
+                                try:
+                                    values.append(value.decode())
+                                except (UnicodeDecodeError, AttributeError):
+                                    values.append(str(value))
+
+                            explain_table.add_row(*values, style="grey93")
+
+                        console.print(Align.center(explain_table))
+                    else:
+                        console.print(Align.center(explain_failure))
+
+                block_refresh_for_key_command(block_only=True)
+            else:
+                update_footer("[bright_red]Thread ID '[grey93]%s[bright_red]' does not exist!" % thread_id)
+
+    elif key == "H":
+        config["host_filter"] = console.input("[steel_blue1]Hostname/IP to filter by[/steel_blue1]: ")
+
+        # Since our filtering is done by the processlist query, the value needs to be what's in host cache
+        for ip, addr in hosts_cache.items():
+            if config["host_filter"] == addr:
+                config["host_filter"] = ip
+
+    elif key == "i":
+        if layout["innodb_io"].visible:
+            layout["innodb_io"].visible = False
+        else:
+            layout["innodb_io"].visible = True
+            layout["innodb_io"].update(create_innodb_io_panel())
+
+        live.update(layout, refresh=True)
+
+    elif key == "I":
+        if config["show_idle_queries"]:
+            config["show_idle_queries"] = False
+            config["sort_by_time_descending"] = True
+        else:
+            config["show_idle_queries"] = True
+            config["sort_by_time_descending"] = False
+
+    elif key == "k":
+        thread_id = console.input("[steel_blue1]Thread ID to kill[/steel_blue1]: ")
+
+        if thread_id:
+            if thread_id in processlist_threads:
+                try:
+                    db_cursor.execute("KILL %s" % thread_id)
+                except pymysql.OperationalError:
+                    update_footer("[bright_red]Thread ID '[grey93]%s[bright_red]' does not exist!" % thread_id)
+            else:
+                update_footer("[bright_red]Thread ID '[grey93]%s[bright_red]' does not exist!" % thread_id)
+
+    elif key == "K":
+        include_sleep = console.input("[steel_blue1]Include queries in sleep state? (y/n)[/steel_blue1]: ")
+
+        if include_sleep != "y" and include_sleep != "n":
+            update_footer("[bright_red]Invalid option!")
+        else:
+            kill_type = console.input("[steel_blue1]Kill by username/hostname/time range (u/h/t)[/steel_blue1]: ")
+            threads_killed = 0
+
+            commands_without_sleep = ["Query", "Execute"]
+            commands_with_sleep = ["Query", "Execute", "Sleep"]
+
+            if kill_type == "u":
+                user = console.input("[steel_blue1]User[/steel_blue1]: ")
+
+                for id, thread in processlist_threads.items():
+                    try:
+                        if thread["user"] == user:
+                            if include_sleep == "y":
+                                if thread["command"] in commands_with_sleep:
+                                    db_cursor.execute("KILL %s" % id)
+                                    threads_killed += 1
+                            else:
+                                if thread["command"] in commands_without_sleep:
+                                    db_cursor.execute("KILL %s" % id)
+                                    threads_killed += 1
+                    except pymysql.OperationalError:
+                        continue
+
+            elif kill_type == "h":
+                host = console.input("[steel_blue1]Host/IP[/steel_blue1]: ")
+
+                for id, thread in processlist_threads.items():
+                    try:
+                        if thread["host"] == host:
+                            if include_sleep == "y":
+                                if thread["command"] in commands_with_sleep:
+                                    db_cursor.execute("KILL %s" % id)
+                                    threads_killed += 1
+                            else:
+                                if thread["command"] in commands_without_sleep:
+                                    db_cursor.execute("KILL %s" % id)
+                                    threads_killed += 1
+                    except pymysql.OperationalError:
+                        continue
+
+            elif kill_type == "t":
+                time = console.input("[steel_blue1]Time range (ex. 10-20)[/steel_blue1]: ")
+
+                if re.search(r"(\d+-\d+)", time):
+                    time_range = time.split("-")
+                    lower_limit = int(time_range[0])
+                    upper_limit = int(time_range[1])
+
+                    if lower_limit > upper_limit:
+                        update_footer("[bright_red]Invalid time range! Lower limit can't be higher than upper!")
+                    else:
+                        for id, thread in processlist_threads.items():
+                            try:
+                                if thread["time"] >= lower_limit and thread["time"] <= upper_limit:
+                                    if include_sleep == "y":
+                                        if thread["command"] in commands_with_sleep:
+                                            db_cursor.execute("KILL %s" % id)
+                                            threads_killed += 1
+                                    else:
+                                        if thread["command"] in commands_without_sleep:
+                                            db_cursor.execute("KILL %s" % id)
+                                            threads_killed += 1
+                            except pymysql.OperationalError:
+                                continue
+                else:
+                    update_footer("[bright_red]Invalid time range!")
+            else:
+                update_footer("[bright_red]Invalid option!")
+
+            if threads_killed:
+                update_footer("[grey93]Killed [steel_blue1]%s [grey93]threads!" % threads_killed)
+            else:
+                update_footer("[bright_red]No threads were killed!")
+
+    elif key == "l":
+        if innodb_locks_sql:
+            if layout["innodb_locks"].visible:
+                layout["innodb_locks"].visible = False
+            else:
+                layout["innodb_locks"].visible = True
+                layout["innodb_locks"].update(create_innodb_locks_panel())
+
+            live.update(layout, refresh=True)
+        else:
+            update_footer("[red]Lock panel isn't supported for this host's version!")
+
+    elif key == "L":
+        system("clear")
+        console.print(Align.right(title))
+
+        deadlock = ""
+        output = re.search(
+            r"------------------------\nLATEST\sDETECTED\sDEADLOCK\n------------------------"
+            "\n(.*?)------------\nTRANSACTIONS",
+            innodb_status["status"],
+            flags=re.S,
+        )
+        if output:
+            deadlock = output.group(1)
+
+            deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
+            console.print("[steel_blue1]Latest deadlock detected:")
+            console.print(deadlock, highlight=False)
+        else:
+            console.print("No deadlock detected!", justify="center")
+
+        block_refresh_for_key_command(block_only=True)
+
+    elif key == "p":
+        if layout["processlist"].visible:
+            layout["processlist"].visible = False
+        else:
+            layout["processlist"].visible = True
+            layout["processlist"].update(create_processlist_panel())
+
+        live.update(layout, refresh=True)
+
+    elif key == "P":
+        block_refresh_for_key_command(refresh=True, block_only=True)
+
+    elif key == "Q":
+        config["query_filter"] = console.input("[steel_blue1]Query text to filter by[/steel_blue1]: ")
+
+    elif key == "q":
+        sys.exit()
+
+    elif key == "r":
+        if layout["replicas"].visible:
+            layout["replicas"].visible = False
+
+            # Cleanup connections
+            for connection in replica_connections.values():
+                connection["connection"].close()
+
+            replica_connections = {}
+        else:
+            layout["replicas"].visible = True
+            layout["replicas"].update(create_replicas_panel(True))
+
+        live.update(layout, refresh=True)
+
+    elif key == "R":
+        refresh_interval = console.input("[steel_blue1]Refresh interval (in seconds)[/steel_blue1]: ")
+
+        if refresh_interval.isnumeric():
+            config["refresh_interval"] = int(refresh_interval)
+        else:
+            update_footer("[bright_red]Input must be an integer!")
+
+    elif key == "s":
+        if config["sort_by_time_descending"]:
+            config["sort_by_time_descending"] = False
+        else:
+            config["sort_by_time_descending"] = True
+
+    elif key == "S":
+        if config["show_last_executed_query"]:
+            config["show_last_executed_query"] = False
+        else:
+            config["show_last_executed_query"] = True
+
+    elif key == "t":
+        if config["show_trxs_only"]:
+            config["show_trxs_only"] = False
+        else:
+            config["show_trxs_only"] = True
+
+    elif key == "T":
+        time = console.input("[steel_blue1]Minimum time to display for queries[/steel_blue1]: ")
+
+        if time.isnumeric():
+            config["time_filter"] = int(time)
+        else:
+            update_footer("[bright_red]Time must be an integer!")
+
+    elif key == "u":
+
+        user_stat_data = create_user_stats_table()
+        if user_stat_data:
+            system("clear")
+            console.print(Align.right(title))
+            console.print(Align.center(user_stat_data))
+
+            block_refresh_for_key_command(block_only=True)
+        else:
+            update_footer("[bright_red]This feature requires Userstat variable or Performance Schema to be enabled!")
+
+    elif key == "U":
+        config["user_filter"] = console.input("[steel_blue1]User to filter by[/steel_blue1]: ")
+
+    elif key == "y":
+        system("clear")
+
+        db_counter = 1
+        row_counter = 1
+        table_counter = 1
+        tables = {}
+        all_tables = []
+
+        db_count = db_cursor.execute(dolphie_queries["databases"])
+        databases = db_cursor.fetchall()
+
+        # Determine how many tables to provide data
+        if db_count <= 20:
+            max_num_tables = 1
+        else:
+            max_num_tables = 3
+
+        # Calculate how many databases per table
+        row_per_count = round(db_count / max_num_tables)
+
+        # Create dictionary of how many tables we want
+        table_grid = Table.grid()
+        while table_counter <= max_num_tables:
+            tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="grey70")
+            tables[table_counter].add_column("")
+
+            table_counter += 1
+
+        # Loop databases
+        table_counter = 1
+        for database in databases:
+            tables[table_counter].add_row(database["Database"].decode(), style="grey93")
+
+            if db_counter == row_per_count and row_counter != max_num_tables:
+                row_counter += 1
+                db_counter = 0
+                table_counter += 1
+
+            db_counter += 1
+
+        # Put all the variable data from dict into an array
+        for table, table_data in tables.items():
+            if table_data:
+                all_tables.append(table_data)
+
+        table_grid.add_row(*all_tables)
+
+        console.print(Align.right(title))
+        console.print(Align.center(table_grid))
+        console.print(Align.center("Total: [b steel_blue1]%s" % db_count))
+
+        block_refresh_for_key_command(block_only=True)
+
+    elif key == "v":
+        input_variable = console.input(
+            "[steel_blue1]Variable wildcard search ([grey78]leave blank for all[steel_blue1])[/steel_blue1]: "
+        )
+
+        system("clear")
+
+        size_convert_variables = [
+            "audit_log_buffer_size",
+            "audit_log_rotate_on_size",
+            "binlog_cache_size",
+            "binlog_row_event_max_size",
+            "binlog_stmt_cache_size",
+            "binlog_transaction_dependency_history_size",
+            "bulk_insert_buffer_size",
+            "clone_buffer_size",
+            "delay_queue_size",
+            "histogram_generation_max_mem_size",
+            "innodb_buffer_pool_chunk_size",
+            "innodb_buffer_pool_size",
+            "innodb_change_buffer_max_size",
+            "innodb_ft_cache_size",
+            "innodb_ft_total_cache_size",
+            "innodb_log_buffer_size",
+            "innodb_log_file_size",
+            "innodb_log_write_ahead_size",
+            "innodb_max_bitmap_file_size",
+            "innodb_max_undo_log_size",
+            "innodb_online_alter_log_max_size",
+            "innodb_page_size",
+            "innodb_sort_buffer_size",
+            "join_buffer_size",
+            "key_buffer_size",
+            "key_cache_block_size",
+            "large_page_size",
+            "max_binlog_cache_size",
+            "max_binlog_size",
+            "max_binlog_stmt_cache_size",
+            "max_heap_table_size",
+            "max_join_size",
+            "max_relay_log_size",
+            "myisam_data_pointer_size",
+            "myisam_max_sort_file_size",
+            "myisam_mmap_size",
+            "myisam_sort_buffer_size",
+            "optimizer_trace_max_mem_size",
+            "parser_max_mem_size",
+            "preload_buffer_size",
+            "query_alloc_block_size",
+            "query_prealloc_size",
+            "range_alloc_block_size",
+            "range_optimizer_max_mem_size",
+            "read_buffer_size",
+            "read_rnd_buffer_size",
+            "rpl_read_size",
+            "slave_pending_jobs_size_max",
+            "sort_buffer_size",
+            "tmp_table_size",
+            "transaction_alloc_block_size",
+            "transaction_prealloc_size",
+            "max_allowed_packet",
+        ]
+
+        table_grid = Table.grid()
+        table_counter = 1
+        variable_counter = 1
+        row_counter = 1
+        variable_num = 1
+        all_tables = []
+        tables = {}
+        display_variables = {}
+
+        for variable, value in variables.items():
+            if input_variable:
+                if input_variable not in variable:
+                    continue
+
+            # Convert size variables so they're readable
+            if variable in size_convert_variables:
+                try:
+                    display_variables[variable] = format_bytes(variables[variable])
+                except KeyError:
+                    display_variables[variable] = "N/A"
+            else:
+                display_variables[variable] = value
+
+        if len(display_variables) <= 20:
+            max_num_tables = 1
+        else:
+            max_num_tables = 3
+
+        # Create the number of tables we want
+        while table_counter <= max_num_tables:
+            tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="grey70")
+            tables[table_counter].add_column("")
+            tables[table_counter].add_column("")
+
+            table_counter += 1
+
+        # Calculate how many variables per table
+        row_per_count = round(len(display_variables) / max_num_tables)
+
+        # Loop variables
+        for variable, value in display_variables.items():
+            tables[variable_num].add_row("[gray78]%s" % variable, str(value), style="grey93")
+
+            if variable_counter == row_per_count and row_counter != max_num_tables:
+                row_counter += 1
+                variable_counter = 0
+                variable_num += 1
+
+            variable_counter += 1
+
+        # Put all the variable data from dict into an array
+        for table, table_data in tables.items():
+            if table_data:
+                all_tables.append(table_data)
+
+        console.print(Align.right(title))
+
+        # Add the data into a single tuple for add_row
+        if display_variables:
+            table_grid.add_row(*all_tables)
+            console.print(Align.center(table_grid))
+            block_refresh_for_key_command(block_only=True)
+        else:
+            if input_variable:
+                update_footer("[bright_red]No variable(s) found that match your search!")
+
+    elif key == "z":
+        system("clear")
+        console.print(Align.right(title))
+
+        if hosts_cache:
+            table = Table(box=box.ROUNDED, style="grey70")
+            table.add_column("IP")
+            table.add_column("Hostname")
+
+            for ip, addr in hosts_cache.items():
+                table.add_row(ip, addr)
+
+            console.print(Align.center(table))
+            console.print(Align.center("Total: [b steel_blue1]%s" % len(hosts_cache)))
+        else:
+            console.print(Align.center("\nThere are currently no IPs resolved to a hostname"))
+
+        block_refresh_for_key_command(block_only=True)
+
+    elif key == "?":
+        system("clear")
+
+        row_style = Style(color="grey93")
+
+        filters = {
+            "c": "Clear all filters",
+            "D": "Filter by database",
+            "H": "Filter by host/IP",
+            "Q": "Filter by query text",
+            "T": "Filter by minimum query time",
+            "U": "Filter by user",
+        }
+        table_filters = Table(box=box.ROUNDED, style="grey70", title="Filters", title_style="bold steel_blue1")
+        table_filters.add_column("Key", justify="center", style="b steel_blue1")
+        table_filters.add_column("Description")
+        for key, description in sorted(filters.items()):
+            table_filters.add_row("[steel_blue1]%s" % key, description, style=row_style)
+
+        panels = {
+            "d": "Show/hide dashboard",
+            "i": "Show/hide InnoDB information",
+            "l": "Show/hide InnoDB query locks",
+            "p": "Show/hide processlist",
+            "r": "Show/hide replication",
+        }
+        table_panels = Table(box=box.ROUNDED, style="grey70", title="Panels", title_style="bold steel_blue1")
+        table_panels.add_column("Key", justify="center", style="b steel_blue1")
+        table_panels.add_column("Description")
+        for key, description in sorted(panels.items()):
+            table_panels.add_row("[steel_blue1]%s" % key, description, style=row_style)
+
+        keys = {
+            "1": "Switch between using Processlist/Performance Schema for listing queries",
+            "2": "Print output from SHOW ENGINE INNODB STATUS",
+            "a": "Show/hide additional processlist columns",
+            "e": "Explain query of a thread and display thread information",
+            "I": "Show/hide idle queries",
+            "k": "Kill a query by thread ID",
+            "K": "Kill a query by either user/host/time range",
+            "L": "Show latest deadlock detected",
+            "P": "Pause Dolphie",
+            "q": "Quit Dolphie",
+            "t": "Show/hide running transactions only",
+            "R": "Set the refresh interval (in seconds)",
+            "s": "Sort query list by time in descending/ascending order",
+            "S": "Show/hide last executed query for sleeping thread (Performance Schema only)",
+            "u": "List users (results vary depending on if userstat variable is enabled)",
+            "v": "Variable wildcard search via SHOW VARIABLES",
+            "y": "Display all databases on server",
+            "z": "Show all entries in the host cache",
+        }
+
+        table_keys = Table(box=box.ROUNDED, style="grey70", title="Features", title_style="bold steel_blue1")
+        table_keys.add_column("Key", justify="center", style="b steel_blue1")
+        table_keys.add_column("Description")
+
+        for key, description in sorted(keys.items()):
+            table_keys.add_row("[steel_blue1]%s" % key, description, style=row_style)
+
+        datapoints = {
+            "Read Only": "If the host is in read-only mode",
+            "Use PS": "If Dolphie is using Performance Schema for listing queries",
+            "Read Hit": "The percentage of how many reads are from InnoDB buffer pool compared to from disk",
+            "Lag": "Retrieves metric from: Slave -> SHOW SLAVE STATUS, HB -> Heartbeat table, PS -> Performance Schema",
+            "Chkpt Age": "This depicts how close InnoDB is before it starts to furiously flush dirty data to disk "
+            "(Higher is better)",
+            "AHI Hit": "The percentage of how many lookups there are from Adapative Hash Index compared to it not "
+            "being used",
+            "Pending AIO": "W means writes, R means reads. The values should normally be 0",
+            "Diff": "This is the size difference of the binary log between each refresh interval",
+            "Cache Hit": "The percentage of how many binary log lookups are from cache instead of from disk",
+            "History List": "History list length (number of un-purged row changes in InnoDB's undo logs)",
+            "Unpurged TRX": "How many transactions are between the newest and the last purged in InnoDB's undo logs",
+            "QPS": "Queries per second",
+            "Latency": "How much time it takes to receive data from the server for Dolphie each refresh interval",
+            "Threads": "Con = Connected, Run = Running, Cac = Cached from SHOW GLOBAL STATUS",
+            "Speed": "How many seconds were taken off of replication lag from the last refresh interval",
+            "Query A/Q": "How many queries are active/queued in InnoDB. Based on " "innodb_thread_concurrency variable",
+            "Tickets": "Relates to innodb_concurrency_tickets variable",
+        }
+
+        table_info = Table(box=box.ROUNDED, style="grey70")
+        table_info.add_column("Datapoint", style="steel_blue1")
+        table_info.add_column("Description")
+        for datapoint, description in sorted(datapoints.items()):
+            table_info.add_row("[steel_blue1]%s" % datapoint, description, style=row_style)
+
+        console.print(
+            Align.center(base_title + " by Charles Thompson <[grey62]01charles.t@gmail.com[/grey62]>\n"),
+            highlight=False,
+        )
+
+        table_grid = Table.grid()
+        table_grid.add_row(table_panels, table_filters)
+        console.print(Align.center(table_keys))
+        console.print("")
+        console.print(Align.center(table_grid))
+        console.print("")
+        console.print(Align.center(table_info))
+
+        block_refresh_for_key_command(block_only=True)
+    else:
+        valid_key = False
+
+    pause_refresh = False
+    kb.set_new_term()
+
+    return valid_key
+
+
+def db_connect(config):
+    full_version = None
+    server_distro = None
+    innodb_locks_sql = None
+    aurora_version = None
+    use_performance_schema = False
+    performance_schema_enabled = False
+
+    try:
+        db_connection = pymysql.connect(
+            host=config["host"],
+            user=config["user"],
+            passwd=config["password"],
+            unix_socket=config["socket"],
+            port=config["port"],
+            use_unicode=False,
+            ssl=config["ssl"],
+            autocommit=True,
+        )
+        db_cursor = db_connection.cursor(pymysql.cursors.DictCursor)
+
+        db_cursor.execute("SELECT CONNECTION_ID() AS connection_id")
+        data = db_cursor.fetchone()
+        connection_id = data["connection_id"]
+
+        db_cursor.execute("SELECT @@performance_schema")
+        data = db_cursor.fetchone()
+        performance_schema = data["@@performance_schema"]
+
+        if performance_schema == 1:
+            performance_schema_enabled = True
+
+            if not config["use_processlist"]:
+                use_performance_schema = True
+
+        db_cursor.execute("SELECT @@version_comment")
+        data = db_cursor.fetchone()
+        version_comment = data["@@version_comment"].decode().lower()
+
+        db_cursor.execute("SELECT @@basedir")
+        data = db_cursor.fetchone()
+        basedir = data["@@basedir"].decode()
+
+        db_cursor.execute("SHOW GLOBAL VARIABLES LIKE 'aurora_version'")
+        data = db_cursor.fetchone()
+        if data:
+            aurora_version = data["Value"].decode()
+
+        db_cursor.execute("SELECT @@version")
+        data = db_cursor.fetchone()
+        version = data["@@version"].decode().lower()
+        version_split = version.split(".")
+
+        full_version = "%s.%s.%s" % (
+            version_split[0],
+            version_split[1],
+            version_split[2].split("-")[0],
+        )
+
+        major_minor_version = "%s.%s" % (version_split[0], version_split[1])
+        major_version = version_split[0]
+
+        # Get proper server version fork
+        if "percona xtradb cluster" in version_comment:
+            server_distro = "Percona XtraDB Cluster"
+        elif "percona server" in version_comment:
+            server_distro = "Percona Server"
+        elif "mariadb cluster" in version_comment:
+            server_distro = "MariaDB Cluster"
+        elif "mariadb" in version_comment or "mariadb" in version:
+            server_distro = "MariaDB"
+        elif aurora_version:
+            server_distro = "Amazon Aurora"
+        elif "rdsdb" in basedir:
+            server_distro = "Amazon RDS"
+        else:
+            server_distro = "MySQL"
+
+        # Determine if InnoDB locks panel is available for a version and which query to use
+        # Major version 10 is for MariaDB
+        if major_minor_version == "5.6" or major_minor_version == "5.7" or major_version == "10":
+            innodb_locks_sql = dolphie_queries["locks_query-5"]
+        elif major_version == "8":
+            if use_performance_schema:
+                innodb_locks_sql = dolphie_queries["locks_query-8"]
+    except pymysql.Error as e:
+        sys.exit(
+            console.print(
+                "[red]Error[/red]: [grey93]Failed to connect to database server %s - [red]Reason[/red]: [grey93]%s"
+                % (config["host"], e.args[1]),
+                highlight=False,
+            )
+        )
+    except FileNotFoundError:  # Catch SSL file path errors
+        console.print_exception()
+        sys.exit(console.print("[red]Error[/red]: [grey93]SSL certificate file path isn't valid!"))
+
+    return (
+        db_connection,
+        db_cursor,
+        connection_id,
+        performance_schema_enabled,
+        use_performance_schema,
+        full_version,
+        server_distro,
+        innodb_locks_sql,
+    )
+
+
+def fetch_data(command):
+    command_data = {}
+
+    if command == "status" or command == "variables":
+        db_cursor.execute(dolphie_queries[command])
+        data = db_cursor.fetchall()
+
+        for row in data:
+            variable = row["Variable_name"].decode()
+            value = row["Value"]
+
+            try:
+                converted_value = row["Value"].decode()
+
+                if converted_value.isnumeric():
+                    converted_value = int(converted_value)
+            except (UnicodeDecodeError, AttributeError):
+                converted_value = value
+
+            command_data[variable] = converted_value
+
+    elif command == "innodb_status":
+        db_cursor.execute(dolphie_queries[command])
+        data = db_cursor.fetchone()
+
+        command_data["status"] = data["Status"].decode(detect_encoding(data["Status"]))
+
+    else:
+        db_cursor.execute(dolphie_queries[command])
+        data = db_cursor.fetchall()
+
+        for row in data:
+            for column, value in row.items():
+                try:
+                    converted_value = value.decode()
+
+                    if converted_value.isnumeric():
+                        converted_value = int(converted_value)
+                except (UnicodeDecodeError, AttributeError):
+                    converted_value = value
+
+                command_data[column] = converted_value
+
+    return command_data
+
+
+def parse_args():
+    epilog = """
+Config file with [client] section supports these options:
+    host
+    user
+    password
+    port
+    socket
+    ssl_mode REQUIRED/VERIFY_CA/VERIFY_IDENTITY
+    ssl_ca
+    ssl_cert
+    ssl_key
+"""
+    parser = ArgumentParser(
+        conflict_handler="resolve",
+        description="Dolphie, an intuitive feature-rich top tool for monitoring MySQL in real time",
+        epilog=epilog,
+        formatter_class=RawTextHelpFormatter,
+    )
+
+    parser.add_argument(
+        "-u",
+        "--user",
+        dest="user",
+        type=str,
+        help="Username for MySQL",
+    )
+    parser.add_argument("-p", "--password", dest="password", type=str, help="Password for MySQL")
+    parser.add_argument(
+        "--ask-pass",
+        dest="ask_password",
+        action="store_true",
+        default=False,
+        help="Ask for password (hidden text)",
+    )
+    parser.add_argument(
+        "-h",
+        "--host",
+        dest="host",
+        type=str,
+        help="Hostname/IP address for MySQL",
+    )
+    parser.add_argument(
+        "-P",
+        "--port",
+        dest="port",
+        type=int,
+        help="Port for MySQL (Socket has precendence)",
+    )
+    parser.add_argument(
+        "-S",
+        "--socket",
+        dest="socket",
+        type=str,
+        help="Socket file for MySQL",
+    )
+    parser.add_argument(
+        "-c",
+        "--config-file",
+        dest="config_file",
+        type=str,
+        help="Absolute config file path to use. This should use [client] section. "
+        "See below for options support [default: ~/.my.cnf]",
+    )
+    parser.add_argument(
+        "-l",
+        "--login-path",
+        dest="login_path",
+        default="client",
+        type=str,
+        help="Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. "
+        "Supercedes config file and supports all options available [default: client]",
+    )
+    parser.add_argument(
+        "-r",
+        "--refresh_interval",
+        dest="refresh_interval",
+        type=int,
+        help="How much time to wait in seconds between each refresh [default: 1]",
+    )
+    parser.add_argument(
+        "-H",
+        "--heartbeat-table",
+        dest="heartbeat_table",
+        type=str,
+        help="If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it "
+        "has for replication lag instead of Seconds_Behind_Master from SHOW SLAVE STATUS",
+    )
+    parser.add_argument(
+        "--ssl-mode",
+        dest="ssl_mode",
+        type=str,
+        help="Desired security state of the connection to the host. Supports: "
+        "REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]",
+    )
+    parser.add_argument(
+        "--ssl-ca",
+        dest="ssl_ca",
+        type=str,
+        help="Path to the file that contains a PEM-formatted CA certificate",
+    )
+    parser.add_argument(
+        "--ssl-cert",
+        dest="ssl_cert",
+        type=str,
+        help="Path to the file that contains a PEM-formatted client certificate",
+    )
+    parser.add_argument(
+        "--ssl-key",
+        dest="ssl_key",
+        type=str,
+        help="Path to the file that contains a PEM-formatted private key for the client certificate",
+    )
+    parser.add_argument(
+        "--hide-dashboard",
+        dest="dashboard",
+        action="store_false",
+        default=True,
+        help="Start without showing dashboard. This is good to use if you want to reclaim terminal space and "
+        "not execute the additional queries for it",
+    )
+    parser.add_argument(
+        "--show-trxs-only",
+        dest="show_trxs_only",
+        action="store_true",
+        default=False,
+        help="Start with only showing queries that are running a transaction",
+    )
+    parser.add_argument(
+        "--additional-columns",
+        dest="show_additional_query_columns",
+        action="store_true",
+        default=False,
+        help="Start with additional columns in processlist panel",
+    )
+    parser.add_argument(
+        "--use-processlist",
+        dest="use_processlist",
+        action="store_true",
+        default=False,
+        help="Start with using Processlist instead of Performance Schema for listing queries",
+    )
+
+    parameter_options = vars(parser.parse_args())  # Convert object to dict
+    basic_options = ["user", "password", "host", "port", "socket"]
+
+    # Use specified config file if there is one, else use standard ~/.my.cnf
+    if parameter_options["config_file"]:
+        config["config_file"] = parameter_options["config_file"]
+    else:
+        config["config_file"] = "%s/.my.cnf" % os.path.expanduser("~")
+
+    # Use config file for login credentials
+    if os.path.isfile(config["config_file"]):
+        cfg = ConfigParser()
+        cfg.read(config["config_file"])
+
+        for option in basic_options:
+            if cfg.has_option("client", option):
+                config[option] = cfg.get("client", option)
+
+        if cfg.has_option("client", "ssl_mode"):
+            ssl_mode = cfg.get("client", "ssl_mode").upper()
+
+            if ssl_mode == "REQUIRED":
+                config["ssl"][""] = True
+            elif ssl_mode == "VERIFY_CA":
+                config["ssl"]["check_hostname"] = False
+            elif ssl_mode == "VERIFY_IDENTITY":
+                config["ssl"]["check_hostname"] = True
+            else:
+                sys.exit(console.print("[red]Error[/red]: [grey93]Unsupported SSL mode [b]%s" % ssl_mode))
+
+        if cfg.has_option("client", "ssl_ca"):
+            config["ssl"]["ca"] = cfg.get("client", "ssl_ca")
+        if cfg.has_option("client", "ssl_cert"):
+            config["ssl"]["cert"] = cfg.get("client", "ssl_cert")
+        if cfg.has_option("client", "ssl_key"):
+            config["ssl"]["key"] = cfg.get("client", "ssl_key")
+
+    # Use login path for login credentials
+    if parameter_options["login_path"]:
+        try:
+            login_path_data = myloginpath.parse(parameter_options["login_path"])
+
+            for option in basic_options:
+                if option in login_path_data:
+                    config[option] = login_path_data[option]
+        except Exception as e:
+            # Don't error out for default login path
+            if parameter_options["login_path"] != "client":
+                sys.exit(
+                    console.print(
+                        "[red]Error[/red]: [grey93]Problem reading login path file[/grey93] [red]Reason[/red]: %s" % e,
+                        highlight=False,
+                    )
+                )
+
+    # Lastly, use parameter options if specified
+    for option in basic_options:
+        if parameter_options[option]:
+            config[option] = parameter_options[option]
+
+    if parameter_options["ask_password"]:
+        config["password"] = Prompt.ask("[b steel_blue1]Password", password=True)
+
+    if not config["host"]:
+        config["host"] = "localhost"
+
+    if parameter_options["refresh_interval"]:
+        config["refresh_interval"] = parameter_options["refresh_interval"]
+
+    if parameter_options["heartbeat_table"]:
+        pattern_match = re.search(r"^(\w+\.\w+)$", parameter_options["heartbeat_table"])
+        if pattern_match:
+            config["heartbeat_table"] = parameter_options["heartbeat_table"]
+            dolphie_queries["heartbeat_replica_lag"] = dolphie_queries["heartbeat_replica_lag"].replace(
+                "$placeholder", config["heartbeat_table"]
+            )
+        else:
+            sys.exit(
+                console.print(
+                    "[red]Error[/red]: [grey93]Your heartbeat table did not conform to the proper format [b]db.table"
+                )
+            )
+
+    if parameter_options["ssl_mode"]:
+        ssl_mode = parameter_options["ssl_mode"].upper()
+
+        if ssl_mode == "REQUIRED":
+            config["ssl"][""] = True
+        elif ssl_mode == "VERIFY_CA":
+            config["ssl"]["check_hostame"] = False
+        elif ssl_mode == "VERIFY_IDENTITY":
+            config["ssl"]["check_hostame"] = True
+        else:
+            sys.exit(console.print("[red]Error[/red]: [grey93]Unsupported SSL mode [b]%s" % ssl_mode))
+
+    if parameter_options["ssl_ca"]:
+        config["ssl"]["ca"] = parameter_options["ssl_ca"]
+    if parameter_options["ssl_cert"]:
+        config["ssl"]["cert"] = parameter_options["ssl_cert"]
+    if parameter_options["ssl_key"]:
+        config["ssl"]["key"] = parameter_options["ssl_key"]
+
+    config["dashboard"] = parameter_options["dashboard"]
+    config["show_trxs_only"] = parameter_options["show_trxs_only"]
+    config["show_additional_query_columns"] = parameter_options["show_additional_query_columns"]
+    config["use_processlist"] = parameter_options["use_processlist"]
+
+    if config["dashboard"]:
+        layout["dashboard"].visible = True
+    else:
+        layout["dashboard"].visible = False
+
+
+if __name__ == "__main__":
+    console = Console()
+    kb = KBHit()
+
+    # Check for new version
+    try:
+        version_data = urlopen("https://raw.githubusercontent.com/charles-001/dolphie/main/version")
+        latest_version = version_data.read().decode().strip()
+
+        if parse_version(latest_version) > parse_version(current_version):
+            console.print(
+                "[bright_green]New version available!\n\n[grey93]Current version: [steel_blue1]%s\n"
+                "[grey93]Latest version: [steel_blue1] %s[grey93]\n\n"
+                "Please update to the latest version at your convenience\n\n"
+                "[steel_blue1]Press any key to continue" % (current_version, latest_version),
+            )
+
+            key = kb.key_press_blocking()
+            if key:
+                pass
+    except Exception:
+        # If there's an issue getting version, don't constantly pest the user
+        pass
+
+    dolphie_start_time = datetime.now()
+    previous_loop_time = datetime.now()
+
+    pause_refresh = False
+    first_loop = True
+    saved_status = None
+
+    previous_binlog_position = 0
+    previous_slave_sbm = 0
+
+    hosts_cache = {}
+    variables = {}
+    statuses = {}
+    master_status = {}
+    slave_status = {}
+    innodb_status = {}
+    replica_connections = {}
+
+    # Create Rich layout
+    layout = make_layout()
+    layout["header"].update(Align.right(Text.from_markup(title)))
+    layout["dashboard"].update("")
+    layout["processlist"].update("")
+    layout["footer"].update("")
+
+    parse_args()
+
+    # Connect to MySQL and get necessary information
+    (
+        db_connection,
+        db_cursor,
+        connection_id,
+        performance_schema_enabled,
+        use_performance_schema,
+        full_version,
+        server_distro,
+        innodb_locks_sql,
+    ) = db_connect(config)
+
+    # //////////////////////////////////
+    # //         Main Loop            //
+    # //////////////////////////////////
+    try:
+        with Live(layout, vertical_overflow="crop", screen=True, transient=True, auto_refresh=False) as live:
+            while True:
+                if pause_refresh is False:
+                    loop_time = datetime.now()
+
+                    statuses = fetch_data("status")
+                    if first_loop:
+                        saved_status = statuses.copy()
+
+                    loop_duration_diff = loop_time - previous_loop_time
+                    loop_duration_seconds = loop_duration_diff.total_seconds()
+
+                    if layout["processlist"].visible:
+                        processlist_threads = get_processlist()
+                        layout["processlist"].update(create_processlist_panel())
+
+                    if config["dashboard"]:
+                        variables = fetch_data("variables")
+                        master_status = fetch_data("master_status")
+                        slave_status = fetch_data("slave_status")
+                        innodb_status = fetch_data("innodb_status")
+
+                        layout["dashboard"].update(create_dashboard_panel())
+
+                        # Save some variables to be used in next refresh
+                        previous_binlog_position = 0
+                        if master_status:
+                            previous_binlog_position = master_status["Position"]
+
+                        layout["dashboard"].visible = True
+                    else:
+                        layout["dashboard"].visible = False
+
+                    if layout["replicas"].visible:
+                        layout["replicas"].update(create_replicas_panel())
+
+                    if layout["innodb_io"].visible:
+                        layout["innodb_io"].update(create_innodb_io_panel())
+
+                    if layout["innodb_locks"].visible:
+                        layout["innodb_locks"].update(create_innodb_locks_panel())
+
+                    if slave_status:
+                        previous_slave_sbm = 0
+                        if slave_status["Seconds_Behind_Master"] is not None:
+                            previous_slave_sbm = slave_status["Seconds_Behind_Master"]
+
+                    # This is for the many stats per second in Dolphie
+                    saved_status = statuses.copy()
+                    previous_loop_time = loop_time
+
+                    live.update(layout, refresh=True)
+                else:
+                    # To prevent main loop from eating up 100% CPU
+                    sleep(0.01)
+
+                # Detect a keypress loop
+                loop_counter = 0
+                while loop_counter <= config["refresh_interval"] * 10:
+                    if kb.key_press():
+                        if pause_refresh is False:
+                            key = kb.getch()
+
+                        if key:
+                            valid_key = capture_key(key)
+                            if valid_key:
+                                break
+
+                    # refresh_interval * 10 * 100ms equals to the second of sleep a user wants. This allows us to
+                    # capture a key faster than sleeping the whole second of refresh_interval
+                    sleep(0.100)
+
+                    loop_counter += 1
+
+                first_loop = False
+    except Exception:
+        console.print_exception()
