@@ -40,7 +40,7 @@ from urllib.request import urlopen
 # //////////////////////////////////
 # //       Default Settings       //
 # //////////////////////////////////
-current_version = "1.0.1"
+current_version = "1.0.2"
 
 base_title = "[b steel_blue1]dolphie :dolphin: v%s[/b steel_blue1]" % current_version
 title = "%s[grey62] press ? for help" % base_title
@@ -445,32 +445,33 @@ def get_hostname(ip_address):
     return hostname
 
 
-def format_replication_data(data, db_cursor, list_replica_sbm=None):
-    formatted_data = {}
+def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_thread_id=None):
+    global replica_connections
 
     # This is for the replica view
-    if list_replica_sbm is not None:
-        replica_previous_slave_sbm = list_replica_sbm
+    if list_replica_thread_id:
+        if replica_connections[list_replica_thread_id]["previous_sbm"] is not None:
+            replica_previous_slave_sbm = replica_connections[list_replica_thread_id]["previous_sbm"]
     else:
         replica_previous_slave_sbm = previous_slave_sbm
 
     if data["Slave_IO_Running"].lower() == "no":
-        formatted_data["io_running"] = "[bright_red]NO[/bright_red]"
+        data["Slave_IO_Running"] = "[bright_red]NO[/bright_red]"
     else:
-        formatted_data["io_running"] = "[bright_green]Yes[/bright_green]"
+        data["Slave_IO_Running"] = "[bright_green]Yes[/bright_green]"
 
     if data["Slave_SQL_Running"].lower() == "no":
-        formatted_data["sql_running"] = "[bright_red]NO[/bright_red]"
+        data["Slave_SQL_Running"] = "[bright_red]NO[/bright_red]"
     else:
-        formatted_data["sql_running"] = "[bright_green]Yes[/bright_green]"
+        data["Slave_SQL_Running"] = "[bright_green]Yes[/bright_green]"
 
-    formatted_data["sbm_source"] = "Slave"
+    data["sbm_source"] = "Slave"
     # Use performance schema for seconds behind if server is MySQL 8
     if full_version.startswith("8") and performance_schema_enabled:
         db_cursor.execute(dolphie_queries["ps_replica_lag"])
         replica_lag_data = db_cursor.fetchone()
 
-        formatted_data["sbm_source"] = "PS"
+        data["sbm_source"] = "PS"
         if replica_lag_data["secs_behind"]:
             data["Seconds_Behind_Master"] = int(replica_lag_data["secs_behind"])
         else:
@@ -482,61 +483,128 @@ def format_replication_data(data, db_cursor, list_replica_sbm=None):
             replica_lag_data = db_cursor.fetchone()
 
             if replica_lag_data["secs_behind"] is not None:
-                formatted_data["sbm_source"] = "HB"
+                data["sbm_source"] = "HB"
                 data["Seconds_Behind_Master"] = int(replica_lag_data["secs_behind"])
         except pymysql.Error:
             pass
 
-    formatted_data["speed"] = 0
-    formatted_data["seconds_behind"] = ""
+    data["speed"] = 0
+    # Colorize seconds behind master
     if data["Seconds_Behind_Master"] is not None:
         slave_sbm = data["Seconds_Behind_Master"]
 
+        if list_replica_thread_id:
+            replica_connections[list_replica_thread_id]["previous_sbm"] = slave_sbm
+
         if replica_previous_slave_sbm and slave_sbm < replica_previous_slave_sbm:
-            formatted_data["speed"] = round((replica_previous_slave_sbm - slave_sbm) / config["refresh_interval"])
+            data["speed"] = round((replica_previous_slave_sbm - slave_sbm) / config["refresh_interval"])
 
         if slave_sbm != 0:
             if slave_sbm > 20:
-                formatted_data["seconds_behind"] = "[bright_red]%s" % "{:0>8}".format(str(timedelta(seconds=slave_sbm)))
+                data["lag"] = "[bright_red]%s" % "{:0>8}".format(str(timedelta(seconds=slave_sbm)))
             elif slave_sbm > 10:
-                formatted_data["seconds_behind"] = "[bright_yellow]%s" % "{:0>8}".format(
-                    str(timedelta(seconds=slave_sbm))
-                )
+                data["lag"] = "[bright_yellow]%s" % "{:0>8}".format(str(timedelta(seconds=slave_sbm)))
             else:
-                formatted_data["seconds_behind"] = "[bright_green]%s" % "{:0>8}".format(
-                    str(timedelta(seconds=slave_sbm))
-                )
+                data["lag"] = "[bright_green]%s" % "{:0>8}".format(str(timedelta(seconds=slave_sbm)))
         elif slave_sbm == 0:
-            formatted_data["seconds_behind"] = "[bright_green]00:00:00"
+            data["lag"] = "[bright_green]00:00:00"
 
-    formatted_data["Master_Host"] = get_hostname(data["Master_Host"])
-    formatted_data["Master_User"] = data["Master_User"]
-    formatted_data["Master_Log_File"] = data["Master_Log_File"]
-    formatted_data["Relay_Master_Log_File"] = data["Relay_Master_Log_File"]
-    formatted_data["Relay_Log_File"] = data["Relay_Log_File"]
-    formatted_data["Read_Master_Log_Pos"] = data["Read_Master_Log_Pos"]
-    formatted_data["Exec_Master_Log_Pos"] = data["Exec_Master_Log_Pos"]
-    formatted_data["Relay_Log_Pos"] = data["Relay_Log_Pos"]
-    formatted_data["Last_Error"] = data["Last_Error"]
+    data["Master_Host"] = get_hostname(data["Master_Host"])
+    data["mysql_gtid_enabled"] = False
+    data["mariadb_gtid_enabled"] = False
+    data["gtid"] = "OFF"
+    if "Executed_Gtid_Set" in data and data["Executed_Gtid_Set"]:
+        data["mysql_gtid_enabled"] = True
+        data["gtid"] = "ON"
+    if "Using_Gtid" in data and data["Using_Gtid"] != "No":
+        data["mariadb_gtid_enabled"] = True
+        data["gtid"] = data["Using_Gtid"]
 
-    # MariaDB Support
-    if "Auto_Position" in data:
-        formatted_data["Auto_Position"] = data["Auto_Position"]
-    if "Retrieved_Gtid_Set" in data:
-        formatted_data["Retrieved_Gtid_Set"] = data["Retrieved_Gtid_Set"]
-    if "Executed_Gtid_Set" in data:
-        if data["Executed_Gtid_Set"]:
-            formatted_data["gtid"] = "ON"
-        else:
-            formatted_data["gtid"] = "OFF"
+    # Create table for Rich
+    table_title_style = Style(color="grey93", bold=True)
+    table_line_color = "grey78"
+    row_style = Style(color="grey93")
 
-        formatted_data["Executed_Gtid_Set"] = data["Executed_Gtid_Set"]
+    table_title = ""
+    if dashboard_table is True or list_replica_thread_id is None:
+        table_title = "Replication"
+
+    table = Table(
+        show_header=False,
+        box=box.ROUNDED,
+        title=table_title,
+        title_style=table_title_style,
+        style=table_line_color,
+    )
+
+    table.add_column()
+    if dashboard_table is True:
+        table.add_column(max_width=21)
+    elif list_replica_thread_id is not None:
+        if data["mysql_gtid_enabled"] or data["mariadb_gtid_enabled"]:
+            table.add_column(max_width=60)
     else:
-        if "Using_Gtid" in data:
-            formatted_data["gtid"] = data["Using_Gtid"]
-            formatted_data["Gtid_IO_Pos"] = data["Gtid_IO_Pos"]
+        table.add_column()
 
-    return formatted_data
+    if list_replica_thread_id is not None:
+        table.add_row(
+            "[grey78]Host", "[grey93]%s" % replica_connections[list_replica_thread_id]["host"], style=row_style
+        )
+    else:
+        table.add_row("[grey78]Master", "[grey93]%s" % data["Master_Host"], style=row_style)
+
+    table.add_row("[grey78]User", "[grey93]%s" % data["Master_User"], style=row_style)
+    table.add_row(
+        "[grey78]Thread",
+        "[grey78]IO [grey93]%s [grey78]SQL [grey93]%s" % (data["Slave_IO_Running"], data["Slave_SQL_Running"]),
+        style=row_style,
+    )
+    if data["Seconds_Behind_Master"] is None:
+        table.add_row("[grey78]Lag", "", style=row_style)
+    else:
+        table.add_row(
+            "[grey78]%s Lag" % data["sbm_source"],
+            "[grey93]%s [grey78]Speed [grey93]%s" % (data["lag"], data["speed"]),
+            style=row_style,
+        )
+    if dashboard_table:
+        table.add_row("[grey78]Binlog IO", "[grey93]%s" % (data["Master_Log_File"]), style=row_style)
+        table.add_row("[grey78]Binlog SQL", "[grey93]%s" % (data["Relay_Master_Log_File"]), style=row_style)
+        table.add_row("[grey78]Relay Log ", "[grey93]%s" % (data["Relay_Log_File"]), style=row_style)
+        table.add_row("[grey78]GTID", "[grey93]%s" % data["gtid"], style=row_style)
+    else:
+        table.add_row(
+            "[grey78]Binlog IO",
+            "%s ([grey62]%s[/grey62])" % (data["Master_Log_File"], data["Read_Master_Log_Pos"]),
+            style=row_style,
+        )
+        table.add_row(
+            "[grey78]Binlog SQL",
+            "%s ([grey62]%s[/grey62])"
+            % (
+                data["Relay_Master_Log_File"],
+                data["Exec_Master_Log_Pos"],
+            ),
+            style=row_style,
+        )
+        table.add_row(
+            "[grey78]Relay Log",
+            "%s ([grey62]%s[/grey62])" % (data["Relay_Log_File"], data["Relay_Log_Pos"]),
+            style=row_style,
+        )
+
+        table.add_row("[grey78]GTID", "[grey93]%s" % data["gtid"], style=row_style)
+        if data["mysql_gtid_enabled"]:
+            table.add_row("[grey78]Auto Position", "[grey93]%s" % data["Auto_Position"], style=row_style)
+            table.add_row("[grey78]Retrieved GTID Set", "[grey93]%s" % data["Retrieved_Gtid_Set"], style=row_style)
+            table.add_row("[grey78]Executed GTID Set", "[grey93]%s" % data["Executed_Gtid_Set"], style=row_style)
+        elif data["mariadb_gtid_enabled"]:
+            table.add_row("[grey78]GTID IO Pos ", "[grey93]%s" % data["Gtid_IO_Pos"], style=row_style)
+
+        if data["Last_Error"]:
+            table.add_row("[grey78]Error ", "[grey93]%s" % data["Last_Error"])
+
+    return table
 
 
 def create_dashboard_panel():
@@ -870,53 +938,8 @@ def create_dashboard_panel():
     ###############
     # Replication #
     ###############
-    table_replication = Table()
-
     if slave_status and layout["replicas"].visible is False:
-        slave_data = format_replication_data(slave_status, db_cursor)
-
-        table_replication = Table(
-            show_header=False,
-            box=table_box,
-            title="Replication",
-            title_style=table_title_style,
-            style=table_line_color,
-        )
-        table_replication.add_column()
-        table_replication.add_column(max_width=20)
-        table_replication.add_row("Master", "[grey93]%s" % slave_data["Master_Host"], style=row_style)
-        table_replication.add_row("User", "[grey93]%s" % slave_data["Master_User"], style=row_style)
-        table_replication.add_row(
-            "Thread",
-            "[grey78]IO [grey93]%s [grey78]SQL [grey93]%s" % (slave_data["io_running"], slave_data["sql_running"]),
-            style=row_style,
-        )
-        if slave_data["seconds_behind"] == "":
-            table_replication.add_row("Lag", "", style=row_style)
-        else:
-            table_replication.add_row(
-                "%s Lag" % slave_data["sbm_source"],
-                "[grey93]%s [grey78]Speed [grey93]%s" % (slave_data["seconds_behind"], slave_data["speed"]),
-                style=row_style,
-            )
-        table_replication.add_row(
-            "Binlog IO",
-            "[grey93]%s" % (slave_data["Master_Log_File"]),
-            style=row_style,
-        )
-        table_replication.add_row(
-            "Binlog SQL",
-            "[grey93]%s" % (slave_data["Relay_Master_Log_File"]),
-            style=row_style,
-        )
-        table_replication.add_row(
-            "Relay Log ",
-            "[grey93]%s" % (slave_data["Relay_Log_File"]),
-            style=row_style,
-        )
-        table_replication.add_row("GTID", "[grey93]%s" % slave_data["gtid"], style=row_style)
-
-        tables_to_add.append(table_replication)
+        tables_to_add.append(create_replica_table(slave_status, db_cursor, True))
 
     ###############
     # Statisitics #
@@ -1780,106 +1803,29 @@ def create_innodb_io_panel():
 def create_replicas_panel(first_run=False):
     global slave_status
 
-    row_style = Style(color="grey93")
-    table_title_style = Style(color="grey93", bold=True)
     table_grid = Table.grid()
     table_replication = Table()
 
-    # Only run this if dashboard isn't turned on
-    if config["dashboard"] is not True:
-        slave_status = fetch_data("slave_status")
-
-    slave_count = 0
     if first_run:
-        header = Text.from_markup("\nLoading...")
+        replica_count_text = Text.from_markup("\nLoading...")
     else:
+        # Only run this if dashboard isn't turned on
+        if config["dashboard"] is not True:
+            slave_status = fetch_data("slave_status")
+
         if slave_status:
-            slave_data = format_replication_data(slave_status, db_cursor)
+            table_replication = create_replica_table(slave_status, db_cursor)
 
-            table_replication = Table(
-                box=box.MINIMAL,
-                show_header=False,
-                style="grey70",
-                title_style=table_title_style,
-            )
-            table_replication.add_column()
-            table_replication.add_column()
-            table_replication.add_row(
-                "[grey78]Master",
-                "[grey93]%s" % slave_data["Master_Host"],
-                style=row_style,
-            )
-            table_replication.add_row("[grey78]User", slave_data["Master_User"], style=row_style)
-            table_replication.add_row(
-                "[grey78]Thread",
-                "[grey78]IO [grey93]%s [grey78]SQL [grey93]%s" % (slave_data["io_running"], slave_data["sql_running"]),
-                style=row_style,
-            )
-            if slave_data["seconds_behind"] == "":
-                table_replication.add_row("[grey78]Lag", "", style=row_style)
-            else:
-                table_replication.add_row(
-                    "[grey78]%s Lag" % slave_data["sbm_source"],
-                    "[grey93]%s [grey78]Speed [grey93]%s" % (slave_data["seconds_behind"], slave_data["speed"]),
-                    style=row_style,
-                )
-            table_replication.add_row(
-                "[grey78]Binlog IO",
-                "%s ([grey62]%s[/grey62])" % (slave_data["Master_Log_File"], slave_data["Read_Master_Log_Pos"]),
-                style=row_style,
-            )
-            table_replication.add_row(
-                "[grey78]Binlog SQL",
-                "%s ([grey62]%s[/grey62])"
-                % (
-                    slave_data["Relay_Master_Log_File"],
-                    slave_data["Exec_Master_Log_Pos"],
-                ),
-                style=row_style,
-            )
-            table_replication.add_row(
-                "[grey78]Relay Log",
-                "%s ([grey62]%s[/grey62])" % (slave_data["Relay_Log_File"], slave_data["Relay_Log_Pos"]),
-                style=row_style,
-            )
-            table_replication.add_row("[grey78]GTID", "[grey93]%s" % slave_data["gtid"], style=row_style)
-            if slave_data["gtid"] == "ON":
-                table_replication.add_row(
-                    "[grey78]Auto Position",
-                    "[grey93]%s" % slave_data["Auto_Position"],
-                    style=row_style,
-                )
-                table_replication.add_row(
-                    "[grey78]Retrieved GTID Set",
-                    "[grey93]%s" % slave_data["Retrieved_Gtid_Set"],
-                    style=row_style,
-                )
-                table_replication.add_row(
-                    "[grey78]Executed GTID Set",
-                    "[grey93]%s" % slave_data["Executed_Gtid_Set"],
-                    style=row_style,
-                )
-            # MariaDB Support
-            if "Using_Gtid" in slave_data and slave_data["Using_Gtid"] != "No":
-                table_replication.add_row(
-                    "[grey78]GTID IO Pos ",
-                    "[grey93]%s" % slave_data["Gtid_IO_Pos"],
-                    style=row_style,
-                )
-            if slave_data["Last_Error"]:
-                table_replication.add_row(
-                    "[grey78]Error ",
-                    "[grey93]%s" % slave_data["Last_Error"],
-                    style=row_style,
-                )
+        find_replicas_query = 0
         if use_performance_schema:
-            slave_count = db_cursor.execute(dolphie_queries["ps_find_slaves"])
+            find_replicas_query = dolphie_queries["ps_find_slaves"]
         else:
-            slave_count = db_cursor.execute(dolphie_queries["pl_find_slaves"])
+            find_replicas_query = dolphie_queries["pl_find_slaves"]
 
+        replica_count = db_cursor.execute(find_replicas_query)
         data = db_cursor.fetchall()
 
-        header = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (slave_count))
+        replica_count_text = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (replica_count))
 
         table_split_counter = 1
         tables = []
@@ -1893,6 +1839,7 @@ def create_replicas_panel(first_run=False):
             try:
                 if thread_id not in replica_connections:
                     replica_connections[thread_id] = {
+                        "host": host,
                         "connection": pymysql.connect(
                             host=host,
                             user=config["user"],
@@ -1906,96 +1853,14 @@ def create_replicas_panel(first_run=False):
 
                 replica_connection = replica_connections[thread_id]
                 replica_cursor = replica_connection["connection"].cursor(pymysql.cursors.DictCursor)
-                slave_count = replica_cursor.execute("SHOW SLAVE STATUS")
+                replica_cursor.execute(dolphie_queries["slave_status"])
                 replica_data = replica_cursor.fetchone()
 
                 if replica_data:
-                    slave_data = format_replication_data(
-                        replica_data, replica_cursor, replica_connection["previous_sbm"]
-                    )
-
-                    slave_sbm = 0
-                    if replica_data["Seconds_Behind_Master"] is not None:
-                        slave_sbm = replica_data["Seconds_Behind_Master"]
-
-                    replica_connection["previous_sbm"] = slave_sbm
-
-                    table.add_column("")
-
-                    # For GTIDs, give it more space since they can be long
-                    if slave_data["gtid"] == "ON" or ("Using_Gtid" in slave_data and slave_data["Using_Gtid"] != "No"):
-                        table.add_column("", max_width=60)
-                    else:
-                        table.add_column("", min_width=30)
-
-                    table.add_row("[grey78]Host", host, style=row_style)
-                    table.add_row("[grey78]User", row["user"].decode(), style=row_style)
-                    table.add_row(
-                        "[grey78]Thread",
-                        "[grey78]IO [grey93]%s [grey78]SQL [grey93]%s"
-                        % (slave_data["io_running"], slave_data["sql_running"]),
-                        style=row_style,
-                    )
-                    if slave_data["seconds_behind"] == "":
-                        table.add_row("[grey78]Lag", "", style=row_style)
-                    else:
-                        table.add_row(
-                            "[grey78]%s Lag" % slave_data["sbm_source"],
-                            "[grey93]%s [grey78]Speed [grey93]%s" % (slave_data["seconds_behind"], slave_data["speed"]),
-                            style=row_style,
-                        )
-                    table.add_row(
-                        "[grey78]Binlog IO",
-                        "%s ([grey62]%s[/grey62])"
-                        % (
-                            slave_data["Master_Log_File"],
-                            slave_data["Read_Master_Log_Pos"],
-                        ),
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[grey78]Binlog SQL",
-                        "%s ([grey62]%s[/grey62])"
-                        % (
-                            slave_data["Relay_Master_Log_File"],
-                            slave_data["Exec_Master_Log_Pos"],
-                        ),
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[grey78]Relay Log",
-                        "%s ([grey62]%s[/grey62])" % (slave_data["Relay_Log_File"], slave_data["Relay_Log_Pos"]),
-                        style=row_style,
-                    )
-                    table.add_row("[grey78]GTID", slave_data["gtid"], style=row_style)
-                    if slave_data["gtid"] == "ON":
-                        table.add_row(
-                            "[grey78]Auto Position",
-                            "[grey93]%s" % slave_data["Auto_Position"],
-                            style=row_style,
-                        )
-                        table.add_row(
-                            "[grey78]Retrieved GTID Set",
-                            "[grey93]%s" % slave_data["Retrieved_Gtid_Set"],
-                            style=row_style,
-                        )
-                        table.add_row(
-                            "[grey78]Executed GTID Set",
-                            "[grey93]%s" % slave_data["Executed_Gtid_Set"],
-                            style=row_style,
-                        )
-                    # MariaDB Support
-                    if "Using_Gtid" in slave_data and slave_data["Using_Gtid"] != "No":
-                        table.add_row(
-                            "[grey78]GTID IO Pos ",
-                            "[grey93]%s" % slave_data["Gtid_IO_Pos"],
-                            style=row_style,
-                        )
-                    if slave_data["Last_Error"]:
-                        table.add_row("[grey78]Error", slave_data["Last_Error"], style=row_style)
-
-                    tables.append(table)
+                    tables.append(create_replica_table(replica_data, replica_cursor, False, thread_id))
             except pymysql.Error as e:
+                row_style = Style(color="grey93")
+
                 table.add_column()
                 table.add_column(width=30)
 
@@ -2016,23 +1881,24 @@ def create_replicas_panel(first_run=False):
             table_grid.add_row(*tables)
 
     if slave_status:
-        # GTID Sets can be very long, so we don't center align it or else table will increase/decrease in size a lot
+        # GTID Sets can be very long, so we don't center align replication table or else table
+        # will increase/decrease in size a lot
         if ("Executed_Gtid_Set" in slave_status and slave_status["Executed_Gtid_Set"]) or (
             "Using_Gtid" in slave_status and slave_status["Using_Gtid"] != "No"
         ):
             panel_data = Group(
                 Align.left(table_replication),
-                Align.center(header),
+                Align.center(replica_count_text),
                 Align.center(table_grid),
             )
         else:
             panel_data = Group(
                 Align.center(table_replication),
-                Align.center(header),
+                Align.center(replica_count_text),
                 Align.center(table_grid),
             )
     else:
-        panel_data = Group(Align.center(header), Align.center(table_grid))
+        panel_data = Group(Align.center(replica_count_text), Align.center(table_grid))
 
     return panel_data
 
