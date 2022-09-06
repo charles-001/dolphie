@@ -24,9 +24,7 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 1. PROCESS
 2. Global SELECT access (good for explaining queries, listing all databases, etc)
 4. REPLICATION CLIENT
-5. SUPER
-
-`SUPER` is required if you want to use the kill feature and target threads that aren't yours
+5. SUPER (only required if you want to kill queries)
 
 ## Features
 - Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer (see Help screenshot for panels available)
