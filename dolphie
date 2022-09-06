@@ -3063,8 +3063,9 @@ if __name__ == "__main__":
             console.print(
                 "[bright_green]New version available!\n\n[grey93]Current version: [steel_blue1]%s\n"
                 "[grey93]Latest version: [steel_blue1] %s[grey93]\n\n"
-                "Please update to the latest version at your convenience\n\n"
+                "Please update to the latest version at your convenience - https://github.com/charles-001/dolphie\n\n"
                 "[steel_blue1]Press any key to continue" % (current_version, latest_version),
+                highlight=False,
             )
 
             key = kb.key_press_blocking()
