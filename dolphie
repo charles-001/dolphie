@@ -1860,7 +1860,7 @@ def create_replicas_panel(first_run=False):
                     style=row_style,
                 )
             # MariaDB Support
-            if "Gtid_IO_Pos" in slave_data:
+            if "Using_Gtid" in slave_data and slave_data["Using_Gtid"] != "No":
                 table_replication.add_row(
                     "[grey78]GTID IO Pos ",
                     "[grey93]%s" % slave_data["Gtid_IO_Pos"],
@@ -1921,7 +1921,13 @@ def create_replicas_panel(first_run=False):
                     replica_connection["previous_sbm"] = slave_sbm
 
                     table.add_column("")
-                    table.add_column("", max_width=60)
+
+                    # For GTIDs, give it more space since they can be long
+                    if slave_data["gtid"] == "ON" or ("Using_Gtid" in slave_data and slave_data["Using_Gtid"] != "No"):
+                        table.add_column("", max_width=60)
+                    else:
+                        table.add_column("", min_width=30)
+
                     table.add_row("[grey78]Host", host, style=row_style)
                     table.add_row("[grey78]User", row["user"].decode(), style=row_style)
                     table.add_row(
@@ -1979,7 +1985,7 @@ def create_replicas_panel(first_run=False):
                             style=row_style,
                         )
                     # MariaDB Support
-                    if "Gtid_IO_Pos" in slave_data:
+                    if "Using_Gtid" in slave_data and slave_data["Using_Gtid"] != "No":
                         table.add_row(
                             "[grey78]GTID IO Pos ",
                             "[grey93]%s" % slave_data["Gtid_IO_Pos"],
@@ -2011,7 +2017,9 @@ def create_replicas_panel(first_run=False):
 
     if slave_status:
         # GTID Sets can be very long, so we don't center align it or else table will increase/decrease in size a lot
-        if slave_status["Executed_Gtid_Set"]:
+        if ("Executed_Gtid_Set" in slave_status and slave_status["Executed_Gtid_Set"]) or (
+            "Using_Gtid" in slave_status and slave_status["Using_Gtid"] != "No"
+        ):
             panel_data = Group(
                 Align.left(table_replication),
                 Align.center(header),
