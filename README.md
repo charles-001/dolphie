@@ -56,6 +56,8 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
                         Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file and supports all options available [default: client]
   -r REFRESH_INTERVAL, --refresh_interval REFRESH_INTERVAL
                         How much time to wait in seconds between each refresh [default: 1]
+  -R REFRESH_INTERVAL_INNODB_STATUS, --refresh_interval_innodb_status REFRESH_INTERVAL_INNODB_STATUS
+                        How much time to wait in seconds to execute SHOW ENGINE INNODB STATUS to refresh data its responsible for [default: 1]
   -H HEARTBEAT_TABLE, --heartbeat-table HEARTBEAT_TABLE
                         If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW SLAVE STATUS
   --ssl-mode SSL_MODE   Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
