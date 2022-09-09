@@ -102,6 +102,6 @@ I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please
 <img width="1710" alt="variables" src="https://user-images.githubusercontent.com/13244625/188236534-9f876d01-4a6f-47ed-ba4f-9f0901ba0efb.png">
 
 ## Help 
-<img width="1813" alt="Screen Shot 2022-09-02 at 7 48 45 PM" src="https://user-images.githubusercontent.com/13244625/188247147-9f0aab01-76dd-4639-8f41-f8b7ea7971f0.png">
+<img width="1421" alt="Screen Shot 2022-09-09 at 3 41 47 AM" src="https://user-images.githubusercontent.com/13244625/189298313-adbcc1fc-bde5-4261-8c83-f0752a01b9d8.png">
 
 
