@@ -40,7 +40,7 @@ from urllib.request import urlopen
 # //////////////////////////////////
 # //       Default Settings       //
 # //////////////////////////////////
-current_version = "1.0.3"
+current_version = "1.0.4"
 
 base_title = "[b steel_blue1]dolphie :dolphin: v%s[/b steel_blue1]" % current_version
 title = "%s[grey62] press ? for help" % base_title
@@ -54,6 +54,7 @@ config = {
     "ssl": {},
     "config_file": "",
     "refresh_interval": 1,
+    "refresh_interval_innodb_status": 1,
     "dashboard": True,
     "use_processlist": False,
     "show_idle_queries": False,
@@ -2018,7 +2019,7 @@ def capture_key(key):
                     processlist_threads[thread_id]["trx_rows_modified"],
                     style=row_style,
                 )
-                if variables["innodb_thread_concurrency"]:
+                if "innodb_thread_concurrency" in variables and variables["innodb_thread_concurrency"]:
                     table.add_row(
                         "[gray78]Tickets",
                         processlist_threads[thread_id]["trx_concurrency_tickets"],
@@ -2287,14 +2288,6 @@ def capture_key(key):
 
         live.update(layout, refresh=True)
 
-    elif key == "R":
-        refresh_interval = console.input("[steel_blue1]Refresh interval (in seconds)[/steel_blue1]: ")
-
-        if refresh_interval.isnumeric():
-            config["refresh_interval"] = int(refresh_interval)
-        else:
-            update_footer("[bright_red]Input must be an integer!")
-
     elif key == "s":
         if config["sort_by_time_descending"]:
             config["sort_by_time_descending"] = False
@@ -2519,6 +2512,24 @@ def capture_key(key):
             if input_variable:
                 update_footer("[bright_red]No variable(s) found that match your search!")
 
+    elif key == "x":
+        refresh_interval = console.input("[steel_blue1]Refresh interval (in seconds)[/steel_blue1]: ")
+
+        if refresh_interval.isnumeric():
+            config["refresh_interval"] = int(refresh_interval)
+        else:
+            update_footer("[bright_red]Input must be an integer!")
+
+    elif key == "X":
+        refresh_interval_innodb_status = console.input(
+            "[steel_blue1]Refresh interval for InnoDB Status data (in seconds)[/steel_blue1]: "
+        )
+
+        if refresh_interval_innodb_status.isnumeric():
+            config["refresh_interval_innodb_status"] = int(refresh_interval_innodb_status)
+        else:
+            update_footer("[bright_red]Input must be an integer!")
+
     elif key == "z":
         system("clear")
         console.print(Align.right(title))
@@ -2582,11 +2593,13 @@ def capture_key(key):
             "P": "Pause Dolphie",
             "q": "Quit Dolphie",
             "t": "Show/hide running transactions only",
-            "R": "Set the refresh interval (in seconds)",
             "s": "Sort query list by time in descending/ascending order",
             "S": "Show/hide last executed query for sleeping thread (Performance Schema only)",
             "u": "List users (results vary depending on if userstat variable is enabled)",
             "v": "Variable wildcard search via SHOW VARIABLES",
+            "x": "Set the general refresh interval",
+            "X": "Set the refresh interval for data the query SHOW ENGINE INNODB STATUS is responsible for\n[grey70]"
+            "This is good to change if your host has a very heavy workload since this query can be a bottleneck",
             "y": "Display all databases on server",
             "z": "Show all entries in the host cache",
         }
@@ -2885,6 +2898,14 @@ Config file with [client] section supports these options:
         help="How much time to wait in seconds between each refresh [default: 1]",
     )
     parser.add_argument(
+        "-R",
+        "--refresh_interval_innodb_status",
+        dest="refresh_interval_innodb_status",
+        type=int,
+        help="How much time to wait in seconds to execute SHOW ENGINE INNODB STATUS to refresh data its responsible "
+        "for [default: 1]",
+    )
+    parser.add_argument(
         "-H",
         "--heartbeat-table",
         dest="heartbeat_table",
@@ -3016,6 +3037,9 @@ Config file with [client] section supports these options:
     if parameter_options["refresh_interval"]:
         config["refresh_interval"] = parameter_options["refresh_interval"]
 
+    if parameter_options["refresh_interval_innodb_status"]:
+        config["refresh_interval_innodb_status"] = parameter_options["refresh_interval_innodb_status"]
+
     if parameter_options["heartbeat_table"]:
         pattern_match = re.search(r"^(\w+\.\w+)$", parameter_options["heartbeat_table"])
         if pattern_match:
@@ -3086,7 +3110,8 @@ if __name__ == "__main__":
         pass
 
     dolphie_start_time = datetime.now()
-    previous_loop_time = datetime.now()
+    previous_main_loop_time = datetime.now()
+    previous_innodb_status_loop_time = datetime.now()
 
     pause_refresh = False
     first_loop = True
@@ -3137,8 +3162,8 @@ if __name__ == "__main__":
                     if first_loop:
                         saved_status = statuses.copy()
 
-                    loop_duration_diff = loop_time - previous_loop_time
-                    loop_duration_seconds = loop_duration_diff.total_seconds()
+                    loop_duration_seconds = (loop_time - previous_main_loop_time).total_seconds()
+                    loop_duration_innodb_status_seconds = (loop_time - previous_innodb_status_loop_time).total_seconds()
 
                     if layout["processlist"].visible:
                         processlist_threads = get_processlist()
@@ -3148,7 +3173,12 @@ if __name__ == "__main__":
                         variables = fetch_data("variables")
                         master_status = fetch_data("master_status")
                         slave_status = fetch_data("slave_status")
-                        innodb_status = fetch_data("innodb_status")
+
+                        if (
+                            first_loop
+                            or loop_duration_innodb_status_seconds >= config["refresh_interval_innodb_status"]
+                        ):
+                            innodb_status = fetch_data("innodb_status")
 
                         layout["dashboard"].update(create_dashboard_panel())
 
@@ -3177,7 +3207,10 @@ if __name__ == "__main__":
 
                     # This is for the many stats per second in Dolphie
                     saved_status = statuses.copy()
-                    previous_loop_time = loop_time
+                    previous_main_loop_time = loop_time
+
+                    if loop_duration_innodb_status_seconds >= config["refresh_interval_innodb_status"]:
+                        previous_innodb_status_loop_time = loop_time
 
                     live.update(layout, refresh=True)
                 else:
