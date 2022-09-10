@@ -4,10 +4,16 @@
 An intuitive feature-rich top tool for monitoring MySQL in real time
 </p>
 
-## Requirements
+## Requirements (local machine)
 1. Python 3.6+
 2. Packages: rich, pymysql, charset_normalizer, myloginpath, packaging
 3. Unix systems (Windows may work, haven't tested)
+
+## Using Docker container
+1. `docker pull ghcr.io/charles-001/dolphie:$version`
+2. `docker run -dit --name dolphie ghcr.io/charles-001/dolphie:$version`
+3. `docker exec -it dolphie bash`
+4. Enjoy!
 
 ## Supported MySQL versions
 - MySQL/Percona Server 5.5/5.6/5.7/8.0
