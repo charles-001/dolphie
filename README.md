@@ -12,8 +12,7 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 ## Using Docker container
 1. `docker pull ghcr.io/charles-001/dolphie:latest`
 2. `docker run -dit --name dolphie ghcr.io/charles-001/dolphie:latest`
-3. `docker exec -it dolphie bash`
-4. Run dolphie: `dolphie -h localhost -u root --ask-pass`
+3. `docker exec -it dolphie dolphie -h localhost -u root --ask-pass`
 5. Enjoy!
 
 ## Supported MySQL versions
