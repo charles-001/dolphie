@@ -480,10 +480,10 @@ def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_th
         data["Slave_SQL_Running"] = "[bright_green]Yes[/bright_green]"
 
     data["sbm_source"] = "Slave"
-    # Use performance schema for seconds behind if server is MySQL 8
-    if full_version.startswith("8") and performance_schema_enabled:
-        db_cursor.execute(dolphie_queries["ps_replica_lag"])
-        replica_lag_data = db_cursor.fetchone()
+    # Use performance schema for seconds behind if host is MySQL 8
+    if c_data["full_version"].startswith("8") and c_data["performance_schema_enabled"]:
+        c_data["db_cursor"].execute(dolphie_queries["ps_replica_lag"])
+        replica_lag_data = c_data["db_cursor"].fetchone()
 
         data["sbm_source"] = "PS"
         if replica_lag_data["secs_behind"]:
@@ -493,8 +493,8 @@ def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_th
     # Use heartbeat table from pt-toolkit if specified
     elif config["heartbeat_table"]:
         try:
-            db_cursor.execute(dolphie_queries["heartbeat_replica_lag"])
-            replica_lag_data = db_cursor.fetchone()
+            c_data["db_cursor"].execute(dolphie_queries["heartbeat_replica_lag"])
+            replica_lag_data = c_data["db_cursor"].fetchone()
 
             if replica_lag_data["secs_behind"] is not None:
                 data["sbm_source"] = "HB"
@@ -652,7 +652,7 @@ def create_dashboard_panel():
         refresh_latency = str(round(loop_duration_seconds - config["refresh_interval"], 2))
 
     use_performance_schema_status = "NO"
-    if use_performance_schema:
+    if c_data["use_performance_schema"]:
         use_performance_schema_status = "YES"
 
     if variables["read_only"] == "ON":
@@ -665,7 +665,9 @@ def create_dashboard_panel():
     table_information.add_column()
     table_information.add_column(width=27)
     table_information.add_row("Name", "[grey93]%s" % config["host"], style=row_style)
-    table_information.add_row("Version", "[grey93]%s %s" % (server_distro, full_version), style=row_style)
+    table_information.add_row(
+        "Version", "[grey93]%s %s" % (c_data["host_distro"], c_data["full_version"]), style=row_style
+    )
     table_information.add_row("Uptime", "[grey93]%s" % uptime, style=row_style)
     table_information.add_row(
         "Runtime", "[grey93]%s [grey78]latency: [grey93]%ss" % (runtime, refresh_latency), style=row_style
@@ -719,7 +721,7 @@ def create_dashboard_panel():
 
     # Save what percentage of log files InnoDB will start to aggressively flush
     # to disk due to checkpointing based on version
-    if full_version.startswith("8"):
+    if c_data["full_version"].startswith("8"):
         version_threshold = 0.875
     else:
         version_threshold = 0.81
@@ -953,7 +955,7 @@ def create_dashboard_panel():
     # Replication #
     ###############
     if slave_status and layout["replicas"].visible is False:
-        tables_to_add.append(create_replica_table(slave_status, db_cursor, True))
+        tables_to_add.append(create_replica_table(slave_status, c_data["db_cursor"], True))
 
     ###############
     # Statisitics #
@@ -1123,18 +1125,18 @@ def create_processlist_panel():
 
 
 def get_processlist():
-    if use_performance_schema:
+    if c_data["use_performance_schema"]:
         processlist_query = dolphie_queries["ps_query"]
     else:
         processlist_query = dolphie_queries["pl_query"]
 
     if config["sort_by_time_descending"]:
-        if use_performance_schema:
+        if c_data["use_performance_schema"]:
             processlist_query = processlist_query + " ORDER BY processlist_time DESC"
         else:
             processlist_query = processlist_query + " ORDER BY LENGTH(Time) DESC, Time DESC"
     else:
-        if use_performance_schema:
+        if c_data["use_performance_schema"]:
             processlist_query = processlist_query + " ORDER BY processlist_time"
         else:
             processlist_query = processlist_query + " ORDER BY LENGTH(Time), Time"
@@ -1146,7 +1148,7 @@ def get_processlist():
 
     # Only show running queries
     if not config["show_idle_queries"]:
-        if use_performance_schema:
+        if c_data["use_performance_schema"]:
             where_clause.append(
                 "(processlist_command != 'Sleep' AND processlist_command NOT LIKE 'Binlog Dump%') AND "
                 "(processlist_info IS NOT NULL OR trx_query IS NOT NULL)"
@@ -1163,14 +1165,14 @@ def get_processlist():
 
     # Filter user
     if config["user_filter"]:
-        if use_performance_schema:
+        if c_data["use_performance_schema"]:
             where_clause.append("processlist_user = '%s'" % config["user_filter"])
         else:
             where_clause.append("User = '%s'" % config["user_filter"])
 
     # Filter database
     if config["db_filter"]:
-        if use_performance_schema:
+        if c_data["use_performance_schema"]:
             where_clause.append("processlist_db = '%s'" % config["db_filter"])
         else:
             where_clause.append("db = '%s'" % config["db_filter"])
@@ -1178,21 +1180,21 @@ def get_processlist():
     # Filter hostname/IP
     if config["host_filter"]:
         # Have to use LIKE since there's a port at the end
-        if use_performance_schema:
+        if c_data["use_performance_schema"]:
             where_clause.append("processlist_host LIKE '%s%%'" % config["host_filter"])
         else:
             where_clause.append("Host LIKE '%s%%'" % config["host_filter"])
 
     # Filter time
     if config["time_filter"]:
-        if use_performance_schema:
+        if c_data["use_performance_schema"]:
             where_clause.append("processlist_time >= '%s'" % config["time_filter"])
         else:
             where_clause.append("Time >= '%s'" % config["time_filter"])
 
     # Filter query
     if config["query_filter"]:
-        if use_performance_schema:
+        if c_data["use_performance_schema"]:
             where_clause.append(
                 "(processlist_info LIKE '%%%s%%' OR trx_query LIKE '%%%s%%')"
                 % (config["query_filter"], config["query_filter"]),
@@ -1211,20 +1213,20 @@ def get_processlist():
 
     processlist_threads = {}
     # Run the processlist query
-    db_cursor.execute(processlist_query)
-    threads = db_cursor.fetchall()
+    c_data["db_cursor"].execute(processlist_query)
+    threads = c_data["db_cursor"].fetchall()
 
     for thread in threads:
         # Don't include Dolphie's thread
-        if connection_id == thread["id"]:
+        if c_data["connection_id"] == thread["id"]:
             continue
 
         command = thread["command"].decode()
-        if use_performance_schema and config["show_last_executed_query"] is False and command == "Sleep":
+        if c_data["use_performance_schema"] and config["show_last_executed_query"] is False and command == "Sleep":
             query = ""
         else:
             # Use trx_query over Performance Schema query since it's more accurate
-            if use_performance_schema and thread["trx_query"]:
+            if c_data["use_performance_schema"] and thread["trx_query"]:
                 query = thread["trx_query"].decode(detect_encoding(thread["trx_query"]))
             else:
                 query = thread["query"].decode(detect_encoding(thread["query"]))
@@ -1278,8 +1280,8 @@ def create_user_stats_table():
     # Determine if userstat variable is enabled
     userstat_enabled = False
     try:
-        db_cursor.execute("SELECT @@userstat")
-        data = db_cursor.fetchone()
+        c_data["db_cursor"].execute("SELECT @@userstat")
+        data = c_data["db_cursor"].fetchone()
         userstat = data["@@userstat"]
 
         if userstat == 1:
@@ -1292,8 +1294,8 @@ def create_user_stats_table():
     user_stats = {}
     columns = {}
     if userstat_enabled:
-        db_cursor.execute(dolphie_queries["userstat_user_statisitics"])
-        users = db_cursor.fetchall()
+        c_data["db_cursor"].execute(dolphie_queries["userstat_user_statisitics"])
+        users = c_data["db_cursor"].fetchall()
 
         for user in users:
             username = user["user"].decode()
@@ -1328,10 +1330,10 @@ def create_user_stats_table():
         columns["Rollback"] = {"field": "rollback_transactions", "format_number": True}
         columns["Access Denied"] = {"field": "access_denied", "format_number": True}
         columns["Conn Denied"] = {"field": "denied_connections", "format_number": True}
-    elif performance_schema_enabled:
-        db_cursor.execute(dolphie_queries["ps_user_statisitics"])
+    elif c_data["performance_schema_enabled"]:
+        c_data["db_cursor"].execute(dolphie_queries["ps_user_statisitics"])
 
-        users = db_cursor.fetchall()
+        users = c_data["db_cursor"].fetchall()
         for user in users:
             username = user["user"].decode()
 
@@ -1389,8 +1391,8 @@ def create_user_stats_table():
 def create_innodb_locks_panel():
     innodb_lock_threads = {}
 
-    db_cursor.execute(innodb_locks_sql)
-    threads = db_cursor.fetchall()
+    c_data["db_cursor"].execute(c_data["innodb_locks_sql"])
+    threads = c_data["db_cursor"].fetchall()
 
     for counter, thread in enumerate(threads):
         w_query = re.sub(r"\s+", " ", thread["waiting_query"].decode(detect_encoding(thread["waiting_query"])))
@@ -1825,16 +1827,16 @@ def create_replicas_panel(first_run=False):
             slave_status = fetch_data("slave_status")
 
         if slave_status:
-            table_replication = create_replica_table(slave_status, db_cursor)
+            table_replication = create_replica_table(slave_status, c_data["db_cursor"])
 
         find_replicas_query = 0
-        if use_performance_schema:
+        if c_data["use_performance_schema"]:
             find_replicas_query = dolphie_queries["ps_find_slaves"]
         else:
             find_replicas_query = dolphie_queries["pl_find_slaves"]
 
-        replica_count = db_cursor.execute(find_replicas_query)
-        data = db_cursor.fetchall()
+        replica_count = c_data["db_cursor"].execute(find_replicas_query)
+        data = c_data["db_cursor"].fetchall()
 
         replica_count_text = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (replica_count))
 
@@ -1915,7 +1917,7 @@ def create_replicas_panel(first_run=False):
 
 
 def capture_key(key):
-    global pause_refresh, use_performance_schema, replica_connections
+    global pause_refresh, c_data, replica_connections
 
     pause_refresh = True
     valid_key = True
@@ -1923,12 +1925,12 @@ def capture_key(key):
     kb.set_normal_term()
 
     if key == "1":
-        if use_performance_schema:
-            use_performance_schema = False
+        if c_data["use_performance_schema"]:
+            c_data["use_performance_schema"] = False
             update_footer("[steel_blue1]Switched to [grey93]Processlist")
         else:
-            if performance_schema_enabled:
-                use_performance_schema = True
+            if c_data["performance_schema_enabled"]:
+                c_data["use_performance_schema"] = True
                 update_footer("[steel_blue1]Switched to [grey93]Performance Schema")
             else:
                 update_footer("[red]You can't switch to Performance Schema because it isn't enabled")
@@ -2060,10 +2062,10 @@ def capture_key(key):
                     console.print("")
 
                     try:
-                        db_cursor.execute("USE %s" % processlist_threads[thread_id]["db"])
-                        db_cursor.execute("EXPLAIN %s" % processlist_threads[thread_id]["query"])
+                        c_data["db_cursor"].execute("USE %s" % processlist_threads[thread_id]["db"])
+                        c_data["db_cursor"].execute("EXPLAIN %s" % processlist_threads[thread_id]["query"])
 
-                        explain_data = db_cursor.fetchall()
+                        explain_data = c_data["db_cursor"].fetchall()
                     except pymysql.Error as e:
                         explain_failure = "[bright_red]EXPLAIN ERROR:[/bright_red] [red]%s" % e.args[1]
 
@@ -2135,7 +2137,10 @@ def capture_key(key):
         if thread_id:
             if thread_id in processlist_threads:
                 try:
-                    db_cursor.execute("KILL %s" % thread_id)
+                    if c_data["host_is_rds"]:
+                        c_data["db_cursor"].execute("CALL mysql.rds_kill(%s)" % thread_id)
+                    else:
+                        c_data["db_cursor"].execute("KILL %s" % thread_id)
                 except pymysql.OperationalError:
                     update_footer("[bright_red]Thread ID '[grey93]%s[bright_red]' does not exist!" % thread_id)
             else:
@@ -2156,16 +2161,24 @@ def capture_key(key):
             if kill_type == "u":
                 user = console.input("[steel_blue1]User[/steel_blue1]: ")
 
-                for id, thread in processlist_threads.items():
+                for thread_id, thread in processlist_threads.items():
                     try:
                         if thread["user"] == user:
                             if include_sleep == "y":
                                 if thread["command"] in commands_with_sleep:
-                                    db_cursor.execute("KILL %s" % id)
+                                    if c_data["host_is_rds"]:
+                                        c_data["db_cursor"].execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                    else:
+                                        c_data["db_cursor"].execute("KILL %s" % thread_id)
+
                                     threads_killed += 1
                             else:
                                 if thread["command"] in commands_without_sleep:
-                                    db_cursor.execute("KILL %s" % id)
+                                    if c_data["host_is_rds"]:
+                                        c_data["db_cursor"].execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                    else:
+                                        c_data["db_cursor"].execute("KILL %s" % thread_id)
+
                                     threads_killed += 1
                     except pymysql.OperationalError:
                         continue
@@ -2173,16 +2186,24 @@ def capture_key(key):
             elif kill_type == "h":
                 host = console.input("[steel_blue1]Host/IP[/steel_blue1]: ")
 
-                for id, thread in processlist_threads.items():
+                for thread_id, thread in processlist_threads.items():
                     try:
                         if thread["host"] == host:
                             if include_sleep == "y":
                                 if thread["command"] in commands_with_sleep:
-                                    db_cursor.execute("KILL %s" % id)
+                                    if c_data["host_is_rds"]:
+                                        c_data["db_cursor"].execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                    else:
+                                        c_data["db_cursor"].execute("KILL %s" % thread_id)
+
                                     threads_killed += 1
                             else:
                                 if thread["command"] in commands_without_sleep:
-                                    db_cursor.execute("KILL %s" % id)
+                                    if c_data["host_is_rds"]:
+                                        c_data["db_cursor"].execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                    else:
+                                        c_data["db_cursor"].execute("KILL %s" % thread_id)
+
                                     threads_killed += 1
                     except pymysql.OperationalError:
                         continue
@@ -2198,16 +2219,24 @@ def capture_key(key):
                     if lower_limit > upper_limit:
                         update_footer("[bright_red]Invalid time range! Lower limit can't be higher than upper!")
                     else:
-                        for id, thread in processlist_threads.items():
+                        for thread_id, thread in processlist_threads.items():
                             try:
                                 if thread["time"] >= lower_limit and thread["time"] <= upper_limit:
                                     if include_sleep == "y":
                                         if thread["command"] in commands_with_sleep:
-                                            db_cursor.execute("KILL %s" % id)
+                                            if c_data["host_is_rds"]:
+                                                c_data["db_cursor"].execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            else:
+                                                c_data["db_cursor"].execute("KILL %s" % thread_id)
+
                                             threads_killed += 1
                                     else:
                                         if thread["command"] in commands_without_sleep:
-                                            db_cursor.execute("KILL %s" % id)
+                                            if c_data["host_is_rds"]:
+                                                c_data["db_cursor"].execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            else:
+                                                c_data["db_cursor"].execute("KILL %s" % thread_id)
+
                                             threads_killed += 1
                             except pymysql.OperationalError:
                                 continue
@@ -2222,7 +2251,7 @@ def capture_key(key):
                 update_footer("[bright_red]No threads were killed!")
 
     elif key == "l":
-        if innodb_locks_sql:
+        if c_data["innodb_locks_sql"]:
             if layout["innodb_locks"].visible:
                 layout["innodb_locks"].visible = False
             else:
@@ -2338,8 +2367,8 @@ def capture_key(key):
         tables = {}
         all_tables = []
 
-        db_count = db_cursor.execute(dolphie_queries["databases"])
-        databases = db_cursor.fetchall()
+        db_count = c_data["db_cursor"].execute(dolphie_queries["databases"])
+        databases = c_data["db_cursor"].fetchall()
 
         # Determine how many tables to provide data
         if db_count <= 20:
@@ -2600,7 +2629,7 @@ def capture_key(key):
             "x": "Set the general refresh interval",
             "X": "Set the refresh interval for data the query SHOW ENGINE INNODB STATUS is responsible for\n[grey70]"
             "This is good to change if your host has a very heavy workload since this query can be a bottleneck",
-            "y": "Display all databases on server",
+            "y": "Display all databases on host",
             "z": "Show all entries in the host cache",
         }
 
@@ -2626,7 +2655,7 @@ def capture_key(key):
             "History List": "History list length (number of un-purged row changes in InnoDB's undo logs)",
             "Unpurged TRX": "How many transactions are between the newest and the last purged in InnoDB's undo logs",
             "QPS": "Queries per second",
-            "Latency": "How much time it takes to receive data from the server for Dolphie each refresh interval",
+            "Latency": "How much time it takes to receive data from the host for Dolphie each refresh interval",
             "Threads": "Con = Connected, Run = Running, Cac = Cached from SHOW GLOBAL STATUS",
             "Speed": "How many seconds were taken off of replication lag from the last refresh interval",
             "Query A/Q": "How many queries are active/queued in InnoDB. Based on " "innodb_thread_concurrency variable",
@@ -2663,12 +2692,7 @@ def capture_key(key):
 
 
 def db_connect(config):
-    full_version = None
-    server_distro = None
-    innodb_locks_sql = None
-    aurora_version = None
-    use_performance_schema = False
-    performance_schema_enabled = False
+    c_data = {}
 
     try:
         db_connection = pymysql.connect(
@@ -2682,20 +2706,23 @@ def db_connect(config):
             autocommit=True,
         )
         db_cursor = db_connection.cursor(pymysql.cursors.DictCursor)
+        c_data["db_cursor"] = db_cursor
 
         db_cursor.execute("SELECT CONNECTION_ID() AS connection_id")
         data = db_cursor.fetchone()
-        connection_id = data["connection_id"]
+        c_data["connection_id"] = data["connection_id"]
 
         db_cursor.execute("SELECT @@performance_schema")
         data = db_cursor.fetchone()
         performance_schema = data["@@performance_schema"]
 
+        c_data["use_performance_schema"] = False
+        c_data["performance_schema_enabled"] = False
         if performance_schema == 1:
-            performance_schema_enabled = True
+            c_data["performance_schema_enabled"] = True
 
             if not config["use_processlist"]:
-                use_performance_schema = True
+                c_data["use_performance_schema"] = True
 
         db_cursor.execute("SELECT @@version_comment")
         data = db_cursor.fetchone()
@@ -2707,6 +2734,7 @@ def db_connect(config):
 
         db_cursor.execute("SHOW GLOBAL VARIABLES LIKE 'aurora_version'")
         data = db_cursor.fetchone()
+        aurora_version = None
         if data:
             aurora_version = data["Value"].decode()
 
@@ -2715,7 +2743,7 @@ def db_connect(config):
         version = data["@@version"].decode().lower()
         version_split = version.split(".")
 
-        full_version = "%s.%s.%s" % (
+        c_data["full_version"] = "%s.%s.%s" % (
             version_split[0],
             version_split[1],
             version_split[2].split("-")[0],
@@ -2724,33 +2752,37 @@ def db_connect(config):
         major_minor_version = "%s.%s" % (version_split[0], version_split[1])
         major_version = version_split[0]
 
-        # Get proper server version fork
+        # Get proper host version and fork
+        c_data["host_is_rds"] = False
         if "percona xtradb cluster" in version_comment:
-            server_distro = "Percona XtraDB Cluster"
+            c_data["host_distro"] = "Percona XtraDB Cluster"
         elif "percona server" in version_comment:
-            server_distro = "Percona Server"
+            c_data["host_distro"] = "Percona Server"
         elif "mariadb cluster" in version_comment:
-            server_distro = "MariaDB Cluster"
+            c_data["host_distro"] = "MariaDB Cluster"
         elif "mariadb" in version_comment or "mariadb" in version:
-            server_distro = "MariaDB"
+            c_data["host_distro"] = "MariaDB"
         elif aurora_version:
-            server_distro = "Amazon Aurora"
+            c_data["host_distro"] = "Amazon Aurora"
+            c_data["host_is_rds"] = True
         elif "rdsdb" in basedir:
-            server_distro = "Amazon RDS"
+            c_data["host_distro"] = "Amazon RDS"
+            c_data["host_is_rds"] = True
         else:
-            server_distro = "MySQL"
+            c_data["host_distro"] = "MySQL"
 
         # Determine if InnoDB locks panel is available for a version and which query to use
         # Major version 10 is for MariaDB
+        c_data["innodb_locks_sql"] = None
         if major_minor_version == "5.6" or major_minor_version == "5.7" or major_version == "10":
-            innodb_locks_sql = dolphie_queries["locks_query-5"]
+            c_data["innodb_locks_sql"] = dolphie_queries["locks_query-5"]
         elif major_version == "8":
-            if use_performance_schema:
-                innodb_locks_sql = dolphie_queries["locks_query-8"]
+            if c_data["use_performance_schema"]:
+                c_data["innodb_locks_sql"] = dolphie_queries["locks_query-8"]
     except pymysql.Error as e:
         sys.exit(
             console.print(
-                "[red]Error[/red]: [grey93]Failed to connect to database server %s - [red]Reason[/red]: [grey93]%s"
+                "[red]Error[/red]: [grey93]Failed to connect to database host %s - [red]Reason[/red]: [grey93]%s"
                 % (config["host"], e.args[1]),
                 highlight=False,
             )
@@ -2759,24 +2791,15 @@ def db_connect(config):
         console.print_exception()
         sys.exit(console.print("[red]Error[/red]: [grey93]SSL certificate file path isn't valid!"))
 
-    return (
-        db_connection,
-        db_cursor,
-        connection_id,
-        performance_schema_enabled,
-        use_performance_schema,
-        full_version,
-        server_distro,
-        innodb_locks_sql,
-    )
+    return c_data
 
 
 def fetch_data(command):
     command_data = {}
 
     if command == "status" or command == "variables":
-        db_cursor.execute(dolphie_queries[command])
-        data = db_cursor.fetchall()
+        c_data["db_cursor"].execute(dolphie_queries[command])
+        data = c_data["db_cursor"].fetchall()
 
         for row in data:
             variable = row["Variable_name"].decode()
@@ -2793,14 +2816,14 @@ def fetch_data(command):
             command_data[variable] = converted_value
 
     elif command == "innodb_status":
-        db_cursor.execute(dolphie_queries[command])
-        data = db_cursor.fetchone()
+        c_data["db_cursor"].execute(dolphie_queries[command])
+        data = c_data["db_cursor"].fetchone()
 
         command_data["status"] = data["Status"].decode(detect_encoding(data["Status"]))
 
     else:
-        db_cursor.execute(dolphie_queries[command])
-        data = db_cursor.fetchall()
+        c_data["db_cursor"].execute(dolphie_queries[command])
+        data = c_data["db_cursor"].fetchall()
 
         for row in data:
             for column, value in row.items():
@@ -3120,6 +3143,7 @@ if __name__ == "__main__":
     previous_binlog_position = 0
     previous_slave_sbm = 0
 
+    c_data = {}
     hosts_cache = {}
     variables = {}
     statuses = {}
@@ -3137,17 +3161,8 @@ if __name__ == "__main__":
 
     parse_args()
 
-    # Connect to MySQL and get necessary information
-    (
-        db_connection,
-        db_cursor,
-        connection_id,
-        performance_schema_enabled,
-        use_performance_schema,
-        full_version,
-        server_distro,
-        innodb_locks_sql,
-    ) = db_connect(config)
+    # Connect to MySQL and save connection details
+    c_data = db_connect(config)
 
     # //////////////////////////////////
     # //         Main Loop            //
