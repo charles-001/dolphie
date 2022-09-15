@@ -39,6 +39,7 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
   - `Performance Schema` (MySQL 8 only - most accurate, especially for multi-threaded replication)
   - `pt-heartbeat table` (specified by parameter)
   - `SHOW SLAVE STATUS`
+- Host cache file. This provides users a way to specify hostnames for IPs when their network's DNS can't resolve them. An example use case for this is when you connect to your work's VPN and DNS isn't available to resolve IPs. In my opinion, it's a lot easier to look at hostnames than IPs!
 - Supports encrypted login credentials via `mysql_config_editor`
 - Automatic conversion of large numbers & bytes to human-readable
 - Notifies when new version is available
