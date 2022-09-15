@@ -614,14 +614,23 @@ def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_th
             retrieved_gtid_set = data["Retrieved_Gtid_Set"]
 
             for m in re.findall(r"(\w+-\w+-\w+-\w+-)(\w+)", retrieved_gtid_set):
-                retrieved_gtid_set = retrieved_gtid_set.replace(m[0], "[grey62]…[steel_blue1]")
+                source_id = m[0] + m[1]
+                if source_id == c_data["server_uuid"]:
+                    retrieved_gtid_set = retrieved_gtid_set.replace(m[0], "[grey62]…[medium_spring_green]")
+                else:
+                    retrieved_gtid_set = retrieved_gtid_set.replace(m[0], "[grey62]…[steel_blue1]")
+
                 retrieved_gtid_set = retrieved_gtid_set.replace(m[1], "%s[grey93]" % m[1])
 
             for m in re.findall(r"(\w+-\w+-\w+-\w+-)(\w+)", executed_gtid_set):
-                executed_gtid_set = executed_gtid_set.replace(m[0], "[grey62]…[steel_blue1]")
+                source_id = m[0] + m[1]
+                if source_id == c_data["server_uuid"]:
+                    executed_gtid_set = executed_gtid_set.replace(m[0], "[grey62]…[medium_spring_green]")
+                else:
+                    executed_gtid_set = executed_gtid_set.replace(m[0], "[grey62]…[steel_blue1]")
+
                 executed_gtid_set = executed_gtid_set.replace(m[1], "%s[grey93]" % m[1])
 
-            # executed_gtid_set = re.sub(r"(\w+-\w+-\w+-\w+-)", "…[grey62]", data["Executed_Gtid_Set"])
             table.add_row("[grey78]Auto Position", "[grey93]%s" % data["Auto_Position"], style=row_style)
             table.add_row("[grey78]Retrieved GTID Set", "[grey93]%s" % retrieved_gtid_set, style=row_style)
             table.add_row("[grey78]Executed GTID Set", "[grey93]%s" % executed_gtid_set, style=row_style)
@@ -2753,6 +2762,10 @@ def db_connect(config):
         db_cursor.execute("SELECT CONNECTION_ID() AS connection_id")
         data = db_cursor.fetchone()
         c_data["connection_id"] = data["connection_id"]
+
+        db_cursor.execute("SELECT @@server_uuid")
+        data = db_cursor.fetchone()
+        c_data["server_uuid"] = data["@@server_uuid"].decode()
 
         db_cursor.execute("SELECT @@performance_schema")
         data = db_cursor.fetchone()
