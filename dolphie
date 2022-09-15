@@ -40,7 +40,7 @@ from urllib.request import urlopen
 # //////////////////////////////////
 # //       Default Settings       //
 # //////////////////////////////////
-current_version = "1.0.5"
+current_version = "1.0.6"
 
 base_title = "[b steel_blue1]dolphie :dolphin: v%s[/b steel_blue1]" % current_version
 title = "%s[grey62] press ? for help" % base_title
@@ -53,6 +53,7 @@ config = {
     "socket": "",
     "ssl": {},
     "config_file": "",
+    "host_cache_file": "",
     "refresh_interval": 1,
     "refresh_interval_innodb_status": 1,
     "dashboard": True,
@@ -441,7 +442,7 @@ def format_number(n, decimal=2):
 
 
 def get_hostname(ip_address):
-    if ip_address not in hosts_cache:
+    if ip_address not in host_cache:
         try:
             # Test to see if it's IP address
             ipaddress.IPv4Network(ip_address)
@@ -450,11 +451,11 @@ def get_hostname(ip_address):
             hostname = socket.gethostbyaddr(ip_address)[0]
 
             # Add IP to cache with an associated address
-            hosts_cache[ip_address] = hostname
+            host_cache[ip_address] = hostname
         except (ValueError, socket.error):
             hostname = ip_address
     else:
-        hostname = hosts_cache[ip_address]
+        hostname = host_cache[ip_address]
 
     return hostname
 
@@ -558,7 +559,7 @@ def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_th
         if data["mysql_gtid_enabled"] or data["mariadb_gtid_enabled"]:
             table.add_column(max_width=60)
     else:
-        table.add_column()
+        table.add_column(overflow="fold")
 
     if list_replica_thread_id is not None:
         table.add_row(
@@ -609,9 +610,21 @@ def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_th
 
         table.add_row("[grey78]GTID", "[grey93]%s" % data["gtid"], style=row_style)
         if data["mysql_gtid_enabled"]:
+            executed_gtid_set = data["Executed_Gtid_Set"]
+            retrieved_gtid_set = data["Retrieved_Gtid_Set"]
+
+            for m in re.findall(r"(\w+-\w+-\w+-\w+-)(\w+)", retrieved_gtid_set):
+                retrieved_gtid_set = retrieved_gtid_set.replace(m[0], "[grey62]…[steel_blue1]")
+                retrieved_gtid_set = retrieved_gtid_set.replace(m[1], "%s[grey93]" % m[1])
+
+            for m in re.findall(r"(\w+-\w+-\w+-\w+-)(\w+)", executed_gtid_set):
+                executed_gtid_set = executed_gtid_set.replace(m[0], "[grey62]…[steel_blue1]")
+                executed_gtid_set = executed_gtid_set.replace(m[1], "%s[grey93]" % m[1])
+
+            # executed_gtid_set = re.sub(r"(\w+-\w+-\w+-\w+-)", "…[grey62]", data["Executed_Gtid_Set"])
             table.add_row("[grey78]Auto Position", "[grey93]%s" % data["Auto_Position"], style=row_style)
-            table.add_row("[grey78]Retrieved GTID Set", "[grey93]%s" % data["Retrieved_Gtid_Set"], style=row_style)
-            table.add_row("[grey78]Executed GTID Set", "[grey93]%s" % data["Executed_Gtid_Set"], style=row_style)
+            table.add_row("[grey78]Retrieved GTID Set", "[grey93]%s" % retrieved_gtid_set, style=row_style)
+            table.add_row("[grey78]Executed GTID Set", "[grey93]%s" % executed_gtid_set, style=row_style)
         elif data["mariadb_gtid_enabled"]:
             table.add_row("[grey78]GTID IO Pos ", "[grey93]%s" % data["Gtid_IO_Pos"], style=row_style)
 
@@ -1250,7 +1263,7 @@ def get_processlist():
         # This is an optimization
         host = thread["host"].decode().split(":")[0]
         if first_loop is False:
-            if hosts_cache:
+            if host_cache:
                 host = get_hostname(host)
         else:
             host = get_hostname(host)
@@ -2110,7 +2123,7 @@ def capture_key(key):
         config["host_filter"] = console.input("[steel_blue1]Hostname/IP to filter by[/steel_blue1]: ")
 
         # Since our filtering is done by the processlist query, the value needs to be what's in host cache
-        for ip, addr in hosts_cache.items():
+        for ip, addr in host_cache.items():
             if config["host_filter"] == addr:
                 config["host_filter"] = ip
 
@@ -2563,16 +2576,16 @@ def capture_key(key):
         system("clear")
         console.print(Align.right(title))
 
-        if hosts_cache:
+        if host_cache:
             table = Table(box=box.ROUNDED, style="grey70")
             table.add_column("IP")
             table.add_column("Hostname")
 
-            for ip, addr in hosts_cache.items():
+            for ip, addr in host_cache.items():
                 table.add_row(ip, addr)
 
             console.print(Align.center(table))
-            console.print(Align.center("Total: [b steel_blue1]%s" % len(hosts_cache)))
+            console.print(Align.center("Total: [b steel_blue1]%s" % len(host_cache)))
         else:
             console.print(Align.center("\nThere are currently no IPs resolved to a hostname"))
 
@@ -2689,6 +2702,35 @@ def capture_key(key):
     kb.set_new_term()
 
     return valid_key
+
+
+def load_host_cache_file():
+    host_file = config["host_cache_file"]
+
+    if os.path.exists(host_file):
+        with open(host_file) as file:
+            for line in file:
+                line = line.strip()
+                error_message = (
+                    "[red]Error[/red]: [grey93]Host cache entry '%s' is not properly formatted! Format: ip=hostname"
+                    % line
+                )
+
+                if "=" in line:
+                    line_split = line.split("=")
+
+                    if len(line_split) != 2:
+                        sys.exit(console.print(error_message))
+
+                    ip_address = line_split[0].strip()
+                    hostname = line_split[1].strip()
+
+                    if ip_address and hostname:
+                        host_cache[ip_address] = hostname
+                    else:
+                        sys.exit(console.print(error_message))
+                else:
+                    sys.exit(console.print(error_message))
 
 
 def db_connect(config):
@@ -2852,6 +2894,21 @@ Config file with [client] section supports these options:
     ssl_ca
     ssl_cert
     ssl_key
+
+Login path file supports these options:
+    host
+    user
+    password
+    port
+    socket
+
+Environment variables support these options:
+    DOLPHIE_USER
+    DOLPHIE_PASSWORD
+    DOLPHIE_HOST
+    DOLPHIE_PORT
+    DOLPHIE_SOCKET
+
 """
     parser = ArgumentParser(
         conflict_handler="resolve",
@@ -2905,13 +2962,21 @@ Config file with [client] section supports these options:
         "See below for options support [default: ~/.my.cnf]",
     )
     parser.add_argument(
+        "-f",
+        "--host-cache-file",
+        dest="host_cache_file",
+        type=str,
+        help="Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line "
+        "using format: ip=hostname [default: %s/host_cache]" % os.path.dirname(os.path.abspath(__file__)),
+    )
+    parser.add_argument(
         "-l",
         "--login-path",
         dest="login_path",
         default="client",
         type=str,
         help="Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. "
-        "Supercedes config file and supports all options available [default: client]",
+        "Supercedes config file [default: client]",
     )
     parser.add_argument(
         "-r",
@@ -2988,7 +3053,7 @@ Config file with [client] section supports these options:
         dest="use_processlist",
         action="store_true",
         default=False,
-        help="Start with using Processlist instead of Performance Schema for listing queries",
+        help="Start with using Processlist instead of Performance Schema for listing queries.",
     )
 
     parameter_options = vars(parser.parse_args())  # Convert object to dict
@@ -3046,6 +3111,12 @@ Config file with [client] section supports these options:
                     )
                 )
 
+    # Use environment variables for basic options if specified
+    for option in basic_options:
+        environment_var = "DOLPHIE_%s" % option.upper()
+        if environment_var in os.environ and os.environ[environment_var]:
+            config[option] = os.environ[environment_var]
+
     # Lastly, use parameter options if specified
     for option in basic_options:
         if parameter_options[option]:
@@ -3096,6 +3167,11 @@ Config file with [client] section supports these options:
     if parameter_options["ssl_key"]:
         config["ssl"]["key"] = parameter_options["ssl_key"]
 
+    if parameter_options["host_cache_file"]:
+        config["host_cache_file"] = parameter_options["host_cache_file"]
+    else:
+        config["host_cache_file"] = os.path.dirname(os.path.abspath(__file__)) + "/host_cache"
+
     config["dashboard"] = parameter_options["dashboard"]
     config["show_trxs_only"] = parameter_options["show_trxs_only"]
     config["show_additional_query_columns"] = parameter_options["show_additional_query_columns"]
@@ -3144,7 +3220,7 @@ if __name__ == "__main__":
     previous_slave_sbm = 0
 
     c_data = {}
-    hosts_cache = {}
+    host_cache = {}
     variables = {}
     statuses = {}
     master_status = {}
@@ -3160,6 +3236,7 @@ if __name__ == "__main__":
     layout["footer"].update("")
 
     parse_args()
+    load_host_cache_file()
 
     # Connect to MySQL and save connection details
     c_data = db_connect(config)

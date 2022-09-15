@@ -35,7 +35,7 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 ## Features
 - Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer (see Help screenshot for panels available)
 - Prefers Performance Schema over Processlist if it's turned on for listing queries. Can be switched to use Processlist by pressing key "1" (or using parameter) since P_S can truncate query length for explaining queries
-- 3 options for finding replica lag in this order of preference: 
+- 3 options for finding replica lag in this order of precedence: 
   - `Performance Schema` (MySQL 8 only - most accurate, especially for multi-threaded replication)
   - `pt-heartbeat table` (specified by parameter)
   - `SHOW SLAVE STATUS`
@@ -44,6 +44,13 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 - Notifies when new version is available
 - Many commands at your fingertips (see Help screenshot)
 - Many valuable statisitics across the available panels that can help you troubleshoot issues and be proactive against them
+
+## Things to note
+Order of precedence for variables passed to Dolphie:
+1. Parameters via command-line
+2. Environment variables
+3. ~/.mylogin.cnf (`mysql_config_editor`)
+4. ~/.my.cnf
 
 ## Usage
 ```optional arguments:
@@ -66,6 +73,8 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
                         How much time to wait in seconds to execute SHOW ENGINE INNODB STATUS to refresh data its responsible for [default: 1]
   -H HEARTBEAT_TABLE, --heartbeat-table HEARTBEAT_TABLE
                         If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW SLAVE STATUS
+  -f HOST_CACHE_FILE, --host-cache-file HOST_CACHE_FILE
+                        Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format: ip=hostname [default: /Users/charles/git/dolphie/host_cache]
   --ssl-mode SSL_MODE   Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
   --ssl-ca SSL_CA       Path to the file that contains a PEM-formatted CA certificate
   --ssl-cert SSL_CERT   Path to the file that contains a PEM-formatted client certificate
@@ -85,6 +94,20 @@ Config file with [client] section supports these options:
     ssl_ca
     ssl_cert
     ssl_key
+
+Login path file supports these options:
+    host
+    user
+    password
+    port
+    socket
+
+Environment variables support these options:
+    DOLPHIE_USER
+    DOLPHIE_PASSWORD
+    DOLPHIE_HOST
+    DOLPHIE_PORT
+    DOLPHIE_SOCKET
 
 ```
 
