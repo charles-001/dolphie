@@ -121,7 +121,7 @@ I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please
 <img width="1413" alt="Screen Shot 2022-09-04 at 4 23 21 AM" src="https://user-images.githubusercontent.com/13244625/188304499-b86d1161-c505-4a62-9427-754f8a244f79.png">
 
 ## Dashboard with replicas
-<img width="1417" alt="Screen Shot 2022-09-03 at 1 38 43 AM" src="https://user-images.githubusercontent.com/13244625/188257487-96614b9f-acec-40b4-9f24-8859edd4ab3e.png">
+<img width="1558" alt="Screen Shot 2022-09-15 at 2 30 14 AM" src="https://user-images.githubusercontent.com/13244625/190331388-f43b4ba3-f0ef-445e-a3bd-15625af21728.png">
 
 ## Explain query
 <img width="1830" alt="explain" src="https://user-images.githubusercontent.com/13244625/188236515-1dacca42-ee90-4295-925d-672e876833d3.png">
