@@ -40,7 +40,7 @@ from urllib.request import urlopen
 # //////////////////////////////////
 # //       Default Settings       //
 # //////////////////////////////////
-current_version = "1.0.7"
+current_version = "1.0.8"
 
 base_title = "[b steel_blue1]dolphie :dolphin: v%s[/b steel_blue1]" % current_version
 title = "%s[grey62] press ? for help" % base_title
@@ -644,7 +644,7 @@ def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_th
         elif data["Last_IO_Error"]:
             table.add_row("[grey78]Error ", "[grey93]%s" % data["Last_IO_Error"])
         elif data["Last_SQL_Error"]:
-            table.add_row("[grey78]Error ", "[grey93]%s" % data["Last_IO_Error"])
+            table.add_row("[grey78]Error ", "[grey93]%s" % data["Last_SQL_Error"])
 
     return table
 
@@ -1760,7 +1760,6 @@ def create_innodb_io_panel():
         writes_per_second = 0
         log_waits = 0
         row_lock_waits = 0
-        bp_wait_clean_page = 0
     else:
         reads_mem_per_second = round(
             (statuses["Innodb_buffer_pool_read_requests"] - saved_status["Innodb_buffer_pool_read_requests"])
@@ -2506,6 +2505,12 @@ def capture_key(key):
             "transaction_alloc_block_size",
             "transaction_prealloc_size",
             "max_allowed_packet",
+            "innodb_redo_log_capacity",
+            "replica_max_allowed_packet",
+            "mysqlx_max_allowed_packet",
+            "global_connection_memory_limit",
+            "temptable_max_mmap",
+            "temptable_max_ram",
         ]
 
         table_grid = Table.grid()
