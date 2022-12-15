@@ -40,7 +40,7 @@ from urllib.request import urlopen
 # //////////////////////////////////
 # //       Default Settings       //
 # //////////////////////////////////
-current_version = "1.0.6"
+current_version = "1.0.7"
 
 base_title = "[b steel_blue1]dolphie :dolphin: v%s[/b steel_blue1]" % current_version
 title = "%s[grey62] press ? for help" % base_title
@@ -384,6 +384,8 @@ def detect_encoding(text):
     # If there isn't an encoding detected, use latin1 by default
     if encoding is None:
         encoding = "latin1"
+    elif encoding == "utf_16_be":
+        encoding = "utf_8"
 
     return encoding
 
@@ -483,8 +485,8 @@ def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_th
     data["sbm_source"] = "Slave"
     # Use performance schema for seconds behind if host is MySQL 8
     if c_data["full_version"].startswith("8") and c_data["performance_schema_enabled"]:
-        c_data["db_cursor"].execute(dolphie_queries["ps_replica_lag"])
-        replica_lag_data = c_data["db_cursor"].fetchone()
+        db_cursor.execute(dolphie_queries["ps_replica_lag"])
+        replica_lag_data = db_cursor.fetchone()
 
         data["sbm_source"] = "PS"
         if replica_lag_data["secs_behind"]:
@@ -494,8 +496,8 @@ def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_th
     # Use heartbeat table from pt-toolkit if specified
     elif config["heartbeat_table"]:
         try:
-            c_data["db_cursor"].execute(dolphie_queries["heartbeat_replica_lag"])
-            replica_lag_data = c_data["db_cursor"].fetchone()
+            db_cursor.execute(dolphie_queries["heartbeat_replica_lag"])
+            replica_lag_data = db_cursor.fetchone()
 
             if replica_lag_data["secs_behind"] is not None:
                 data["sbm_source"] = "HB"
@@ -639,6 +641,10 @@ def create_replica_table(data, db_cursor, dashboard_table=False, list_replica_th
 
         if data["Last_Error"]:
             table.add_row("[grey78]Error ", "[grey93]%s" % data["Last_Error"])
+        elif data["Last_IO_Error"]:
+            table.add_row("[grey78]Error ", "[grey93]%s" % data["Last_IO_Error"])
+        elif data["Last_SQL_Error"]:
+            table.add_row("[grey78]Error ", "[grey93]%s" % data["Last_IO_Error"])
 
     return table
 
@@ -1754,6 +1760,7 @@ def create_innodb_io_panel():
         writes_per_second = 0
         log_waits = 0
         row_lock_waits = 0
+        bp_wait_clean_page = 0
     else:
         reads_mem_per_second = round(
             (statuses["Innodb_buffer_pool_read_requests"] - saved_status["Innodb_buffer_pool_read_requests"])
@@ -1777,7 +1784,12 @@ def create_innodb_io_panel():
     table_innodb_activity.add_row("[grey78]BP reads/s (disk)", format_number(reads_disk_per_second), style=row_style)
     table_innodb_activity.add_row("[grey78]BP writes/s", format_number(writes_per_second), style=row_style)
     table_innodb_activity.add_row(
-        "[grey78]BP wait clean page", format_number(statuses["Innodb_buffer_pool_wait_free"]), style=row_style
+        "[grey78]BP wait clean page/s",
+        format_number(
+            (statuses["Innodb_buffer_pool_wait_free"] - saved_status["Innodb_buffer_pool_wait_free"])
+            / loop_duration_seconds
+        ),
+        style=row_style,
     )
     table_innodb_activity.add_row("[grey78]Log waits/s", format_number(log_waits), style=row_style)
     table_innodb_activity.add_row("[grey78]Row lock waits/s", format_number(row_lock_waits), style=row_style)
@@ -2447,7 +2459,6 @@ def capture_key(key):
             "binlog_cache_size",
             "binlog_row_event_max_size",
             "binlog_stmt_cache_size",
-            "binlog_transaction_dependency_history_size",
             "bulk_insert_buffer_size",
             "clone_buffer_size",
             "delay_queue_size",
