@@ -362,9 +362,6 @@ def main():
         dolphie.db_connect()
         dolphie.load_host_cache_file()
 
-        # //////////////////////////////////
-        # //         Main Loop            //
-        # //////////////////////////////////
         with Live(
             dolphie.layout, vertical_overflow="crop", screen=True, transient=True, auto_refresh=False
         ) as dolphie.rich_live:
