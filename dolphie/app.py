@@ -356,11 +356,9 @@ def main():
     dolphie = Dolphie()
 
     try:
-        dolphie.check_for_update()
         dolphie.create_rich_layout()
-
         parse_args(dolphie)
-
+        dolphie.check_for_update()
         dolphie.db_connect()
         dolphie.load_host_cache_file()
 

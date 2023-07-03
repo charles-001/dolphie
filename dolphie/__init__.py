@@ -112,8 +112,9 @@ class Dolphie:
                 self.console.print(
                     (
                         "[bright_green]New version available!\n\n[grey93]Current version:"
-                        f" [steel_blue1]{__version__}\n[grey93]Latest version: [steel_blue1]2.0.1\n\n[grey93]Please"
-                        " update to the latest version at your convenience\n\n[steel_blue1]Press any key to continue"
+                        f" [steel_blue1]{__version__}\n[grey93]Latest version:"
+                        f" [steel_blue1]{latest_version}\n\n[grey93]Please update to the latest version at your"
+                        " convenience\n\n[steel_blue1]Press any key to continue"
                     ),
                     highlight=False,
                 )
@@ -123,8 +124,8 @@ class Dolphie:
                     pass
         else:
             self.console.print(
-                f"[bright_red]Failed to retrieve package information from PyPI! URL: {url} - Code:"
-                f" {response.status_code} - Response: {response.json()}"
+                f"[bright_red]Failed to retrieve package information from PyPI![/bright_red] URL: {url} - Code:"
+                f" {response.status_code}"
             )
 
     def create_rich_layout(self) -> Layout:
