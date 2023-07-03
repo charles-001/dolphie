@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "dolphie"
+version = "2.0.2"
+description = "An intuitive feature-rich top tool for monitoring MySQL in real time"
+authors = ["Charles Thompson <01charles.t@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+rich = "^13.4.2"
+pymysql = "^1.1.0"
+charset-normalizer = "^3.1.0"
+myloginpath = "^0.0.4"
+packaging = "^23.1"
+requests = "^2.31.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+dolphie = "dolphie.app:main"

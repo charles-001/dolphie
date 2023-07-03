@@ -4,10 +4,19 @@
 An intuitive feature-rich top tool for monitoring MySQL in real time
 </p>
 
-## Requirements (local machine)
-1. Python 3.6+
-2. Packages: rich, pymysql, charset_normalizer, myloginpath, packaging
-3. Unix systems (Windows may work, haven't tested)
+## Installation
+
+Using PyPi:
+```shell
+pip install dolphie
+```
+
+Using Poetry:
+```shell
+curl -sSL https://install.python-poetry.org | python3 -
+
+poetry install
+```
 
 ## Using Docker container
 1. `docker pull ghcr.io/charles-001/dolphie:latest`
