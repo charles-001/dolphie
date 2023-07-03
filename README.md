@@ -63,7 +63,8 @@ Order of precedence for variables passed to Dolphie:
 4. ~/.my.cnf
 
 ## Usage
-```optional arguments:
+```
+options:
   --help                show this help message and exit
   -u USER, --user USER  Username for MySQL
   -p PASSWORD, --password PASSWORD
@@ -75,16 +76,16 @@ Order of precedence for variables passed to Dolphie:
                         Socket file for MySQL
   -c CONFIG_FILE, --config-file CONFIG_FILE
                         Absolute config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
+  -f HOST_CACHE_FILE, --host-cache-file HOST_CACHE_FILE
+                        Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format: ip=hostname [default: /Users/cthompson/git/dolphie/host_cache]
   -l LOGIN_PATH, --login-path LOGIN_PATH
-                        Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file and supports all options available [default: client]
+                        Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
   -r REFRESH_INTERVAL, --refresh_interval REFRESH_INTERVAL
                         How much time to wait in seconds between each refresh [default: 1]
   -R REFRESH_INTERVAL_INNODB_STATUS, --refresh_interval_innodb_status REFRESH_INTERVAL_INNODB_STATUS
                         How much time to wait in seconds to execute SHOW ENGINE INNODB STATUS to refresh data its responsible for [default: 1]
   -H HEARTBEAT_TABLE, --heartbeat-table HEARTBEAT_TABLE
                         If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW SLAVE STATUS
-  -f HOST_CACHE_FILE, --host-cache-file HOST_CACHE_FILE
-                        Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format: ip=hostname [default: /Users/charles/git/dolphie/host_cache]
   --ssl-mode SSL_MODE   Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
   --ssl-ca SSL_CA       Path to the file that contains a PEM-formatted CA certificate
   --ssl-cert SSL_CERT   Path to the file that contains a PEM-formatted client certificate
@@ -92,7 +93,9 @@ Order of precedence for variables passed to Dolphie:
   --hide-dashboard      Start without showing dashboard. This is good to use if you want to reclaim terminal space and not execute the additional queries for it
   --show-trxs-only      Start with only showing queries that are running a transaction
   --additional-columns  Start with additional columns in processlist panel
-  --use-processlist     Start with using Processlist instead of Performance Schema for listing queries
+  --use-processlist     Start with using Processlist instead of Performance Schema for listing queries.
+  --debug               Print tracebacks on errors. Useful for debugging.
+  -V, --version         Display version and exit
 
 Config file with [client] section supports these options:
     host
