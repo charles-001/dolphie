@@ -114,9 +114,8 @@ Environment variables support these options:
         type=str,
         help=(
             "Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line "
-            "using format: ip=hostname [default: %s/host_cache]"
-        )
-        % os.path.dirname(os.path.abspath(__file__)),
+            "using format: ip=hostname [default: %(default)s]"
+        ),
     )
     parser.add_argument(
         "-l",
@@ -126,24 +125,26 @@ Environment variables support these options:
         type=str,
         help=(
             "Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. "
-            "Supercedes config file [default: client]"
+            "Supercedes config file [default: %(default)s]"
         ),
     )
     parser.add_argument(
         "-r",
         "--refresh_interval",
         dest="refresh_interval",
+        default=1,
         type=int,
-        help="How much time to wait in seconds between each refresh [default: 1]",
+        help="How much time to wait in seconds between each refresh [default: %(default)s]",
     )
     parser.add_argument(
         "-R",
         "--refresh_interval_innodb_status",
         dest="refresh_interval_innodb_status",
+        default=1,
         type=int,
         help=(
             "How much time to wait in seconds to execute SHOW ENGINE INNODB STATUS to refresh data its responsible "
-            "for [default: 1]"
+            "for [default: %(default)s]"
         ),
     )
     parser.add_argument(
