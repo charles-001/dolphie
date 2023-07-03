@@ -5,6 +5,7 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 </p>
 
 ## Installation
+Must be using Python 3.8+
 
 Using PyPi:
 ```shell
