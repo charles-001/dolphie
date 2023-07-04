@@ -78,7 +78,7 @@ options:
   -c CONFIG_FILE, --config-file CONFIG_FILE
                         Absolute config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
   -f HOST_CACHE_FILE, --host-cache-file HOST_CACHE_FILE
-                        Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format: ip=hostname [default: /Users/cthompson/git/dolphie/host_cache]
+                        Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format: ip=hostname [default: None]
   -l LOGIN_PATH, --login-path LOGIN_PATH
                         Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
   -r REFRESH_INTERVAL, --refresh_interval REFRESH_INTERVAL
@@ -94,8 +94,8 @@ options:
   --hide-dashboard      Start without showing dashboard. This is good to use if you want to reclaim terminal space and not execute the additional queries for it
   --show-trxs-only      Start with only showing queries that are running a transaction
   --additional-columns  Start with additional columns in processlist panel
-  --use-processlist     Start with using Processlist instead of Performance Schema for listing queries.
-  --debug               Print tracebacks on errors. Useful for debugging.
+  --use-processlist     Start with using Processlist instead of Performance Schema for listing queries
+  --debug               Print tracebacks on errors for more verbose debugging
   -V, --version         Display version and exit
 
 Config file with [client] section supports these options:
