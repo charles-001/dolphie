@@ -10,7 +10,7 @@ from rich.table import Table
 def create_panel(dolphie: Dolphie):
     innodb_lock_threads = {}
 
-    dolphie.db.cursor.execute(dolphie.innodb_locks_sql)
+    dolphie.db.execute(dolphie.innodb_locks_sql)
     threads = dolphie.db.cursor.fetchall()
 
     for counter, thread in enumerate(threads):

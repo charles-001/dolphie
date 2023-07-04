@@ -93,7 +93,7 @@ class Dolphie:
         self.host_distro: str = None
 
         self.app_version = __version__
-        self.base_title = f"[b steel_blue1]dolphie :dolphin: {self.app_version}[/b steel_blue1]"
+        self.base_title = f"[b steel_blue1]dolphie :dolphin: v{self.app_version}[/b steel_blue1]"
         self.title = f"{self.base_title}[grey62] press ? for help"
 
     def check_for_update(self):
@@ -114,7 +114,9 @@ class Dolphie:
                         "[bright_green]New version available!\n\n[grey93]Current version:"
                         f" [steel_blue1]{__version__}\n[grey93]Latest version:"
                         f" [steel_blue1]{latest_version}\n\n[grey93]Please update to the latest version at your"
-                        " convenience\n\n[steel_blue1]Press any key to continue"
+                        " convenience\n[grey66]You can find more details at:"
+                        " [underline]https://github.com/charles-001/dolphie[/underline]\n\n[steel_blue1]Press any key"
+                        " to continue"
                     ),
                     highlight=False,
                 )
@@ -178,7 +180,7 @@ class Dolphie:
         query = "SELECT @@basedir"
         basedir = self.db.fetchone(query, "@@basedir")
 
-        self.db.cursor.execute("SHOW GLOBAL VARIABLES LIKE 'aurora_version'")
+        self.db.execute("SHOW GLOBAL VARIABLES LIKE 'aurora_version'")
         data = self.db.cursor.fetchone()
         aurora_version = None
         if data:
@@ -193,9 +195,7 @@ class Dolphie:
             version_split[1],
             version_split[2].split("-")[0],
         )
-
-        major_minor_version = "%s.%s" % (version_split[0], version_split[1])
-        major_version = version_split[0]
+        major_version = int(version_split[0])
 
         # Get proper host version and fork
         if "percona xtradb cluster" in version_comment:
@@ -216,29 +216,23 @@ class Dolphie:
             self.host_distro = "MySQL"
 
         # Determine if InnoDB locks panel is available for a version and which query to use
-        # Major version 10 is for MariaDB
         self.innodb_locks_sql = None
-        innodb_locks_queries = {
-            "5.6": Queries["locks_query-5"],
-            "5.7": Queries["locks_query-5"],
-            "8": Queries["locks_query-8"] if self.use_performance_schema else None,
-            "10": Queries["locks_query-5"],
-        }
-        if major_minor_version in innodb_locks_queries or major_version in innodb_locks_queries:
-            self.innodb_locks_sql = innodb_locks_queries.get(major_minor_version) or innodb_locks_queries.get(
-                major_version
-            )
+        server_uuid_query = "SELECT @@server_uuid"
+        if "MariaDB" in self.host_distro and major_version >= 10:
+            server_uuid_query = "SELECT @@server_id AS @@server_uuid"
+            self.innodb_locks_sql = Queries["locks_query-5"]
+        elif major_version == 5:
+            self.innodb_locks_sql = Queries["locks_query-5"]
+        elif major_version == 8 and self.use_performance_schema:
+            self.innodb_locks_sql = Queries["locks_query-8"]
 
-        query = "SELECT @@server_uuid"
-        if "MariaDB" in self.host_distro:
-            query = "SELECT @@server_id AS @@server_uuid"
-        self.server_uuid = self.db.fetchone(query, "@@server_uuid")
+        self.server_uuid = self.db.fetchone(server_uuid_query, "@@server_uuid")
 
     def fetch_data(self, command):
         command_data = {}
 
         if command == "status" or command == "variables":
-            self.db.cursor.execute(Queries[command])
+            self.db.execute(Queries[command])
             data = self.db.cursor.fetchall()
 
             for row in data:
@@ -256,13 +250,13 @@ class Dolphie:
                 command_data[variable] = converted_value
 
         elif command == "innodb_status":
-            self.db.cursor.execute(Queries[command])
+            self.db.execute(Queries[command])
             data = self.db.cursor.fetchone()
 
             command_data["status"] = data["Status"].decode(detect_encoding(data["Status"]))
 
         else:
-            self.db.cursor.execute(Queries[command])
+            self.db.execute(Queries[command])
             data = self.db.cursor.fetchall()
 
             for row in data:
@@ -437,8 +431,8 @@ class Dolphie:
                         self.console.print("")
 
                         try:
-                            self.db.cursor.execute("USE %s" % self.processlist_threads[thread_id]["db"])
-                            self.db.cursor.execute("EXPLAIN %s" % self.processlist_threads[thread_id]["query"])
+                            self.db.execute("USE %s" % self.processlist_threads[thread_id]["db"])
+                            self.db.execute("EXPLAIN %s" % self.processlist_threads[thread_id]["query"])
 
                             explain_data = self.db.cursor.fetchall()
                         except pymysql.Error as e:
@@ -510,9 +504,9 @@ class Dolphie:
                 if thread_id in self.processlist_threads:
                     try:
                         if self.host_is_rds:
-                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
                         else:
-                            self.db.cursor.execute("KILL %s" % thread_id)
+                            self.db.execute("KILL %s" % thread_id)
                     except pymysql.OperationalError:
                         self.update_footer("[bright_red]Thread ID '[grey93]%s[bright_red]' does not exist!" % thread_id)
                 else:
@@ -541,17 +535,17 @@ class Dolphie:
                                 if include_sleep == "y":
                                     if thread["command"] in commands_with_sleep:
                                         if self.host_is_rds:
-                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                         else:
-                                            self.db.cursor.execute("KILL %s" % thread_id)
+                                            self.db.execute("KILL %s" % thread_id)
 
                                         threads_killed += 1
                                 else:
                                     if thread["command"] in commands_without_sleep:
                                         if self.host_is_rds:
-                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                         else:
-                                            self.db.cursor.execute("KILL %s" % thread_id)
+                                            self.db.execute("KILL %s" % thread_id)
 
                                         threads_killed += 1
                         except pymysql.OperationalError:
@@ -566,17 +560,17 @@ class Dolphie:
                                 if include_sleep == "y":
                                     if thread["command"] in commands_with_sleep:
                                         if self.host_is_rds:
-                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                         else:
-                                            self.db.cursor.execute("KILL %s" % thread_id)
+                                            self.db.execute("KILL %s" % thread_id)
 
                                         threads_killed += 1
                                 else:
                                     if thread["command"] in commands_without_sleep:
                                         if self.host_is_rds:
-                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                         else:
-                                            self.db.cursor.execute("KILL %s" % thread_id)
+                                            self.db.execute("KILL %s" % thread_id)
 
                                         threads_killed += 1
                         except pymysql.OperationalError:
@@ -601,17 +595,17 @@ class Dolphie:
                                         if include_sleep == "y":
                                             if thread["command"] in commands_with_sleep:
                                                 if self.host_is_rds:
-                                                    self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                                    self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                                 else:
-                                                    self.db.cursor.execute("KILL %s" % thread_id)
+                                                    self.db.execute("KILL %s" % thread_id)
 
                                                 threads_killed += 1
                                         else:
                                             if thread["command"] in commands_without_sleep:
                                                 if self.host_is_rds:
-                                                    self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                                    self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                                 else:
-                                                    self.db.cursor.execute("KILL %s" % thread_id)
+                                                    self.db.execute("KILL %s" % thread_id)
 
                                                 threads_killed += 1
                                 except pymysql.OperationalError:
@@ -633,7 +627,7 @@ class Dolphie:
                 else:
                     self.layout["innodb_locks"].visible = True
             else:
-                self.update_footer("[red]Lock panel isn't supported for this host's version!")
+                self.update_footer("[red]InnoDB Locks panel isn't supported for this host's version!")
 
         elif key == "L":
             os.system("clear")
@@ -737,7 +731,7 @@ class Dolphie:
             tables = {}
             all_tables = []
 
-            db_count = self.db.cursor.execute(Queries["databases"])
+            db_count = self.db.execute(Queries["databases"])
             databases = self.db.cursor.fetchall()
 
             # Determine how many tables to provide data
@@ -1077,13 +1071,13 @@ class Dolphie:
         table = Table(header_style="bold white", box=box.ROUNDED, style="grey70")
         columns = {}
 
-        if self.db.cursor.execute("SELECT @@userstat") == 1:
+        if self.db.execute("SELECT @@userstat") == 1:
             userstat_enabled = self.db.cursor.fetchone()["@@userstat"] == 1
 
             if userstat_enabled:
-                self.db.cursor.execute(Queries["userstat_user_statisitics"])
+                self.db.execute(Queries["userstat_user_statisitics"])
             elif self.performance_schema_enabled:
-                self.db.cursor.execute(Queries["ps_user_statisitics"])
+                self.db.execute(Queries["ps_user_statisitics"])
             else:
                 return False
 

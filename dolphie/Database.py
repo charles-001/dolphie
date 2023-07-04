@@ -37,6 +37,12 @@ class Database:
         else:
             return data[field]
 
+    def execute(self, query, values=None):
+        try:
+            self.cursor.execute(query, values)
+        except Exception as e:
+            raise Exception("Failed to execute query %s - Reason: %s" % (query, e.args[1]))
+
     def close(self):
         if self.connection:
             self.connection.close()

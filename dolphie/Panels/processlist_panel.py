@@ -193,7 +193,7 @@ def get_data(dolphie: Dolphie):
 
     processlist_threads = {}
     # Run the processlist query
-    dolphie.db.cursor.execute(processlist_query)
+    dolphie.db.execute(processlist_query)
     threads = dolphie.db.cursor.fetchall()
 
     for thread in threads:
