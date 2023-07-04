@@ -214,7 +214,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
             "[grey78]Host", "[grey93]%s" % dolphie.replica_connections[list_replica_thread_id]["host"], style=row_style
         )
     else:
-        table.add_row("[grey78]Master", "[grey93]%s" % data["Master_Host"], style=row_style)
+        table.add_row("[grey78]Primary", "[grey93]%s" % data["Master_Host"], style=row_style)
 
     table.add_row("[grey78]User", "[grey93]%s" % data["Master_User"], style=row_style)
     table.add_row(

@@ -213,20 +213,13 @@ Environment variables support these options:
         dest="use_processlist",
         action="store_true",
         default=False,
-        help="Start with using Processlist instead of Performance Schema for listing queries.",
-    )
-    parser.add_argument(
-        "--use-processlist",
-        dest="use_processlist",
-        action="store_true",
-        default=False,
-        help="Start with using Processlist instead of Performance Schema for listing queries.",
+        help="Start with using Processlist instead of Performance Schema for listing queries",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
         default=False,
-        help="Print tracebacks on errors. Useful for debugging.",
+        help="Print tracebacks on errors for more verbose debugging",
     )
     parser.add_argument(
         "-V", "--version", action="version", version=dolphie.app_version, help="Display version and exit"
@@ -279,7 +272,7 @@ Environment variables support these options:
 
             for option in basic_options:
                 if option in login_path_data:
-                    setattr(dolphie, option, cfg.get("client", option))
+                    setattr(dolphie, option, login_path_data[option])
         except Exception as e:
             # Don't error out for default login path
             if parameter_options["login_path"] != "client":
