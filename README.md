@@ -5,7 +5,7 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 </p>
 
 ## Installation
-Must be using Python 3.8+
+Requires Python 3.8+
 
 Using PyPi:
 ```shell
@@ -23,45 +23,6 @@ poetry install
 1. `docker pull ghcr.io/charles-001/dolphie:latest`
 2. `docker run -dit --name dolphie ghcr.io/charles-001/dolphie:latest`
 3. `docker exec -it dolphie dolphie -h host.docker.internal -u root --ask-pass` (pass any additional parameters you'd like)
-5. Enjoy!
-
-## Supported MySQL versions
-- MySQL/Percona Server 5.5/5.6/5.7/8.0
-- MariaDB 10+
-- RDS/Aurora
-
-## Grants required
-#### Least privilege
-1. PROCESS
-2. SELECT to `performance_schema` (if used) + `pt-heartbeat table` (if used)
-3. REPLICATION CLIENT
-
-#### Recommended
-1. PROCESS
-2. Global SELECT access (good for explaining queries, listing all databases, etc)
-4. REPLICATION CLIENT
-5. SUPER (only required if you want to kill queries)
-
-## Features
-- Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer (see Help screenshot for panels available)
-- Prefers Performance Schema over Processlist if it's turned on for listing queries. Can be switched to use Processlist by pressing key "1" (or using parameter) since P_S can truncate query length for explaining queries
-- 3 options for finding replica lag in this order of precedence: 
-  - `Performance Schema` (MySQL 8 only - most accurate, especially for multi-threaded replication)
-  - `pt-heartbeat table` (specified by parameter)
-  - `SHOW SLAVE STATUS`
-- Host cache file. This provides users a way to specify hostnames for IPs when their network's DNS can't resolve them. An example use case for this is when you connect to your work's VPN and DNS isn't available to resolve IPs. In my opinion, it's a lot easier to look at hostnames than IPs!
-- Supports encrypted login credentials via `mysql_config_editor`
-- Automatic conversion of large numbers & bytes to human-readable
-- Notifies when new version is available
-- Many commands at your fingertips (see Help screenshot)
-- Many valuable statisitics across the available panels that can help you troubleshoot issues and be proactive against them
-
-## Things to note
-Order of precedence for variables passed to Dolphie:
-1. Parameters via command-line
-2. Environment variables
-3. ~/.mylogin.cnf (`mysql_config_editor`)
-4. ~/.my.cnf
 
 ## Usage
 ```
@@ -124,6 +85,44 @@ Environment variables support these options:
     DOLPHIE_SOCKET
 
 ```
+
+## Supported MySQL versions
+- MySQL/Percona Server 5.5/5.6/5.7/8.0
+- MariaDB 10+
+- RDS/Aurora
+
+## Grants required
+#### Least privilege
+1. PROCESS
+2. SELECT to `performance_schema` (if used) + `pt-heartbeat table` (if used)
+3. REPLICATION CLIENT
+
+#### Recommended
+1. PROCESS
+2. Global SELECT access (good for explaining queries, listing all databases, etc)
+4. REPLICATION CLIENT
+5. SUPER (only required if you want to kill queries)
+
+## Features
+- Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer (see Help screenshot for panels available)
+- Prefers Performance Schema over Processlist if it's turned on for listing queries. Can be switched to use Processlist by pressing key "1" (or using parameter) since P_S can truncate query length for explaining queries
+- 3 options for finding replica lag in this order of precedence:
+  - `Performance Schema` (MySQL 8 only - most accurate, especially for multi-threaded replication)
+  - `pt-heartbeat table` (specified by parameter)
+  - `SHOW SLAVE STATUS`
+- Host cache file. This provides users a way to specify hostnames for IPs when their network's DNS can't resolve them. An example use case for this is when you connect to your work's VPN and DNS isn't available to resolve IPs. In my opinion, it's a lot easier to look at hostnames than IPs!
+- Supports encrypted login credentials via `mysql_config_editor`
+- Automatic conversion of large numbers & bytes to human-readable
+- Notifies when new version is available
+- Many commands at your fingertips (see Help screenshot)
+- Many valuable statisitics across the available panels that can help you troubleshoot issues and be proactive against them
+
+## Things to note
+Order of precedence for variables passed to Dolphie:
+1. Command-line
+2. Environment variables
+3. ~/.mylogin.cnf (`mysql_config_editor`)
+4. ~/.my.cnf
 
 ## Feedback
 I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please let me know! I'd love to hear from you :smiley:

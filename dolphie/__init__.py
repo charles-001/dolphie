@@ -75,6 +75,7 @@ class Dolphie:
         self.previous_binlog_position: int = 0
         self.previous_replica_sbm: int = 0
         self.host_cache: dict = {}
+        self.host_cache_from_file: dict = {}
         self.variables: dict = {}
         self.statuses: dict = {}
         self.primary_status: dict = {}
@@ -1071,96 +1072,95 @@ class Dolphie:
         table = Table(header_style="bold white", box=box.ROUNDED, style="grey70")
         columns = {}
 
-        if self.db.execute("SELECT @@userstat") == 1:
-            userstat_enabled = self.db.cursor.fetchone()["@@userstat"] == 1
+        userstat_enabled = 0
+        if self.db.execute("SELECT @@userstat", ignore_error=True) == 1:
+            userstat_enabled = self.db.cursor.fetchone()["@@userstat"]
 
-            if userstat_enabled:
-                self.db.execute(Queries["userstat_user_statisitics"])
-            elif self.performance_schema_enabled:
-                self.db.execute(Queries["ps_user_statisitics"])
-            else:
-                return False
-
-            users = self.db.cursor.fetchall()
-            user_stats = {}
-
-            for user in users:
-                username = user["user"].decode()
-                user_stats.setdefault(username, {}).update(
-                    user=user["user"].decode(),
-                    total_connections=user["total_connections"],
-                    concurrent_connections=user.get("concurrent_connections"),
-                    denied_connections=user.get("denied_connections"),
-                    binlog_bytes_written=user.get("binlog_bytes_written"),
-                    rows_fetched=user.get("rows_fetched"),
-                    rows_updated=user.get("rows_updated"),
-                    table_rows_read=user.get("table_rows_read"),
-                    select_commands=user.get("select_commands"),
-                    update_commands=user.get("update_commands"),
-                    other_commands=user.get("other_commands"),
-                    commit_transactions=user.get("commit_transactions"),
-                    rollback_transactions=user.get("rollback_transactions"),
-                    access_denied=user.get("access_denied"),
-                    current_connections=user.get("current_connections"),
-                    rows_affected=user.get("sum_rows_affected"),
-                    rows_sent=user.get("sum_rows_sent"),
-                    rows_read=user.get("sum_rows_examined"),
-                    created_tmp_disk_tables=user.get("sum_created_tmp_disk_tables"),
-                    created_tmp_tables=user.get("sum_created_tmp_tables"),
-                )
-
-            if userstat_enabled:
-                columns.update(
-                    {
-                        "User": {"field": "user", "format_number": False},
-                        "Active": {"field": "concurrent_connections", "format_number": True},
-                        "Total": {"field": "total_connections", "format_number": True},
-                        "Binlog Data": {"field": "binlog_bytes_written", "format_number": False},
-                        "Rows Read": {"field": "table_rows_read", "format_number": True},
-                        "Rows Sent": {"field": "rows_fetched", "format_number": True},
-                        "Rows Updated": {"field": "rows_updated", "format_number": True},
-                        "Selects": {"field": "select_commands", "format_number": True},
-                        "Updates": {"field": "update_commands", "format_number": True},
-                        "Other": {"field": "other_commands", "format_number": True},
-                        "Commit": {"field": "commit_transactions", "format_number": True},
-                        "Rollback": {"field": "rollback_transactions", "format_number": True},
-                        "Access Denied": {"field": "access_denied", "format_number": True},
-                        "Conn Denied": {"field": "denied_connections", "format_number": True},
-                    }
-                )
-            else:
-                columns.update(
-                    {
-                        "User": {"field": "user", "format_number": False},
-                        "Active": {"field": "current_connections", "format_number": True},
-                        "Total": {"field": "total_connections", "format_number": True},
-                        "Rows Read": {"field": "rows_read", "format_number": True},
-                        "Rows Sent": {"field": "rows_sent", "format_number": True},
-                        "Rows Updated": {"field": "rows_affected", "format_number": True},
-                        "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
-                        "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
-                    }
-                )
-
-            for column, data in columns.items():
-                table.add_column(column, no_wrap=True)
-
-            for user_data in user_stats.values():
-                row_values = []
-                for column, data in columns.items():
-                    value = user_data.get(data["field"])
-                    if column == "Binlog Data":
-                        row_values.append(format_bytes(value) if value else "")
-                    elif data["format_number"]:
-                        row_values.append(format_number(value) if value else "")
-                    else:
-                        row_values.append(value or "")
-
-                table.add_row(*row_values, style="grey93")
-
-            return table if user_stats else False
+        if userstat_enabled:
+            self.db.execute(Queries["userstat_user_statisitics"])
+        elif self.performance_schema_enabled:
+            self.db.execute(Queries["ps_user_statisitics"])
         else:
             return False
+
+        users = self.db.cursor.fetchall()
+        user_stats = {}
+
+        for user in users:
+            username = user["user"].decode()
+            user_stats.setdefault(username, {}).update(
+                user=user["user"].decode(),
+                total_connections=user["total_connections"],
+                concurrent_connections=user.get("concurrent_connections"),
+                denied_connections=user.get("denied_connections"),
+                binlog_bytes_written=user.get("binlog_bytes_written"),
+                rows_fetched=user.get("rows_fetched"),
+                rows_updated=user.get("rows_updated"),
+                table_rows_read=user.get("table_rows_read"),
+                select_commands=user.get("select_commands"),
+                update_commands=user.get("update_commands"),
+                other_commands=user.get("other_commands"),
+                commit_transactions=user.get("commit_transactions"),
+                rollback_transactions=user.get("rollback_transactions"),
+                access_denied=user.get("access_denied"),
+                current_connections=user.get("current_connections"),
+                rows_affected=user.get("sum_rows_affected"),
+                rows_sent=user.get("sum_rows_sent"),
+                rows_read=user.get("sum_rows_examined"),
+                created_tmp_disk_tables=user.get("sum_created_tmp_disk_tables"),
+                created_tmp_tables=user.get("sum_created_tmp_tables"),
+            )
+
+        if userstat_enabled:
+            columns.update(
+                {
+                    "User": {"field": "user", "format_number": False},
+                    "Active": {"field": "concurrent_connections", "format_number": True},
+                    "Total": {"field": "total_connections", "format_number": True},
+                    "Binlog Data": {"field": "binlog_bytes_written", "format_number": False},
+                    "Rows Read": {"field": "table_rows_read", "format_number": True},
+                    "Rows Sent": {"field": "rows_fetched", "format_number": True},
+                    "Rows Updated": {"field": "rows_updated", "format_number": True},
+                    "Selects": {"field": "select_commands", "format_number": True},
+                    "Updates": {"field": "update_commands", "format_number": True},
+                    "Other": {"field": "other_commands", "format_number": True},
+                    "Commit": {"field": "commit_transactions", "format_number": True},
+                    "Rollback": {"field": "rollback_transactions", "format_number": True},
+                    "Access Denied": {"field": "access_denied", "format_number": True},
+                    "Conn Denied": {"field": "denied_connections", "format_number": True},
+                }
+            )
+        else:
+            columns.update(
+                {
+                    "User": {"field": "user", "format_number": False},
+                    "Active": {"field": "current_connections", "format_number": True},
+                    "Total": {"field": "total_connections", "format_number": True},
+                    "Rows Read": {"field": "rows_read", "format_number": True},
+                    "Rows Sent": {"field": "rows_sent", "format_number": True},
+                    "Rows Updated": {"field": "rows_affected", "format_number": True},
+                    "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
+                    "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
+                }
+            )
+
+        for column, data in columns.items():
+            table.add_column(column, no_wrap=True)
+
+        for user_data in user_stats.values():
+            row_values = []
+            for column, data in columns.items():
+                value = user_data.get(data["field"])
+                if column == "Binlog Data":
+                    row_values.append(format_bytes(value) if value else "")
+                elif data["format_number"]:
+                    row_values.append(format_number(value) if value else "")
+                else:
+                    row_values.append(value or "")
+
+            table.add_row(*row_values, style="grey93")
+
+        return table if user_stats else False
 
     def load_host_cache_file(self):
         if os.path.exists(self.host_cache_file):
@@ -1179,17 +1179,22 @@ class Dolphie:
                     if not ip_address or not hostname:
                         raise Exception(error_message)
 
-                    self.host_cache[ip_address] = hostname
+                    self.host_cache_from_file[ip_address] = hostname
 
     def get_hostname(self, ip_address):
         if ip_address in self.host_cache:
             return self.host_cache[ip_address]
+
+        if self.host_cache_from_file and ip_address in self.host_cache_from_file:
+            self.host_cache[ip_address] = self.host_cache_from_file[ip_address]
+            return self.host_cache_from_file[ip_address]
 
         try:
             ipaddress.IPv4Network(ip_address)
             hostname = socket.gethostbyaddr(ip_address)[0]
             self.host_cache[ip_address] = hostname
         except (ValueError, socket.error):
+            self.host_cache[ip_address] = ip_address
             hostname = ip_address
 
         return hostname
