@@ -930,8 +930,8 @@ class Dolphie:
 
             if self.host_cache:
                 table = Table(box=box.ROUNDED, style="grey70")
-                table.add_column("IP")
-                table.add_column("Hostname")
+                table.add_column("Host/IP")
+                table.add_column("Hostname (if resolved)")
 
                 for ip, addr in self.host_cache.items():
                     table.add_row(ip, addr)
@@ -939,7 +939,7 @@ class Dolphie:
                 self.console.print(Align.center(table))
                 self.console.print(Align.center("Total: [b steel_blue1]%s" % len(self.host_cache)))
             else:
-                self.console.print(Align.center("\nThere are currently no IPs resolved to a hostname"))
+                self.console.print(Align.center("\nThere are currently no hosts resolved"))
 
             self.block_refresh_for_key_command()
 
@@ -1172,29 +1172,29 @@ class Dolphie:
                     if "=" not in line:
                         raise Exception(error_message)
 
-                    ip_address, hostname = line.split("=", maxsplit=1)
-                    ip_address = ip_address.strip()
+                    host, hostname = line.split("=", maxsplit=1)
+                    host = host.strip()
                     hostname = hostname.strip()
 
-                    if not ip_address or not hostname:
+                    if not host or not hostname:
                         raise Exception(error_message)
 
-                    self.host_cache_from_file[ip_address] = hostname
+                    self.host_cache_from_file[host] = hostname
 
-    def get_hostname(self, ip_address):
-        if ip_address in self.host_cache:
-            return self.host_cache[ip_address]
+    def get_hostname(self, host):
+        if host in self.host_cache:
+            return self.host_cache[host]
 
-        if self.host_cache_from_file and ip_address in self.host_cache_from_file:
-            self.host_cache[ip_address] = self.host_cache_from_file[ip_address]
-            return self.host_cache_from_file[ip_address]
+        if self.host_cache_from_file and host in self.host_cache_from_file:
+            self.host_cache[host] = self.host_cache_from_file[host]
+            return self.host_cache_from_file[host]
 
         try:
-            ipaddress.IPv4Network(ip_address)
-            hostname = socket.gethostbyaddr(ip_address)[0]
-            self.host_cache[ip_address] = hostname
+            ipaddress.IPv4Network(host)
+            hostname = socket.gethostbyaddr(host)[0]
+            self.host_cache[host] = hostname
         except (ValueError, socket.error):
-            self.host_cache[ip_address] = ip_address
-            hostname = ip_address
+            self.host_cache[host] = host
+            hostname = host
 
         return hostname
