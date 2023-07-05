@@ -1070,9 +1070,11 @@ class Dolphie:
 
     def create_user_stats_table(self):
         table = Table(header_style="bold white", box=box.ROUNDED, style="grey70")
-        columns = {}
 
+        columns = {}
+        user_stats = {}
         userstat_enabled = 0
+
         if self.db.execute("SELECT @@userstat", ignore_error=True) == 1:
             userstat_enabled = self.db.cursor.fetchone()["@@userstat"]
 
@@ -1084,32 +1086,51 @@ class Dolphie:
             return False
 
         users = self.db.cursor.fetchall()
-        user_stats = {}
-
         for user in users:
             username = user["user"].decode()
-            user_stats.setdefault(username, {}).update(
-                user=user["user"].decode(),
-                total_connections=user["total_connections"],
-                concurrent_connections=user.get("concurrent_connections"),
-                denied_connections=user.get("denied_connections"),
-                binlog_bytes_written=user.get("binlog_bytes_written"),
-                rows_fetched=user.get("rows_fetched"),
-                rows_updated=user.get("rows_updated"),
-                table_rows_read=user.get("table_rows_read"),
-                select_commands=user.get("select_commands"),
-                update_commands=user.get("update_commands"),
-                other_commands=user.get("other_commands"),
-                commit_transactions=user.get("commit_transactions"),
-                rollback_transactions=user.get("rollback_transactions"),
-                access_denied=user.get("access_denied"),
-                current_connections=user.get("current_connections"),
-                rows_affected=user.get("sum_rows_affected"),
-                rows_sent=user.get("sum_rows_sent"),
-                rows_read=user.get("sum_rows_examined"),
-                created_tmp_disk_tables=user.get("sum_created_tmp_disk_tables"),
-                created_tmp_tables=user.get("sum_created_tmp_tables"),
-            )
+            if userstat_enabled:
+                user_stats.setdefault(username, {}).update(
+                    user=username,
+                    total_connections=user["total_connections"],
+                    concurrent_connections=user.get("concurrent_connections"),
+                    denied_connections=user.get("denied_connections"),
+                    binlog_bytes_written=user.get("binlog_bytes_written"),
+                    rows_fetched=user.get("rows_fetched"),
+                    rows_updated=user.get("rows_updated"),
+                    table_rows_read=user.get("table_rows_read"),
+                    select_commands=user.get("select_commands"),
+                    update_commands=user.get("update_commands"),
+                    other_commands=user.get("other_commands"),
+                    commit_transactions=user.get("commit_transactions"),
+                    rollback_transactions=user.get("rollback_transactions"),
+                    access_denied=user.get("access_denied"),
+                    current_connections=user.get("current_connections"),
+                    rows_affected=user.get("sum_rows_affected"),
+                    rows_sent=user.get("sum_rows_sent"),
+                    rows_read=user.get("sum_rows_examined"),
+                    created_tmp_disk_tables=user.get("sum_created_tmp_disk_tables"),
+                    created_tmp_tables=user.get("sum_created_tmp_tables"),
+                )
+            else:
+                if username not in user_stats:
+                    user_stats[username] = {
+                        "user": username,
+                        "total_connections": user["total_connections"],
+                        "current_connections": user["current_connections"],
+                        "rows_affected": user["sum_rows_affected"],
+                        "rows_sent": user["sum_rows_sent"],
+                        "rows_read": user["sum_rows_examined"],
+                        "created_tmp_disk_tables": user["sum_created_tmp_disk_tables"],
+                        "created_tmp_tables": user["sum_created_tmp_tables"],
+                    }
+                else:
+                    # I would use SUM() in the query instead of this, but pymysql doesn't play well with it since I
+                    # use use_unicode = 0 in the connection
+                    user_stats[username]["rows_affected"] += user["sum_rows_affected"]
+                    user_stats[username]["rows_sent"] += user["sum_rows_sent"]
+                    user_stats[username]["rows_read"] += user["sum_rows_examined"]
+                    user_stats[username]["created_tmp_disk_tables"] += user["sum_created_tmp_disk_tables"]
+                    user_stats[username]["created_tmp_tables"] += user["sum_created_tmp_tables"]
 
         if userstat_enabled:
             columns.update(
