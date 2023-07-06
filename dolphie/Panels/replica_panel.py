@@ -31,7 +31,6 @@ def create_panel(dolphie: Dolphie):
 
     replica_count = dolphie.db.cursor.execute(find_replicas_query)
     data = dolphie.db.fetchall()
-
     replica_count_text = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (replica_count))
 
     table_split_counter = 1
@@ -42,7 +41,6 @@ def create_panel(dolphie: Dolphie):
         # Resolve IPs to addresses and add to cache for fast lookup
         host = dolphie.get_hostname(row["host"].split(":")[0])
 
-        table = Table(box=box.ROUNDED, show_header=False, style="grey70")
         try:
             if thread_id not in dolphie.replica_connections:
                 dolphie.replica_connections[thread_id] = {
@@ -66,6 +64,7 @@ def create_panel(dolphie: Dolphie):
             if replica_data:
                 tables.append(create_table(dolphie, replica_data, list_replica_thread_id=thread_id))
         except pymysql.Error as e:
+            table = Table(box=box.ROUNDED, show_header=False, style="grey70")
             row_style = Style(color="grey93")
 
             table.add_column()
