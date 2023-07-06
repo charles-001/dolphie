@@ -1,7 +1,7 @@
 import re
 
 from dolphie import Dolphie
-from dolphie.Functions import detect_encoding, format_number
+from dolphie.Functions import format_number
 from rich import box
 from rich.style import Style
 from rich.table import Table
@@ -11,25 +11,25 @@ def create_panel(dolphie: Dolphie):
     innodb_lock_threads = {}
 
     dolphie.db.execute(dolphie.innodb_locks_sql)
-    threads = dolphie.db.cursor.fetchall()
+    threads = dolphie.db.fetchall()
 
     for counter, thread in enumerate(threads):
-        w_query = re.sub(r"\s+", " ", thread["waiting_query"].decode(detect_encoding(thread["waiting_query"])))
-        b_query = re.sub(r"\s+", " ", thread["blocking_query"].decode(detect_encoding(thread["blocking_query"])))
+        w_query = re.sub(r"\s+", " ", thread["waiting_query"])
+        b_query = re.sub(r"\s+", " ", thread["blocking_query"])
 
         innodb_lock_threads[counter] = {
-            "w_thread": thread["waiting_thread"].decode(),
+            "w_thread": thread["waiting_thread"],
             "w_query": re.sub(r"\s+", " ", w_query),
-            "w_rows_modified": thread["waiting_rows_modified"].decode(),
-            "w_age": thread["waiting_age"].decode(),
-            "w_wait_secs": thread["waiting_wait_secs"].decode(),
-            "b_thread": thread["blocking_thread"].decode(),
+            "w_rows_modified": thread["waiting_rows_modified"],
+            "w_age": thread["waiting_age"],
+            "w_wait_secs": thread["waiting_wait_secs"],
+            "b_thread": thread["blocking_thread"],
             "b_query": re.sub(r"\s+", " ", b_query),
-            "b_rows_modified": thread["blocking_rows_modified"].decode(),
-            "b_age": thread["blocking_age"].decode(),
-            "b_wait_secs": thread["blocking_wait_secs"].decode(),
-            "lock_mode": thread["lock_mode"].decode(),
-            "lock_type": thread["lock_type"].decode(),
+            "b_rows_modified": thread["blocking_rows_modified"],
+            "b_age": thread["blocking_age"],
+            "b_wait_secs": thread["blocking_wait_secs"],
+            "lock_mode": thread["lock_mode"],
+            "lock_type": thread["lock_type"],
         }
 
     table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="steel_blue1")

@@ -1,4 +1,6 @@
 import pymysql
+from dolphie.Functions import detect_encoding
+from dolphie.ManualException import ManualException
 
 
 class Database:
@@ -23,28 +25,72 @@ class Database:
             )
             self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
         except pymysql.Error as e:
-            raise Exception("Failed to connect to database host %s - Reason: %s" % (self.host, e.args[1]))
+            raise ManualException(
+                "Failed to connect to database host %s\n[bold indian_red]Reason[/bold indian_red]: %s"
+                % (self.host, e.args[1])
+            )
         except FileNotFoundError:  # Catch SSL file path errors
-            raise Exception("SSL certificate file path isn't valid!")
-
-    def fetchone(self, query, field, values=None):
-        if values is None:
-            values = []
-        self.cursor.execute(query, tuple(values))
-        data = self.cursor.fetchone()
-        if isinstance(data[field], (bytes, bytearray)):
-            return data[field].decode()
-        else:
-            return data[field]
+            raise ManualException("SSL certificate file path isn't valid!")
 
     def execute(self, query, values=None, ignore_error=False):
+        # Prefix all queries with dolphie so they can be identified in the processlist
+        query = "/* dolphie */ " + query
+
         try:
             return self.cursor.execute(query, values)
         except Exception as e:
             if ignore_error:
-                pass
+                return None
             else:
-                raise Exception("Failed to execute query %s - Reason: %s" % (query, e.args[1]))
+                raise ManualException(
+                    "Failed to execute query:\n\t%s\n[bold indian_red]Reason[/bold indian_red]: %s" % (query, e.args[1])
+                )
+
+    def fetchall(self):
+        rows = []
+
+        # Iterate over each row obtained from self.cursor.fetchall()
+        for row in self.cursor.fetchall():
+            processed_row = {}
+
+            # Iterate over each field-value pair in the row dictionary
+            for field, value in row.items():
+                if isinstance(value, (bytes, bytearray)):
+                    # If the value is an instance of bytes or bytearray, decode it
+                    if "query" in field:
+                        # If the field name contains the word 'query', detect the encoding
+                        processed_row[field] = value.decode(detect_encoding(value))
+                    else:
+                        # Otherwise, decode the value as utf-8 by default
+                        processed_row[field] = value.decode()
+                else:
+                    # Otherwise, use the original value
+                    processed_row[field] = value
+
+            # Append the processed row to the rows list
+            rows.append(processed_row)
+
+        # Return the list of processed rows
+        return rows
+
+    def fetchone(self, query, field, values=None):
+        self.execute(query, values)
+        data = self.cursor.fetchone()
+
+        if not data:
+            return None
+
+        value = data[field]
+        if isinstance(value, (bytes, bytearray)):
+            # If the value is an instance of bytes or bytearray, decode it
+            if field == "Status":
+                # If the field name is Status, detect the encoding
+                return value.decode(detect_encoding(value))
+            else:
+                # Otherwise, decode the value as utf-8 by default
+                return value.decode()
+        else:
+            return value
 
     def close(self):
         if self.connection:

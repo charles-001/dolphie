@@ -30,7 +30,7 @@ def create_panel(dolphie: Dolphie):
         find_replicas_query = Queries["pl_find_replicas"]
 
     replica_count = dolphie.db.cursor.execute(find_replicas_query)
-    data = dolphie.db.cursor.fetchall()
+    data = dolphie.db.fetchall()
 
     replica_count_text = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (replica_count))
 
@@ -40,7 +40,7 @@ def create_panel(dolphie: Dolphie):
         thread_id = row["id"]
 
         # Resolve IPs to addresses and add to cache for fast lookup
-        host = dolphie.get_hostname(row["host"].decode().split(":")[0])
+        host = dolphie.get_hostname(row["host"].split(":")[0])
 
         table = Table(box=box.ROUNDED, show_header=False, style="grey70")
         try:
@@ -72,7 +72,7 @@ def create_panel(dolphie: Dolphie):
             table.add_column(width=30)
 
             table.add_row("[grey78]Host", host, style=row_style)
-            table.add_row("[grey78]User", row["user"].decode(), style=row_style)
+            table.add_row("[grey78]User", row["user"], style=row_style)
             table.add_row("[bright_red]Error", e.args[1], style=row_style)
 
             tables.append(table)

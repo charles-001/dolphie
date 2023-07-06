@@ -10,8 +10,9 @@ from time import sleep
 import pymysql
 import requests
 from dolphie.Database import Database
-from dolphie.Functions import detect_encoding, format_bytes, format_number
+from dolphie.Functions import format_bytes, format_number
 from dolphie.KBHit import KBHit
+from dolphie.ManualException import ManualException
 from dolphie.Queries import Queries
 from packaging.version import parse as parse_version
 from rich import box
@@ -22,6 +23,7 @@ from rich.style import Style
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
+from sqlparse import format as sqlformat
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -127,7 +129,7 @@ class Dolphie:
                     pass
         else:
             self.console.print(
-                f"[bright_red]Failed to retrieve package information from PyPI![/bright_red] URL: {url} - Code:"
+                f"[indian_red]Failed to retrieve package information from PyPI![/indian_red] URL: {url} - Code:"
                 f" {response.status_code}"
             )
 
@@ -181,11 +183,11 @@ class Dolphie:
         query = "SELECT @@basedir"
         basedir = self.db.fetchone(query, "@@basedir")
 
-        self.db.execute("SHOW GLOBAL VARIABLES LIKE 'aurora_version'")
-        data = self.db.cursor.fetchone()
         aurora_version = None
-        if data:
-            aurora_version = data["Value"].decode()
+        query = "SHOW GLOBAL VARIABLES LIKE 'aurora_version'"
+        aurora_version_data = self.db.fetchone(query, "Value")
+        if aurora_version_data:
+            aurora_version = aurora_version_data["Value"]
 
         query = "SELECT @@version"
         version = self.db.fetchone(query, "@@version").lower()
@@ -234,14 +236,14 @@ class Dolphie:
 
         if command == "status" or command == "variables":
             self.db.execute(Queries[command])
-            data = self.db.cursor.fetchall()
+            data = self.db.fetchall()
 
             for row in data:
-                variable = row["Variable_name"].decode()
+                variable = row["Variable_name"]
                 value = row["Value"]
 
                 try:
-                    converted_value = row["Value"].decode()
+                    converted_value = row["Value"]
 
                     if converted_value.isnumeric():
                         converted_value = int(converted_value)
@@ -251,19 +253,17 @@ class Dolphie:
                 command_data[variable] = converted_value
 
         elif command == "innodb_status":
-            self.db.execute(Queries[command])
-            data = self.db.cursor.fetchone()
-
-            command_data["status"] = data["Status"].decode(detect_encoding(data["Status"]))
+            data = self.db.fetchone(Queries[command], "Status")
+            command_data["status"] = data
 
         else:
             self.db.execute(Queries[command])
-            data = self.db.cursor.fetchall()
+            data = self.db.fetchall()
 
             for row in data:
                 for column, value in row.items():
                     try:
-                        converted_value = value.decode()
+                        converted_value = value
 
                         if converted_value.isnumeric():
                             converted_value = int(converted_value)
@@ -303,7 +303,7 @@ class Dolphie:
                     self.use_performance_schema = True
                     self.update_footer("[steel_blue1]Switched to [grey93]Performance Schema")
                 else:
-                    self.update_footer("[red]You can't switch to Performance Schema because it isn't enabled")
+                    self.update_footer("[indian_red]You can't switch to Performance Schema because it isn't enabled")
 
         elif key == "2":
             os.system("clear")
@@ -319,7 +319,7 @@ class Dolphie:
             else:
                 self.show_additional_query_columns = True
 
-        elif key == "c":
+        elif key == "C":
             self.user_filter = ""
             self.db_filter = ""
             self.host_filter = ""
@@ -411,33 +411,49 @@ class Dolphie:
 
                     self.console.print(Align.center(table))
 
-                    if self.processlist_threads[thread_id]["query"]:
+                    query = sqlformat(self.processlist_threads[thread_id]["query"], reindent=True)
+                    query_db = self.processlist_threads[thread_id]["db"]
+
+                    if query:
                         self.console.print("")
+
+                        # This is just to make the theme is wrapped around only the query and not expanded out
+                        # further than it needs to be
+                        query_width = 0
+                        for line in query.split("\n"):
+                            if len(line) > query_width:
+                                query_width = len(line)
+
+                        if query_width >= self.console.width:
+                            query_width = self.console.width - 2
+
                         self.console.print(
                             Align.center(
                                 Syntax(
-                                    self.processlist_threads[thread_id]["query"],
+                                    query,
                                     "sql",
                                     line_numbers=False,
                                     word_wrap=True,
-                                    theme="vim",
+                                    theme="monokai",
+                                    code_width=query_width,
+                                    background_color="default",
                                 )
                             )
                         )
 
-                    if self.processlist_threads[thread_id]["query"] and self.processlist_threads[thread_id]["db"]:
+                    if query and query_db:
                         explain_failure = None
                         explain_data = None
 
                         self.console.print("")
 
                         try:
-                            self.db.execute("USE %s" % self.processlist_threads[thread_id]["db"])
-                            self.db.execute("EXPLAIN %s" % self.processlist_threads[thread_id]["query"])
+                            self.db.cursor.execute("USE %s" % query_db)
+                            self.db.cursor.execute("EXPLAIN %s" % query)
 
-                            explain_data = self.db.cursor.fetchall()
+                            explain_data = self.db.fetchall()
                         except pymysql.Error as e:
-                            explain_failure = "[bright_red]EXPLAIN ERROR:[/bright_red] [red]%s" % e.args[1]
+                            explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
 
                         if explain_data:
                             explain_table = Table(box=box.ROUNDED, style="grey70")
@@ -456,15 +472,12 @@ class Dolphie:
                                         columns.append(column)
 
                                     if column == "key" and value is None:
-                                        value = "[b bright_red]NONE[/b bright_red]"
+                                        value = "[b indian_red]NONE[/b indian_red]"
 
                                     if column == "rows":
                                         value = format_number(value)
 
-                                    try:
-                                        values.append(value.decode())
-                                    except (UnicodeDecodeError, AttributeError):
-                                        values.append(str(value))
+                                    values.append(str(value))
 
                                 explain_table.add_row(*values, style="grey93")
 
@@ -474,7 +487,7 @@ class Dolphie:
 
                     self.block_refresh_for_key_command()
                 else:
-                    self.update_footer("[bright_red]Thread ID '[grey93]%s[bright_red]' does not exist!" % thread_id)
+                    self.update_footer("[indian_red]Thread ID '[grey93]%s[indian_red]' does not exist!" % thread_id)
 
         elif key == "H":
             self.host_filter = self.console.input("[steel_blue1]Hostname/IP to filter by[/steel_blue1]: ")
@@ -505,19 +518,19 @@ class Dolphie:
                 if thread_id in self.processlist_threads:
                     try:
                         if self.host_is_rds:
-                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                         else:
-                            self.db.execute("KILL %s" % thread_id)
+                            self.db.cursor.execute("KILL %s" % thread_id)
                     except pymysql.OperationalError:
-                        self.update_footer("[bright_red]Thread ID '[grey93]%s[bright_red]' does not exist!" % thread_id)
+                        self.update_footer("[indian_red]Thread ID '[grey93]%s[indian_red]' does not exist!" % thread_id)
                 else:
-                    self.update_footer("[bright_red]Thread ID '[grey93]%s[bright_red]' does not exist!" % thread_id)
+                    self.update_footer("[indian_red]Thread ID '[grey93]%s[indian_red]' does not exist!" % thread_id)
 
         elif key == "K":
             include_sleep = self.console.input("[steel_blue1]Include queries in sleep state? (y/n)[/steel_blue1]: ")
 
             if include_sleep != "y" and include_sleep != "n":
-                self.update_footer("[bright_red]Invalid option!")
+                self.update_footer("[indian_red]Invalid option!")
             else:
                 kill_type = self.console.input(
                     "[steel_blue1]Kill by username/hostname/time range (u/h/t)[/steel_blue1]: "
@@ -536,17 +549,17 @@ class Dolphie:
                                 if include_sleep == "y":
                                     if thread["command"] in commands_with_sleep:
                                         if self.host_is_rds:
-                                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                         else:
-                                            self.db.execute("KILL %s" % thread_id)
+                                            self.db.cursor.execute("KILL %s" % thread_id)
 
                                         threads_killed += 1
                                 else:
                                     if thread["command"] in commands_without_sleep:
                                         if self.host_is_rds:
-                                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                         else:
-                                            self.db.execute("KILL %s" % thread_id)
+                                            self.db.cursor.execute("KILL %s" % thread_id)
 
                                         threads_killed += 1
                         except pymysql.OperationalError:
@@ -561,17 +574,17 @@ class Dolphie:
                                 if include_sleep == "y":
                                     if thread["command"] in commands_with_sleep:
                                         if self.host_is_rds:
-                                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                         else:
-                                            self.db.execute("KILL %s" % thread_id)
+                                            self.db.cursor.execute("KILL %s" % thread_id)
 
                                         threads_killed += 1
                                 else:
                                     if thread["command"] in commands_without_sleep:
                                         if self.host_is_rds:
-                                            self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                         else:
-                                            self.db.execute("KILL %s" % thread_id)
+                                            self.db.cursor.execute("KILL %s" % thread_id)
 
                                         threads_killed += 1
                         except pymysql.OperationalError:
@@ -587,7 +600,7 @@ class Dolphie:
 
                         if lower_limit > upper_limit:
                             self.update_footer(
-                                "[bright_red]Invalid time range! Lower limit can't be higher than upper!"
+                                "[indian_red]Invalid time range! Lower limit can't be higher than upper!"
                             )
                         else:
                             for thread_id, thread in self.processlist_threads.items():
@@ -596,30 +609,30 @@ class Dolphie:
                                         if include_sleep == "y":
                                             if thread["command"] in commands_with_sleep:
                                                 if self.host_is_rds:
-                                                    self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                                    self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                                 else:
-                                                    self.db.execute("KILL %s" % thread_id)
+                                                    self.db.cursor.execute("KILL %s" % thread_id)
 
                                                 threads_killed += 1
                                         else:
                                             if thread["command"] in commands_without_sleep:
                                                 if self.host_is_rds:
-                                                    self.db.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                                                    self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                                                 else:
-                                                    self.db.execute("KILL %s" % thread_id)
+                                                    self.db.cursor.execute("KILL %s" % thread_id)
 
                                                 threads_killed += 1
                                 except pymysql.OperationalError:
                                     continue
                     else:
-                        self.update_footer("[bright_red]Invalid time range!")
+                        self.update_footer("[indian_red]Invalid time range!")
                 else:
-                    self.update_footer("[bright_red]Invalid option!")
+                    self.update_footer("[indian_red]Invalid option!")
 
                 if threads_killed:
                     self.update_footer("[grey93]Killed [steel_blue1]%s [grey93]threads!" % threads_killed)
                 else:
-                    self.update_footer("[bright_red]No threads were killed!")
+                    self.update_footer("[indian_red]No threads were killed!")
 
         elif key == "l":
             if self.innodb_locks_sql:
@@ -628,7 +641,7 @@ class Dolphie:
                 else:
                     self.layout["innodb_locks"].visible = True
             else:
-                self.update_footer("[red]InnoDB Locks panel isn't supported for this host's version!")
+                self.update_footer("[indian_red]InnoDB Locks panel isn't supported for this host's version!")
 
         elif key == "L":
             os.system("clear")
@@ -705,7 +718,7 @@ class Dolphie:
             if time.isnumeric():
                 self.time_filter = int(time)
             else:
-                self.update_footer("[bright_red]Time must be an integer!")
+                self.update_footer("[indian_red]Time must be an integer!")
 
         elif key == "u":
             user_stat_data = self.create_user_stats_table()
@@ -717,7 +730,7 @@ class Dolphie:
                 self.block_refresh_for_key_command()
             else:
                 self.update_footer(
-                    "[bright_red]This feature requires Userstat variable or Performance Schema to be enabled!"
+                    "[indian_red]This feature requires Userstat variable or Performance Schema to be enabled!"
                 )
 
         elif key == "U":
@@ -733,7 +746,7 @@ class Dolphie:
             all_tables = []
 
             db_count = self.db.execute(Queries["databases"])
-            databases = self.db.cursor.fetchall()
+            databases = self.db.fetchall()
 
             # Determine how many tables to provide data
             if db_count <= 20:
@@ -755,7 +768,7 @@ class Dolphie:
             # Loop databases
             table_counter = 1
             for database in databases:
-                tables[table_counter].add_row(database["Database"].decode(), style="grey93")
+                tables[table_counter].add_row(database["Database"], style="grey93")
 
                 if db_counter == row_per_count and row_counter != max_num_tables:
                     row_counter += 1
@@ -904,7 +917,7 @@ class Dolphie:
                 self.block_refresh_for_key_command()
             else:
                 if input_variable:
-                    self.update_footer("[bright_red]No variable(s) found that match your search!")
+                    self.update_footer("[indian_red]No variable(s) found that match your search!")
 
         elif key == "x":
             refresh_interval = self.console.input("[steel_blue1]Refresh interval (in seconds)[/steel_blue1]: ")
@@ -912,7 +925,7 @@ class Dolphie:
             if refresh_interval.isnumeric():
                 self.refresh_interval = int(refresh_interval)
             else:
-                self.update_footer("[bright_red]Input must be an integer!")
+                self.update_footer("[indian_red]Input must be an integer!")
 
         elif key == "X":
             refresh_interval_innodb_status = self.console.input(
@@ -922,7 +935,7 @@ class Dolphie:
             if refresh_interval_innodb_status.isnumeric():
                 self.refresh_interval_innodb_status = int(refresh_interval_innodb_status)
             else:
-                self.update_footer("[bright_red]Input must be an integer!")
+                self.update_footer("[indian_red]Input must be an integer!")
 
         elif key == "z":
             os.system("clear")
@@ -949,7 +962,7 @@ class Dolphie:
             row_style = Style(color="grey93")
 
             filters = {
-                "c": "Clear all filters",
+                "C": "Clear all filters",
                 "D": "Filter by database",
                 "H": "Filter by host/IP",
                 "Q": "Filter by query text",
@@ -1080,14 +1093,47 @@ class Dolphie:
 
         if userstat_enabled:
             self.db.execute(Queries["userstat_user_statisitics"])
+
+            columns.update(
+                {
+                    "User": {"field": "user", "format_number": False},
+                    "Active": {"field": "concurrent_connections", "format_number": True},
+                    "Total": {"field": "total_connections", "format_number": True},
+                    "Binlog Data": {"field": "binlog_bytes_written", "format_number": False},
+                    "Rows Read": {"field": "table_rows_read", "format_number": True},
+                    "Rows Sent": {"field": "rows_fetched", "format_number": True},
+                    "Rows Updated": {"field": "rows_updated", "format_number": True},
+                    "Selects": {"field": "select_commands", "format_number": True},
+                    "Updates": {"field": "update_commands", "format_number": True},
+                    "Other": {"field": "other_commands", "format_number": True},
+                    "Commit": {"field": "commit_transactions", "format_number": True},
+                    "Rollback": {"field": "rollback_transactions", "format_number": True},
+                    "Access Denied": {"field": "access_denied", "format_number": True},
+                    "Conn Denied": {"field": "denied_connections", "format_number": True},
+                }
+            )
+
         elif self.performance_schema_enabled:
             self.db.execute(Queries["ps_user_statisitics"])
+
+            columns.update(
+                {
+                    "User": {"field": "user", "format_number": False},
+                    "Active": {"field": "current_connections", "format_number": True},
+                    "Total": {"field": "total_connections", "format_number": True},
+                    "Rows Read": {"field": "rows_read", "format_number": True},
+                    "Rows Sent": {"field": "rows_sent", "format_number": True},
+                    "Rows Updated": {"field": "rows_affected", "format_number": True},
+                    "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
+                    "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
+                }
+            )
         else:
             return False
 
-        users = self.db.cursor.fetchall()
+        users = self.db.fetchall()
         for user in users:
-            username = user["user"].decode()
+            username = user["user"]
             if userstat_enabled:
                 user_stats.setdefault(username, {}).update(
                     user=username,
@@ -1132,39 +1178,6 @@ class Dolphie:
                     user_stats[username]["created_tmp_disk_tables"] += user["sum_created_tmp_disk_tables"]
                     user_stats[username]["created_tmp_tables"] += user["sum_created_tmp_tables"]
 
-        if userstat_enabled:
-            columns.update(
-                {
-                    "User": {"field": "user", "format_number": False},
-                    "Active": {"field": "concurrent_connections", "format_number": True},
-                    "Total": {"field": "total_connections", "format_number": True},
-                    "Binlog Data": {"field": "binlog_bytes_written", "format_number": False},
-                    "Rows Read": {"field": "table_rows_read", "format_number": True},
-                    "Rows Sent": {"field": "rows_fetched", "format_number": True},
-                    "Rows Updated": {"field": "rows_updated", "format_number": True},
-                    "Selects": {"field": "select_commands", "format_number": True},
-                    "Updates": {"field": "update_commands", "format_number": True},
-                    "Other": {"field": "other_commands", "format_number": True},
-                    "Commit": {"field": "commit_transactions", "format_number": True},
-                    "Rollback": {"field": "rollback_transactions", "format_number": True},
-                    "Access Denied": {"field": "access_denied", "format_number": True},
-                    "Conn Denied": {"field": "denied_connections", "format_number": True},
-                }
-            )
-        else:
-            columns.update(
-                {
-                    "User": {"field": "user", "format_number": False},
-                    "Active": {"field": "current_connections", "format_number": True},
-                    "Total": {"field": "total_connections", "format_number": True},
-                    "Rows Read": {"field": "rows_read", "format_number": True},
-                    "Rows Sent": {"field": "rows_sent", "format_number": True},
-                    "Rows Updated": {"field": "rows_affected", "format_number": True},
-                    "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
-                    "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
-                }
-            )
-
         for column, data in columns.items():
             table.add_column(column, no_wrap=True)
 
@@ -1191,14 +1204,14 @@ class Dolphie:
                     error_message = f"Host cache entry '{line}' is not properly formatted! Format: ip=hostname"
 
                     if "=" not in line:
-                        raise Exception(error_message)
+                        raise ManualException(error_message)
 
                     host, hostname = line.split("=", maxsplit=1)
                     host = host.strip()
                     hostname = hostname.strip()
 
                     if not host or not hostname:
-                        raise Exception(error_message)
+                        raise ManualException(error_message)
 
                     self.host_cache_from_file[host] = hostname
 

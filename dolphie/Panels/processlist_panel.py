@@ -3,7 +3,7 @@ import string
 from datetime import timedelta
 
 from dolphie import Dolphie
-from dolphie.Functions import detect_encoding, format_number
+from dolphie.Functions import format_number
 from dolphie.Queries import Queries
 from rich import box
 from rich.table import Table
@@ -194,22 +194,22 @@ def get_data(dolphie: Dolphie):
     processlist_threads = {}
     # Run the processlist query
     dolphie.db.execute(processlist_query)
-    threads = dolphie.db.cursor.fetchall()
+    threads = dolphie.db.fetchall()
 
     for thread in threads:
         # Don't include Dolphie's thread
         if dolphie.connection_id == thread["id"]:
             continue
 
-        command = thread["command"].decode()
+        command = thread["command"]
         if dolphie.use_performance_schema and dolphie.show_last_executed_query is False and command == "Sleep":
             query = ""
         else:
             # Use trx_query over Performance Schema query since it's more accurate
             if dolphie.use_performance_schema and thread["trx_query"]:
-                query = thread["trx_query"].decode(detect_encoding(thread["trx_query"]))
+                query = thread["trx_query"]
             else:
-                query = thread["query"].decode(detect_encoding(thread["query"]))
+                query = thread["query"]
 
         # Determine time color
         time = int(thread["time"])
@@ -228,7 +228,7 @@ def get_data(dolphie: Dolphie):
 
         # If after the first loop there's nothing in cache, don't try to resolve anymore.
         # This is an optimization
-        host = thread["host"].decode().split(":")[0]
+        host = thread["host"].split(":")[0]
         if dolphie.first_loop is False:
             if dolphie.host_cache:
                 host = dolphie.get_hostname(host)
@@ -237,19 +237,19 @@ def get_data(dolphie: Dolphie):
 
         processlist_threads[str(thread["id"])] = {
             "id": str(thread["id"]),
-            "user": thread["user"].decode(),
+            "user": thread["user"],
             "host": host,
-            "db": thread["db"].decode(),
+            "db": thread["db"],
             "formatted_time": formatted_time,
             "time": time,
             "hhmmss_time": "[{}]{:0>8}".format(thread_color, str(timedelta(seconds=time))),
             "command": command,
-            "state": thread["state"].decode(),
-            "trx_state": thread["trx_state"].decode(),
-            "trx_operation_state": thread["trx_operation_state"].decode(),
-            "trx_rows_locked": thread["trx_rows_locked"].decode(),
-            "trx_rows_modified": thread["trx_rows_modified"].decode(),
-            "trx_concurrency_tickets": thread["trx_concurrency_tickets"].decode(),
+            "state": thread["state"],
+            "trx_state": thread["trx_state"],
+            "trx_operation_state": thread["trx_operation_state"],
+            "trx_rows_locked": thread["trx_rows_locked"],
+            "trx_rows_modified": thread["trx_rows_modified"],
+            "trx_concurrency_tickets": thread["trx_concurrency_tickets"],
             "query": re.sub(r"\s+", " ", query),
         }
 

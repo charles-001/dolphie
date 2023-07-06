@@ -14,6 +14,7 @@ from time import sleep
 
 import myloginpath
 from dolphie import Dolphie
+from dolphie.ManualException import ManualException
 from dolphie.Panels import (
     dashboard_panel,
     innodb_io_panel,
@@ -216,12 +217,6 @@ Environment variables support these options:
         help="Start with using Processlist instead of Performance Schema for listing queries",
     )
     parser.add_argument(
-        "--debug",
-        action="store_true",
-        default=False,
-        help="Print tracebacks on errors for more verbose debugging",
-    )
-    parser.add_argument(
         "-V", "--version", action="version", version=dolphie.app_version, help="Display version and exit"
     )
 
@@ -233,9 +228,6 @@ Environment variables support these options:
         dolphie.config_file = parameter_options["config_file"]
     else:
         dolphie.config_file = "%s/.my.cnf" % os.path.expanduser("~")
-
-    if parameter_options["debug"]:
-        dolphie.debug = parameter_options["debug"]
 
     # Use config file for login credentials
     if os.path.isfile(dolphie.config_file):
@@ -256,7 +248,7 @@ Environment variables support these options:
             elif ssl_mode == "VERIFY_IDENTITY":
                 dolphie.ssl["check_hostname"] = True
             else:
-                raise Exception("Unsupported SSL mode [b]%s" % ssl_mode)
+                raise ManualException("Unsupported SSL mode [b]%s" % ssl_mode)
 
         if cfg.has_option("client", "ssl_ca"):
             dolphie.ssl["ca"] = cfg.get("client", "ssl_ca")
@@ -273,10 +265,10 @@ Environment variables support these options:
             for option in basic_options:
                 if option in login_path_data:
                     setattr(dolphie, option, login_path_data[option])
-        except Exception as e:
+        except ManualException as e:
             # Don't error out for default login path
             if parameter_options["login_path"] != "client":
-                raise Exception(f"Problem reading login path file - Reason: {e}")
+                raise ManualException(f"Problem reading login path file - Reason: {e}")
 
     # Use environment variables for basic options if specified
     for option in basic_options:
@@ -309,7 +301,7 @@ Environment variables support these options:
                 "$placeholder", dolphie.heartbeat_table
             )
         else:
-            raise Exception("Your heartbeat table did not conform to the proper format db.table")
+            raise ManualException("Your heartbeat table did not conform to the proper format: db.table")
 
     if parameter_options["ssl_mode"]:
         ssl_mode = parameter_options["ssl_mode"].upper()
@@ -321,7 +313,7 @@ Environment variables support these options:
         elif ssl_mode == "VERIFY_IDENTITY":
             dolphie.ssl["check_hostame"] = True
         else:
-            raise Exception(f"Unsupported SSL mode {ssl_mode}")
+            raise ManualException(f"Unsupported SSL mode {ssl_mode}")
 
     if parameter_options["ssl_ca"]:
         dolphie.ssl["ca"] = parameter_options["ssl_ca"]
@@ -439,11 +431,13 @@ def main():
                     loop_counter += 1
 
                 dolphie.first_loop = False
-    except Exception as e:
-        if dolphie.debug:
-            dolphie.console.print_exception()
-        else:
-            dolphie.console.print(f"[b][red]ERROR![/red][/b] {str(e)}", highlight=False)
+    except ManualException as e:
+        dolphie.console.print(
+            f"[bold indian_red]Error[/bold indian_red]: {e}",
+            highlight=False,
+        )
+    except Exception:
+        dolphie.console.print_exception()
 
 
 if __name__ == "__main__":

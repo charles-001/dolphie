@@ -1,7 +1,7 @@
 # MySQL queries used
 Queries = {
     "pl_query": """
-        /* dolphie */ SELECT
+        SELECT
             id,
             IFNULL(User, "")                    AS user,
             IFNULL(Host, "")                    AS host,
@@ -22,7 +22,7 @@ Queries = {
         WHERE 1 $placeholder
     """,
     "ps_query": """
-        /* dolphie */ SELECT
+        SELECT
             processlist_id                      AS id,
             IFNULL(processlist_user, "")        AS user,
             IFNULL(processlist_host, "")        AS host,
@@ -47,7 +47,7 @@ Queries = {
             $placeholder
     """,
     "locks_query-5": """
-        /* dolphie */ SELECT
+        SELECT
             IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
             IFNULL(r.trx_query, "")                                      AS waiting_query,
             IFNULL(r.trx_rows_modified, "")                              AS waiting_rows_modified,
@@ -69,7 +69,7 @@ Queries = {
             TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
     """,
     "locks_query-8": """
-        /* dolphie */ SELECT
+        SELECT
             IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
             IFNULL(r.trx_query, "")                                      AS waiting_query,
             IFNULL(r.trx_rows_modified, "")                              AS waiting_rows_modified,
@@ -91,7 +91,7 @@ Queries = {
             TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
     """,
     "ps_replica_lag": """
-        /* dolphie */ SELECT
+        SELECT
             IFNULL(TIMESTAMPDIFF(
                 SECOND,
                 MIN(APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP),
@@ -102,13 +102,13 @@ Queries = {
             APPLYING_TRANSACTION != ''
     """,
     "heartbeat_replica_lag": """
-        /* dolphie */ SELECT
+        SELECT
             TIMESTAMPDIFF(SECOND, MAX(ts), NOW()) AS secs_behind
         FROM
             $placeholder
     """,
     "ps_find_replicas": """
-        /* dolphie */ SELECT
+        SELECT
             processlist_id   AS id,
             processlist_user AS user,
             processlist_host AS host
@@ -118,7 +118,7 @@ Queries = {
             processlist_command LIKE 'Binlog Dump%'
     """,
     "pl_find_replicas": """
-        /* dolphie */ SELECT
+        SELECT
             Id   AS id,
             User AS user,
             Host AS host
@@ -128,7 +128,7 @@ Queries = {
             Command Like 'Binlog Dump%'
     """,
     "ps_user_statisitics": """
-        /* dolphie */ SELECT
+        SELECT
             u.user AS user,
             total_connections,
             current_connections,
@@ -146,7 +146,7 @@ Queries = {
             current_connections DESC
     """,
     "userstat_user_statisitics": """
-        /* dolphie */ SELECT
+        SELECT
             user,
             total_connections,
             concurrent_connections,
@@ -168,10 +168,10 @@ Queries = {
         ORDER BY
             concurrent_connections DESC
     """,
-    "status": "/* dolphie */ SHOW GLOBAL STATUS",
-    "variables": "/* dolphie */ SHOW GLOBAL VARIABLES",
-    "primary_status": "/* dolphie */ SHOW MASTER STATUS",
-    "replica_status": "/* dolphie */ SHOW SLAVE STATUS",
-    "databases": "/* dolphie */ SHOW DATABASES",
-    "innodb_status": "/* dolphie */ SHOW ENGINE INNODB STATUS",
+    "status": "SHOW GLOBAL STATUS",
+    "variables": "SHOW GLOBAL VARIABLES",
+    "primary_status": "SHOW MASTER STATUS",
+    "replica_status": "SHOW SLAVE STATUS",
+    "databases": "SHOW DATABASES",
+    "innodb_status": "SHOW ENGINE INNODB STATUS",
 }

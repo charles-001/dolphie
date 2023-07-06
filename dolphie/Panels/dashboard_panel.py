@@ -54,7 +54,7 @@ def create_panel(dolphie: Dolphie):
 
     if variables["read_only"] == "ON":
         if not dolphie.replica_status:
-            variables["read_only"] = "YES ([red]SHOULD BE NO?[/red])"
+            variables["read_only"] = "YES ([indian_red]SHOULD BE NO?[/indian_red])"
         else:
             variables["read_only"] = "YES"
     elif variables["read_only"] == "OFF":

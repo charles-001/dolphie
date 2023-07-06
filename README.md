@@ -56,7 +56,6 @@ options:
   --show-trxs-only      Start with only showing queries that are running a transaction
   --additional-columns  Start with additional columns in processlist panel
   --use-processlist     Start with using Processlist instead of Performance Schema for listing queries
-  --debug               Print tracebacks on errors for more verbose debugging
   -V, --version         Display version and exit
 
 Config file with [client] section supports these options:
