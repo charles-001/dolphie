@@ -127,13 +127,13 @@ Order of precedence for variables passed to Dolphie:
 I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please let me know! I'd love to hear from you :smiley:
 
 ## Dashboard with processlist
-<img width="1703" alt="Screenshot 2023-07-06 at 5 59 23 AM" src="https://github.com/charles-001/dolphie/assets/13244625/2ef8b1c8-b7ee-429a-8287-33263e318e71">
+<img width="1700" alt="251416338-2ef8b1c8-b7ee-429a-8287-33263e318e71" src="https://github.com/charles-001/dolphie/assets/13244625/94f7a295-2f27-4a7c-8c18-d786f41a3a90">
 
 ## Dashboard with InnoDB statisitics + processlist
-<img width="1703" alt="Screenshot 2023-07-06 at 6 00 02 AM" src="https://github.com/charles-001/dolphie/assets/13244625/6a7dfd7e-d024-40c9-b905-5acab1a435e3">
+<img width="1699" alt="251416353-6a7dfd7e-d024-40c9-b905-5acab1a435e3" src="https://github.com/charles-001/dolphie/assets/13244625/82c63057-ee73-4545-ac34-25409a55bb7c">
 
 ## Dashboard with replicas
-<img width="1704" alt="Screenshot 2023-07-06 at 5 24 32 AM" src="https://github.com/charles-001/dolphie/assets/13244625/5234fef4-f141-4058-94fe-73c20d42133c">
+<img width="1700" alt="251411054-5234fef4-f141-4058-94fe-73c20d42133c" src="https://github.com/charles-001/dolphie/assets/13244625/8e80f6ef-41d8-4e4b-9cee-acb1c1852495">
 
 ## Explain query
 <img width="1702" alt="Screenshot 2023-07-06 at 5 33 54 AM" src="https://github.com/charles-001/dolphie/assets/13244625/da4ea77f-c26f-449a-b959-280e88756981">
