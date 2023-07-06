@@ -127,24 +127,25 @@ Order of precedence for variables passed to Dolphie:
 I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please let me know! I'd love to hear from you :smiley:
 
 ## Dashboard with processlist
-<img width="1706" alt="dashboard_processlist" src="https://user-images.githubusercontent.com/13244625/188236477-4ede6b72-d643-4037-b9a7-c2acfdf0c0b9.png">
+<img width="1702" alt="Screenshot 2023-07-06 at 4 59 21 AM" src="https://github.com/charles-001/dolphie/assets/13244625/62d9da84-a196-4457-b1a1-eacc1603020a">
 
 ## Dashboard with InnoDB statisitics + processlist
-<img width="1413" alt="Screen Shot 2022-09-04 at 4 23 21 AM" src="https://user-images.githubusercontent.com/13244625/188304499-b86d1161-c505-4a62-9427-754f8a244f79.png">
+<img width="1701" alt="Screenshot 2023-07-06 at 4 59 44 AM" src="https://github.com/charles-001/dolphie/assets/13244625/040e161a-7e1e-4527-bde7-bd9c8772533b">
 
 ## Dashboard with replicas
-<img width="1558" alt="Screen Shot 2022-09-15 at 2 30 14 AM" src="https://user-images.githubusercontent.com/13244625/190331388-f43b4ba3-f0ef-445e-a3bd-15625af21728.png">
+<img width="1704" alt="Screenshot 2023-07-06 at 5 24 32 AM" src="https://github.com/charles-001/dolphie/assets/13244625/5234fef4-f141-4058-94fe-73c20d42133c">
 
 ## Explain query
-<img width="1830" alt="explain" src="https://user-images.githubusercontent.com/13244625/188236515-1dacca42-ee90-4295-925d-672e876833d3.png">
+<img width="1702" alt="Screenshot 2023-07-06 at 5 33 54 AM" src="https://github.com/charles-001/dolphie/assets/13244625/da4ea77f-c26f-449a-b959-280e88756981">
 
-## Users list via userstat variable
-<img width="1825" alt="users" src="https://user-images.githubusercontent.com/13244625/188236526-f00f2e9c-e2f7-4608-9be9-d769392d522c.png">
+## Users list
+<img width="1701" alt="Screenshot 2023-07-06 at 5 00 41 AM" src="https://github.com/charles-001/dolphie/assets/13244625/9f870376-7425-4bee-a81b-940193b84e6c">
 
 ## Variable wildcard searching
-<img width="1710" alt="variables" src="https://user-images.githubusercontent.com/13244625/188236534-9f876d01-4a6f-47ed-ba4f-9f0901ba0efb.png">
+<img width="1701" alt="Screenshot 2023-07-06 at 5 01 06 AM" src="https://github.com/charles-001/dolphie/assets/13244625/43e84f80-a77d-415a-acff-207f520aa249">
 
 ## Help 
-<img width="1421" alt="Screen Shot 2022-09-09 at 3 41 47 AM" src="https://user-images.githubusercontent.com/13244625/189298313-adbcc1fc-bde5-4261-8c83-f0752a01b9d8.png">
+<img width="1695" alt="Screenshot 2023-07-06 at 5 01 39 AM" src="https://github.com/charles-001/dolphie/assets/13244625/37b3d87f-53db-4cbd-a160-94cd930f09aa">
+
 
 
