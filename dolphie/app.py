@@ -268,7 +268,7 @@ Environment variables support these options:
         except Exception as e:
             # Don't error out for default login path
             if parameter_options["login_path"] != "client":
-                raise ManualException(f"Problem reading login path file - Reason: {e}")
+                raise ManualException("Problem reading login path file", reason=e)
 
     # Use environment variables for basic options if specified
     for option in basic_options:
@@ -432,10 +432,7 @@ def main():
 
                 dolphie.first_loop = False
     except ManualException as e:
-        dolphie.console.print(
-            f"[bold indian_red]Error[/bold indian_red]: {e}",
-            highlight=False,
-        )
+        dolphie.console.print(e.output())
     except Exception:
         dolphie.console.print_exception()
 
