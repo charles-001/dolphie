@@ -127,10 +127,10 @@ Order of precedence for variables passed to Dolphie:
 I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please let me know! I'd love to hear from you :smiley:
 
 ## Dashboard with processlist
-<img width="1702" alt="Screenshot 2023-07-06 at 4 59 21 AM" src="https://github.com/charles-001/dolphie/assets/13244625/62d9da84-a196-4457-b1a1-eacc1603020a">
+<img width="1699" alt="Screenshot 2023-07-06 at 5 52 02 AM" src="https://github.com/charles-001/dolphie/assets/13244625/9db68fa9-7020-40e9-9045-9e44deb300e8">
 
 ## Dashboard with InnoDB statisitics + processlist
-<img width="1701" alt="Screenshot 2023-07-06 at 4 59 44 AM" src="https://github.com/charles-001/dolphie/assets/13244625/040e161a-7e1e-4527-bde7-bd9c8772533b">
+<img width="1702" alt="Screenshot 2023-07-06 at 5 50 24 AM" src="https://github.com/charles-001/dolphie/assets/13244625/5dd0935e-0608-4f5b-b53e-90d1a5a4c069">
 
 ## Dashboard with replicas
 <img width="1704" alt="Screenshot 2023-07-06 at 5 24 32 AM" src="https://github.com/charles-001/dolphie/assets/13244625/5234fef4-f141-4058-94fe-73c20d42133c">
