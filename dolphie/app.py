@@ -265,7 +265,7 @@ Environment variables support these options:
             for option in basic_options:
                 if option in login_path_data:
                     setattr(dolphie, option, login_path_data[option])
-        except ManualException as e:
+        except Exception as e:
             # Don't error out for default login path
             if parameter_options["login_path"] != "client":
                 raise ManualException(f"Problem reading login path file - Reason: {e}")
