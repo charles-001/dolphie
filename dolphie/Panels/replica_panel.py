@@ -129,7 +129,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
 
     data["sbm_source"] = "Replica"
     # Use performance schema for seconds behind if host is MySQL 8
-    if dolphie.full_version.startswith("8") and dolphie.performance_schema_enabled:
+    if dolphie.mysql_version.startswith("8") and dolphie.performance_schema_enabled:
         dolphie.db.cursor.execute(Queries["ps_replica_lag"])
         replica_lag_data = dolphie.db.cursor.fetchone()
 

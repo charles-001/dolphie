@@ -168,6 +168,42 @@ Queries = {
         ORDER BY
             concurrent_connections DESC
     """,
+    "error_log": """
+        SELECT
+            logged AS timestamp,
+            prio AS level,
+            subsystem,
+            data AS message
+        FROM
+            performance_schema.error_log
+        WHERE
+            data != 'Could not open log file.'
+            $placeholder
+        ORDER BY timestamp
+    """,
+    "memory_by_user": """
+        SELECT
+            user,
+            current_allocated,
+            current_max_alloc
+        FROM
+            sys.memory_by_user_by_current_bytes
+        WHERE
+            user != "background" AND
+            current_allocated NOT LIKE '%0 bytes%'
+    """,
+    "memory_by_code_area": """
+        SELECT
+            SUBSTRING_INDEX( event_name, '/', 2 ) AS code_area,
+            format_bytes (
+            SUM( current_alloc )) AS current_allocated
+        FROM
+            sys.x$memory_global_by_current_bytes
+        GROUP BY
+            SUBSTRING_INDEX( event_name, '/', 2 )
+        ORDER BY
+            SUM( current_alloc ) DESC
+    """,
     "status": "SHOW GLOBAL STATUS",
     "variables": "SHOW GLOBAL VARIABLES",
     "primary_status": "SHOW MASTER STATUS",

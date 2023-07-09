@@ -65,7 +65,9 @@ def create_panel(dolphie: Dolphie):
     table_information.add_column()
     table_information.add_column(width=27)
     table_information.add_row("Name", "[grey93]%s" % dolphie.host, style=row_style)
-    table_information.add_row("Version", "[grey93]%s %s" % (dolphie.host_distro, dolphie.full_version), style=row_style)
+    table_information.add_row(
+        "Version", "[grey93]%s %s" % (dolphie.host_distro, dolphie.mysql_version), style=row_style
+    )
     table_information.add_row("Uptime", "[grey93]%s" % uptime, style=row_style)
     table_information.add_row(
         "Runtime", "[grey93]%s [grey78]latency: [grey93]%ss" % (runtime, refresh_latency), style=row_style
@@ -119,7 +121,7 @@ def create_panel(dolphie: Dolphie):
 
     # Save what percentage of log files InnoDB will start to aggressively flush
     # to disk due to checkpointing based on version
-    if dolphie.full_version.startswith("8"):
+    if dolphie.mysql_version.startswith("8"):
         version_threshold = 0.875
     else:
         version_threshold = 0.81
