@@ -7,12 +7,12 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 ## Installation
 Requires Python 3.8+
 
-#### Using PyPi:
+#### Using PyPi
 ```shell
 pip install dolphie
 ```
 
-#### Using Poetry:
+#### Using Poetry
 ```shell
 curl -sSL https://install.python-poetry.org | python3 -
 

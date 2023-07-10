@@ -561,7 +561,7 @@ class Dolphie:
                                         columns.append(column)
 
                                     if column == "key" and value is None:
-                                        value = "[b indian_red]NONE[/b indian_red]"
+                                        value = "[b white on red]NO INDEX[/b white on red]"
 
                                     if column == "rows":
                                         value = format_number(value)
