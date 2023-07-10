@@ -9,7 +9,7 @@ from rich import box
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie):
+def create_panel(dolphie: Dolphie) -> Table:
     table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="steel_blue1")
 
     columns = {}

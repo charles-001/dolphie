@@ -31,9 +31,11 @@ def create_panel(dolphie: Dolphie):
 
     replica_count = dolphie.db.cursor.execute(find_replicas_query)
     data = dolphie.db.fetchall()
-    replica_count_text = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (replica_count))
 
-    table_split_counter = 1
+    replica_count_text = ""
+    if replica_count:
+        replica_count_text = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (replica_count))
+
     tables = []
     for row in data:
         thread_id = row["id"]
@@ -76,15 +78,13 @@ def create_panel(dolphie: Dolphie):
 
             tables.append(table)
 
-        if table_split_counter == 3:
-            table_grid.add_row(*tables)
-            table_split_counter = 0
-            tables = []
+    # Stack tables in groups of 3
+    num_tables = len(tables)
+    for i in range(0, num_tables - (num_tables % 3), 3):
+        table_grid.add_row(*tables[i : i + 3])
 
-        table_split_counter += 1
-
-    if table_split_counter:
-        table_grid.add_row(*tables)
+    if num_tables % 3 != 0:
+        table_grid.add_row(*tables[num_tables - (num_tables % 3) :])
 
     if dolphie.replica_status:
         # GTID Sets can be very long, so we don't center align replication table or else table

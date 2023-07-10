@@ -4,12 +4,11 @@ from dolphie import Dolphie
 from dolphie.Functions import format_bytes, format_number
 from rich import box
 from rich.align import Align
-from rich.console import Group
 from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie):
+def create_panel(dolphie: Dolphie) -> Table:
     variables = dolphie.variables
     statuses = dolphie.statuses
     loop_duration_seconds = dolphie.loop_duration_seconds
@@ -312,4 +311,4 @@ def create_panel(dolphie: Dolphie):
         table_innodb_information, table_innodb_activity, table_row_operations, table_pending_io, table_file_io
     )
 
-    return Group(Align.center(table_grid))
+    return Align.center(table_grid)

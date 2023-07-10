@@ -6,12 +6,11 @@ from dolphie.Functions import format_bytes, format_number
 from dolphie.Panels import replica_panel
 from rich import box
 from rich.align import Align
-from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie):
+def create_panel(dolphie: Dolphie) -> Table:
     statuses = dolphie.statuses
     variables = dolphie.variables
     innodb_status = dolphie.innodb_status
@@ -421,12 +420,7 @@ def create_panel(dolphie: Dolphie):
 
     tables_to_add.append(table_stats)
 
+    dashboard_grid.add_row()
     dashboard_grid.add_row(*tables_to_add)
 
-    dashboard_panel = Panel(
-        Align.center(dashboard_grid),
-        box=box.SIMPLE,
-        border_style="steel_blue1",
-    )
-
-    return dashboard_panel
+    return Align.center(dashboard_grid)

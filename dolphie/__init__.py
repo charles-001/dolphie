@@ -138,7 +138,7 @@ class Dolphie:
         layout.split_column(
             Layout(name="header", size=1),
             Layout(name="dashboard", size=13),
-            Layout(name="innodb_io", visible=False, size=10),
+            Layout(name="innodb_io", visible=False, size=11),
             Layout(name="replicas", visible=False),
             Layout(name="innodb_locks", visible=False),
             Layout(name="processlist"),
@@ -883,9 +883,6 @@ class Dolphie:
             os.system("clear")
             self.console.print(Align.right(self.header_title), highlight=False)
 
-            db_counter = 1
-            row_counter = 1
-            table_counter = 1
             tables = {}
             all_tables = []
 
@@ -893,44 +890,36 @@ class Dolphie:
             databases = self.db.fetchall()
 
             # Determine how many tables to provide data
-            if db_count <= 20:
-                max_num_tables = 1
-            else:
-                max_num_tables = 3
+            max_num_tables = 1 if db_count <= 20 else 3
 
             # Calculate how many databases per table
-            row_per_count = round(db_count / max_num_tables)
+            row_per_count = db_count // max_num_tables
 
-            # Create dictionary of how many tables we want
-            table_grid = Table.grid()
-            while table_counter <= max_num_tables:
+            # Create dictionary of tables
+            for table_counter in range(1, max_num_tables + 1):
                 tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="grey70")
                 tables[table_counter].add_column("")
 
-                table_counter += 1
-
-            # Loop databases
+            # Loop over databases
+            db_counter = 1
             table_counter = 1
             for database in databases:
                 tables[table_counter].add_row(database["Database"], style="grey93")
-
-                if db_counter == row_per_count and row_counter != max_num_tables:
-                    row_counter += 1
-                    db_counter = 0
-                    table_counter += 1
-
                 db_counter += 1
 
-            # Put all the variable data from dict into an array
-            for table, table_data in tables.items():
-                if table_data:
-                    all_tables.append(table_data)
+                if db_counter > row_per_count and table_counter < max_num_tables:
+                    table_counter += 1
+                    db_counter = 1
 
+            # Collect table data into an array
+            all_tables = [table_data for table_data in tables.values() if table_data]
+
+            table_grid = Table.grid()
             table_grid.add_row(*all_tables)
 
             self.console.print(Align.center("Databases"), style="b")
             self.console.print(Align.center(table_grid))
-            self.console.print(Align.center("Total: [b steel_blue1]%s" % db_count))
+            self.console.print(Align.center("Total: [b steel_blue1]%s[/b steel_blue1]" % db_count))
 
             self.block_refresh_for_key_command()
 
@@ -1037,7 +1026,7 @@ class Dolphie:
                 table_counter += 1
 
             # Calculate how many variables per table
-            row_per_count = round(len(display_variables) / max_num_tables)
+            row_per_count = len(display_variables) // max_num_tables
 
             # Loop variables
             for variable, value in display_variables.items():
