@@ -756,42 +756,57 @@ class Dolphie:
             self.block_refresh_for_key_command()
 
         elif key == "m":
-            if not self.mysql_version.startswith("8"):
-                self.update_footer("[indian_red]This command requires MySQL 8!")
-            else:
-                os.system("clear")
-                self.console.print(Align.right(self.header_title), highlight=False)
+            os.system("clear")
+            self.console.print(Align.right(self.header_title), highlight=False)
 
-                table_grid = Table.grid()
+            table_grid = Table.grid()
 
-                table1 = Table(
-                    box=box.ROUNDED, style="grey70", title="User Memory Allocation", title_style="bold grey70"
+            table1 = Table(
+                box=box.ROUNDED,
+                style="grey70",
+            )
+            table1.add_column("User")
+            table1.add_column("Current")
+            table1.add_column("Total")
+
+            self.db.execute(Queries["memory_by_user"])
+            data = self.db.fetchall()
+            for row in data:
+                table1.add_row(row["user"], row["current_allocated"].strip(), row["total_allocated"].strip())
+
+            table2 = Table(
+                box=box.ROUNDED,
+                style="grey70",
+            )
+            table2.add_column("Code Area")
+            table2.add_column("Current")
+
+            self.db.execute(Queries["memory_by_code_area"])
+            data = self.db.fetchall()
+            for row in data:
+                table2.add_row(row["code_area"], row["current_allocated"].strip())
+
+            table3 = Table(
+                box=box.ROUNDED,
+                style="grey70",
+            )
+            table3.add_column("Host")
+            table3.add_column("Current")
+            table3.add_column("Total")
+
+            self.db.execute(Queries["memory_by_host"])
+            data = self.db.fetchall()
+            for row in data:
+                table3.add_row(
+                    self.get_hostname(row["host"]), row["current_allocated"].strip(), row["total_allocated"].strip()
                 )
-                table1.add_column("User")
-                table1.add_column("Current Memory")
-                table1.add_column("Max Allocated")
 
-                self.db.execute(Queries["memory_by_user"])
-                data = self.db.fetchall()
-                for row in data:
-                    table1.add_row(row["user"], row["current_allocated"], row["current_max_alloc"])
+            table_grid.add_row("", Align.center("[b]Memory Allocation[/b]"), "")
+            table_grid.add_row(table1, table3, table2)
 
-                table2 = Table(
-                    box=box.ROUNDED, style="grey70", title="Code Area Memory Allocation", title_style="bold grey70"
-                )
-                table2.add_column("Code Area")
-                table2.add_column("Current Memory")
+            self.console.print(Align.center(table_grid))
 
-                self.db.execute(Queries["memory_by_code_area"])
-                data = self.db.fetchall()
-                for row in data:
-                    table2.add_row(row["code_area"], row["current_allocated"])
-
-                table_grid.add_row(table1, table2)
-
-                self.console.print(Align.center(table_grid))
-
-                self.block_refresh_for_key_command()
+            self.block_refresh_for_key_command()
 
         elif key == "p":
             if self.layout["processlist"].visible:
@@ -913,6 +928,7 @@ class Dolphie:
 
             table_grid.add_row(*all_tables)
 
+            self.console.print(Align.center("Databases"), style="b")
             self.console.print(Align.center(table_grid))
             self.console.print(Align.center("Total: [b steel_blue1]%s" % db_count))
 
@@ -1077,6 +1093,7 @@ class Dolphie:
                     if ip:
                         table.add_row(ip, addr)
 
+                self.console.print(Align.center("Host Cache"), style="b")
                 self.console.print(Align.center(table))
                 self.console.print(Align.center("Total: [b steel_blue1]%s" % len(self.host_cache)))
             else:
@@ -1126,7 +1143,7 @@ class Dolphie:
                 "k": "Kill a query by thread ID",
                 "K": "Kill a query by either user/host/time range",
                 "L": "Show latest deadlock detected",
-                "m": "Display memory usage (MySQL 8 only)",
+                "m": "Display memory usage - limits to only 30 rows",
                 "P": "Pause Dolphie",
                 "q": "Quit Dolphie",
                 "t": "Show/hide running transactions only",

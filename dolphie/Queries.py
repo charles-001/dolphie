@@ -185,17 +185,17 @@ Queries = {
         SELECT
             user,
             current_allocated,
-            current_max_alloc
+            total_allocated
         FROM
             sys.memory_by_user_by_current_bytes
         WHERE
-            user != "background" AND
-            current_allocated NOT LIKE '%0 bytes%'
+            user != "background"
+        LIMIT 30
     """,
     "memory_by_code_area": """
         SELECT
             SUBSTRING_INDEX( event_name, '/', 2 ) AS code_area,
-            format_bytes (
+            sys.format_bytes (
             SUM( current_alloc )) AS current_allocated
         FROM
             sys.x$memory_global_by_current_bytes
@@ -203,6 +203,18 @@ Queries = {
             SUBSTRING_INDEX( event_name, '/', 2 )
         ORDER BY
             SUM( current_alloc ) DESC
+        LIMIT 30
+    """,
+    "memory_by_host": """
+        SELECT
+            host,
+            current_allocated,
+            total_allocated
+        FROM
+            sys.memory_by_host_by_current_bytes
+        WHERE
+            host != "background"
+        LIMIT 30
     """,
     "status": "SHOW GLOBAL STATUS",
     "variables": "SHOW GLOBAL VARIABLES",
