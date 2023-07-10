@@ -501,7 +501,7 @@ class Dolphie:
 
                     self.console.print(Align.center(table))
 
-                    query = sqlformat(self.processlist_threads[thread_id]["query"], reindent=True)
+                    query = sqlformat(self.processlist_threads[thread_id]["query"], reindent_aligned=True)
                     query_db = self.processlist_threads[thread_id]["db"]
 
                     if query:

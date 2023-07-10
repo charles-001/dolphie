@@ -91,6 +91,8 @@ def format_sys_table_memory(data):
             suffix = ""
         elif suffix != "b":
             suffix += "B"
+        elif suffix == "b":
+            suffix = "B"
 
         return f"{value}[steel_blue1]{suffix}"
 
