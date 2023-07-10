@@ -199,7 +199,7 @@ def create_panel(dolphie: Dolphie) -> Table:
         show_header=False,
     )
     table_file_io.add_column("")
-    table_file_io.add_column("", min_width=6)
+    table_file_io.add_column("", min_width=8)
 
     table_file_io.add_row("[grey78]OS Reads", format_number(os_file_reads), style=row_style)
     table_file_io.add_row("[grey78]OS Writes", format_number(os_file_writes), style=row_style)
@@ -217,7 +217,7 @@ def create_panel(dolphie: Dolphie) -> Table:
         show_header=False,
     )
     table_innodb_activity.add_column("")
-    table_innodb_activity.add_column("", width=7)
+    table_innodb_activity.add_column("", min_width=8)
 
     if loop_duration_seconds == 0:
         reads_mem_per_second = 0

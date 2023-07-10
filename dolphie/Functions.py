@@ -4,7 +4,7 @@ import charset_normalizer
 
 
 def format_bytes(bytes_value):
-    units = ["B", "K", "M", "G", "T"]
+    units = ["B", "KB", "MB", "GB", "TB"]
     unit_index = 0
 
     while bytes_value >= 1024 and unit_index < len(units) - 1:
@@ -80,3 +80,18 @@ def format_number(n, decimal=2):
             return num + "[steel_blue1]" + sufix if minus_buff > 0 else "-" + num + "[steel_blue1]" + sufix
 
     return str(0)
+
+
+def format_sys_table_memory(data):
+    parsed_data = data.strip().split(" ")
+    if len(parsed_data) == 2:
+        value, suffix = parsed_data[0], parsed_data[1][:1]
+
+        if value == "0":
+            suffix = ""
+        elif suffix != "b":
+            suffix += "B"
+
+        return f"{value}[steel_blue1]{suffix}"
+
+    return data

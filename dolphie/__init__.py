@@ -10,7 +10,7 @@ from time import sleep
 import pymysql
 import requests
 from dolphie.Database import Database
-from dolphie.Functions import format_bytes, format_number
+from dolphie.Functions import format_bytes, format_number, format_sys_table_memory
 from dolphie.KBHit import KBHit
 from dolphie.ManualException import ManualException
 from dolphie.Queries import Queries
@@ -765,40 +765,48 @@ class Dolphie:
                 box=box.ROUNDED,
                 style="grey70",
             )
-            table1.add_column("User")
-            table1.add_column("Current")
-            table1.add_column("Total")
+
+            header_style = Style(bold=True)
+            table1.add_column("User", header_style=header_style)
+            table1.add_column("Current", header_style=header_style)
+            table1.add_column("Total", header_style=header_style)
 
             self.db.execute(Queries["memory_by_user"])
             data = self.db.fetchall()
             for row in data:
-                table1.add_row(row["user"], row["current_allocated"].strip(), row["total_allocated"].strip())
+                table1.add_row(
+                    row["user"],
+                    format_sys_table_memory(row["current_allocated"]),
+                    format_sys_table_memory(row["total_allocated"]),
+                )
 
             table2 = Table(
                 box=box.ROUNDED,
                 style="grey70",
             )
-            table2.add_column("Code Area")
-            table2.add_column("Current")
+            table2.add_column("Code Area", header_style=header_style)
+            table2.add_column("Current", header_style=header_style)
 
             self.db.execute(Queries["memory_by_code_area"])
             data = self.db.fetchall()
             for row in data:
-                table2.add_row(row["code_area"], row["current_allocated"].strip())
+                table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
 
             table3 = Table(
                 box=box.ROUNDED,
                 style="grey70",
             )
-            table3.add_column("Host")
-            table3.add_column("Current")
-            table3.add_column("Total")
+            table3.add_column("Host", header_style=header_style)
+            table3.add_column("Current", header_style=header_style)
+            table3.add_column("Total", header_style=header_style)
 
             self.db.execute(Queries["memory_by_host"])
             data = self.db.fetchall()
             for row in data:
                 table3.add_row(
-                    self.get_hostname(row["host"]), row["current_allocated"].strip(), row["total_allocated"].strip()
+                    self.get_hostname(row["host"]),
+                    format_sys_table_memory(row["current_allocated"]),
+                    format_sys_table_memory(row["total_allocated"]),
                 )
 
             table_grid.add_row("", Align.center("[b]Memory Allocation[/b]"), "")
