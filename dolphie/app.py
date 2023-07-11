@@ -347,6 +347,7 @@ def main():
         dolphie.check_for_update()
         dolphie.db_connect()
         dolphie.load_host_cache_file()
+        dolphie.update_environment_variables_for_pager()
 
         with Live(
             dolphie.layout, vertical_overflow="crop", screen=True, transient=True, auto_refresh=False

@@ -132,6 +132,11 @@ class Dolphie:
                 f" {response.status_code}"
             )
 
+    def update_environment_variables_for_pager(self):
+        # Must do this so color is enabled for pager commands
+        os.environ["PAGER"] = "less -R"
+        os.environ["TERM"] = "xterm-256color"
+
     def create_rich_layout(self) -> Layout:
         layout = Layout(name="root")
 
