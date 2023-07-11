@@ -138,7 +138,7 @@ class Dolphie:
         layout.split_column(
             Layout(name="header", size=1),
             Layout(name="dashboard", size=13),
-            Layout(name="innodb_io", visible=False, size=11),
+            Layout(name="innodb_io", visible=False, size=10),
             Layout(name="replicas", visible=False),
             Layout(name="innodb_locks", visible=False),
             Layout(name="processlist"),
@@ -911,8 +911,10 @@ class Dolphie:
             # Loop over databases
             db_counter = 1
             table_counter = 1
+
+            # Sort the databases by name
             for database in databases:
-                tables[table_counter].add_row(database["Database"], style="grey93")
+                tables[table_counter].add_row(database["SCHEMA_NAME"], style="grey93")
                 db_counter += 1
 
                 if db_counter > row_per_count and table_counter < max_num_tables:
@@ -1099,6 +1101,8 @@ class Dolphie:
             self.block_refresh_for_key_command()
 
         elif key == "?":
+            self.rich_live.stop()
+
             os.system("clear")
 
             row_style = Style(color="grey93")
@@ -1135,7 +1139,7 @@ class Dolphie:
                 "2": "Display output from SHOW ENGINE INNODB STATUS using a pager",
                 "a": "Show/hide additional processlist columns",
                 "e": "Explain query of a thread and display thread information",
-                "E": "Display error log using a pager (MySQL 8 only)",
+                "E": "Display error log from performance schema using a pager (MySQL 8 only)",
                 "I": "Show/hide idle queries",
                 "k": "Kill a query by thread ID",
                 "K": "Kill a query by either user/host/time range",
@@ -1199,22 +1203,26 @@ class Dolphie:
             for datapoint, description in sorted(datapoints.items()):
                 table_info.add_row("[steel_blue1]%s" % datapoint, description, style=row_style)
 
-            self.console.print(
-                Align.center(
-                    self.header_title + " by Charles Thompson <[bright_yellow]01charles.t@gmail.com[/bright_yellow]>\n"
-                ),
-                highlight=False,
-            )
-
             table_grid = Table.grid()
             table_grid.add_row(table_panels, table_filters)
-            self.console.print(Align.center(table_keys))
-            self.console.print("")
-            self.console.print(Align.center(table_grid))
-            self.console.print("")
-            self.console.print(Align.center(table_info))
 
-            self.block_refresh_for_key_command()
+            with self.console.pager(styles=True):
+                self.console.print(
+                    Align.center(
+                        self.header_title
+                        + " by Charles Thompson <[bright_yellow]01charles.t@gmail.com[/bright_yellow] [dim]press q"
+                        " to return\n"
+                    ),
+                    highlight=False,
+                )
+                self.console.print(Align.center(table_keys))
+                self.console.print("")
+                self.console.print(Align.center(table_grid))
+                self.console.print("")
+                self.console.print(Align.center(table_info))
+                self.console.print("")
+                self.console.print(Align.center("[dim]Press q to return"))
+            self.rich_live.start()
         else:
             valid_key = False
 

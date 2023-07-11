@@ -216,10 +216,17 @@ Queries = {
             host != "background"
         LIMIT 30
     """,
+    "databases": """
+        SELECT
+            SCHEMA_NAME
+        FROM
+            information_schema.SCHEMATA
+        ORDER BY
+            SCHEMA_NAME
+    """,
     "status": "SHOW GLOBAL STATUS",
     "variables": "SHOW GLOBAL VARIABLES",
     "primary_status": "SHOW MASTER STATUS",
     "replica_status": "SHOW SLAVE STATUS",
-    "databases": "SHOW DATABASES",
     "innodb_status": "SHOW ENGINE INNODB STATUS",
 }
