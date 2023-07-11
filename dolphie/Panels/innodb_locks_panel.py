@@ -7,7 +7,7 @@ from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie):
+def create_panel(dolphie: Dolphie) -> Table:
     innodb_lock_threads = {}
 
     dolphie.db.execute(dolphie.innodb_locks_sql)

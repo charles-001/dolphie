@@ -9,7 +9,7 @@ from rich import box
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie):
+def create_panel(dolphie: Dolphie) -> Table:
     table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="steel_blue1")
 
     columns = {}
@@ -54,7 +54,7 @@ def create_panel(dolphie: Dolphie):
 
     thread_counter = 0
     for id, thread in dolphie.processlist_threads.items():
-        query = thread["query"]
+        query = re.sub(r"\s+", " ", thread["query"])
 
         # Replace strings with [NONPRINTABLE] if they contain non-printable characters
         for m in re.findall(r"(\"(?:(?!(?<!\\)\").)*\"|'(?:(?!(?<!\\)').)*')", query):
@@ -250,7 +250,7 @@ def get_data(dolphie: Dolphie):
             "trx_rows_locked": thread["trx_rows_locked"],
             "trx_rows_modified": thread["trx_rows_modified"],
             "trx_concurrency_tickets": thread["trx_concurrency_tickets"],
-            "query": re.sub(r"\s+", " ", query),
+            "query": query,
         }
 
     return processlist_threads

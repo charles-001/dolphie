@@ -6,12 +6,11 @@ from dolphie.Functions import format_bytes, format_number
 from dolphie.Panels import replica_panel
 from rich import box
 from rich.align import Align
-from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie):
+def create_panel(dolphie: Dolphie) -> Table:
     statuses = dolphie.statuses
     variables = dolphie.variables
     innodb_status = dolphie.innodb_status
@@ -65,7 +64,9 @@ def create_panel(dolphie: Dolphie):
     table_information.add_column()
     table_information.add_column(width=27)
     table_information.add_row("Name", "[grey93]%s" % dolphie.host, style=row_style)
-    table_information.add_row("Version", "[grey93]%s %s" % (dolphie.host_distro, dolphie.full_version), style=row_style)
+    table_information.add_row(
+        "Version", "[grey93]%s %s" % (dolphie.host_distro, dolphie.mysql_version), style=row_style
+    )
     table_information.add_row("Uptime", "[grey93]%s" % uptime, style=row_style)
     table_information.add_row(
         "Runtime", "[grey93]%s [grey78]latency: [grey93]%ss" % (runtime, refresh_latency), style=row_style
@@ -119,7 +120,7 @@ def create_panel(dolphie: Dolphie):
 
     # Save what percentage of log files InnoDB will start to aggressively flush
     # to disk due to checkpointing based on version
-    if dolphie.full_version.startswith("8"):
+    if dolphie.mysql_version.startswith("8"):
         version_threshold = 0.875
     else:
         version_threshold = 0.81
@@ -419,12 +420,7 @@ def create_panel(dolphie: Dolphie):
 
     tables_to_add.append(table_stats)
 
+    dashboard_grid.add_row()
     dashboard_grid.add_row(*tables_to_add)
 
-    dashboard_panel = Panel(
-        Align.center(dashboard_grid),
-        box=box.SIMPLE,
-        border_style="steel_blue1",
-    )
-
-    return dashboard_panel
+    return Align.center(dashboard_grid)

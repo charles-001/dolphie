@@ -31,9 +31,11 @@ def create_panel(dolphie: Dolphie):
 
     replica_count = dolphie.db.cursor.execute(find_replicas_query)
     data = dolphie.db.fetchall()
-    replica_count_text = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (replica_count))
 
-    table_split_counter = 1
+    replica_count_text = ""
+    if replica_count:
+        replica_count_text = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (replica_count))
+
     tables = []
     for row in data:
         thread_id = row["id"]
@@ -53,13 +55,14 @@ def create_panel(dolphie: Dolphie):
                         ssl=dolphie.ssl,
                         autocommit=True,
                     ),
+                    "cursor": None,
                     "previous_sbm": 0,
                 }
 
             replica_connection = dolphie.replica_connections[thread_id]
-            replica_cursor = replica_connection["connection"].cursor(pymysql.cursors.DictCursor)
-            replica_cursor.execute(Queries["replica_status"])
-            replica_data = replica_cursor.fetchone()
+            replica_connection["cursor"] = replica_connection["connection"].cursor(pymysql.cursors.DictCursor)
+            replica_connection["cursor"].execute(Queries["replica_status"])
+            replica_data = replica_connection["cursor"].fetchone()
 
             if replica_data:
                 tables.append(create_table(dolphie, replica_data, list_replica_thread_id=thread_id))
@@ -76,15 +79,13 @@ def create_panel(dolphie: Dolphie):
 
             tables.append(table)
 
-        if table_split_counter == 3:
-            table_grid.add_row(*tables)
-            table_split_counter = 0
-            tables = []
+    # Stack tables in groups of 3
+    num_tables = len(tables)
+    for i in range(0, num_tables - (num_tables % 3), 3):
+        table_grid.add_row(*tables[i : i + 3])
 
-        table_split_counter += 1
-
-    if table_split_counter:
-        table_grid.add_row(*tables)
+    if num_tables % 3 != 0:
+        table_grid.add_row(*tables[num_tables - (num_tables % 3) :])
 
     if dolphie.replica_status:
         # GTID Sets can be very long, so we don't center align replication table or else table
@@ -114,8 +115,11 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     if list_replica_thread_id:
         if dolphie.replica_connections[list_replica_thread_id]["previous_sbm"] is not None:
             replica_previous_replica_sbm = dolphie.replica_connections[list_replica_thread_id]["previous_sbm"]
+
+        db_cursor = dolphie.replica_connections[list_replica_thread_id]["cursor"]
     else:
         replica_previous_replica_sbm = dolphie.previous_replica_sbm
+        db_cursor = dolphie.db.cursor
 
     if data["Slave_IO_Running"].lower() == "no":
         data["Slave_IO_Running"] = "[bright_red]NO[/bright_red]"
@@ -129,9 +133,9 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
 
     data["sbm_source"] = "Replica"
     # Use performance schema for seconds behind if host is MySQL 8
-    if dolphie.full_version.startswith("8") and dolphie.performance_schema_enabled:
-        dolphie.db.cursor.execute(Queries["ps_replica_lag"])
-        replica_lag_data = dolphie.db.cursor.fetchone()
+    if dolphie.mysql_version.startswith("8") and dolphie.performance_schema_enabled:
+        db_cursor.execute(Queries["ps_replica_lag"])
+        replica_lag_data = db_cursor.fetchone()
 
         data["sbm_source"] = "PS"
         if replica_lag_data["secs_behind"]:
@@ -141,8 +145,8 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     # Use heartbeat table from pt-toolkit if specified
     elif dolphie.heartbeat_table:
         try:
-            dolphie.db.cursor.execute(Queries["heartbeat_replica_lag"])
-            replica_lag_data = dolphie.db.cursor.fetchone()
+            db_cursor.execute(Queries["heartbeat_replica_lag"])
+            replica_lag_data = db_cursor.fetchone()
 
             if replica_lag_data["secs_behind"] is not None:
                 data["sbm_source"] = "HB"
@@ -150,7 +154,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         except pymysql.Error:
             pass
 
-    data["speed"] = 0
+    data["Speed"] = 0
     # Colorize seconds behind
     if data["Seconds_Behind_Master"] is not None:
         replica_sbm = data["Seconds_Behind_Master"]
@@ -159,17 +163,17 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
             dolphie.replica_connections[list_replica_thread_id]["previous_sbm"] = replica_sbm
 
         if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
-            data["speed"] = round((replica_previous_replica_sbm - replica_sbm) / dolphie.refresh_interval)
+            data["Speed"] = round((replica_previous_replica_sbm - replica_sbm) / dolphie.refresh_interval)
 
         if replica_sbm != 0:
             if replica_sbm > 20:
-                data["lag"] = "[bright_red]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[bright_red]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
             elif replica_sbm > 10:
-                data["lag"] = "[bright_yellow]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[bright_yellow]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
             else:
-                data["lag"] = "[bright_green]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[bright_green]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
         elif replica_sbm == 0:
-            data["lag"] = "[bright_green]00:00:00"
+            data["Lag"] = "[bright_green]00:00:00"
 
     data["Master_Host"] = dolphie.get_hostname(data["Master_Host"])
     data["mysql_gtid_enabled"] = False
@@ -226,7 +230,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     else:
         table.add_row(
             "[grey78]%s Lag" % data["sbm_source"],
-            "[grey93]%s [grey78]Speed [grey93]%s" % (data["lag"], data["speed"]),
+            "[grey93]%s [grey78]Speed [grey93]%s" % (data["Lag"], data["Speed"]),
             style=row_style,
         )
     if dashboard_table:
@@ -292,3 +296,30 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
             table.add_row("[grey78]Error ", "[grey93]%s" % data["Last_SQL_Error"])
 
     return table
+
+
+def get_replica_lag(dolphie: Dolphie, db_cursor):
+    source = "Replica"
+    # Use performance schema for seconds behind if host is MySQL 8
+    if dolphie.mysql_version.startswith("8") and dolphie.performance_schema_enabled:
+        db_cursor.execute(Queries["ps_replica_lag"])
+        replica_lag_data = db_cursor.fetchone()
+
+        source = "PS"
+        if replica_lag_data["secs_behind"]:
+            secs_behind = int(replica_lag_data["secs_behind"])
+        else:
+            secs_behind = 0
+    # Use heartbeat table from pt-toolkit if specified
+    elif dolphie.heartbeat_table:
+        try:
+            db_cursor.execute(Queries["heartbeat_replica_lag"])
+            replica_lag_data = db_cursor.fetchone()
+
+            if replica_lag_data["secs_behind"] is not None:
+                source = "HB"
+                secs_behind = int(replica_lag_data["secs_behind"])
+        except pymysql.Error:
+            pass
+
+    return source, secs_behind

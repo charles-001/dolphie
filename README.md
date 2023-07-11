@@ -7,22 +7,24 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 ## Installation
 Requires Python 3.8+
 
-Using PyPi:
+#### Using PyPi
 ```shell
 pip install dolphie
 ```
 
-Using Poetry:
+#### Using Poetry
 ```shell
 curl -sSL https://install.python-poetry.org | python3 -
 
 poetry install
 ```
 
-## Using Docker container
-1. `docker pull ghcr.io/charles-001/dolphie:latest`
-2. `docker run -dit --name dolphie ghcr.io/charles-001/dolphie:latest`
-3. `docker exec -it dolphie dolphie -h host.docker.internal -u root --ask-pass` (pass any additional parameters you'd like)
+#### Using Docker
+```
+docker pull ghcr.io/charles-001/dolphie:latest
+docker run -dit --name dolphie ghcr.io/charles-001/dolphie:latest
+docker exec -it dolphie dolphie -h host.docker.internal -u root --ask-pass
+```
 
 ## Usage
 ```

@@ -168,10 +168,65 @@ Queries = {
         ORDER BY
             concurrent_connections DESC
     """,
+    "error_log": """
+        SELECT
+            logged AS timestamp,
+            prio AS level,
+            subsystem,
+            data AS message
+        FROM
+            performance_schema.error_log
+        WHERE
+            data != 'Could not open log file.'
+            $placeholder
+        ORDER BY timestamp
+    """,
+    "memory_by_user": """
+        SELECT
+            user,
+            current_allocated,
+            total_allocated
+        FROM
+            sys.memory_by_user_by_current_bytes
+        WHERE
+            user != "background"
+        LIMIT 30
+    """,
+    "memory_by_code_area": """
+        SELECT
+            SUBSTRING_INDEX( event_name, '/', 2 ) AS code_area,
+            sys.format_bytes (
+            SUM( current_alloc )) AS current_allocated
+        FROM
+            sys.x$memory_global_by_current_bytes
+        GROUP BY
+            SUBSTRING_INDEX( event_name, '/', 2 )
+        ORDER BY
+            SUM( current_alloc ) DESC
+        LIMIT 30
+    """,
+    "memory_by_host": """
+        SELECT
+            host,
+            current_allocated,
+            total_allocated
+        FROM
+            sys.memory_by_host_by_current_bytes
+        WHERE
+            host != "background"
+        LIMIT 30
+    """,
+    "databases": """
+        SELECT
+            SCHEMA_NAME
+        FROM
+            information_schema.SCHEMATA
+        ORDER BY
+            SCHEMA_NAME
+    """,
     "status": "SHOW GLOBAL STATUS",
     "variables": "SHOW GLOBAL VARIABLES",
     "primary_status": "SHOW MASTER STATUS",
     "replica_status": "SHOW SLAVE STATUS",
-    "databases": "SHOW DATABASES",
     "innodb_status": "SHOW ENGINE INNODB STATUS",
 }

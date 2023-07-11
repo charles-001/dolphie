@@ -10,7 +10,7 @@ from time import sleep
 import pymysql
 import requests
 from dolphie.Database import Database
-from dolphie.Functions import format_bytes, format_number
+from dolphie.Functions import format_bytes, format_number, format_sys_table_memory
 from dolphie.KBHit import KBHit
 from dolphie.ManualException import ManualException
 from dolphie.Queries import Queries
@@ -92,12 +92,11 @@ class Dolphie:
         self.innodb_locks_sql: bool = False
         self.host_is_rds: bool = False
         self.server_uuid: str = None
-        self.full_version: str = None
+        self.mysql_version: str = None
         self.host_distro: str = None
 
         self.app_version = __version__
-        self.base_title = f"[b steel_blue1]dolphie :dolphin: v{self.app_version}[/b steel_blue1]"
-        self.title = f"{self.base_title}[grey62] press ? for help"
+        self.header_title = f"[b steel_blue1]dolphie[/b steel_blue1] :dolphin: v{self.app_version}"
 
     def check_for_update(self):
         # Query PyPI API to get the latest version
@@ -146,7 +145,6 @@ class Dolphie:
             Layout(name="footer", size=1, visible=False),
         )
 
-        layout["header"].update(Align.right(Text.from_markup(self.base_title)))
         layout["dashboard"].update("")
         layout["processlist"].update("")
         layout["footer"].update("")
@@ -193,7 +191,7 @@ class Dolphie:
         version = self.db.fetchone(query, "@@version").lower()
         version_split = version.split(".")
 
-        self.full_version = "%s.%s.%s" % (
+        self.mysql_version = "%s.%s.%s" % (
             version_split[0],
             version_split[1],
             version_split[2].split("-")[0],
@@ -230,6 +228,12 @@ class Dolphie:
             self.innodb_locks_sql = Queries["locks_query-8"]
 
         self.server_uuid = self.db.fetchone(server_uuid_query, "@@server_uuid")
+
+        self.header_title = (
+            f"{self.header_title} [b steel_blue1]\\[[/b steel_blue1][grey78]{self.host}[/grey78][b steel_blue1]][/b"
+            " steel_blue1]"
+        )
+        self.layout["header"].update(Align.right(Text.from_markup(f"{self.header_title} [dim]press ? for help[/dim]")))
 
     def fetch_data(self, command):
         command_data = {}
@@ -277,10 +281,10 @@ class Dolphie:
     def block_refresh_for_key_command(self, refresh=False):
         if refresh:
             self.layout["footer"].visible = True
-            self.layout["footer"].update(Align.center("[b]Paused![/b] Press any key to resume", style="steel_blue1"))
+            self.layout["footer"].update(Align.center("[b]Paused![/b] Press any key to return", style="steel_blue1"))
             self.rich_live.update(self.layout, refresh=True)
         else:
-            self.console.print(Align.center("\n[b]Paused![/b] Press any key to resume", style="steel_blue1"))
+            self.console.print(Align.center("\n[b]Paused![/b] Press any key to return", style="steel_blue1"))
 
         key = self.kb.key_press_blocking()
         if key:
@@ -306,12 +310,23 @@ class Dolphie:
                     self.update_footer("[indian_red]You can't switch to Performance Schema because it isn't enabled")
 
         elif key == "2":
+            self.rich_live.stop()
+
             os.system("clear")
-            self.console.print(Align.center(self.title))
 
-            self.console.print(self.innodb_status["status"])
+            table = Table(
+                show_header=False,
+                caption="Press q to return",
+                box=box.SIMPLE,
+            )
+            table.add_column("")
+            table.add_row(self.innodb_status["status"])
 
-            self.block_refresh_for_key_command()
+            with self.console.pager(styles=True):
+                self.console.print(Align.right(f"{self.header_title} [dim]press q to return"), highlight=False)
+                self.console.print(table)
+
+            self.rich_live.start()
 
         elif key == "a":
             if self.show_additional_query_columns:
@@ -337,13 +352,88 @@ class Dolphie:
         elif key == "D":
             self.db_filter = self.console.input("[steel_blue1]Database to filter by[/steel_blue1]: ")
 
+        elif key == "E":
+            if not self.mysql_version.startswith("8"):
+                self.update_footer("[indian_red]This command requires MySQL 8!")
+            else:
+                event_levels = {
+                    "a": "all",
+                    "s": "system",
+                    "w": "warning",
+                    "e": "error",
+                }
+                available_levels = ", ".join(
+                    f"[b steel_blue1]{key}[/b steel_blue1]=[grey70]{value}[/grey70]"
+                    for key, value in event_levels.items()
+                )
+                while True:
+                    event_levels_input = self.console.input(
+                        (
+                            "[steel_blue1]What level(s) of events do you want to display? Use a comma to"
+                            f" separate[/steel_blue1] \\[{available_levels}]: "
+                        ),
+                    )
+
+                    # Split the input by commas and remove leading/trailing whitespaces
+                    selected_levels = [level.strip() for level in event_levels_input.split(",")]
+
+                    # Check if all selected levels are valid
+                    if all(level in event_levels.keys() for level in selected_levels):
+                        break
+                    else:
+                        self.update_footer("[indian_red]Invalid level")
+
+                table = Table(
+                    show_header=False,
+                    caption="Press q to return",
+                    box=box.SIMPLE,
+                )
+                table.add_column("Time", style="dim")
+                table.add_column("Level")
+                table.add_column("Event")
+
+                query = Queries["error_log"]
+                where_clauses = {
+                    "s": 'prio = "System"',
+                    "w": 'prio = "Warning"',
+                    "e": 'prio = "Error"',
+                }
+
+                if "a" not in selected_levels:
+                    where_conditions = [where_clauses[level] for level in selected_levels if level in where_clauses]
+                    where_clause = " OR ".join(where_conditions)
+                    query = query.replace("$placeholder", f"AND ({where_clause})")
+                else:
+                    query = query.replace("$placeholder", "")
+
+                self.db.execute(query)
+                data = self.db.fetchall()
+                for row in data:
+                    level_color = "grey93"
+                    if row["level"] == "Error":
+                        level_color = "white on red"
+                    elif row["level"] == "Warning":
+                        level_color = "bright_yellow"
+
+                    level = f"[{level_color}]{row['level']}[/{level_color}]"
+                    table.add_row(row["timestamp"].strftime("%Y-%m-%d %H:%M:%S"), level, row["message"])
+
+                self.rich_live.stop()
+
+                os.system("clear")
+                with self.console.pager(styles=True):
+                    self.console.print(Align.right(f"{self.header_title} [dim]press q to return"), highlight=False)
+                    self.console.print(table)
+
+                self.rich_live.start()
+
         elif key == "e":
             thread_id = self.console.input("[steel_blue1]Thread ID to explain[/steel_blue1]: ")
 
             if thread_id:
                 if thread_id in self.processlist_threads:
                     os.system("clear")
-                    self.console.print(Align.right(self.title))
+                    self.console.print(Align.right(self.header_title), highlight=False)
 
                     row_style = Style(color="grey93")
                     table = Table(box=box.ROUNDED, show_header=False, style="grey70")
@@ -411,7 +501,7 @@ class Dolphie:
 
                     self.console.print(Align.center(table))
 
-                    query = sqlformat(self.processlist_threads[thread_id]["query"], reindent=True)
+                    query = sqlformat(self.processlist_threads[thread_id]["query"], reindent_aligned=True)
                     query_db = self.processlist_threads[thread_id]["db"]
 
                     if query:
@@ -446,7 +536,6 @@ class Dolphie:
                         explain_data = None
 
                         self.console.print("")
-
                         try:
                             self.db.cursor.execute("USE %s" % query_db)
                             self.db.cursor.execute("EXPLAIN %s" % query)
@@ -472,7 +561,7 @@ class Dolphie:
                                         columns.append(column)
 
                                     if column == "key" and value is None:
-                                        value = "[b indian_red]NONE[/b indian_red]"
+                                        value = "[b white on red]NO INDEX[/b white on red]"
 
                                     if column == "rows":
                                         value = format_number(value)
@@ -488,6 +577,8 @@ class Dolphie:
                     self.block_refresh_for_key_command()
                 else:
                     self.update_footer("[indian_red]Thread ID '[grey93]%s[indian_red]' does not exist!" % thread_id)
+            else:
+                self.update_footer("[indian_red]There was no Thread ID specified!")
 
         elif key == "H":
             self.host_filter = self.console.input("[steel_blue1]Hostname/IP to filter by[/steel_blue1]: ")
@@ -645,7 +736,7 @@ class Dolphie:
 
         elif key == "L":
             os.system("clear")
-            self.console.print(Align.right(self.title))
+            self.console.print(Align.right(self.header_title), highlight=False)
 
             deadlock = ""
             output = re.search(
@@ -658,10 +749,70 @@ class Dolphie:
                 deadlock = output.group(1)
 
                 deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
-                self.console.print("[steel_blue1]Latest deadlock detected:")
                 self.console.print(deadlock, highlight=False)
             else:
                 self.console.print("No deadlock detected!", justify="center")
+
+            self.block_refresh_for_key_command()
+
+        elif key == "m":
+            os.system("clear")
+            self.console.print(Align.right(self.header_title), highlight=False)
+
+            table_grid = Table.grid()
+
+            table1 = Table(
+                box=box.ROUNDED,
+                style="grey70",
+            )
+
+            header_style = Style(bold=True)
+            table1.add_column("User", header_style=header_style)
+            table1.add_column("Current", header_style=header_style)
+            table1.add_column("Total", header_style=header_style)
+
+            self.db.execute(Queries["memory_by_user"])
+            data = self.db.fetchall()
+            for row in data:
+                table1.add_row(
+                    row["user"],
+                    format_sys_table_memory(row["current_allocated"]),
+                    format_sys_table_memory(row["total_allocated"]),
+                )
+
+            table2 = Table(
+                box=box.ROUNDED,
+                style="grey70",
+            )
+            table2.add_column("Code Area", header_style=header_style)
+            table2.add_column("Current", header_style=header_style)
+
+            self.db.execute(Queries["memory_by_code_area"])
+            data = self.db.fetchall()
+            for row in data:
+                table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
+
+            table3 = Table(
+                box=box.ROUNDED,
+                style="grey70",
+            )
+            table3.add_column("Host", header_style=header_style)
+            table3.add_column("Current", header_style=header_style)
+            table3.add_column("Total", header_style=header_style)
+
+            self.db.execute(Queries["memory_by_host"])
+            data = self.db.fetchall()
+            for row in data:
+                table3.add_row(
+                    self.get_hostname(row["host"]),
+                    format_sys_table_memory(row["current_allocated"]),
+                    format_sys_table_memory(row["total_allocated"]),
+                )
+
+            table_grid.add_row("", Align.center("[b]Memory Allocation[/b]"), "")
+            table_grid.add_row(table1, table3, table2)
+
+            self.console.print(Align.center(table_grid))
 
             self.block_refresh_for_key_command()
 
@@ -724,13 +875,13 @@ class Dolphie:
             user_stat_data = self.create_user_stats_table()
             if user_stat_data:
                 os.system("clear")
-                self.console.print(Align.right(self.title))
+                self.console.print(Align.right(self.header_title), highlight=False)
                 self.console.print(Align.center(user_stat_data))
 
                 self.block_refresh_for_key_command()
             else:
                 self.update_footer(
-                    "[indian_red]This feature requires Userstat variable or Performance Schema to be enabled!"
+                    "[indian_red]This command requires Userstat variable or Performance Schema to be enabled!"
                 )
 
         elif key == "U":
@@ -738,10 +889,8 @@ class Dolphie:
 
         elif key == "y":
             os.system("clear")
+            self.console.print(Align.right(self.header_title), highlight=False)
 
-            db_counter = 1
-            row_counter = 1
-            table_counter = 1
             tables = {}
             all_tables = []
 
@@ -749,44 +898,38 @@ class Dolphie:
             databases = self.db.fetchall()
 
             # Determine how many tables to provide data
-            if db_count <= 20:
-                max_num_tables = 1
-            else:
-                max_num_tables = 3
+            max_num_tables = 1 if db_count <= 20 else 3
 
             # Calculate how many databases per table
-            row_per_count = round(db_count / max_num_tables)
+            row_per_count = db_count // max_num_tables
 
-            # Create dictionary of how many tables we want
-            table_grid = Table.grid()
-            while table_counter <= max_num_tables:
+            # Create dictionary of tables
+            for table_counter in range(1, max_num_tables + 1):
                 tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="grey70")
                 tables[table_counter].add_column("")
 
-                table_counter += 1
-
-            # Loop databases
+            # Loop over databases
+            db_counter = 1
             table_counter = 1
+
+            # Sort the databases by name
             for database in databases:
-                tables[table_counter].add_row(database["Database"], style="grey93")
-
-                if db_counter == row_per_count and row_counter != max_num_tables:
-                    row_counter += 1
-                    db_counter = 0
-                    table_counter += 1
-
+                tables[table_counter].add_row(database["SCHEMA_NAME"], style="grey93")
                 db_counter += 1
 
-            # Put all the variable data from dict into an array
-            for table, table_data in tables.items():
-                if table_data:
-                    all_tables.append(table_data)
+                if db_counter > row_per_count and table_counter < max_num_tables:
+                    table_counter += 1
+                    db_counter = 1
 
+            # Collect table data into an array
+            all_tables = [table_data for table_data in tables.values() if table_data]
+
+            table_grid = Table.grid()
             table_grid.add_row(*all_tables)
 
-            self.console.print(Align.right(self.title))
+            self.console.print(Align.center("Databases"), style="b")
             self.console.print(Align.center(table_grid))
-            self.console.print(Align.center("Total: [b steel_blue1]%s" % db_count))
+            self.console.print(Align.center("Total: [b steel_blue1]%s[/b steel_blue1]" % db_count))
 
             self.block_refresh_for_key_command()
 
@@ -796,6 +939,7 @@ class Dolphie:
             )
 
             os.system("clear")
+            self.console.print(Align.right(self.header_title), highlight=False)
 
             size_convert_variables = [
                 "audit_log_buffer_size",
@@ -892,7 +1036,7 @@ class Dolphie:
                 table_counter += 1
 
             # Calculate how many variables per table
-            row_per_count = round(len(display_variables) / max_num_tables)
+            row_per_count = len(display_variables) // max_num_tables
 
             # Loop variables
             for variable, value in display_variables.items():
@@ -907,8 +1051,6 @@ class Dolphie:
 
             # Put all the variable data from dict into an array
             all_tables = [table_data for table_data in tables.values() if table_data]
-
-            self.console.print(Align.right(self.title))
 
             # Add the data into a single tuple for add_row
             if display_variables:
@@ -939,7 +1081,7 @@ class Dolphie:
 
         elif key == "z":
             os.system("clear")
-            self.console.print(Align.right(self.title))
+            self.console.print(Align.right(self.header_title), highlight=False)
 
             if self.host_cache:
                 table = Table(box=box.ROUNDED, style="grey70")
@@ -947,8 +1089,10 @@ class Dolphie:
                 table.add_column("Hostname (if resolved)")
 
                 for ip, addr in self.host_cache.items():
-                    table.add_row(ip, addr)
+                    if ip:
+                        table.add_row(ip, addr)
 
+                self.console.print(Align.center("Host Cache"), style="b")
                 self.console.print(Align.center(table))
                 self.console.print(Align.center("Total: [b steel_blue1]%s" % len(self.host_cache)))
             else:
@@ -957,6 +1101,8 @@ class Dolphie:
             self.block_refresh_for_key_command()
 
         elif key == "?":
+            self.rich_live.stop()
+
             os.system("clear")
 
             row_style = Style(color="grey93")
@@ -990,13 +1136,15 @@ class Dolphie:
 
             keys = {
                 "1": "Switch between using Processlist/Performance Schema for listing queries",
-                "2": "Print output from SHOW ENGINE INNODB STATUS",
+                "2": "Display output from SHOW ENGINE INNODB STATUS using a pager",
                 "a": "Show/hide additional processlist columns",
                 "e": "Explain query of a thread and display thread information",
+                "E": "Display error log from performance schema using a pager (MySQL 8 only)",
                 "I": "Show/hide idle queries",
                 "k": "Kill a query by thread ID",
                 "K": "Kill a query by either user/host/time range",
                 "L": "Show latest deadlock detected",
+                "m": "Display memory usage - limits to only 30 rows",
                 "P": "Pause Dolphie",
                 "q": "Quit Dolphie",
                 "t": "Show/hide running transactions only",
@@ -1005,11 +1153,7 @@ class Dolphie:
                 "u": "List users (results vary depending on if userstat variable is enabled)",
                 "v": "Variable wildcard search via SHOW VARIABLES",
                 "x": "Set the general refresh interval",
-                "X": (
-                    "Set the refresh interval for data the query SHOW ENGINE INNODB STATUS is responsible"
-                    " for\n[grey70]This is good to change if your host has a very heavy workload since this query"
-                    " can be a bottleneck"
-                ),
+                "X": "Set the refresh interval for data the query SHOW ENGINE INNODB STATUS is responsible for",
                 "y": "Display all databases on host",
                 "z": "Show all entries in the host cache",
             }
@@ -1059,20 +1203,26 @@ class Dolphie:
             for datapoint, description in sorted(datapoints.items()):
                 table_info.add_row("[steel_blue1]%s" % datapoint, description, style=row_style)
 
-            self.console.print(
-                Align.center(self.base_title + " by Charles Thompson <[grey62]01charles.t@gmail.com[/grey62]>\n"),
-                highlight=False,
-            )
-
             table_grid = Table.grid()
             table_grid.add_row(table_panels, table_filters)
-            self.console.print(Align.center(table_keys))
-            self.console.print("")
-            self.console.print(Align.center(table_grid))
-            self.console.print("")
-            self.console.print(Align.center(table_info))
 
-            self.block_refresh_for_key_command()
+            with self.console.pager(styles=True):
+                self.console.print(
+                    Align.center(
+                        self.header_title
+                        + " by Charles Thompson <[bright_yellow]01charles.t@gmail.com[/bright_yellow] [dim]press q"
+                        " to return\n"
+                    ),
+                    highlight=False,
+                )
+                self.console.print(Align.center(table_keys))
+                self.console.print("")
+                self.console.print(Align.center(table_grid))
+                self.console.print("")
+                self.console.print(Align.center(table_info))
+                self.console.print("")
+                self.console.print(Align.center("[dim]Press q to return"))
+            self.rich_live.start()
         else:
             valid_key = False
 
