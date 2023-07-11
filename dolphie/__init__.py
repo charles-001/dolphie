@@ -1208,11 +1208,7 @@ class Dolphie:
 
             with self.console.pager(styles=True):
                 self.console.print(
-                    Align.center(
-                        self.header_title
-                        + " by Charles Thompson <[bright_yellow]01charles.t@gmail.com[/bright_yellow] [dim]press q"
-                        " to return\n"
-                    ),
+                    Align.right(self.header_title + " [dim]press q to return\n"),
                     highlight=False,
                 )
                 self.console.print(Align.center(table_keys))
