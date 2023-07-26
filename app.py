@@ -19,12 +19,15 @@ from dolphie.Panels import (
     dashboard_panel,
     innodb_io_panel,
     innodb_locks_panel,
-    processlist_panel,
+    query_panel,
     replica_panel,
 )
 from dolphie.Queries import Queries
 from rich.live import Live
 from rich.prompt import Prompt
+from textual import events
+from textual.app import App, ComposeResult
+from textual.widgets import DataTable, Static
 
 
 def parse_args(dolphie: Dolphie):
@@ -332,13 +335,86 @@ Environment variables support these options:
     dolphie.show_additional_query_columns = parameter_options["show_additional_query_columns"]
     dolphie.use_processlist = parameter_options["use_processlist"]
 
-    if dolphie.dashboard:
-        dolphie.layout["dashboard"].visible = True
-    else:
-        dolphie.layout["dashboard"].visible = False
+    dolphie.header.host = dolphie.host
+
+
+class DolphieApp(App):
+    TITLE = "Dolphie"
+    CSS_PATH = "dolphie/dolphie.css"
+
+    def __init__(self):
+        super().__init__()
+        self.dolphie = Dolphie(self)
+
+    def update_display(self):
+        if len(self.screen_stack) > 1 or self.dolphie.pause_refresh:
+            self.set_timer(self.dolphie.refresh_interval, self.update_display)
+            return
+
+        dolphie = self.dolphie
+
+        dashboard = self.query_one("#dashboard")
+        self.processlist = self.query_one("#processlist")
+
+        loop_time = datetime.now()
+
+        dolphie.statuses = dolphie.fetch_data("status")
+        if dolphie.first_loop:
+            dolphie.saved_status = dolphie.statuses.copy()
+
+        dolphie.loop_duration_seconds = (loop_time - dolphie.previous_main_loop_time).total_seconds()
+        loop_duration_innodb_status_seconds = (loop_time - dolphie.previous_innodb_status_loop_time).total_seconds()
+
+        if dolphie.dashboard:
+            dolphie.variables = dolphie.fetch_data("variables")
+            dolphie.primary_status = dolphie.fetch_data("primary_status")
+            dolphie.replica_status = dolphie.fetch_data("replica_status")
+
+            if dolphie.first_loop or loop_duration_innodb_status_seconds >= dolphie.refresh_interval_innodb_status:
+                dolphie.innodb_status = dolphie.fetch_data("innodb_status")
+
+            dashboard.update(dashboard_panel.create_panel(self.dolphie))
+
+        query_panel.create_panel(self.dolphie)
+
+        # This is for the many stats per second in Dolphie
+        dolphie.saved_status = dolphie.statuses.copy()
+        dolphie.previous_main_loop_time = loop_time
+
+        if loop_duration_innodb_status_seconds >= dolphie.refresh_interval_innodb_status:
+            dolphie.previous_innodb_status_loop_time = loop_time
+
+        dolphie.first_loop = False
+
+        self.set_timer(self.dolphie.refresh_interval, self.update_display)
+
+    def on_key(self, event: events.Key):
+        self.dolphie.capture_key(event.key)
+
+    def on_mount(self):
+        parse_args(self.dolphie)
+        # self.dolphie.check_for_update()
+        self.dolphie.db_connect()
+        self.dolphie.load_host_cache_file()
+
+        self.update_display()
+
+        footer = self.query_one("#footer")
+        footer.display = False
+
+    def compose(self) -> ComposeResult:
+        yield self.dolphie.header
+        yield Static(id="dashboard")
+        yield DataTable(id="processlist", show_cursor=False)
+        yield Static(id="footer")
 
 
 def main():
+    app = DolphieApp()
+    app.run()
+
+
+def main2():
     dolphie = Dolphie()
 
     try:
@@ -366,8 +442,8 @@ def main():
                     ).total_seconds()
 
                     if dolphie.layout["processlist"].visible:
-                        dolphie.processlist_threads = processlist_panel.get_data(dolphie)
-                        dolphie.layout["processlist"].update(processlist_panel.create_panel(dolphie))
+                        dolphie.processlist_threads = processlist_panel2.get_data(dolphie)
+                        dolphie.layout["processlist"].update(processlist_panel2.create_panel(dolphie))
 
                     if dolphie.dashboard:
                         dolphie.variables = dolphie.fetch_data("variables")
@@ -439,4 +515,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+
+    app = DolphieApp()
+    app.run()

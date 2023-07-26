@@ -5,25 +5,25 @@ import socket
 import sys
 from datetime import datetime
 from importlib import metadata
-from time import sleep
 
 import pymysql
 import requests
 from dolphie.Database import Database
 from dolphie.Functions import format_bytes, format_number, format_sys_table_memory
-from dolphie.KBHit import KBHit
 from dolphie.ManualException import ManualException
 from dolphie.Queries import Queries
+from dolphie.Widgets.infoscreen import InfoScreen
+from dolphie.Widgets.topbar import TopBar
 from packaging.version import parse as parse_version
 from rich import box
 from rich.align import Align
-from rich.console import Console
-from rich.layout import Layout
+from rich.console import Console, Group
 from rich.style import Style
 from rich.syntax import Syntax
 from rich.table import Table
-from rich.text import Text
 from sqlparse import format as sqlformat
+from textual.app import App
+from textual.widgets import Static, TextLog
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -34,10 +34,9 @@ except Exception:
 
 
 class Dolphie:
-    def __init__(self):
+    def __init__(self, app: App):
+        self.app = app
         self.console = Console()
-        self.kb = KBHit()
-        self.rich_live = None
 
         # Config options
         self.user: str = None
@@ -96,7 +95,7 @@ class Dolphie:
         self.host_distro: str = None
 
         self.app_version = __version__
-        self.header_title = f"[b steel_blue1]dolphie[/b steel_blue1] :dolphin: v{self.app_version}"
+        self.header = TopBar(app_version=self.app_version)
 
     def check_for_update(self):
         # Query PyPI API to get the latest version
@@ -132,39 +131,16 @@ class Dolphie:
                 f" {response.status_code}"
             )
 
-    def update_environment_variables_for_pager(self):
-        # Must do this so color is enabled for pager commands
-        os.environ["PAGER"] = "less -R"
-        os.environ["TERM"] = "xterm-256color"
+    def update_footer(self, output, hide=False, temporary=True):
+        footer = self.app.query_one("#footer")
 
-    def create_rich_layout(self) -> Layout:
-        layout = Layout(name="root")
+        footer.display = True
+        footer.update(output)
 
-        layout.split_column(
-            Layout(name="header", size=1),
-            Layout(name="dashboard", size=13),
-            Layout(name="innodb_io", visible=False, size=10),
-            Layout(name="replicas", visible=False),
-            Layout(name="innodb_locks", visible=False),
-            Layout(name="processlist"),
-            Layout(name="footer", size=1, visible=False),
-        )
-
-        layout["dashboard"].update("")
-        layout["processlist"].update("")
-        layout["footer"].update("")
-
-        self.layout = layout
-
-    def update_footer(self, output):
-        self.layout["footer"].visible = True
-
-        self.layout["footer"].update(output)
-        self.rich_live.update(self.layout, refresh=True)
-        sleep(1.5)
-        self.layout["footer"].update("")
-
-        self.layout["footer"].visible = False
+        if hide:
+            footer.display = False
+        elif temporary:
+            self.app.set_timer(5, lambda: setattr(footer, "display", False))
 
     def db_connect(self):
         self.db = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
@@ -234,12 +210,6 @@ class Dolphie:
 
         self.server_uuid = self.db.fetchone(server_uuid_query, "@@server_uuid")
 
-        self.header_title = (
-            f"{self.header_title} [b steel_blue1]\\[[/b steel_blue1][grey78]{self.host}[/grey78][b steel_blue1]][/b"
-            " steel_blue1]"
-        )
-        self.layout["header"].update(Align.right(Text.from_markup(f"{self.header_title} [dim]press ? for help[/dim]")))
-
     def fetch_data(self, command):
         command_data = {}
 
@@ -283,25 +253,8 @@ class Dolphie:
 
         return command_data
 
-    def block_refresh_for_key_command(self, refresh=False):
-        if refresh:
-            self.layout["footer"].visible = True
-            self.layout["footer"].update(Align.center("[b]Paused![/b] Press any key to return", style="steel_blue1"))
-            self.rich_live.update(self.layout, refresh=True)
-        else:
-            self.console.print(Align.center("\n[b]Paused![/b] Press any key to return", style="steel_blue1"))
-
-        key = self.kb.key_press_blocking()
-        if key:
-            self.layout["footer"].update("")
-            self.layout["footer"].visible = False
-            return
-
     def capture_key(self, key):
-        self.pause_refresh = True
-        valid_key = True
-
-        self.kb.set_normal_term()
+        textlog = TextLog(auto_scroll=False)
 
         if key == "1":
             if self.use_performance_schema:
@@ -315,23 +268,14 @@ class Dolphie:
                     self.update_footer("[indian_red]You can't switch to Performance Schema because it isn't enabled")
 
         elif key == "2":
-            self.rich_live.stop()
-
-            os.system("clear")
-
             table = Table(
                 show_header=False,
-                caption="Press q to return",
                 box=box.SIMPLE,
             )
             table.add_column("")
             table.add_row(self.innodb_status["status"])
 
-            with self.console.pager(styles=True):
-                self.console.print(Align.right(f"{self.header_title} [dim]press q to return"), highlight=False)
-                self.console.print(table)
-
-            self.rich_live.start()
+            textlog.write(table)
 
         elif key == "a":
             if self.show_additional_query_columns:
@@ -828,9 +772,15 @@ class Dolphie:
                 self.layout["processlist"].visible = True
 
         elif key == "P":
-            self.block_refresh_for_key_command(
-                refresh=True,
-            )
+            if not self.pause_refresh:
+                self.pause_refresh = True
+                self.update_footer(
+                    "[steel_blue1]Refresh is paused! Press '[/steel_blue1]P[steel_blue1]' again to resume",
+                    temporary=False,
+                )
+            else:
+                self.pause_refresh = False
+                self.update_footer("", hide=True)
 
         elif key == "Q":
             self.query_filter = self.console.input("[steel_blue1]Query text to filter by[/steel_blue1]: ")
@@ -1085,9 +1035,6 @@ class Dolphie:
                 self.update_footer("[indian_red]Input must be an integer!")
 
         elif key == "z":
-            os.system("clear")
-            self.console.print(Align.right(self.header_title), highlight=False)
-
             if self.host_cache:
                 table = Table(box=box.ROUNDED, style="grey70")
                 table.add_column("Host/IP")
@@ -1097,19 +1044,17 @@ class Dolphie:
                     if ip:
                         table.add_row(ip, addr)
 
-                self.console.print(Align.center("Host Cache"), style="b")
-                self.console.print(Align.center(table))
-                self.console.print(Align.center("Total: [b steel_blue1]%s" % len(self.host_cache)))
+                screen_data = Static(
+                    Group(
+                        Align.center("[b]Host Cache[/b]"),
+                        Align.center(table),
+                        Align.center("Total: [b steel_blue1]%s" % len(self.host_cache)),
+                    )
+                )
             else:
-                self.console.print(Align.center("\nThere are currently no hosts resolved"))
+                screen_data = Static(Align.center("\nThere are currently no hosts resolved"))
 
-            self.block_refresh_for_key_command()
-
-        elif key == "?":
-            self.rich_live.stop()
-
-            os.system("clear")
-
+        elif key == "question_mark":
             row_style = Style(color="grey93")
 
             filters = {
@@ -1211,26 +1156,14 @@ class Dolphie:
             table_grid = Table.grid()
             table_grid.add_row(table_panels, table_filters)
 
-            with self.console.pager(styles=True):
-                self.console.print(
-                    Align.right(self.header_title + " [dim]press q to return\n"),
-                    highlight=False,
-                )
-                self.console.print(Align.center(table_keys))
-                self.console.print("")
-                self.console.print(Align.center(table_grid))
-                self.console.print("")
-                self.console.print(Align.center(table_info))
-                self.console.print("")
-                self.console.print(Align.center("[dim]Press q to return"))
-            self.rich_live.start()
-        else:
-            valid_key = False
+            textlog.write(Align.center(table_keys), width=200, expand=True)
+            textlog.write(" ")
+            textlog.write(Align.center(table_grid), width=200, expand=True)
+            textlog.write(" ")
+            textlog.write(Align.center(table_info), width=200, expand=True)
 
-        self.pause_refresh = False
-        self.kb.set_new_term()
-
-        return valid_key
+        if textlog.lines:
+            self.app.push_screen(InfoScreen(self.app_version, self.host, textlog))
 
     def create_user_stats_table(self):
         table = Table(header_style="bold white", box=box.ROUNDED, style="grey70")

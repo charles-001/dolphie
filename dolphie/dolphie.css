@@ -1,0 +1,59 @@
+* {
+    scrollbar-background: #192036;
+    scrollbar-background-active: #141b2e;
+
+    scrollbar-background-hover: #141b2e;
+    scrollbar-background-active: #192036;
+
+    scrollbar-color: #3b496e;
+    scrollbar-color-hover: #424f6f;
+    scrollbar-color-active: #00789d;
+}
+Screen {
+    background: #000718;
+    color: #fff;
+}
+TextLog {
+    background: #000718;
+    color: #fff;
+    
+}
+DataTable {
+    background: #000718;
+    color: #fff;
+    align: center middle;
+    overflow: hidden;
+    padding-top: 1;
+}
+.datatable--header {
+    background: #051a38;
+    text-style: bold;
+}
+TopBar {
+    dock: top;
+    background: #08112a;
+    color: #fff;
+    height: 1;
+    layout: horizontal;
+    content-align: center middle;
+}
+#topbar_title {
+    width: 1fr;
+    content-align: left middle;
+}
+#topbar_server {
+    width: 1fr;
+    content-align: center middle;
+    text-style: bold;
+}
+#topbar_help {
+    width: 1fr;
+    content-align: right middle;
+    color: #9294ad
+}
+
+#footer {
+    dock: bottom;
+    height: 1;
+    background: #08112a;
+}

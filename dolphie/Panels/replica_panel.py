@@ -9,10 +9,10 @@ from rich.align import Align
 from rich.console import Group
 from rich.style import Style
 from rich.table import Table
-from rich.text import Text
 
 
 def create_panel(dolphie: Dolphie):
+    panel_size = 0
     table_grid = Table.grid()
     table_replication = Table()
 
@@ -21,7 +21,8 @@ def create_panel(dolphie: Dolphie):
         dolphie.replica_status = dolphie.fetch_data("replica_status")
 
     if dolphie.replica_status:
-        table_replication = create_table(dolphie, dolphie.replica_status)
+        table_replication, table_size = create_table(dolphie, dolphie.replica_status)
+        panel_size = table_size + 1
 
     find_replicas_query = 0
     if dolphie.use_performance_schema:
@@ -29,14 +30,11 @@ def create_panel(dolphie: Dolphie):
     else:
         find_replicas_query = Queries["pl_find_replicas"]
 
-    replica_count = dolphie.db.cursor.execute(find_replicas_query)
+    dolphie.db.cursor.execute(find_replicas_query)
     data = dolphie.db.fetchall()
 
-    replica_count_text = ""
-    if replica_count:
-        replica_count_text = Text.from_markup("\n[b steel_blue1]%s[/b steel_blue1] replicas" % (replica_count))
-
-    tables = []
+    tables = {}
+    largest_table_size = 0
     for row in data:
         thread_id = row["id"]
 
@@ -65,7 +63,10 @@ def create_panel(dolphie: Dolphie):
             replica_data = replica_connection["cursor"].fetchone()
 
             if replica_data:
-                tables.append(create_table(dolphie, replica_data, list_replica_thread_id=thread_id))
+                tables[host], table_size = create_table(dolphie, replica_data, list_replica_thread_id=thread_id)
+
+                if table_size > largest_table_size:
+                    largest_table_size = table_size
         except pymysql.Error as e:
             table = Table(box=box.ROUNDED, show_header=False, style="grey70")
             row_style = Style(color="grey93")
@@ -77,15 +78,21 @@ def create_panel(dolphie: Dolphie):
             table.add_row("[grey78]User", row["user"], style=row_style)
             table.add_row("[bright_red]Error", e.args[1], style=row_style)
 
-            tables.append(table)
+            tables[host] = table
+
+            # Pad it with 10 for error message
+            largest_table_size = len(table.rows) + 10
 
     # Stack tables in groups of 3
+    tables = sorted(tables.items())
     num_tables = len(tables)
     for i in range(0, num_tables - (num_tables % 3), 3):
-        table_grid.add_row(*tables[i : i + 3])
+        table_grid.add_row(*[table for _, table in tables[i : i + 3]])
+        panel_size += largest_table_size
 
     if num_tables % 3 != 0:
-        table_grid.add_row(*tables[num_tables - (num_tables % 3) :])
+        table_grid.add_row(*[table for _, table in tables[num_tables - (num_tables % 3) :]])
+        panel_size += largest_table_size
 
     if dolphie.replica_status:
         # GTID Sets can be very long, so we don't center align replication table or else table
@@ -95,17 +102,17 @@ def create_panel(dolphie: Dolphie):
         ):
             panel_data = Group(
                 Align.left(table_replication),
-                Align.center(replica_count_text),
                 Align.center(table_grid),
             )
         else:
             panel_data = Group(
                 Align.center(table_replication),
-                Align.center(replica_count_text),
                 Align.center(table_grid),
             )
     else:
-        panel_data = Group(Align.center(replica_count_text), Align.center(table_grid))
+        panel_data = Align.center(table_grid)
+
+    dolphie.layout["replicas"].size = panel_size
 
     return panel_data
 
@@ -203,6 +210,8 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         style=table_line_color,
     )
 
+    table_size = 0
+
     table.add_column()
     if dashboard_table is True:
         table.add_column(max_width=21)
@@ -273,6 +282,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
 
                 retrieved_gtid_set = retrieved_gtid_set.replace(m[1], "%s[grey93]" % m[1])
 
+                table_size += 1
             for m in re.findall(r"(\w+-\w+-\w+-\w+-)(\w+)", executed_gtid_set):
                 source_id = m[0] + m[1]
                 if source_id == dolphie.server_uuid:
@@ -281,6 +291,11 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
                     executed_gtid_set = executed_gtid_set.replace(m[0], "[grey62]…[steel_blue1]")
 
                 executed_gtid_set = executed_gtid_set.replace(m[1], "%s[grey93]" % m[1])
+
+                table_size += 1
+
+            # Remove 2 lines because a GTID is shared with the label
+            table_size -= 2
 
             table.add_row("[grey78]Auto Position", "[grey93]%s" % data["Auto_Position"], style=row_style)
             table.add_row("[grey78]Retrieved GTID Set", "[grey93]%s" % retrieved_gtid_set, style=row_style)
@@ -295,7 +310,9 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         elif data["Last_SQL_Error"]:
             table.add_row("[grey78]Error ", "[grey93]%s" % data["Last_SQL_Error"])
 
-    return table
+    table_size += len(table.rows) + 2
+
+    return table, table_size
 
 
 def get_replica_lag(dolphie: Dolphie, db_cursor):

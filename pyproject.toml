@@ -14,6 +14,8 @@ myloginpath = "^0.0.4"
 packaging = "^23.1"
 requests = "^2.31.0"
 sqlparse = "^0.4.4"
+textual = "^0.30.0"
+textual-dev = "^1.0.1"
 
 
 [build-system]

@@ -62,8 +62,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
     table_information.add_column()
-    table_information.add_column(width=27)
-    table_information.add_row("Name", "[grey93]%s" % dolphie.host, style=row_style)
+    table_information.add_column(width=25)
     table_information.add_row(
         "Version", "[grey93]%s %s" % (dolphie.host_distro, dolphie.mysql_version), style=row_style
     )
@@ -276,19 +275,6 @@ def create_panel(dolphie: Dolphie) -> Table:
             style=row_style,
         )
 
-    if str(total_pending_aio_reads) == "N/A":
-        table_innodb.add_row(
-            "Pending AIO",
-            "[gray93]N/A",
-            style=row_style,
-        )
-    else:
-        table_innodb.add_row(
-            "Pending AIO",
-            "[gray78]W [grey93]%s [gray78]R [grey93]%s" % (str(total_pending_aio_writes), str(total_pending_aio_reads)),
-            style=row_style,
-        )
-
     table_innodb.add_row(
         "History List",
         "[grey93]%s" % format_number(history_list_length),
@@ -349,15 +335,18 @@ def create_panel(dolphie: Dolphie) -> Table:
         else:
             table_primary.add_row()
         table_primary.add_row()
-        table_primary.add_row()
 
         tables_to_add.append(table_primary)
+
+        # Save some variables to be used in next refresh
+        if dolphie.primary_status:
+            dolphie.previous_binlog_position = dolphie.primary_status["Position"]
 
     ###############
     # Replication #
     ###############
     if dolphie.replica_status and dolphie.layout["replicas"].visible is False:
-        tables_to_add.append(replica_panel.create_table(dolphie, dolphie.replica_status, dashboard_table=True))
+        tables_to_add.append(replica_panel.create_table(dolphie, dolphie.replica_status, dashboard_table=True)[0])
 
     ###############
     # Statisitics #
@@ -375,7 +364,6 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     if loop_duration_seconds == 0:
         queries_per_second = 0
-        connects_per_second = 0
         selects_per_second = 0
         inserts_per_second = 0
         updates_per_second = 0
@@ -385,7 +373,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     else:
         queries_per_second = round((statuses["Queries"] - saved_status["Queries"]) / loop_duration_seconds)
 
-        connects_per_second = round((statuses["Connections"] - saved_status["Connections"]) / loop_duration_seconds)
         selects_per_second = round((statuses["Com_select"] - saved_status["Com_select"]) / loop_duration_seconds)
         inserts_per_second = round((statuses["Com_insert"] - saved_status["Com_insert"]) / loop_duration_seconds)
         updates_per_second = round((statuses["Com_update"] - saved_status["Com_update"]) / loop_duration_seconds)
@@ -410,11 +397,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_stats.add_row(
         "ROLLBACK",
         "[grey93]%s" % format_number(rollbacks_per_second),
-        style=row_style,
-    )
-    table_stats.add_row(
-        "CONNECT",
-        "[grey93]%s" % format_number(connects_per_second),
         style=row_style,
     )
 
