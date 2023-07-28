@@ -32,7 +32,7 @@ def create_panel(dolphie: Dolphie) -> Table:
             "lock_type": thread["lock_type"],
         }
 
-    table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="steel_blue1")
+    table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="#c2cff2")
 
     columns = {}
     columns["[W](W) Thread ID"] = {"field": "w_thread", "width": 13, "format_number": False}

@@ -6,33 +6,29 @@
     scrollbar-background-active: #192036;
 
     scrollbar-color: #3b496e;
-    scrollbar-color-hover: #424f6f;
-    scrollbar-color-active: #00789d;
+    scrollbar-color-hover: #55658d;
+    scrollbar-color-active: #8999c4;
 }
-Screen {
+#_default, CommandScreen { # screens
     background: #000718;
-    color: #fff;
+    color: #ededed;
 }
 TextLog {
     background: #000718;
-    color: #fff;
+    color: #ededed;
     
 }
 DataTable {
     background: #000718;
-    color: #fff;
+    color: #ededed;
     align: center middle;
     overflow: hidden;
-    padding-top: 1;
 }
-.datatable--header {
-    background: #051a38;
-    text-style: bold;
-}
+
 TopBar {
     dock: top;
-    background: #08112a;
-    color: #fff;
+    background: #192036;
+    color: #ededed;
     height: 1;
     layout: horizontal;
     content-align: center middle;
@@ -41,7 +37,9 @@ TopBar {
     width: 1fr;
     content-align: left middle;
 }
-#topbar_server {
+#topbar_host {
+    /* color: #e0e5ec; */
+    color: #91abec;
     width: 1fr;
     content-align: center middle;
     text-style: bold;
@@ -49,11 +47,50 @@ TopBar {
 #topbar_help {
     width: 1fr;
     content-align: right middle;
-    color: #9294ad
+    color: #a8b5d2
 }
 
 #footer {
     dock: bottom;
     height: 1;
-    background: #08112a;
+    background: #192036;
+    content-align: center middle;
+}
+
+.datatable--header {
+    background: #00000000;
+    color: #c2cff2;
+    text-style: bold;
+}
+.panel {
+    padding-top: 1;
+}
+
+CommandPopup {
+    align: center middle;
+    height: 40;
+}
+
+#popup {
+    background: #181e2e;
+    border: thick #212941;
+    grid-size: 1;
+    grid-rows: 1fr 4;
+    padding: 0 1;
+    width: 40;
+    height: 13;
+}
+#popup_button_grid {
+    grid-size: 2;
+    grid-rows: 1fr 4;
+    padding: 0 1;
+    width: 100%;
+    height: 11;
+}
+
+#popup_message {
+    column-span: 2;
+    height: 1fr;
+    width: 1fr;
+    content-align: center middle;
 }

@@ -14,17 +14,24 @@ def create_panel(dolphie: Dolphie) -> Table:
     loop_duration_seconds = dolphie.loop_duration_seconds
     saved_status = dolphie.saved_status
 
+    if not saved_status:
+        saved_status = statuses.copy()
+
     row_style = Style(color="grey93")
     table_title_style = Style(color="grey93", bold=True)
+    table_box = box.ROUNDED
+    table_line_color = "#b0bad7"
+
+    innodb_status = dolphie.innodb_status
 
     # Only run this if dashboard isn't turned on
-    innodb_status = dolphie.innodb_status
-    if dolphie.dashboard is False:
+    dashboard = dolphie.app.query_one("#dashboard_panel")
+    if not dashboard.display:
         innodb_status = dolphie.fetch_data("innodb_status")
 
     table_innodb_information = Table(
-        box=box.ROUNDED,
-        style="grey70",
+        box=table_box,
+        style=table_line_color,
         title="InnoDB Information",
         title_style=table_title_style,
         show_header=False,
@@ -33,17 +40,17 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb_information.add_column("")
 
     table_innodb_information.add_row(
-        "[grey78]BP Size",
+        "[#c5c7d2]BP Size",
         format_bytes(float(variables["innodb_buffer_pool_size"])),
         style=row_style,
     )
     table_innodb_information.add_row(
-        "[grey78]BP Available",
+        "[#c5c7d2]BP Available",
         format_bytes(float(variables["innodb_buffer_pool_size"]) - float(statuses["Innodb_buffer_pool_bytes_data"])),
         style=row_style,
     )
     table_innodb_information.add_row(
-        "[grey78]BP Dirty",
+        "[#c5c7d2]BP Dirty",
         format_bytes(float(statuses["Innodb_buffer_pool_bytes_dirty"])),
         style=row_style,
     )
@@ -52,9 +59,9 @@ def create_panel(dolphie: Dolphie) -> Table:
         bp_instances = str(variables["innodb_buffer_pool_instances"])
     else:
         bp_instances = 1
-    table_innodb_information.add_row("[grey78]BP Instances", str(bp_instances), style=row_style)
+    table_innodb_information.add_row("[#c5c7d2]BP Instances", str(bp_instances), style=row_style)
     table_innodb_information.add_row(
-        "[grey78]BP Pages Free",
+        "[#c5c7d2]BP Pages Free",
         format_number(float(statuses["Innodb_buffer_pool_pages_free"])),
         style=row_style,
     )
@@ -66,22 +73,22 @@ def create_panel(dolphie: Dolphie) -> Table:
         log_files_in_group = 1
 
     table_innodb_information.add_row(
-        "[grey78]Total Log Size",
+        "[#c5c7d2]Total Log Size",
         format_bytes(variables["innodb_log_file_size"] * log_files_in_group),
         style=row_style,
     )
 
     if "innodb_adaptive_hash_index_parts" in variables.keys():
         table_innodb_information.add_row(
-            "[grey78]Adapt Hash Idx",
-            "%s [grey78]([grey93]%s[grey78])"
+            "[#c5c7d2]Adapt Hash Idx",
+            "%s [#c5c7d2]([grey93]%s[#c5c7d2])"
             % (variables["innodb_adaptive_hash_index"], variables["innodb_adaptive_hash_index_parts"]),
             style=row_style,
         )
     else:
         table_innodb_information.add_row(
-            "[grey78]Adapt Hash Idx",
-            "%s [grey78]" % (variables["innodb_adaptive_hash_index"]),
+            "[#c5c7d2]Adapt Hash Idx",
+            "%s [#c5c7d2]" % (variables["innodb_adaptive_hash_index"]),
             style=row_style,
         )
 
@@ -128,8 +135,8 @@ def create_panel(dolphie: Dolphie) -> Table:
         pending_buffer_pool_flush = search_pattern.group(2)
 
     table_pending_io = Table(
-        box=box.ROUNDED,
-        style="grey70",
+        box=table_box,
+        style=table_line_color,
         title="Pending",
         title_style=table_title_style,
         show_header=False,
@@ -138,25 +145,25 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_pending_io.add_column("", min_width=5)
 
     table_pending_io.add_row(
-        "[grey78]Normal AIO Reads",
+        "[#c5c7d2]Normal AIO Reads",
         format_number(total_pending_aio_reads),
         style=row_style,
     )
     table_pending_io.add_row(
-        "[grey78]Normal AIO Writes",
+        "[#c5c7d2]Normal AIO Writes",
         format_number(total_pending_aio_writes),
         style=row_style,
     )
     table_pending_io.add_row(
-        "[grey78]Insert Buffer Reads",
+        "[#c5c7d2]Insert Buffer Reads",
         format_number(pending_ibuf_aio_reads),
         style=row_style,
     )
-    table_pending_io.add_row("[grey78]Log IO/s", format_number(pending_log_ios), style=row_style)
-    table_pending_io.add_row("[grey78]Sync IO/s", format_number(pending_sync_ios), style=row_style)
-    table_pending_io.add_row("[grey78]Log Flushes", format_number(pending_log_flush), style=row_style)
+    table_pending_io.add_row("[#c5c7d2]Log IO/s", format_number(pending_log_ios), style=row_style)
+    table_pending_io.add_row("[#c5c7d2]Sync IO/s", format_number(pending_sync_ios), style=row_style)
+    table_pending_io.add_row("[#c5c7d2]Log Flushes", format_number(pending_log_flush), style=row_style)
     table_pending_io.add_row(
-        "[grey78]Buffer Pool Flushes",
+        "[#c5c7d2]Buffer Pool Flushes",
         format_number(pending_buffer_pool_flush),
         style=row_style,
     )
@@ -192,8 +199,8 @@ def create_panel(dolphie: Dolphie) -> Table:
         os_fsyncs = search_pattern.group(3)
 
     table_file_io = Table(
-        box=box.ROUNDED,
-        style="grey70",
+        box=table_box,
+        style=table_line_color,
         title="File",
         title_style=table_title_style,
         show_header=False,
@@ -201,17 +208,17 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_file_io.add_column("")
     table_file_io.add_column("", min_width=8)
 
-    table_file_io.add_row("[grey78]OS Reads", format_number(os_file_reads), style=row_style)
-    table_file_io.add_row("[grey78]OS Writes", format_number(os_file_writes), style=row_style)
-    table_file_io.add_row("[grey78]OS fsyncs", format_number(os_fsyncs), style=row_style)
-    table_file_io.add_row("[grey78]Read/s", format_number(reads_s), style=row_style)
-    table_file_io.add_row("[grey78]Write/s", format_number(writes_s), style=row_style)
-    table_file_io.add_row("[grey78]FSync/s", format_number(fsyncs_s), style=row_style)
-    table_file_io.add_row("[grey78]Bytes/s", format_number(bytes_s), style=row_style)
+    table_file_io.add_row("[#c5c7d2]OS Reads", format_number(os_file_reads), style=row_style)
+    table_file_io.add_row("[#c5c7d2]OS Writes", format_number(os_file_writes), style=row_style)
+    table_file_io.add_row("[#c5c7d2]OS fsyncs", format_number(os_fsyncs), style=row_style)
+    table_file_io.add_row("[#c5c7d2]Read/s", format_number(reads_s), style=row_style)
+    table_file_io.add_row("[#c5c7d2]Write/s", format_number(writes_s), style=row_style)
+    table_file_io.add_row("[#c5c7d2]FSync/s", format_number(fsyncs_s), style=row_style)
+    table_file_io.add_row("[#c5c7d2]Bytes/s", format_number(bytes_s), style=row_style)
 
     table_innodb_activity = Table(
-        box=box.ROUNDED,
-        style="grey70",
+        box=table_box,
+        style=table_line_color,
         title="Activity",
         title_style=table_title_style,
         show_header=False,
@@ -244,9 +251,9 @@ def create_panel(dolphie: Dolphie) -> Table:
             (statuses["Innodb_row_lock_waits"] - saved_status["Innodb_row_lock_waits"]) / loop_duration_seconds
         )
 
-    table_innodb_activity.add_row("[grey78]BP reads/s (mem)", format_number(reads_mem_per_second), style=row_style)
-    table_innodb_activity.add_row("[grey78]BP reads/s (disk)", format_number(reads_disk_per_second), style=row_style)
-    table_innodb_activity.add_row("[grey78]BP writes/s", format_number(writes_per_second), style=row_style)
+    table_innodb_activity.add_row("[#c5c7d2]BP reads/s (mem)", format_number(reads_mem_per_second), style=row_style)
+    table_innodb_activity.add_row("[#c5c7d2]BP reads/s (disk)", format_number(reads_disk_per_second), style=row_style)
+    table_innodb_activity.add_row("[#c5c7d2]BP writes/s", format_number(writes_per_second), style=row_style)
 
     bp_clean_page_wait = format_number(
         (statuses["Innodb_buffer_pool_wait_free"] - saved_status["Innodb_buffer_pool_wait_free"])
@@ -258,19 +265,19 @@ def create_panel(dolphie: Dolphie) -> Table:
         bp_clean_page_wait_color = "[bright_red]"
 
     table_innodb_activity.add_row(
-        "[grey78]BP clean page wait/s",
+        "[#c5c7d2]BP clean page wait/s",
         bp_clean_page_wait_color + bp_clean_page_wait,
         style=row_style,
     )
-    table_innodb_activity.add_row("[grey78]Log waits/s", format_number(log_waits), style=row_style)
-    table_innodb_activity.add_row("[grey78]Row lock waits/s", format_number(row_lock_waits), style=row_style)
+    table_innodb_activity.add_row("[#c5c7d2]Log waits/s", format_number(log_waits), style=row_style)
+    table_innodb_activity.add_row("[#c5c7d2]Row lock waits/s", format_number(row_lock_waits), style=row_style)
     table_innodb_activity.add_row(
-        "[grey78]Row lock time avg", "%sms" % str(statuses["Innodb_row_lock_time_avg"]), style=row_style
+        "[#c5c7d2]Row lock time avg", "%sms" % str(statuses["Innodb_row_lock_time_avg"]), style=row_style
     )
 
     table_row_operations = Table(
-        box=box.ROUNDED,
-        style="grey70",
+        box=table_box,
+        style=table_line_color,
         title="Row Operations/s",
         title_style=table_title_style,
         show_header=False,
@@ -297,10 +304,10 @@ def create_panel(dolphie: Dolphie) -> Table:
             (statuses["Innodb_rows_deleted"] - saved_status["Innodb_rows_deleted"]) / loop_duration_seconds
         )
 
-    table_row_operations.add_row("[grey78]Reads", format_number(reads_per_second))
-    table_row_operations.add_row("[grey78]Inserts", format_number(inserts_per_second))
-    table_row_operations.add_row("[grey78]Updates", format_number(updates_per_second))
-    table_row_operations.add_row("[grey78]Deletes", format_number(deletes_per_second))
+    table_row_operations.add_row("[#c5c7d2]Reads", format_number(reads_per_second))
+    table_row_operations.add_row("[#c5c7d2]Inserts", format_number(inserts_per_second))
+    table_row_operations.add_row("[#c5c7d2]Updates", format_number(updates_per_second))
+    table_row_operations.add_row("[#c5c7d2]Deletes", format_number(deletes_per_second))
     table_row_operations.add_row()
     table_row_operations.add_row()
     table_row_operations.add_row()

@@ -26,10 +26,10 @@ def create_panel(dolphie: Dolphie) -> Table:
     dashboard_grid.add_column()
     dashboard_grid.add_column()
 
-    row_style = Style(color="gray78")
+    row_style = Style(color="#c5c7d2")
     table_title_style = Style(color="grey93", bold=True)
     table_box = box.ROUNDED
-    table_line_color = "grey78"
+    table_line_color = "#b0bad7"
 
     ################
     # Information #
@@ -68,13 +68,13 @@ def create_panel(dolphie: Dolphie) -> Table:
     )
     table_information.add_row("Uptime", "[grey93]%s" % uptime, style=row_style)
     table_information.add_row(
-        "Runtime", "[grey93]%s [grey78]latency: [grey93]%ss" % (runtime, refresh_latency), style=row_style
+        "Runtime", "[grey93]%s [#c5c7d2]latency: [grey93]%ss" % (runtime, refresh_latency), style=row_style
     )
     table_information.add_row("Read Only", "[grey93]%s" % variables["read_only"], style=row_style)
     table_information.add_row("Use PS", "[grey93]%s" % (use_performance_schema_status), style=row_style)
     table_information.add_row(
         "Threads",
-        "[grey78]con[grey93] %s[steel_blue1]/[grey78]run[grey93] %s[steel_blue1]/[grey78]cac[grey93] %s"
+        "[#c5c7d2]con[grey93] %s[#91abec]/[#c5c7d2]run[grey93] %s[#91abec]/[#c5c7d2]cac[grey93] %s"
         % (
             format_number(statuses["Threads_connected"]),
             format_number(statuses["Threads_running"]),
@@ -84,7 +84,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     )
     table_information.add_row(
         "Tables",
-        "[grey78]open[grey93] %s[steel_blue1]/[grey78]opened[grey93] %s"
+        "[#c5c7d2]open[grey93] %s[#91abec]/[#c5c7d2]opened[grey93] %s"
         % (
             format_number(statuses["Open_tables"]),
             format_number(statuses["Opened_tables"]),
@@ -259,7 +259,7 @@ def create_panel(dolphie: Dolphie) -> Table:
 
         table_innodb.add_row(
             "Query Active",
-            "[grey93]%s [steel_blue1]/ [grey93]%s" % (queries_active_formatted, variables["innodb_thread_concurrency"]),
+            "[grey93]%s [#91abec]/ [grey93]%s" % (queries_active_formatted, variables["innodb_thread_concurrency"]),
             style=row_style,
         )
         table_innodb.add_row("Query Queued", "[grey93]%s" % format_number(queries_queued), style=row_style)
@@ -345,8 +345,9 @@ def create_panel(dolphie: Dolphie) -> Table:
     ###############
     # Replication #
     ###############
-    if dolphie.replica_status and dolphie.layout["replicas"].visible is False:
-        tables_to_add.append(replica_panel.create_table(dolphie, dolphie.replica_status, dashboard_table=True)[0])
+    replica = dolphie.app.query_one("#replica_panel")
+    if dolphie.replica_status and not replica.display:
+        tables_to_add.append(replica_panel.create_table(dolphie, dolphie.replica_status, dashboard_table=True))
 
     ###############
     # Statisitics #
@@ -402,7 +403,6 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     tables_to_add.append(table_stats)
 
-    dashboard_grid.add_row()
     dashboard_grid.add_row(*tables_to_add)
 
     return Align.center(dashboard_grid)

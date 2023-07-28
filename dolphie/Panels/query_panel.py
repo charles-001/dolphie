@@ -8,6 +8,76 @@ from textual.widgets import DataTable
 
 
 def create_panel(dolphie: Dolphie) -> DataTable:
+    fetch_data(dolphie)
+
+    columns = [
+        {"name": "Thread ID", "field": "id", "width": 11, "format_number": False},
+        {"name": "Username", "field": "user", "width": 13, "format_number": False},
+    ]
+
+    if dolphie.show_additional_query_columns:
+        columns.extend(
+            [
+                {"name": "Hostname/IP", "field": "host", "width": 16, "format_number": False},
+                {"name": "Database", "field": "db", "width": 13, "format_number": False},
+            ]
+        )
+
+    columns.extend(
+        [
+            {"name": "Command", "field": "command", "width": 8, "format_number": False},
+            {"name": "State", "field": "state", "width": 16, "format_number": False},
+            {"name": "TRX State", "field": "trx_state", "width": 9, "format_number": False},
+            {"name": "Rows Lock", "field": "trx_rows_locked", "width": 9, "format_number": True},
+            {"name": "Rows Mod", "field": "trx_rows_modified", "width": 8, "format_number": True},
+        ]
+    )
+
+    if (
+        dolphie.show_additional_query_columns
+        and "innodb_thread_concurrency" in dolphie.variables
+        and dolphie.variables["innodb_thread_concurrency"]
+    ):
+        columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": True})
+
+    columns.extend(
+        [
+            {"name": "Time", "field": "formatted_time", "width": 9, "format_number": False},
+            {"name": "Query", "field": "query", "width": None, "format_number": False},
+        ]
+    )
+
+    dolphie.processlist_datatable.clear(columns=True)
+
+    for column_data in columns:
+        column_name = column_data["name"]
+        column_key = column_data["field"]
+        column_width = column_data["width"]
+        dolphie.processlist_datatable.add_column(column_name, key=column_key, width=column_width)
+
+    for id, thread in dolphie.processlist_threads.items():
+        if thread["command"] == "Killed":
+            thread["command"] = "[bright_red]%s" % thread["command"]
+        else:
+            thread["command"] = thread["command"]
+
+        # Add rows for each thread or update existing ones
+        row_values = []
+        for column_data in columns:
+            column_name = column_data["field"]
+            column_format_number = column_data["format_number"]
+
+            if column_name == "query":
+                value = re.sub(r"\s+", " ", thread[column_name])
+            else:
+                value = format_number(thread[column_name]) if column_format_number else thread[column_name]
+
+            row_values.append(value)
+
+        dolphie.processlist_datatable.add_row(*row_values)
+
+
+def fetch_data(dolphie: Dolphie):
     if dolphie.use_performance_schema:
         processlist_query = Queries["ps_query"]
     else:
@@ -155,59 +225,3 @@ def create_panel(dolphie: Dolphie) -> DataTable:
             "trx_concurrency_tickets": thread["trx_concurrency_tickets"],
             "query": query,
         }
-
-    columns = {}
-    columns["Thread ID"] = {"field": "id", "width": 11, "format_number": False}
-    columns["Username"] = {"field": "user", "width": 13, "format_number": False}
-
-    if dolphie.show_additional_query_columns:
-        columns["Hostname/IP"] = {"field": "host", "width": 16, "format_number": False}
-        columns["Database"] = {"field": "db", "width": 13, "format_number": False}
-
-    columns["Command"] = {"field": "command", "width": 8, "format_number": False}
-    columns["State"] = {"field": "state", "width": 16, "format_number": False}
-    columns["TRX State"] = {"field": "trx_state", "width": 9, "format_number": False}
-    columns["Rows Lock"] = {"field": "trx_rows_locked", "width": 9, "format_number": True}
-    columns["Rows Mod"] = {"field": "trx_rows_modified", "width": 8, "format_number": True}
-
-    if (
-        dolphie.show_additional_query_columns
-        and "innodb_thread_concurrency" in dolphie.variables
-        and dolphie.variables["innodb_thread_concurrency"]
-    ):
-        columns["Tickets"] = {"field": "trx_concurrency_tickets", "width": 8, "format_number": True}
-
-    columns["Time"] = {"field": "formatted_time", "width": 9, "format_number": False}
-    columns["Query"] = {"field": "query", "width": None, "format_number": False}
-
-    app_processlist: DataTable = dolphie.app.processlist
-    app_processlist.clear()
-    if not app_processlist.columns:
-        for column, data in columns.items():
-            app_processlist.add_column(column, key=column, width=data["width"])
-
-    # threads_to_remove = set(app_processlist.rows.keys())
-    for id, thread in dolphie.processlist_threads.items():
-        # Replace strings with [NONPRINTABLE] if they contain non-printable characters
-        # for m in re.findall(r"(\"(?:(?!(?<!\\)\").)*\"|'(?:(?!(?<!\\)').)*')", query):
-        #     test_pattern = re.search(f"[^{re.escape(string.printable)}]", m)
-        #     if test_pattern:
-        #         query = query.replace(m, "[NONPRINTABLE]")
-
-        # Change values to what we want
-        if thread["command"] == "Killed":
-            thread["command"] = "[bright_red]%s" % thread["command"]
-        else:
-            thread["command"] = thread["command"]
-
-        # Add rows for each thread or update existing ones
-        row_values = []
-        for column, data in columns.items():
-            if column == "Query":
-                value = re.sub(r"\s+", " ", thread[data["field"]])
-            else:
-                value = format_number(thread[data["field"]]) if data["format_number"] else thread[data["field"]]
-
-            row_values.append(value)
-
-        app_processlist.add_row(*row_values)

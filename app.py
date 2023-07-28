@@ -10,7 +10,6 @@ import re
 from argparse import ArgumentParser, RawTextHelpFormatter
 from configparser import ConfigParser
 from datetime import datetime
-from time import sleep
 
 import myloginpath
 from dolphie import Dolphie
@@ -23,11 +22,11 @@ from dolphie.Panels import (
     replica_panel,
 )
 from dolphie.Queries import Queries
-from rich.live import Live
 from rich.prompt import Prompt
 from textual import events
 from textual.app import App, ComposeResult
-from textual.widgets import DataTable, Static
+from textual.containers import VerticalScroll
+from textual.widgets import Static
 
 
 def parse_args(dolphie: Dolphie):
@@ -139,17 +138,6 @@ Environment variables support these options:
         default=1,
         type=int,
         help="How much time to wait in seconds between each refresh [default: %(default)s]",
-    )
-    parser.add_argument(
-        "-R",
-        "--refresh_interval_innodb_status",
-        dest="refresh_interval_innodb_status",
-        default=1,
-        type=int,
-        help=(
-            "How much time to wait in seconds to execute SHOW ENGINE INNODB STATUS to refresh data its responsible "
-            "for [default: %(default)s]"
-        ),
     )
     parser.add_argument(
         "-H",
@@ -293,9 +281,6 @@ Environment variables support these options:
     if parameter_options["refresh_interval"]:
         dolphie.refresh_interval = parameter_options["refresh_interval"]
 
-    if parameter_options["refresh_interval_innodb_status"]:
-        dolphie.refresh_interval_innodb_status = parameter_options["refresh_interval_innodb_status"]
-
     if parameter_options["heartbeat_table"]:
         pattern_match = re.search(r"^(\w+\.\w+)$", parameter_options["heartbeat_table"])
         if pattern_match:
@@ -330,12 +315,19 @@ Environment variables support these options:
     else:
         dolphie.host_cache_file = os.path.dirname(os.path.abspath(__file__)) + "/host_cache"
 
-    dolphie.dashboard = parameter_options["dashboard"]
     dolphie.show_trxs_only = parameter_options["show_trxs_only"]
     dolphie.show_additional_query_columns = parameter_options["show_additional_query_columns"]
     dolphie.use_processlist = parameter_options["use_processlist"]
 
+    # Update header's host
     dolphie.header.host = dolphie.host
+
+    # Hide/show dashboard based on --hide-dashbord parameter
+    dashboard = dolphie.app.query_one("#dashboard_panel")
+    if parameter_options["dashboard"]:
+        dashboard.display = True
+    else:
+        dashboard.display = False
 
 
 class DolphieApp(App):
@@ -353,38 +345,40 @@ class DolphieApp(App):
 
         dolphie = self.dolphie
 
-        dashboard = self.query_one("#dashboard")
-        self.processlist = self.query_one("#processlist")
+        dashboard = self.query_one("#dashboard_panel")
+        replica = self.query_one("#replica_panel")
+        processlist = self.query_one("#processlist_panel")
+        innodb_io = self.query_one("#innodb_io_panel")
+        innodb_locks = self.query_one("#innodb_locks_panel")
 
         loop_time = datetime.now()
 
         dolphie.statuses = dolphie.fetch_data("status")
-        if dolphie.first_loop:
-            dolphie.saved_status = dolphie.statuses.copy()
-
-        dolphie.loop_duration_seconds = (loop_time - dolphie.previous_main_loop_time).total_seconds()
-        loop_duration_innodb_status_seconds = (loop_time - dolphie.previous_innodb_status_loop_time).total_seconds()
-
-        if dolphie.dashboard:
+        if dashboard.display:
             dolphie.variables = dolphie.fetch_data("variables")
             dolphie.primary_status = dolphie.fetch_data("primary_status")
             dolphie.replica_status = dolphie.fetch_data("replica_status")
-
-            if dolphie.first_loop or loop_duration_innodb_status_seconds >= dolphie.refresh_interval_innodb_status:
-                dolphie.innodb_status = dolphie.fetch_data("innodb_status")
+            dolphie.innodb_status = dolphie.fetch_data("innodb_status")
 
             dashboard.update(dashboard_panel.create_panel(self.dolphie))
 
-        query_panel.create_panel(self.dolphie)
+        if processlist.display:
+            query_panel.create_panel(self.dolphie)
+
+        if replica.display:
+            replica.update(replica_panel.create_panel(self.dolphie))
+
+        if innodb_io.display:
+            innodb_io.update(innodb_io_panel.create_panel(self.dolphie))
+
+        if innodb_locks.display:
+            innodb_locks.update(innodb_locks_panel.create_panel(self.dolphie))
 
         # This is for the many stats per second in Dolphie
         dolphie.saved_status = dolphie.statuses.copy()
+
+        dolphie.loop_duration_seconds = (loop_time - dolphie.previous_main_loop_time).total_seconds()
         dolphie.previous_main_loop_time = loop_time
-
-        if loop_duration_innodb_status_seconds >= dolphie.refresh_interval_innodb_status:
-            dolphie.previous_innodb_status_loop_time = loop_time
-
-        dolphie.first_loop = False
 
         self.set_timer(self.dolphie.refresh_interval, self.update_display)
 
@@ -397,15 +391,21 @@ class DolphieApp(App):
         self.dolphie.db_connect()
         self.dolphie.load_host_cache_file()
 
-        self.update_display()
+        # Set these by default to not show
+        panels = ["replica_panel", "innodb_io_panel", "innodb_locks_panel", "footer"]
+        for panel_name in panels:
+            panel = self.query_one(f"#{panel_name}")
+            panel.display = False
 
-        footer = self.query_one("#footer")
-        footer.display = False
+        self.update_display()
 
     def compose(self) -> ComposeResult:
         yield self.dolphie.header
-        yield Static(id="dashboard")
-        yield DataTable(id="processlist", show_cursor=False)
+        yield Static(id="dashboard_panel", classes="panel")
+        yield Static(id="replica_panel", classes="panel")
+        yield Static(id="innodb_io_panel", classes="panel")
+        yield Static(id="innodb_locks_panel", classes="panel")
+        yield VerticalScroll(self.dolphie.processlist_datatable, id="processlist_panel", classes="panel")
         yield Static(id="footer")
 
 
@@ -414,108 +414,6 @@ def main():
     app.run()
 
 
-def main2():
-    dolphie = Dolphie()
-
-    try:
-        dolphie.create_rich_layout()
-        parse_args(dolphie)
-        dolphie.check_for_update()
-        dolphie.db_connect()
-        dolphie.load_host_cache_file()
-        dolphie.update_environment_variables_for_pager()
-
-        with Live(
-            dolphie.layout, vertical_overflow="crop", screen=True, transient=True, auto_refresh=False
-        ) as dolphie.rich_live:
-            while True:
-                if dolphie.pause_refresh is False:
-                    loop_time = datetime.now()
-
-                    dolphie.statuses = dolphie.fetch_data("status")
-                    if dolphie.first_loop:
-                        dolphie.saved_status = dolphie.statuses.copy()
-
-                    dolphie.loop_duration_seconds = (loop_time - dolphie.previous_main_loop_time).total_seconds()
-                    loop_duration_innodb_status_seconds = (
-                        loop_time - dolphie.previous_innodb_status_loop_time
-                    ).total_seconds()
-
-                    if dolphie.layout["processlist"].visible:
-                        dolphie.processlist_threads = processlist_panel2.get_data(dolphie)
-                        dolphie.layout["processlist"].update(processlist_panel2.create_panel(dolphie))
-
-                    if dolphie.dashboard:
-                        dolphie.variables = dolphie.fetch_data("variables")
-                        dolphie.primary_status = dolphie.fetch_data("primary_status")
-                        dolphie.replica_status = dolphie.fetch_data("replica_status")
-
-                        if (
-                            dolphie.first_loop
-                            or loop_duration_innodb_status_seconds >= dolphie.refresh_interval_innodb_status
-                        ):
-                            dolphie.innodb_status = dolphie.fetch_data("innodb_status")
-
-                        dolphie.layout["dashboard"].update(dashboard_panel.create_panel(dolphie))
-
-                        # Save some variables to be used in next refresh
-                        dolphie.previous_binlog_position = 0
-                        if dolphie.primary_status:
-                            dolphie.previous_binlog_position = dolphie.primary_status["Position"]
-
-                    if dolphie.layout["replicas"].visible:
-                        dolphie.layout["replicas"].update(replica_panel.create_panel(dolphie))
-
-                    if dolphie.layout["innodb_io"].visible:
-                        dolphie.layout["innodb_io"].update(innodb_io_panel.create_panel(dolphie))
-
-                    if dolphie.layout["innodb_locks"].visible:
-                        dolphie.layout["innodb_locks"].update(innodb_locks_panel.create_panel(dolphie))
-
-                    if dolphie.replica_status:
-                        dolphie.previous_replica_sbm = 0
-                        if dolphie.replica_status["Seconds_Behind_Master"] is not None:
-                            dolphie.previous_replica_sbm = dolphie.replica_status["Seconds_Behind_Master"]
-
-                    # This is for the many stats per second in Dolphie
-                    dolphie.saved_status = dolphie.statuses.copy()
-                    dolphie.previous_main_loop_time = loop_time
-
-                    if loop_duration_innodb_status_seconds >= dolphie.refresh_interval_innodb_status:
-                        dolphie.previous_innodb_status_loop_time = loop_time
-
-                    dolphie.rich_live.update(dolphie.layout, refresh=True)
-                else:
-                    # To prevent main loop from eating up 100% CPU
-                    sleep(0.01)
-
-                # Detect a keypress loop
-                loop_counter = 0
-                while loop_counter <= dolphie.refresh_interval * 10:
-                    if dolphie.kb.key_press():
-                        if dolphie.pause_refresh is False:
-                            key = dolphie.kb.getch()
-
-                        if key:
-                            valid_key = dolphie.capture_key(key)
-                            if valid_key:
-                                break
-
-                    # refresh_interval * 10 * 100ms equals to the second of sleep a user wants. This allows us to
-                    # capture a key faster than sleeping the whole second of refresh_interval
-                    sleep(0.100)
-
-                    loop_counter += 1
-
-                dolphie.first_loop = False
-    except ManualException as e:
-        dolphie.console.print(e.output())
-    except Exception:
-        dolphie.console.print_exception()
-
-
 if __name__ == "__main__":
-    # main()
-
     app = DolphieApp()
     app.run()

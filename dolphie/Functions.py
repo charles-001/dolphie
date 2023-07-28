@@ -11,7 +11,7 @@ def format_bytes(bytes_value):
         bytes_value /= 1024
         unit_index += 1
 
-    return f"{bytes_value:.2f}[steel_blue1]{units[unit_index]}"
+    return f"{bytes_value:.2f}[#91abec]{units[unit_index]}"
 
 
 def detect_encoding(text):
@@ -77,7 +77,7 @@ def format_number(n, decimal=2):
                 num = str(round_num(n / sci_expr[x], decimal))
             else:
                 num = str(n)
-            return num + "[steel_blue1]" + sufix if minus_buff > 0 else "-" + num + "[steel_blue1]" + sufix
+            return num + "[#91abec]" + sufix if minus_buff > 0 else "-" + num + "[#91abec]" + sufix
 
     return str(0)
 
@@ -94,6 +94,6 @@ def format_sys_table_memory(data):
         elif suffix == "b":
             suffix = "B"
 
-        return f"{value}[steel_blue1]{suffix}"
+        return f"{value}[#91abec]{suffix}"
 
     return data
