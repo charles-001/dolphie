@@ -32,7 +32,7 @@ def create_panel(dolphie: Dolphie) -> Table:
             "lock_type": thread["lock_type"],
         }
 
-    table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="#c2cff2")
+    table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="#bbc8e8")
 
     columns = {}
     columns["[W](W) Thread ID"] = {"field": "w_thread", "width": 13, "format_number": False}
@@ -61,7 +61,7 @@ def create_panel(dolphie: Dolphie) -> Table:
             column = column.replace("[W]", "")
             row_style = Style(color="magenta")
         else:
-            row_style = Style(color="grey93")
+            row_style = Style()
 
         if data["width"]:
             table.add_column(column, width=data["width"], no_wrap=True, header_style=row_style, overflow=overflow)
@@ -111,7 +111,7 @@ def create_panel(dolphie: Dolphie) -> Table:
             else:
                 row_values.append(thread[data["field"]])
 
-        table.add_row(*row_values, style="grey93")
+        table.add_row(*row_values)
 
     # Add an invisible row to keep query columns sized correctly
     if len(innodb_lock_threads) == 0:

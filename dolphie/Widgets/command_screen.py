@@ -8,9 +8,9 @@ from textual.widgets import Static
 
 class CommandScreen(Screen):
     CSS = """
-    VerticalScroll {
-        padding: 1;
-    }
+        VerticalScroll {
+            padding: 1;
+        }
     """
 
     def __init__(self, app_version, host, data):
@@ -19,13 +19,11 @@ class CommandScreen(Screen):
         self.host = host
         self.data = data
 
-        self.topbar = TopBar(app_version=self.app_version, host=self.host, help="press any key to return")
-
     def on_key(self, event: events.Key):
         exclude_events = ["up", "down", "left", "right", "pageup", "pagedown", "home", "end"]
         if event.key not in exclude_events:
             self.app.pop_screen()
 
     def compose(self) -> ComposeResult:
-        yield self.topbar
+        yield TopBar(app_version=self.app_version, host=self.host, help="press any key to return")
         yield VerticalScroll(Static(self.data))

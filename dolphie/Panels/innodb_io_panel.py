@@ -15,8 +15,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     saved_status = dolphie.saved_status
     innodb_status = dolphie.innodb_status
 
-    row_style = Style(color="grey93")
-    table_title_style = Style(color="grey93", bold=True)
+    table_title_style = Style(bold=True)
     table_box = box.ROUNDED
     table_line_color = "#b0bad7"
 
@@ -38,28 +37,24 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb_information.add_row(
         "[#c5c7d2]BP Size",
         format_bytes(float(variables["innodb_buffer_pool_size"])),
-        style=row_style,
     )
     table_innodb_information.add_row(
         "[#c5c7d2]BP Available",
         format_bytes(float(variables["innodb_buffer_pool_size"]) - float(statuses["Innodb_buffer_pool_bytes_data"])),
-        style=row_style,
     )
     table_innodb_information.add_row(
         "[#c5c7d2]BP Dirty",
         format_bytes(float(statuses["Innodb_buffer_pool_bytes_dirty"])),
-        style=row_style,
     )
     # MariaDB Support
     if "innodb_buffer_pool_instances" in variables:
         bp_instances = str(variables["innodb_buffer_pool_instances"])
     else:
         bp_instances = 1
-    table_innodb_information.add_row("[#c5c7d2]BP Instances", str(bp_instances), style=row_style)
+    table_innodb_information.add_row("[#c5c7d2]BP Instances", str(bp_instances))
     table_innodb_information.add_row(
         "[#c5c7d2]BP Pages Free",
         format_number(float(statuses["Innodb_buffer_pool_pages_free"])),
-        style=row_style,
     )
 
     # MariaDB Support
@@ -71,21 +66,17 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb_information.add_row(
         "[#c5c7d2]Total Log Size",
         format_bytes(variables["innodb_log_file_size"] * log_files_in_group),
-        style=row_style,
     )
 
     if "innodb_adaptive_hash_index_parts" in variables.keys():
         table_innodb_information.add_row(
             "[#c5c7d2]Adapt Hash Idx",
-            "%s [#c5c7d2]([grey93]%s[#c5c7d2])"
-            % (variables["innodb_adaptive_hash_index"], variables["innodb_adaptive_hash_index_parts"]),
-            style=row_style,
+            "%s (%s)" % (variables["innodb_adaptive_hash_index"], variables["innodb_adaptive_hash_index_parts"]),
         )
     else:
         table_innodb_information.add_row(
             "[#c5c7d2]Adapt Hash Idx",
             "%s [#c5c7d2]" % (variables["innodb_adaptive_hash_index"]),
-            style=row_style,
         )
 
     # Calculate AIO reads
@@ -143,25 +134,21 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_pending_io.add_row(
         "[#c5c7d2]Normal AIO Reads",
         format_number(total_pending_aio_reads),
-        style=row_style,
     )
     table_pending_io.add_row(
         "[#c5c7d2]Normal AIO Writes",
         format_number(total_pending_aio_writes),
-        style=row_style,
     )
     table_pending_io.add_row(
         "[#c5c7d2]Insert Buffer Reads",
         format_number(pending_ibuf_aio_reads),
-        style=row_style,
     )
-    table_pending_io.add_row("[#c5c7d2]Log IO/s", format_number(pending_log_ios), style=row_style)
-    table_pending_io.add_row("[#c5c7d2]Sync IO/s", format_number(pending_sync_ios), style=row_style)
-    table_pending_io.add_row("[#c5c7d2]Log Flushes", format_number(pending_log_flush), style=row_style)
+    table_pending_io.add_row("[#c5c7d2]Log IO/s", format_number(pending_log_ios))
+    table_pending_io.add_row("[#c5c7d2]Sync IO/s", format_number(pending_sync_ios))
+    table_pending_io.add_row("[#c5c7d2]Log Flushes", format_number(pending_log_flush))
     table_pending_io.add_row(
         "[#c5c7d2]Buffer Pool Flushes",
         format_number(pending_buffer_pool_flush),
-        style=row_style,
     )
 
     # Get reads/avg bytes/writes/fsyncs per second
@@ -204,13 +191,13 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_file_io.add_column("")
     table_file_io.add_column("", min_width=8)
 
-    table_file_io.add_row("[#c5c7d2]OS Reads", format_number(os_file_reads), style=row_style)
-    table_file_io.add_row("[#c5c7d2]OS Writes", format_number(os_file_writes), style=row_style)
-    table_file_io.add_row("[#c5c7d2]OS fsyncs", format_number(os_fsyncs), style=row_style)
-    table_file_io.add_row("[#c5c7d2]Read/s", format_number(reads_s), style=row_style)
-    table_file_io.add_row("[#c5c7d2]Write/s", format_number(writes_s), style=row_style)
-    table_file_io.add_row("[#c5c7d2]FSync/s", format_number(fsyncs_s), style=row_style)
-    table_file_io.add_row("[#c5c7d2]Bytes/s", format_number(bytes_s), style=row_style)
+    table_file_io.add_row("[#c5c7d2]OS Reads", format_number(os_file_reads))
+    table_file_io.add_row("[#c5c7d2]OS Writes", format_number(os_file_writes))
+    table_file_io.add_row("[#c5c7d2]OS fsyncs", format_number(os_fsyncs))
+    table_file_io.add_row("[#c5c7d2]Read/s", format_number(reads_s))
+    table_file_io.add_row("[#c5c7d2]Write/s", format_number(writes_s))
+    table_file_io.add_row("[#c5c7d2]FSync/s", format_number(fsyncs_s))
+    table_file_io.add_row("[#c5c7d2]Bytes/s", format_number(bytes_s))
 
     table_innodb_activity = Table(
         box=table_box,
@@ -247,9 +234,9 @@ def create_panel(dolphie: Dolphie) -> Table:
             (statuses["Innodb_row_lock_waits"] - saved_status["Innodb_row_lock_waits"]) / loop_duration_seconds
         )
 
-    table_innodb_activity.add_row("[#c5c7d2]BP reads/s (mem)", format_number(reads_mem_per_second), style=row_style)
-    table_innodb_activity.add_row("[#c5c7d2]BP reads/s (disk)", format_number(reads_disk_per_second), style=row_style)
-    table_innodb_activity.add_row("[#c5c7d2]BP writes/s", format_number(writes_per_second), style=row_style)
+    table_innodb_activity.add_row("[#c5c7d2]BP reads/s (mem)", format_number(reads_mem_per_second))
+    table_innodb_activity.add_row("[#c5c7d2]BP reads/s (disk)", format_number(reads_disk_per_second))
+    table_innodb_activity.add_row("[#c5c7d2]BP writes/s", format_number(writes_per_second))
 
     bp_clean_page_wait = format_number(
         (statuses["Innodb_buffer_pool_wait_free"] - saved_status["Innodb_buffer_pool_wait_free"])
@@ -258,18 +245,15 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     bp_clean_page_wait_color = ""
     if bp_clean_page_wait != "0":
-        bp_clean_page_wait_color = "[bright_red]"
+        bp_clean_page_wait_color = "[#fc7979]"
 
     table_innodb_activity.add_row(
         "[#c5c7d2]BP clean page wait/s",
         bp_clean_page_wait_color + bp_clean_page_wait,
-        style=row_style,
     )
-    table_innodb_activity.add_row("[#c5c7d2]Log waits/s", format_number(log_waits), style=row_style)
-    table_innodb_activity.add_row("[#c5c7d2]Row lock waits/s", format_number(row_lock_waits), style=row_style)
-    table_innodb_activity.add_row(
-        "[#c5c7d2]Row lock time avg", "%sms" % str(statuses["Innodb_row_lock_time_avg"]), style=row_style
-    )
+    table_innodb_activity.add_row("[#c5c7d2]Log waits/s", format_number(log_waits))
+    table_innodb_activity.add_row("[#c5c7d2]Row lock waits/s", format_number(row_lock_waits))
+    table_innodb_activity.add_row("[#c5c7d2]Row lock time avg", "%sms" % str(statuses["Innodb_row_lock_time_avg"]))
 
     table_row_operations = Table(
         box=table_box,

@@ -22,11 +22,12 @@ from dolphie.Panels import (
     replica_panel,
 )
 from dolphie.Queries import Queries
+from rich.align import Align
 from rich.prompt import Prompt
 from textual import events
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll
-from textual.widgets import Static
+from textual.containers import Horizontal, VerticalScroll
+from textual.widgets import Label, Static, Switch
 
 
 def parse_args(dolphie: Dolphie):
@@ -178,9 +179,9 @@ Environment variables support these options:
     )
     parser.add_argument(
         "--hide-dashboard",
-        dest="dashboard",
-        action="store_false",
-        default=True,
+        dest="hide_dashboard",
+        action="store_true",
+        default=False,
         help=(
             "Start without showing dashboard. This is good to use if you want to reclaim terminal space and "
             "not execute the additional queries for it"
@@ -318,16 +319,10 @@ Environment variables support these options:
     dolphie.show_trxs_only = parameter_options["show_trxs_only"]
     dolphie.show_additional_query_columns = parameter_options["show_additional_query_columns"]
     dolphie.use_processlist = parameter_options["use_processlist"]
+    dolphie.hide_dashboard = parameter_options["hide_dashboard"]
 
     # Update header's host
     dolphie.header.host = dolphie.host
-
-    # Hide/show dashboard based on --hide-dashbord parameter
-    dashboard = dolphie.app.query_one("#dashboard_panel")
-    if parameter_options["dashboard"]:
-        dashboard.display = True
-    else:
-        dashboard.display = False
 
 
 class DolphieApp(App):
@@ -392,16 +387,92 @@ class DolphieApp(App):
         self.dolphie.db_connect()
         self.dolphie.load_host_cache_file()
 
-        # Set these by default to not show
-        panels = ["replica_panel", "innodb_io_panel", "innodb_locks_panel", "footer"]
-        for panel_name in panels:
-            panel = self.query_one(f"#{panel_name}")
+        # Set default panels to not show
+        panels = self.query(".panel")
+        for panel in panels:
             panel.display = False
+        footer = self.query_one("#footer")
+        footer.display = False
+
+        # To not make the default panels lag when they're first shown, we set display to true here
+        # instead of toggle
+        processlist = self.query_one("#processlist_panel")
+        processlist.display = True
+        if not self.dolphie.hide_dashboard:
+            dashboard = self.query_one("#dashboard_panel")
+            dashboard.display = True
+
+        # Set default switches to be toggled on
+        switches_to_toggle_on = ["switch_dashboard", "switch_processlist"]
+        for switch_name in switches_to_toggle_on:
+            if switch_name == "switch_dashboard" and self.dolphie.hide_dashboard:
+                continue
+
+            self.query_one(f"#{switch_name}").toggle()
 
         self.update_display()
 
+    def on_switch_changed(self, event: Switch.Changed):
+        if len(self.screen_stack) > 1:
+            return
+
+        panels = {
+            "switch_dashboard": self.query_one("#dashboard_panel"),
+            "switch_processlist": self.query_one("#processlist_panel"),
+            "switch_replication": self.query_one("#replica_panel"),
+            "switch_innodb_io": self.query_one("#innodb_io_panel"),
+            "switch_innodb_locks": self.query_one("#innodb_locks_panel"),
+        }
+
+        panel = panels.get(event.switch.id)
+        if panel:
+            if panel.display != event.value:
+                if panel.id == "replica_panel":
+                    if self.dolphie.use_performance_schema:
+                        find_replicas_query = Queries["ps_find_replicas"]
+                    else:
+                        find_replicas_query = Queries["pl_find_replicas"]
+
+                    self.dolphie.db.cursor.execute(find_replicas_query)
+                    data = self.dolphie.db.fetchall()
+                    if not data and not self.dolphie.replica_status:
+                        self.dolphie.update_footer(
+                            "[b]Cannot use this panel![/b] This host is not a replica and has no replicas connected"
+                        )
+                        event.switch.toggle()
+                        return
+
+                    if panel.display:
+                        for connection in self.dolphie.replica_connections.values():
+                            connection["connection"].close()
+
+                        self.dolphie.replica_connections = {}
+                elif panel.id == "innodb_locks_panel":
+                    if not self.dolphie.innodb_locks_sql:
+                        self.dolphie.update_footer(
+                            "[b]Cannot use this panel![/b] InnoDB Locks panel isn't supported for this host's version"
+                        )
+                        event.switch.toggle()
+                        return
+
+                if panel.id != "processlist_panel":
+                    panel.update(Align.center("[b #91abec]Loading[/b #91abec]…"))
+
+                panel.display = event.value
+
     def compose(self) -> ComposeResult:
         yield self.dolphie.header
+        with Horizontal(id="main_switch_container"):
+            yield Label("Dashboard")
+            yield Switch(animate=False, id="switch_dashboard")
+            yield Label("Processlist")
+            yield Switch(animate=False, id="switch_processlist")
+            yield Label("Replication")
+            yield Switch(animate=False, id="switch_replication")
+            yield Label("InnoDB IO")
+            yield Switch(animate=False, id="switch_innodb_io")
+            yield Label("InnoDB Locks")
+            yield Switch(animate=False, id="switch_innodb_locks")
         yield Static(id="dashboard_panel", classes="panel")
         yield Static(id="replica_panel", classes="panel")
         yield Static(id="innodb_io_panel", classes="panel")

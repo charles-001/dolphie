@@ -8,20 +8,19 @@
     scrollbar-color: #3b496e;
     scrollbar-color-hover: #55658d;
     scrollbar-color-active: #8999c4;
+
+    color: #ededed;
 }
 
-#_default, CommandScreen { # screens
+#_default, CommandScreen, EventLog { # screens
     background: #000718;
-    color: #ededed;
 }
 TextLog {
     background: #000718;
-    color: #ededed;
     
 }
 DataTable {
     background: #000718;
-    color: #ededed;
     align: center middle;
     overflow: hidden;
 }
@@ -34,7 +33,6 @@ CommandPopup {
 TopBar {
     dock: top;
     background: #192036;
-    color: #ededed;
     height: 1;
     layout: horizontal;
     content-align: center middle;
@@ -44,8 +42,7 @@ TopBar {
     content-align: left middle;
 }
 #topbar_host {
-    /* color: #e0e5ec; */
-    color: #91abec;
+    color: #bbc8e8;
     width: 1fr;
     content-align: center middle;
     text-style: bold;
@@ -65,7 +62,7 @@ TopBar {
 
 .datatable--header {
     background: #00000000;
-    color: #c2cff2;
+    color: #bbc8e8;
     text-style: bold;
 }
 .panel {
@@ -74,26 +71,45 @@ TopBar {
 
 Button.-primary {
     background: #21315d;
-    color: #ededed;
     border-top: tall #486297;
     border-bottom: tall #121927;
 }
 Button.-primary:hover {
     background: #293d74;
-    color: #ededed;
     border-top: tall #586fad;
     border-bottom: tall #161f36;
 }
 
 Button.-default {
     background: #282d3c;
-    color: #ededed;
     border-top: tall #606577;
     border-bottom: tall #151820;
 }
 Button.-default:hover {
     background: #363c50;
-    color: #ededed;
     border-top: tall #757b91;
     border-bottom: tall #222634;
+}
+
+Switch {
+    background: #000718;
+    border: none #364774;
+}
+Switch > .switch--slider {
+    color: #424d6f;
+    background: #192132;
+}
+Switch.-on > .switch--slider {
+    color: #62c39a;
+}
+
+#main_switch_container {
+    align: center middle;
+    padding-top: 1;
+    height: auto;
+}
+#main_switch_container > Label {
+    color: #bbc8e8;
+    padding-left: 1;
+    text-style: bold;
 }

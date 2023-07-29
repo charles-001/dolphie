@@ -12,7 +12,6 @@ from rich.table import Table
 
 
 def create_panel(dolphie: Dolphie):
-    row_style = Style(color="grey93")
     table_box = box.ROUNDED
     table_line_color = "#b0bad7"
 
@@ -72,9 +71,9 @@ def create_panel(dolphie: Dolphie):
             table.add_column()
             table.add_column(width=30)
 
-            table.add_row("[#c5c7d2]Host", host, style=row_style)
-            table.add_row("[#c5c7d2]User", row["user"], style=row_style)
-            table.add_row("[bright_red]Error", e.args[1], style=row_style)
+            table.add_row("[#c5c7d2]Host", host)
+            table.add_row("[#c5c7d2]User", row["user"])
+            table.add_row("[#fc7979]Error", e.args[1])
 
             tables[host] = table
 
@@ -109,8 +108,7 @@ def create_panel(dolphie: Dolphie):
 
 
 def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thread_id=None):
-    row_style = Style(color="grey93")
-    table_title_style = Style(color="grey93", bold=True)
+    table_title_style = Style(bold=True)
     table_box = box.ROUNDED
     table_line_color = "#b0bad7"
 
@@ -125,14 +123,14 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         db_cursor = dolphie.db.cursor
 
     if data["Slave_IO_Running"].lower() == "no":
-        data["Slave_IO_Running"] = "[bright_red]NO[/bright_red]"
+        data["Slave_IO_Running"] = "[#fc7979]NO[/#fc7979]"
     else:
-        data["Slave_IO_Running"] = "[bright_green]Yes[/bright_green]"
+        data["Slave_IO_Running"] = "[#54efae]Yes[/#54efae]"
 
     if data["Slave_SQL_Running"].lower() == "no":
-        data["Slave_SQL_Running"] = "[bright_red]NO[/bright_red]"
+        data["Slave_SQL_Running"] = "[#fc7979]NO[/#fc7979]"
     else:
-        data["Slave_SQL_Running"] = "[bright_green]Yes[/bright_green]"
+        data["Slave_SQL_Running"] = "[#54efae]Yes[/#54efae]"
 
     data["sbm_source"] = "Replica"
     # Use performance schema for seconds behind if host is MySQL 8
@@ -170,13 +168,13 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
 
         if replica_sbm != 0:
             if replica_sbm > 20:
-                data["Lag"] = "[bright_red]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[#fc7979]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
             elif replica_sbm > 10:
-                data["Lag"] = "[bright_yellow]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[#f1fb82w]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
             else:
-                data["Lag"] = "[bright_green]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[#54efae]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
         elif replica_sbm == 0:
-            data["Lag"] = "[bright_green]00:00:00"
+            data["Lag"] = "[#54efae]00:00:00"
 
     data["Master_Host"] = dolphie.get_hostname(data["Master_Host"])
     data["mysql_gtid_enabled"] = False
@@ -211,38 +209,33 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         table.add_column(overflow="fold")
 
     if list_replica_thread_id is not None:
-        table.add_row(
-            "[#c5c7d2]Host", "[grey93]%s" % dolphie.replica_connections[list_replica_thread_id]["host"], style=row_style
-        )
+        table.add_row("[#c5c7d2]Host", "%s" % dolphie.replica_connections[list_replica_thread_id]["host"])
     else:
-        table.add_row("[#c5c7d2]Primary", "[grey93]%s" % data["Master_Host"], style=row_style)
+        table.add_row("[#c5c7d2]Primary", "%s" % data["Master_Host"])
 
     if not dashboard_table:
-        table.add_row("[#c5c7d2]User", "[grey93]%s" % data["Master_User"], style=row_style)
+        table.add_row("[#c5c7d2]User", "%s" % data["Master_User"])
 
     table.add_row(
         "[#c5c7d2]Thread",
-        "[#c5c7d2]IO [grey93]%s [#c5c7d2]SQL [grey93]%s" % (data["Slave_IO_Running"], data["Slave_SQL_Running"]),
-        style=row_style,
+        "[#c5c7d2]IO %s [#c5c7d2]SQL %s" % (data["Slave_IO_Running"], data["Slave_SQL_Running"]),
     )
     if data["Seconds_Behind_Master"] is None:
-        table.add_row("[#c5c7d2]Lag", "", style=row_style)
+        table.add_row("[#c5c7d2]Lag", "")
     else:
         table.add_row(
             "[#c5c7d2]%s Lag" % data["sbm_source"],
-            "[grey93]%s [#c5c7d2]Speed [grey93]%s" % (data["Lag"], data["Speed"]),
-            style=row_style,
+            "%s [#c5c7d2]Speed %s" % (data["Lag"], data["Speed"]),
         )
     if dashboard_table:
-        table.add_row("[#c5c7d2]Binlog IO", "[grey93]%s" % (data["Master_Log_File"]), style=row_style)
-        table.add_row("[#c5c7d2]Binlog SQL", "[grey93]%s" % (data["Relay_Master_Log_File"]), style=row_style)
-        table.add_row("[#c5c7d2]Relay Log ", "[grey93]%s" % (data["Relay_Log_File"]), style=row_style)
-        table.add_row("[#c5c7d2]GTID", "[grey93]%s" % data["gtid"], style=row_style)
+        table.add_row("[#c5c7d2]Binlog IO", "%s" % (data["Master_Log_File"]))
+        table.add_row("[#c5c7d2]Binlog SQL", "%s" % (data["Relay_Master_Log_File"]))
+        table.add_row("[#c5c7d2]Relay Log ", "%s" % (data["Relay_Log_File"]))
+        table.add_row("[#c5c7d2]GTID", "%s" % data["gtid"])
     else:
         table.add_row(
             "[#c5c7d2]Binlog IO",
             "%s ([#969aad]%s[/#969aad])" % (data["Master_Log_File"], data["Read_Master_Log_Pos"]),
-            style=row_style,
         )
         table.add_row(
             "[#c5c7d2]Binlog SQL",
@@ -251,15 +244,13 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
                 data["Relay_Master_Log_File"],
                 data["Exec_Master_Log_Pos"],
             ),
-            style=row_style,
         )
         table.add_row(
             "[#c5c7d2]Relay Log",
             "%s ([#969aad]%s[/#969aad])" % (data["Relay_Log_File"], data["Relay_Log_Pos"]),
-            style=row_style,
         )
 
-        table.add_row("[#c5c7d2]GTID", "[grey93]%s" % data["gtid"], style=row_style)
+        table.add_row("[#c5c7d2]GTID", "%s" % data["gtid"])
         if data["mysql_gtid_enabled"]:
             executed_gtid_set = data["Executed_Gtid_Set"]
             retrieved_gtid_set = data["Retrieved_Gtid_Set"]
@@ -271,7 +262,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
                 else:
                     retrieved_gtid_set = retrieved_gtid_set.replace(m[0], "[#969aad]…[#91abec]")
 
-                retrieved_gtid_set = retrieved_gtid_set.replace(m[1], "%s[grey93]" % m[1])
+                retrieved_gtid_set = retrieved_gtid_set.replace(m[1], "%s" % m[1])
 
             for m in re.findall(r"(\w+-\w+-\w+-\w+-)(\w+)", executed_gtid_set):
                 source_id = m[0] + m[1]
@@ -280,19 +271,19 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
                 else:
                     executed_gtid_set = executed_gtid_set.replace(m[0], "[#969aad]…[#91abec]")
 
-                executed_gtid_set = executed_gtid_set.replace(m[1], "%s[grey93]" % m[1])
+                executed_gtid_set = executed_gtid_set.replace(m[1], "%s" % m[1])
 
-            table.add_row("[#c5c7d2]Auto Position", "[grey93]%s" % data["Auto_Position"], style=row_style)
-            table.add_row("[#c5c7d2]Retrieved GTID Set", "[grey93]%s" % retrieved_gtid_set, style=row_style)
-            table.add_row("[#c5c7d2]Executed GTID Set", "[grey93]%s" % executed_gtid_set, style=row_style)
+            table.add_row("[#c5c7d2]Auto Position", "%s" % data["Auto_Position"])
+            table.add_row("[#c5c7d2]Retrieved GTID Set", "%s" % retrieved_gtid_set)
+            table.add_row("[#c5c7d2]Executed GTID Set", "%s" % executed_gtid_set)
         elif data["mariadb_gtid_enabled"]:
-            table.add_row("[#c5c7d2]GTID IO Pos ", "[grey93]%s" % data["Gtid_IO_Pos"], style=row_style)
+            table.add_row("[#c5c7d2]GTID IO Pos ", "%s" % data["Gtid_IO_Pos"])
 
         if data["Last_Error"]:
-            table.add_row("[#c5c7d2]Error ", "[grey93]%s" % data["Last_Error"])
+            table.add_row("[#c5c7d2]Error ", "%s" % data["Last_Error"])
         elif data["Last_IO_Error"]:
-            table.add_row("[#c5c7d2]Error ", "[grey93]%s" % data["Last_IO_Error"])
+            table.add_row("[#c5c7d2]Error ", "%s" % data["Last_IO_Error"])
         elif data["Last_SQL_Error"]:
-            table.add_row("[#c5c7d2]Error ", "[grey93]%s" % data["Last_SQL_Error"])
+            table.add_row("[#c5c7d2]Error ", "%s" % data["Last_SQL_Error"])
 
     return table

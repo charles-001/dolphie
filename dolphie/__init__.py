@@ -13,6 +13,7 @@ from dolphie.Functions import format_bytes, format_number, format_sys_table_memo
 from dolphie.ManualException import ManualException
 from dolphie.Queries import Queries
 from dolphie.Widgets.command_screen import CommandScreen
+from dolphie.Widgets.event_log import EventLog
 from dolphie.Widgets.popup import CommandPopup
 from dolphie.Widgets.topbar import TopBar
 from packaging.version import parse as parse_version
@@ -57,6 +58,7 @@ class Dolphie:
         self.show_additional_query_columns: bool = False
         self.show_last_executed_query: bool = False
         self.sort_by_time_descending: bool = True
+        self.hide_dashboard: bool = False
         self.heartbeat_table: str = None
         self.user_filter: str = None
         self.db_filter: str = None
@@ -341,86 +343,11 @@ class Dolphie:
                 Align.center("Total: [b #91abec]%s[/b #91abec]" % db_count),
             )
 
-        elif key == "D":
-            dashboard = self.app.query_one("#dashboard_panel")
-            if dashboard.display:
-                dashboard.display = False
-            else:
-                dashboard.display = True
-
         elif key == "E":
             if not self.mysql_version.startswith("8"):
                 self.update_footer("[indian_red]This command requires MySQL 8")
             else:
-                event_levels = {
-                    "a": "all",
-                    "s": "system",
-                    "w": "warning",
-                    "e": "error",
-                }
-                available_levels = ", ".join(
-                    f"[b #91abec]{key}[/b #91abec]=[grey70]{value}[/grey70]" for key, value in event_levels.items()
-                )
-                while True:
-                    event_levels_input = self.console.input(
-                        (
-                            "[#91abec]What level(s) of events do you want to display? Use a comma to"
-                            f" separate[/#91abec] \\[{available_levels}]: "
-                        ),
-                    )
-
-                    # Split the input by commas and remove leading/trailing whitespaces
-                    selected_levels = [level.strip() for level in event_levels_input.split(",")]
-
-                    # Check if all selected levels are valid
-                    if all(level in event_levels.keys() for level in selected_levels):
-                        break
-                    else:
-                        self.update_footer("[indian_red]Invalid level")
-
-                table = Table(
-                    show_header=False,
-                    caption="Press q to return",
-                    box=box.SIMPLE,
-                )
-                table.add_column("Time", style="dim")
-                table.add_column("Level")
-                table.add_column("Event")
-
-                query = Queries["error_log"]
-                where_clauses = {
-                    "s": 'prio = "System"',
-                    "w": 'prio = "Warning"',
-                    "e": 'prio = "Error"',
-                }
-
-                if "a" not in selected_levels:
-                    where_conditions = [where_clauses[level] for level in selected_levels if level in where_clauses]
-                    where_clause = " OR ".join(where_conditions)
-                    query = query.replace("$placeholder", f"AND ({where_clause})")
-                else:
-                    query = query.replace("$placeholder", "")
-
-                self.db.execute(query)
-                data = self.db.fetchall()
-                for row in data:
-                    level_color = "grey93"
-                    if row["level"] == "Error":
-                        level_color = "white on red"
-                    elif row["level"] == "Warning":
-                        level_color = "bright_yellow"
-
-                    level = f"[{level_color}]{row['level']}[/{level_color}]"
-                    table.add_row(row["timestamp"].strftime("%Y-%m-%d %H:%M:%S"), level, row["message"])
-
-                self.rich_live.stop()
-
-                os.system("clear")
-                with self.console.pager(styles=True):
-                    self.console.print(Align.right(f"{self.header_title} [dim]press q to return"), highlight=False)
-                    self.console.print(table)
-
-                self.rich_live.start()
+                self.app.push_screen(EventLog(self.app_version, self.host, self.db))
 
         elif key == "e":
 
@@ -589,14 +516,6 @@ class Dolphie:
 
             self.app.push_screen(CommandPopup(message="Specify a host to filter by"), command_get_input)
 
-        elif key == "I":
-            innodb_io = self.app.query_one("#innodb_io_panel")
-            if innodb_io.display:
-                innodb_io.display = False
-            else:
-                innodb_io.update(Align.center("[b #91abec]Loading[/b #91abec]…"))
-                innodb_io.display = True
-
         elif key == "i":
             if self.show_idle_queries:
                 self.show_idle_queries = False
@@ -728,17 +647,6 @@ class Dolphie:
                 else:
                     self.update_footer("[#91abec]No threads were killed")
 
-        elif key == "L":
-            if self.innodb_locks_sql:
-                innodb_locks = self.app.query_one("#innodb_locks_panel")
-                if innodb_locks.display:
-                    innodb_locks.display = False
-                else:
-                    innodb_locks.update(Align.center("[b #91abec]Loading[/b #91abec]…"))
-                    innodb_locks.display = True
-            else:
-                self.update_footer("[indian_red]InnoDB Locks panel isn't supported for this host's version")
-
         elif key == "l":
             deadlock = ""
             output = re.search(
@@ -812,13 +720,6 @@ class Dolphie:
 
             screen_data = Align.center(table_grid)
 
-        elif key == "P":
-            processlist = self.app.query_one("#processlist_panel")
-            if processlist.display:
-                processlist.display = False
-            else:
-                processlist.display = True
-
         elif key == "p":
             if not self.pause_refresh:
                 self.pause_refresh = True
@@ -851,32 +752,6 @@ class Dolphie:
                 CommandPopup(message="Specify refresh interval (in seconds)"),
                 command_get_input,
             )
-
-        elif key == "R":
-            if self.use_performance_schema:
-                find_replicas_query = Queries["ps_find_replicas"]
-            else:
-                find_replicas_query = Queries["pl_find_replicas"]
-
-            self.db.cursor.execute(find_replicas_query)
-            data = self.db.fetchall()
-            if not data and not self.replica_status:
-                self.update_footer(
-                    "[b]Cannot use this panel![/b] This host is not a replica and has no replicas connected"
-                )
-                return
-
-            replica = self.app.query_one("#replica_panel")
-            if replica.display:
-                replica.display = False
-
-                for connection in self.replica_connections.values():
-                    connection["connection"].close()
-
-                self.replica_connections = {}
-            else:
-                replica.update(Align.center("[b #91abec]Loading[/b #91abec]…"))
-                replica.display = True
 
         elif key == "s":
             if self.sort_by_time_descending:
@@ -1023,19 +898,6 @@ class Dolphie:
             for key, description in sorted(filters.items()):
                 table_filters.add_row("[#91abec]%s" % key, description, style=row_style)
 
-            panels = {
-                "D": "Show/hide dashboard",
-                "I": "Show/hide InnoDB information",
-                "L": "Show/hide InnoDB query locks",
-                "P": "Show/hide processlist",
-                "R": "Show/hide replication + replicas",
-            }
-            table_panels = Table(box=box.ROUNDED, style="#b0bad7", title="Panels", title_style="bold")
-            table_panels.add_column("Key", justify="center", style="b #91abec")
-            table_panels.add_column("Description")
-            for key, description in sorted(panels.items()):
-                table_panels.add_row("[#91abec]%s" % key, description, style=row_style)
-
             keys = {
                 "1": "Switch between using Processlist/Performance Schema for listing queries",
                 "2": "Display output from SHOW ENGINE INNODB STATUS",
@@ -1059,7 +921,7 @@ class Dolphie:
                 "z": "Show all entries in the host cache",
             }
 
-            table_keys = Table(box=box.ROUNDED, style="#b0bad7", title="Features", title_style="bold")
+            table_keys = Table(box=box.ROUNDED, style="#b0bad7", title="Commands", title_style="bold")
             table_keys.add_column("Key", justify="center", style="b #91abec")
             table_keys.add_column("Description")
 
@@ -1098,18 +960,16 @@ class Dolphie:
                 "Tickets": "Relates to innodb_concurrency_tickets variable",
             }
 
-            table_info = Table(box=box.ROUNDED, style="#b0bad7")
+            table_info = Table(box=box.ROUNDED, style="#b0bad7", title="Terminology", title_style="bold")
             table_info.add_column("Datapoint", style="#91abec")
             table_info.add_column("Description")
             for datapoint, description in sorted(datapoints.items()):
                 table_info.add_row("[#91abec]%s" % datapoint, description, style=row_style)
 
             table_grid = Table.grid()
-            table_grid.add_row(table_panels, table_filters)
+            table_grid.add_row(table_keys, table_filters)
 
             screen_data = Group(
-                Align.center(table_keys),
-                "",
                 Align.center(table_grid),
                 "",
                 Align.center(table_info),

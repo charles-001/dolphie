@@ -16,7 +16,7 @@ class TopBar(Container):
             self.help = help
 
         self.topbar_title = Label(
-            f" [b #c2cff2]dolphie[/b #c2cff2] :dolphin: [#c2cff2]v{app_version}", id="topbar_title"
+            f" [b #bbc8e8]dolphie[/b #bbc8e8] :dolphin: [#bbc8e8]v{app_version}", id="topbar_title"
         )
         self.topbar_host = Label(self.host, id="topbar_host")
         self.topbar_help = Label(self.help, id="topbar_help")
@@ -25,7 +25,7 @@ class TopBar(Container):
         self.host = host
 
     def watch_app_version(self):
-        self.topbar_title.update(f" [b #c2cff2]dolphie[/b #c2cff2] :dolphin: [#c2cff2]v{self.app_version}")
+        self.topbar_title.update(f" [b #bbc8e8]dolphie[/b #bbc8e8] :dolphin: [#bbc8e8]v{self.app_version}")
 
     def watch_host(self):
         self.topbar_host.update(self.host)

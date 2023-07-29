@@ -26,7 +26,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     dashboard_grid.add_column()
     dashboard_grid.add_column()
 
-    table_title_style = Style(color="grey93", bold=True)
+    table_title_style = Style(bold=True)
     table_box = box.ROUNDED
     table_line_color = "#b0bad7"
 
@@ -126,16 +126,16 @@ def create_panel(dolphie: Dolphie) -> Table:
 
         max_checkpoint_age = innodb_log_file_size * innodb_log_files_in_group * version_threshold
         if checkpoint_age >= max_checkpoint_age:
-            checkpoint_efficiency = "[bright_red]0.00%"
+            checkpoint_efficiency = "[#fc7979]0.00%"
         elif max_checkpoint_age > checkpoint_age:
             checkpoint_efficiency = round(100 - (checkpoint_age / max_checkpoint_age * 100), 2)
 
             if checkpoint_efficiency > 40:
-                checkpoint_efficiency = "[bright_green]%s%%" % checkpoint_efficiency
+                checkpoint_efficiency = "[#54efae]%s%%" % checkpoint_efficiency
             elif checkpoint_efficiency > 20:
-                checkpoint_efficiency = "[bright_yellow]%s%%" % checkpoint_efficiency
+                checkpoint_efficiency = "[#f1fb82]%s%%" % checkpoint_efficiency
             else:
-                checkpoint_efficiency = "[bright_red]%s%%" % checkpoint_efficiency
+                checkpoint_efficiency = "[#fc7979]%s%%" % checkpoint_efficiency
 
     # Get history list length
     output = re.search(r"History list length (\d+)", innodb_status["status"])
@@ -170,16 +170,16 @@ def create_panel(dolphie: Dolphie) -> Table:
     ib_pool_disk_reads = statuses["Innodb_buffer_pool_reads"]
     ib_pool_mem_reads = statuses["Innodb_buffer_pool_read_requests"]
     if ib_pool_disk_reads >= ib_pool_mem_reads:
-        innodb_efficiency = "[bright_red]0.00%"
+        innodb_efficiency = "[#fc7979]0.00%"
     elif ib_pool_mem_reads > ib_pool_disk_reads:
         innodb_efficiency = round(100 - (ib_pool_disk_reads / ib_pool_mem_reads * 100), 2)
 
         if innodb_efficiency > 90:
-            innodb_efficiency = "[bright_green]%s%%" % innodb_efficiency
+            innodb_efficiency = "[#54efae]%s%%" % innodb_efficiency
         elif innodb_efficiency > 80:
-            innodb_efficiency = "[bright_yellow]%s%%" % innodb_efficiency
+            innodb_efficiency = "[#f1fb82]%s%%" % innodb_efficiency
         else:
-            innodb_efficiency = "[bright_red]%s%%" % innodb_efficiency
+            innodb_efficiency = "[#fc7979]%s%%" % innodb_efficiency
 
     # Calculate AHI Hit efficiency
     hash_searches = 0
@@ -193,16 +193,16 @@ def create_panel(dolphie: Dolphie) -> Table:
             if non_hash_searches == 0 and hash_searches == 0:
                 hash_search_efficiency = "Inactive"
             elif non_hash_searches >= hash_searches:
-                hash_search_efficiency = "[bright_red]0.00%"
+                hash_search_efficiency = "[#fc7979]0.00%"
             elif hash_searches > non_hash_searches:
                 hash_search_efficiency = round(100 - (non_hash_searches / hash_searches * 100), 2)
 
                 if hash_search_efficiency > 70:
-                    hash_search_efficiency = "[bright_green]%s%%" % hash_search_efficiency
+                    hash_search_efficiency = "[#54efae]%s%%" % hash_search_efficiency
                 elif hash_search_efficiency > 50:
-                    hash_search_efficiency = "[bright_yellow]%s%%" % hash_search_efficiency
+                    hash_search_efficiency = "[#f1fb82]%s%%" % hash_search_efficiency
                 else:
-                    hash_search_efficiency = "[bright_red]%s%%" % hash_search_efficiency
+                    hash_search_efficiency = "[#fc7979]%s%%" % hash_search_efficiency
         else:
             hash_search_efficiency = "N/A"
     else:
@@ -245,9 +245,9 @@ def create_panel(dolphie: Dolphie) -> Table:
         concurrency_ratio = round((queries_active / variables["innodb_thread_concurrency"]) * 100)
 
         if concurrency_ratio >= 80:
-            queries_active_formatted = "[bright_red]%s" % format_number(queries_active)
+            queries_active_formatted = "[#fc7979]%s" % format_number(queries_active)
         elif concurrency_ratio >= 60:
-            queries_active_formatted = "[bright_yellow]%s" % format_number(queries_active)
+            queries_active_formatted = "[#f1fb82]%s" % format_number(queries_active)
         else:
             queries_active_formatted = "%s" % format_number(queries_active)
 
@@ -293,7 +293,7 @@ def create_panel(dolphie: Dolphie) -> Table:
         binlog_cache_mem = statuses["Binlog_cache_use"]
         if binlog_cache_disk and binlog_cache_mem:
             if binlog_cache_disk >= binlog_cache_mem:
-                innodb_efficiency = "[bright_red]0.00%"
+                innodb_efficiency = "[#fc7979]0.00%"
             elif binlog_cache_mem > binlog_cache_disk:
                 binlog_cache = round(100 - (binlog_cache_disk / binlog_cache_mem), 2)
 

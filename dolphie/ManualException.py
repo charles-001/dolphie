@@ -15,7 +15,7 @@ class ManualException(Exception):
             box=box.SIMPLE_HEAVY,
             style="grey70",
             title="  Dolphie :dolphin:",
-            title_style=Style(color="grey93", bold=True),
+            title_style=Style(bold=True),
             title_justify="left",
             header_style=Style(color="indian_red", bold=True),
             show_header=True,

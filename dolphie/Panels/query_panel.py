@@ -57,7 +57,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
 
     for id, thread in dolphie.processlist_threads.items():
         if thread["command"] == "Killed":
-            thread["command"] = "[bright_red]%s" % thread["command"]
+            thread["command"] = "[#fc7979]%s" % thread["command"]
         else:
             thread["command"] = thread["command"]
 
@@ -183,21 +183,21 @@ def fetch_data(dolphie: Dolphie):
 
         # Determine time color
         time = int(thread["time"])
-        thread_color = "grey93"
+        thread_color = ""
         if "SELECT /*!40001 SQL_NO_CACHE */ *" in query:
             thread_color = "magenta"
         elif query and command != "Sleep" and "Binlog Dump" not in command:
             if time >= 5:
-                thread_color = "bright_red"
+                thread_color = "[#fc7979]"
             elif time >= 3:
-                thread_color = "bright_yellow"
+                thread_color = "[#f1fb82]"
             elif time <= 2:
-                thread_color = "bright_green"
+                thread_color = "[#54efae]"
 
         hours = time // 3600
         minutes = (time % 3600) // 60
         seconds = time % 60
-        formatted_time = "[{}]{:02}:{:02}:{:02}".format(thread_color, hours, minutes, seconds)
+        formatted_time = "{}{:02}:{:02}:{:02}".format(thread_color, hours, minutes, seconds)
 
         # If after the first loop there's nothing in cache, don't try to resolve anymore.
         # This is an optimization
@@ -215,7 +215,7 @@ def fetch_data(dolphie: Dolphie):
             "db": thread["db"],
             "formatted_time": formatted_time,
             "time": time,
-            "hhmmss_time": "[{}]{:0>8}".format(thread_color, str(timedelta(seconds=time))),
+            "hhmmss_time": "{}{:0>8}".format(thread_color, str(timedelta(seconds=time))),
             "command": command,
             "state": thread["state"],
             "trx_state": thread["trx_state"],
