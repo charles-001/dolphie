@@ -260,6 +260,12 @@ class Dolphie:
 
         return command_data
 
+    def command_input_to_variable(self, return_data):
+        variable = return_data[0]
+        value = return_data[1]
+        if value:
+            setattr(self, variable, value)
+
     def capture_key(self, key):
         screen_data = None
 
@@ -290,7 +296,7 @@ class Dolphie:
             self.time_filter = ""
             self.query_filter = ""
 
-            self.update_footer("Cleared all filters!")
+            self.update_footer("Cleared all filters")
 
         elif key == "d":
             tables = {}
@@ -344,7 +350,7 @@ class Dolphie:
 
         elif key == "E":
             if not self.mysql_version.startswith("8"):
-                self.update_footer("[indian_red]This command requires MySQL 8!")
+                self.update_footer("[indian_red]This command requires MySQL 8")
             else:
                 event_levels = {
                     "a": "all",
@@ -417,160 +423,171 @@ class Dolphie:
                 self.rich_live.start()
 
         elif key == "e":
-            thread_id = self.console.input("Thread ID to explain: ")
 
-            if thread_id:
-                if thread_id in self.processlist_threads:
-                    row_style = Style(color="grey93")
-                    table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
-                    table.add_column("")
-                    table.add_column("")
+            def command_get_input(thread_id):
+                if thread_id:
+                    if thread_id in self.processlist_threads:
+                        row_style = Style(color="grey93")
+                        table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
+                        table.add_column("")
+                        table.add_column("")
 
-                    table.add_row("[#c5c7d2]Thread ID", str(thread_id), style=row_style)
-                    table.add_row(
-                        "[#c5c7d2]User",
-                        self.processlist_threads[thread_id]["user"],
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[#c5c7d2]Host",
-                        self.processlist_threads[thread_id]["host"],
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[#c5c7d2]Database",
-                        self.processlist_threads[thread_id]["db"],
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[#c5c7d2]Command",
-                        self.processlist_threads[thread_id]["command"],
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[#c5c7d2]State",
-                        self.processlist_threads[thread_id]["state"],
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[#c5c7d2]Time",
-                        self.processlist_threads[thread_id]["hhmmss_time"],
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[#c5c7d2]Rows Locked",
-                        self.processlist_threads[thread_id]["trx_rows_locked"],
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[#c5c7d2]Rows Modified",
-                        self.processlist_threads[thread_id]["trx_rows_modified"],
-                        style=row_style,
-                    )
-                    if "innodb_thread_concurrency" in self.variables and self.variables["innodb_thread_concurrency"]:
+                        table.add_row("[#c5c7d2]Thread ID", str(thread_id), style=row_style)
                         table.add_row(
-                            "[#c5c7d2]Tickets",
-                            self.processlist_threads[thread_id]["trx_concurrency_tickets"],
+                            "[#c5c7d2]User",
+                            self.processlist_threads[thread_id]["user"],
                             style=row_style,
                         )
-                    table.add_row("", "")
-                    table.add_row(
-                        "[#c5c7d2]TRX State",
-                        self.processlist_threads[thread_id]["trx_state"],
-                        style=row_style,
-                    )
-                    table.add_row(
-                        "[#c5c7d2]TRX Operation",
-                        self.processlist_threads[thread_id]["trx_operation_state"],
-                        style=row_style,
-                    )
-
-                    self.console.print(Align.center(table))
-
-                    query = sqlformat(self.processlist_threads[thread_id]["query"], reindent_aligned=True)
-                    query_db = self.processlist_threads[thread_id]["db"]
-
-                    if query:
-                        self.console.print("")
-
-                        # This is just to make the theme is wrapped around only the query and not expanded out
-                        # further than it needs to be
-                        query_width = 0
-                        for line in query.split("\n"):
-                            if len(line) > query_width:
-                                query_width = len(line)
-
-                        if query_width >= self.console.width:
-                            query_width = self.console.width - 2
-
-                        self.console.print(
-                            Align.center(
-                                Syntax(
-                                    query,
-                                    "sql",
-                                    line_numbers=False,
-                                    word_wrap=True,
-                                    theme="monokai",
-                                    code_width=query_width,
-                                    background_color="default",
-                                )
+                        table.add_row(
+                            "[#c5c7d2]Host",
+                            self.processlist_threads[thread_id]["host"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Database",
+                            self.processlist_threads[thread_id]["db"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Command",
+                            self.processlist_threads[thread_id]["command"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]State",
+                            self.processlist_threads[thread_id]["state"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Time",
+                            self.processlist_threads[thread_id]["hhmmss_time"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Rows Locked",
+                            self.processlist_threads[thread_id]["trx_rows_locked"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Rows Modified",
+                            self.processlist_threads[thread_id]["trx_rows_modified"],
+                            style=row_style,
+                        )
+                        if (
+                            "innodb_thread_concurrency" in self.variables
+                            and self.variables["innodb_thread_concurrency"]
+                        ):
+                            table.add_row(
+                                "[#c5c7d2]Tickets",
+                                self.processlist_threads[thread_id]["trx_concurrency_tickets"],
+                                style=row_style,
                             )
+                        table.add_row("", "")
+                        table.add_row(
+                            "[#c5c7d2]TRX State",
+                            self.processlist_threads[thread_id]["trx_state"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]TRX Operation",
+                            self.processlist_threads[thread_id]["trx_operation_state"],
+                            style=row_style,
                         )
 
-                    if query and query_db:
-                        explain_failure = None
-                        explain_data = None
+                        query = sqlformat(self.processlist_threads[thread_id]["query"], reindent_aligned=True)
+                        query_db = self.processlist_threads[thread_id]["db"]
 
-                        self.console.print("")
-                        try:
-                            self.db.cursor.execute("USE %s" % query_db)
-                            self.db.cursor.execute("EXPLAIN %s" % query)
+                        if query and query_db:
+                            explain_failure = None
+                            explain_data = None
 
-                            explain_data = self.db.fetchall()
-                        except pymysql.Error as e:
-                            explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
+                            formatted_query = Syntax(
+                                query,
+                                "sql",
+                                line_numbers=False,
+                                word_wrap=True,
+                                theme="monokai",
+                                background_color="#000718",
+                            )
 
-                        if explain_data:
-                            explain_table = Table(box=box.ROUNDED, style="#b0bad7")
+                            try:
+                                self.db.cursor.execute("USE %s" % query_db)
+                                self.db.cursor.execute("EXPLAIN %s" % query)
 
-                            columns = []
-                            for row in explain_data:
-                                values = []
-                                for column, value in row.items():
-                                    # Exclude possbile_keys field since it takes up too much space
-                                    if column == "possible_keys":
-                                        continue
+                                explain_data = self.db.fetchall()
+                            except pymysql.Error as e:
+                                explain_failure = (
+                                    "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
+                                )
 
-                                    # Don't duplicate columns
-                                    if column not in columns:
-                                        explain_table.add_column(column)
-                                        columns.append(column)
+                            if explain_data:
+                                explain_table = Table(box=box.ROUNDED, style="#b0bad7")
 
-                                    if column == "key" and value is None:
-                                        value = "[b white on red]NO INDEX[/b white on red]"
+                                columns = []
+                                for row in explain_data:
+                                    values = []
+                                    for column, value in row.items():
+                                        # Exclude possbile_keys field since it takes up too much space
+                                        if column == "possible_keys":
+                                            continue
 
-                                    if column == "rows":
-                                        value = format_number(value)
+                                        # Don't duplicate columns
+                                        if column not in columns:
+                                            explain_table.add_column(column)
+                                            columns.append(column)
 
-                                    values.append(str(value))
+                                        if column == "key" and value is None:
+                                            value = "[b white on red]NO INDEX[/b white on red]"
 
-                                explain_table.add_row(*values, style="grey93")
+                                        if column == "rows":
+                                            value = format_number(value)
 
-                            self.console.print(Align.center(explain_table))
+                                        values.append(str(value))
+
+                                    explain_table.add_row(*values, style="grey93")
+
+                                screen_data = Group(
+                                    Align.center(table),
+                                    "",
+                                    Align.center(formatted_query),
+                                    "",
+                                    Align.center(explain_table),
+                                )
+                            else:
+                                screen_data = Group(
+                                    Align.center(table),
+                                    "",
+                                    Align.center(formatted_query),
+                                    "",
+                                    Align.center(explain_failure),
+                                )
                         else:
-                            self.console.print(Align.center(explain_failure))
-                else:
-                    self.update_footer("[#91abec]Thread ID [gray93]%s[#91abec] does not exist!" % thread_id)
-            else:
-                self.update_footer("[91abec]There was no Thread ID specified!")
+                            screen_data = Align.center(table)
+
+                        self.app.push_screen(CommandScreen(self.app_version, self.host, screen_data))
+                    else:
+                        self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
+
+            self.app.push_screen(
+                CommandPopup(message="Specify a Thread ID to explain its query"),
+                command_get_input,
+            )
 
         elif key == "H":
-            self.host_filter = self.console.input("[#91abec]Hostname/IP to filter by[/#91abec]: ")
 
-            # Since our filtering is done by the processlist query, the value needs to be what's in host cache
-            for ip, addr in self.host_cache.items():
-                if self.host_filter == addr:
-                    self.host_filter = ip
+            def command_get_input(host):
+                found = False
+                # Since our filtering is done by the processlist query, the value needs to be what's in host cache
+                for ip, addr in self.host_cache.items():
+                    if host == addr:
+                        self.host_filter = ip
+
+                        found = True
+
+                if host and not found:
+                    self.update_footer("Host [b #91abec]%s[/b #91abec] was not found processlist" % host)
+
+            self.app.push_screen(CommandPopup(message="Specify a host to filter by"), command_get_input)
 
         elif key == "I":
             innodb_io = self.app.query_one("#innodb_io_panel")
@@ -589,25 +606,29 @@ class Dolphie:
                 self.sort_by_time_descending = False
 
         elif key == "k":
-            thread_id = self.console.input("[#91abec]Thread ID to kill[/#91abec]: ")
 
-            if thread_id:
-                if thread_id in self.processlist_threads:
-                    try:
-                        if self.host_is_rds:
-                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                        else:
-                            self.db.cursor.execute("KILL %s" % thread_id)
-                    except pymysql.OperationalError:
-                        self.update_footer("[#91abec]Thread ID [gray93]%s[#91abec] does not exist!" % thread_id)
-                else:
-                    self.update_footer("[#91abec]Thread ID [gray93]%s[#91abec] does not exist!" % thread_id)
+            def command_get_input(thread_id):
+                if thread_id:
+                    if thread_id in self.processlist_threads:
+                        try:
+                            if self.host_is_rds:
+                                self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                            else:
+                                self.db.cursor.execute("KILL %s" % thread_id)
+
+                            self.update_footer("Killed thread [b #91abec]%s[/b #91abec]" % thread_id)
+                        except Exception as e:
+                            self.update_footer("[b][indian_red]Error[/b]: %s" % e.args[1])
+                    else:
+                        self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
+
+            self.app.push_screen(CommandPopup(message="Specify a Thread ID to kill"), command_get_input)
 
         elif key == "K":
             include_sleep = self.console.input("[#91abec]Include queries in sleep state? (y/n)[/#91abec]: ")
 
             if include_sleep != "y" and include_sleep != "n":
-                self.update_footer("[indian_red]Invalid option!")
+                self.update_footer("[indian_red]Invalid option")
             else:
                 kill_type = self.console.input("[#91abec]Kill by username/hostname/time range (u/h/t)[/#91abec]: ")
                 threads_killed = 0
@@ -674,9 +695,7 @@ class Dolphie:
                         upper_limit = int(time_range[1])
 
                         if lower_limit > upper_limit:
-                            self.update_footer(
-                                "[indian_red]Invalid time range! Lower limit can't be higher than upper!"
-                            )
+                            self.update_footer("[indian_red]Invalid time range! Lower limit can't be higher than upper")
                         else:
                             for thread_id, thread in self.processlist_threads.items():
                                 try:
@@ -700,14 +719,14 @@ class Dolphie:
                                 except pymysql.OperationalError:
                                     continue
                     else:
-                        self.update_footer("[indian_red]Invalid time range!")
+                        self.update_footer("[indian_red]Invalid time range")
                 else:
-                    self.update_footer("[indian_red]Invalid option!")
+                    self.update_footer("[indian_red]Invalid option")
 
                 if threads_killed:
-                    self.update_footer("[grey93]Killed [#91abec]%s [grey93]threads!" % threads_killed)
+                    self.update_footer("[grey93]Killed [#91abec]%s [grey93]threads" % threads_killed)
                 else:
-                    self.update_footer("[#91abec]No threads were killed!")
+                    self.update_footer("[#91abec]No threads were killed")
 
         elif key == "L":
             if self.innodb_locks_sql:
@@ -718,7 +737,7 @@ class Dolphie:
                     innodb_locks.update(Align.center("[b #91abec]Loading[/b #91abec]…"))
                     innodb_locks.display = True
             else:
-                self.update_footer("[indian_red]InnoDB Locks panel isn't supported for this host's version!")
+                self.update_footer("[indian_red]InnoDB Locks panel isn't supported for this host's version")
 
         elif key == "l":
             deadlock = ""
@@ -735,7 +754,7 @@ class Dolphie:
                 screen_data = deadlock
                 self.console.print(deadlock, highlight=False)
             else:
-                screen_data = Align.center("No deadlock detected!")
+                screen_data = Align.center("No deadlock detected")
 
         elif key == "m":
             table_grid = Table.grid()
@@ -812,18 +831,26 @@ class Dolphie:
                 self.update_footer("", hide=True)
 
         elif key == "Q":
-            self.query_filter = self.console.input("[#91abec]Query text to filter by[/#91abec]: ")
+            self.app.push_screen(
+                CommandPopup(message="Specify a query text to filter by", variable="query_filter"),
+                self.command_input_to_variable,
+            )
 
         elif key == "q":
             sys.exit()
 
         elif key == "r":
-            refresh_interval = self.console.input("[#91abec]Refresh interval (in seconds)[/#91abec]: ")
 
-            if refresh_interval.isnumeric():
-                self.refresh_interval = int(refresh_interval)
-            else:
-                self.update_footer("[indian_red]Input must be an integer!")
+            def command_get_input(refresh_interval):
+                if refresh_interval.isnumeric():
+                    self.refresh_interval = int(refresh_interval)
+                else:
+                    self.update_footer("[indian_red]Input must be an integer")
+
+            self.app.push_screen(
+                CommandPopup(message="Specify refresh interval (in seconds)"),
+                command_get_input,
+            )
 
         elif key == "R":
             if self.use_performance_schema:
@@ -870,12 +897,17 @@ class Dolphie:
                 self.show_trxs_only = True
 
         elif key == "T":
-            time = self.console.input("[#91abec]Minimum time to display for queries[/#91abec]: ")
 
-            if time.isnumeric():
-                self.time_filter = int(time)
-            else:
-                self.update_footer("[indian_red]Time must be an integer!")
+            def command_get_input(time):
+                if time.isnumeric():
+                    self.time_filter = int(time)
+                else:
+                    self.update_footer("[indian_red]Time must be an integer")
+
+            self.app.push_screen(
+                CommandPopup(message="Specify minimum time to display for queries"),
+                command_get_input,
+            )
 
         elif key == "u":
             user_stat_data = self.create_user_stats_table()
@@ -883,68 +915,78 @@ class Dolphie:
                 screen_data = Align.center(user_stat_data)
             else:
                 self.update_footer(
-                    "[indian_red]This command requires Userstat variable or Performance Schema to be enabled!"
+                    "[indian_red]This command requires Userstat variable or Performance Schema to be enabled"
                 )
 
         elif key == "U":
-            self.user_filter = self.console.input("[#91abec]User to filter by[/#91abec]: ")
-
-        elif key == "Y":
-            self.app.push_screen(CommandPopup("Database to filter by"))
-
-        elif key == "v":
-            input_variable = self.console.input(
-                "[#91abec]Variable wildcard search ([grey78]leave blank for all[#91abec])[/#91abec]: "
+            self.app.push_screen(
+                CommandPopup(message="Specify a user to filter by", variable="user_filter"),
+                self.command_input_to_variable,
             )
 
-            table_grid = Table.grid()
-            table_counter = 1
-            variable_counter = 1
-            row_counter = 1
-            variable_num = 1
-            all_tables = []
-            tables = {}
-            display_variables = {}
+        elif key == "Y":
+            self.app.push_screen(
+                CommandPopup(message="Specify a database to filter by", variable="db_filter"),
+                self.command_input_to_variable,
+            )
+        elif key == "v":
 
-            for variable, value in self.variables.items():
-                if input_variable:
-                    if input_variable not in variable:
-                        continue
+            def command_get_input(input_variable):
+                table_grid = Table.grid()
+                table_counter = 1
+                variable_counter = 1
+                row_counter = 1
+                variable_num = 1
+                all_tables = []
+                tables = {}
+                display_variables = {}
 
-            max_num_tables = 1 if len(display_variables) <= 20 else 3
+                for variable, value in self.variables.items():
+                    if input_variable:
+                        if input_variable in variable:
+                            display_variables[variable] = self.variables[variable]
 
-            # Create the number of tables we want
-            while table_counter <= max_num_tables:
-                tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
-                tables[table_counter].add_column("")
-                tables[table_counter].add_column("")
+                max_num_tables = 1 if len(display_variables) <= 50 else 2
 
-                table_counter += 1
+                # Create the number of tables we want
+                while table_counter <= max_num_tables:
+                    tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
+                    tables[table_counter].add_column("")
+                    tables[table_counter].add_column("")
 
-            # Calculate how many variables per table
-            row_per_count = len(display_variables) // max_num_tables
+                    table_counter += 1
 
-            # Loop variables
-            for variable, value in display_variables.items():
-                tables[variable_num].add_row("[#c5c7d2]%s" % variable, str(value), style="grey93")
+                # Calculate how many variables per table
+                row_per_count = len(display_variables) // max_num_tables
 
-                if variable_counter == row_per_count and row_counter != max_num_tables:
-                    row_counter += 1
-                    variable_counter = 0
-                    variable_num += 1
+                # Loop variables
+                for variable, value in display_variables.items():
+                    tables[variable_num].add_row("[#c5c7d2]%s" % variable, str(value), style="grey93")
 
-                variable_counter += 1
+                    if variable_counter == row_per_count and row_counter != max_num_tables:
+                        row_counter += 1
+                        variable_counter = 0
+                        variable_num += 1
 
-            # Put all the variable data from dict into an array
-            all_tables = [table_data for table_data in tables.values() if table_data]
+                    variable_counter += 1
 
-            # Add the data into a single tuple for add_row
-            if display_variables:
-                table_grid.add_row(*all_tables)
-                screen_data = Align.center(table_grid)
-            else:
-                if input_variable:
-                    self.update_footer("[indian_red]No variable(s) found that match your search!")
+                # Put all the variable data from dict into an array
+                all_tables = [table_data for table_data in tables.values() if table_data]
+
+                # Add the data into a single tuple for add_row
+                if display_variables:
+                    table_grid.add_row(*all_tables)
+                    screen_data = Align.center(table_grid)
+
+                    self.app.push_screen(CommandScreen(self.app_version, self.host, screen_data))
+                else:
+                    if input_variable:
+                        self.update_footer("No variable(s) found that match [b #91abec]%s[/b #91abec]" % input_variable)
+
+            self.app.push_screen(
+                CommandPopup(message="Specify a variable to wildcard search\n([dim]leave blank for all[/dim])"),
+                command_get_input,
+            )
 
         elif key == "z":
             if self.host_cache:

@@ -26,7 +26,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     dashboard_grid.add_column()
     dashboard_grid.add_column()
 
-    row_style = Style(color="#c5c7d2")
     table_title_style = Style(color="grey93", bold=True)
     table_box = box.ROUNDED
     table_line_color = "#b0bad7"
@@ -63,33 +62,28 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     table_information.add_column()
     table_information.add_column(width=25)
+    table_information.add_row("[#c5c7d2]Version", "%s %s" % (dolphie.host_distro, dolphie.mysql_version))
+    table_information.add_row("[#c5c7d2]Uptime", "%s" % uptime)
+    table_information.add_row("[#c5c7d2]Runtime", "%s [#c5c7d2]latency:[/#c5c7d2] %ss" % (runtime, refresh_latency))
+    table_information.add_row("[#c5c7d2]Read Only", "%s" % variables["read_only"])
+    table_information.add_row("[#c5c7d2]Use PS", "%s" % (use_performance_schema_status))
     table_information.add_row(
-        "Version", "[grey93]%s %s" % (dolphie.host_distro, dolphie.mysql_version), style=row_style
-    )
-    table_information.add_row("Uptime", "[grey93]%s" % uptime, style=row_style)
-    table_information.add_row(
-        "Runtime", "[grey93]%s [#c5c7d2]latency: [grey93]%ss" % (runtime, refresh_latency), style=row_style
-    )
-    table_information.add_row("Read Only", "[grey93]%s" % variables["read_only"], style=row_style)
-    table_information.add_row("Use PS", "[grey93]%s" % (use_performance_schema_status), style=row_style)
-    table_information.add_row(
-        "Threads",
-        "[#c5c7d2]con[grey93] %s[#91abec]/[#c5c7d2]run[grey93] %s[#91abec]/[#c5c7d2]cac[grey93] %s"
+        "[#c5c7d2]Threads",
+        "[#c5c7d2]con[/#c5c7d2] %s[#91abec]/[/#91abec][#c5c7d2]run[/#c5c7d2]"
+        " %s[#91abec]/[/#91abec][#c5c7d2]cac[/#c5c7d2] %s"
         % (
             format_number(statuses["Threads_connected"]),
             format_number(statuses["Threads_running"]),
             format_number(statuses["Threads_cached"]),
         ),
-        style=row_style,
     )
     table_information.add_row(
-        "Tables",
-        "[#c5c7d2]open[grey93] %s[#91abec]/[#c5c7d2]opened[grey93] %s"
+        "[#c5c7d2]Tables",
+        "[#c5c7d2]open[/#c5c7d2] %s[#91abec]/[/#91abec][#c5c7d2]opened[/#c5c7d2] %s"
         % (
             format_number(statuses["Open_tables"]),
             format_number(statuses["Opened_tables"]),
         ),
-        style=row_style,
     )
 
     tables_to_add.append(table_information)
@@ -242,9 +236,9 @@ def create_panel(dolphie: Dolphie) -> Table:
         trx_id_counter = "N/A"
 
     # Add data to our table
-    table_innodb.add_row("Read Hit", "[grey93]%s" % innodb_efficiency, style=row_style)
-    table_innodb.add_row("Chkpt Age", "[grey93]%s" % checkpoint_efficiency, style=row_style)
-    table_innodb.add_row("AHI Hit", "[grey93]%s" % (hash_search_efficiency), style=row_style)
+    table_innodb.add_row("[#c5c7d2]Read Hit", "%s" % innodb_efficiency)
+    table_innodb.add_row("[#c5c7d2]Chkpt Age", "%s" % checkpoint_efficiency)
+    table_innodb.add_row("[#c5c7d2]AHI Hit", "%s" % (hash_search_efficiency))
 
     # Don't show thread concurrency information if it isn't set to on, instead show buffer pool stats
     if "innodb_thread_concurrency" in variables and variables["innodb_thread_concurrency"]:
@@ -255,32 +249,21 @@ def create_panel(dolphie: Dolphie) -> Table:
         elif concurrency_ratio >= 60:
             queries_active_formatted = "[bright_yellow]%s" % format_number(queries_active)
         else:
-            queries_active_formatted = "[grey93]%s" % format_number(queries_active)
+            queries_active_formatted = "%s" % format_number(queries_active)
 
         table_innodb.add_row(
-            "Query Active",
-            "[grey93]%s [#91abec]/ [grey93]%s" % (queries_active_formatted, variables["innodb_thread_concurrency"]),
-            style=row_style,
+            "[#c5c7d2]Query Active",
+            "%s [#91abec]/[/#91abec] %s" % (queries_active_formatted, variables["innodb_thread_concurrency"]),
         )
-        table_innodb.add_row("Query Queued", "[grey93]%s" % format_number(queries_queued), style=row_style)
+        table_innodb.add_row("[#c5c7d2]Query Queued", "%s" % format_number(queries_queued))
     else:
+        table_innodb.add_row("[#c5c7d2]BP Size", "%s" % (format_bytes(float(variables["innodb_buffer_pool_size"]))))
         table_innodb.add_row(
-            "BP Size",
-            "[grey93]%s" % (format_bytes(float(variables["innodb_buffer_pool_size"]))),
-            style=row_style,
-        )
-        table_innodb.add_row(
-            "BP Dirty",
-            "[grey93]%s" % (format_bytes(float(statuses["Innodb_buffer_pool_bytes_dirty"]))),
-            style=row_style,
+            "[#c5c7d2]BP Dirty", "%s" % (format_bytes(float(statuses["Innodb_buffer_pool_bytes_dirty"])))
         )
 
-    table_innodb.add_row(
-        "History List",
-        "[grey93]%s" % format_number(history_list_length),
-        style=row_style,
-    )
-    table_innodb.add_row("Unpurged TRX", "[grey93]%s" % format_number(unpurged_trx), style=row_style)
+    table_innodb.add_row("[#c5c7d2]History List", "%s" % format_number(history_list_length))
+    table_innodb.add_row("[#c5c7d2]Unpurged TRX", "%s" % format_number(unpurged_trx))
 
     tables_to_add.append(table_innodb)
 
@@ -316,22 +299,20 @@ def create_panel(dolphie: Dolphie) -> Table:
 
         table_primary.add_column()
         table_primary.add_column(max_width=40)
-        table_primary.add_row("File name", "[grey93]%s" % str(primary_status["File"]), style=row_style)
+        table_primary.add_row("[#c5c7d2]File name", "%s" % str(primary_status["File"]))
         table_primary.add_row(
-            "Position",
-            "[grey93]%s" % (str(primary_status["Position"])),
-            style=row_style,
+            "[#c5c7d2]Position",
+            "%s" % (str(primary_status["Position"])),
         )
         table_primary.add_row(
-            "Size",
-            "[grey93]%s" % format_bytes(primary_status["Position"]),
-            style=row_style,
+            "[#c5c7d2]Size",
+            "%s" % format_bytes(primary_status["Position"]),
         )
-        table_primary.add_row("Diff", "[grey93]%s" % diff_binlog_position, style=row_style)
-        table_primary.add_row("Cache Hit", "[grey93]%s%%" % str(binlog_cache), style=row_style)
+        table_primary.add_row("[#c5c7d2]Diff", "%s" % diff_binlog_position)
+        table_primary.add_row("[#c5c7d2]Cache Hit", "%s%%" % str(binlog_cache))
         # MariaDB Support
         if "gtid_mode" in variables:
-            table_primary.add_row("GTID", "[grey93]%s" % str(variables["gtid_mode"]), style=row_style)
+            table_primary.add_row("[#c5c7d2]GTID", "%s" % str(variables["gtid_mode"]))
         else:
             table_primary.add_row()
         table_primary.add_row()
@@ -382,23 +363,20 @@ def create_panel(dolphie: Dolphie) -> Table:
         rollbacks_per_second = round((statuses["Com_rollback"] - saved_status["Com_rollback"]) / loop_duration_seconds)
 
     table_stats.add_row(
-        "Queries",
-        "[grey93]%s" % format_number(queries_per_second),
-        style=row_style,
+        "[#c5c7d2]Queries",
+        "%s" % format_number(queries_per_second),
     )
-    table_stats.add_row("SELECT", "[grey93]%s" % format_number(selects_per_second), style=row_style)
-    table_stats.add_row("INSERT", "[grey93]%s" % format_number(inserts_per_second), style=row_style)
-    table_stats.add_row("UPDATE", "[grey93]%s" % format_number(updates_per_second), style=row_style)
-    table_stats.add_row("DELETE", "[grey93]%s" % format_number(deletes_per_second), style=row_style)
+    table_stats.add_row("[#c5c7d2]SELECT", "%s" % format_number(selects_per_second))
+    table_stats.add_row("[#c5c7d2]INSERT", "%s" % format_number(inserts_per_second))
+    table_stats.add_row("[#c5c7d2]UPDATE", "%s" % format_number(updates_per_second))
+    table_stats.add_row("[#c5c7d2]DELETE", "%s" % format_number(deletes_per_second))
     table_stats.add_row(
-        "REPLACE",
-        "[grey93]%s" % format_number(replaces_per_second),
-        style=row_style,
+        "[#c5c7d2]REPLACE",
+        "%s" % format_number(replaces_per_second),
     )
     table_stats.add_row(
-        "ROLLBACK",
-        "[grey93]%s" % format_number(rollbacks_per_second),
-        style=row_style,
+        "[#c5c7d2]ROLLBACK",
+        "%s" % format_number(rollbacks_per_second),
     )
 
     tables_to_add.append(table_stats)

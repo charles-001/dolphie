@@ -344,16 +344,13 @@ class DolphieApp(App):
             return
 
         dolphie = self.dolphie
-
-        dashboard = self.query_one("#dashboard_panel")
-        replica = self.query_one("#replica_panel")
-        processlist = self.query_one("#processlist_panel")
-        innodb_io = self.query_one("#innodb_io_panel")
-        innodb_locks = self.query_one("#innodb_locks_panel")
-
         loop_time = datetime.now()
 
         dolphie.statuses = dolphie.fetch_data("status")
+        if not dolphie.saved_status:
+            dolphie.saved_status = dolphie.statuses.copy()
+
+        dashboard = self.query_one("#dashboard_panel")
         if dashboard.display:
             dolphie.variables = dolphie.fetch_data("variables")
             dolphie.primary_status = dolphie.fetch_data("primary_status")
@@ -362,15 +359,19 @@ class DolphieApp(App):
 
             dashboard.update(dashboard_panel.create_panel(self.dolphie))
 
+        processlist = self.query_one("#processlist_panel")
         if processlist.display:
             query_panel.create_panel(self.dolphie)
 
+        replica = self.query_one("#replica_panel")
         if replica.display:
             replica.update(replica_panel.create_panel(self.dolphie))
 
+        innodb_io = self.query_one("#innodb_io_panel")
         if innodb_io.display:
             innodb_io.update(innodb_io_panel.create_panel(self.dolphie))
 
+        innodb_locks = self.query_one("#innodb_locks_panel")
         if innodb_locks.display:
             innodb_locks.update(innodb_locks_panel.create_panel(self.dolphie))
 
@@ -410,10 +411,13 @@ class DolphieApp(App):
 
 
 def main():
+    # Set environment variables so Textual can use all the pretty colors
+    os.environ["TERM"] = "xterm-256color"
+    os.environ["COLORTERM"] = "truecolor"
+
     app = DolphieApp()
     app.run()
 
 
 if __name__ == "__main__":
-    app = DolphieApp()
-    app.run()
+    main()

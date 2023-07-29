@@ -13,16 +13,12 @@ def create_panel(dolphie: Dolphie) -> Table:
     statuses = dolphie.statuses
     loop_duration_seconds = dolphie.loop_duration_seconds
     saved_status = dolphie.saved_status
-
-    if not saved_status:
-        saved_status = statuses.copy()
+    innodb_status = dolphie.innodb_status
 
     row_style = Style(color="grey93")
     table_title_style = Style(color="grey93", bold=True)
     table_box = box.ROUNDED
     table_line_color = "#b0bad7"
-
-    innodb_status = dolphie.innodb_status
 
     # Only run this if dashboard isn't turned on
     dashboard = dolphie.app.query_one("#dashboard_panel")

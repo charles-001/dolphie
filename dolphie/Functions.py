@@ -68,7 +68,7 @@ def format_number(n, decimal=2):
             # If it isn't float/int, return back the original string
             return n
 
-    minus_buff = n
+    # minus_buff = n
     n = abs(n)
     for x in range(len(sci_expr)):
         if n >= sci_expr[x] and n < sci_expr[x + 1]:
@@ -77,7 +77,7 @@ def format_number(n, decimal=2):
                 num = str(round_num(n / sci_expr[x], decimal))
             else:
                 num = str(n)
-            return num + "[#91abec]" + sufix if minus_buff > 0 else "-" + num + "[#91abec]" + sufix
+            return f"{num}[#91abec]{sufix}[/#91abec]" if sufix else num
 
     return str(0)
 
