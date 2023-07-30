@@ -139,11 +139,11 @@ def fetch_data(dolphie: Dolphie):
             where_clause.append("Host LIKE '%s%%'" % dolphie.host_filter)
 
     # Filter time
-    if dolphie.time_filter:
+    if dolphie.query_time_filter:
         if dolphie.use_performance_schema:
-            where_clause.append("processlist_time >= '%s'" % dolphie.time_filter)
+            where_clause.append("processlist_time >= '%s'" % dolphie.query_time_filter)
         else:
-            where_clause.append("Time >= '%s'" % dolphie.time_filter)
+            where_clause.append("Time >= '%s'" % dolphie.query_time_filter)
 
     # Filter query
     if dolphie.query_filter:

@@ -63,7 +63,7 @@ class Dolphie:
         self.user_filter: str = None
         self.db_filter: str = None
         self.host_filter: str = None
-        self.time_filter: str = 0
+        self.query_time_filter: str = 0
         self.query_filter: str = None
 
         # Loop variables
@@ -295,7 +295,7 @@ class Dolphie:
             self.user_filter = ""
             self.db_filter = ""
             self.host_filter = ""
-            self.time_filter = ""
+            self.query_time_filter = ""
             self.query_filter = ""
 
             self.update_footer("Cleared all filters")
@@ -343,186 +343,72 @@ class Dolphie:
                 Align.center("Total: [b #91abec]%s[/b #91abec]" % db_count),
             )
 
-        elif key == "E":
+        elif key == "e":
             if not self.mysql_version.startswith("8"):
-                self.update_footer("[indian_red]This command requires MySQL 8")
+                self.update_footer("Error log command requires MySQL 8")
             else:
                 self.app.push_screen(EventLog(self.app_version, self.host, self.db))
 
-        elif key == "e":
+        elif key == "f":
 
-            def command_get_input(thread_id):
-                if thread_id:
-                    if thread_id in self.processlist_threads:
-                        row_style = Style(color="grey93")
-                        table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
-                        table.add_column("")
-                        table.add_column("")
+            def command_get_input(filter_data):
+                filter_name = filter_data[0]
+                filter_value = filter_data[1]
 
-                        table.add_row("[#c5c7d2]Thread ID", str(thread_id), style=row_style)
-                        table.add_row(
-                            "[#c5c7d2]User",
-                            self.processlist_threads[thread_id]["user"],
-                            style=row_style,
+                if filter_name == "user":
+                    self.user_filter = next(
+                        (data["user"] for data in self.processlist_threads.values() if filter_value == data["user"]),
+                        None,
+                    )
+                    if not self.user_filter:
+                        self.update_footer(
+                            f"[#fc7979]User[/#fc7979] {filter_value}[#fc7979] was not found in processlist"
                         )
-                        table.add_row(
-                            "[#c5c7d2]Host",
-                            self.processlist_threads[thread_id]["host"],
-                            style=row_style,
+                        return
+                elif filter_name == "database":
+                    self.db_filter = next(
+                        (data["db"] for data in self.processlist_threads.values() if filter_value == data["db"]),
+                        None,
+                    )
+                    if not self.db_filter:
+                        self.update_footer(
+                            f"[#fc7979]Database[/#fc7979] {filter_value}[#fc7979] was not found in processlist"
                         )
-                        table.add_row(
-                            "[#c5c7d2]Database",
-                            self.processlist_threads[thread_id]["db"],
-                            style=row_style,
+                        return
+                elif filter_name == "host":
+                    self.host_filter = next((ip for ip, addr in self.host_cache.items() if filter_value == addr), None)
+                    if not self.host_filter:
+                        self.update_footer(
+                            f"[#fc7979]Host[/#fc7979] {filter_value}[#fc7979] was not found in processlist"
                         )
-                        table.add_row(
-                            "[#c5c7d2]Command",
-                            self.processlist_threads[thread_id]["command"],
-                            style=row_style,
-                        )
-                        table.add_row(
-                            "[#c5c7d2]State",
-                            self.processlist_threads[thread_id]["state"],
-                            style=row_style,
-                        )
-                        table.add_row(
-                            "[#c5c7d2]Time",
-                            self.processlist_threads[thread_id]["hhmmss_time"],
-                            style=row_style,
-                        )
-                        table.add_row(
-                            "[#c5c7d2]Rows Locked",
-                            self.processlist_threads[thread_id]["trx_rows_locked"],
-                            style=row_style,
-                        )
-                        table.add_row(
-                            "[#c5c7d2]Rows Modified",
-                            self.processlist_threads[thread_id]["trx_rows_modified"],
-                            style=row_style,
-                        )
-                        if (
-                            "innodb_thread_concurrency" in self.variables
-                            and self.variables["innodb_thread_concurrency"]
-                        ):
-                            table.add_row(
-                                "[#c5c7d2]Tickets",
-                                self.processlist_threads[thread_id]["trx_concurrency_tickets"],
-                                style=row_style,
-                            )
-                        table.add_row("", "")
-                        table.add_row(
-                            "[#c5c7d2]TRX State",
-                            self.processlist_threads[thread_id]["trx_state"],
-                            style=row_style,
-                        )
-                        table.add_row(
-                            "[#c5c7d2]TRX Operation",
-                            self.processlist_threads[thread_id]["trx_operation_state"],
-                            style=row_style,
-                        )
-
-                        query = sqlformat(self.processlist_threads[thread_id]["query"], reindent_aligned=True)
-                        query_db = self.processlist_threads[thread_id]["db"]
-
-                        if query and query_db:
-                            explain_failure = None
-                            explain_data = None
-
-                            formatted_query = Syntax(
-                                query,
-                                "sql",
-                                line_numbers=False,
-                                word_wrap=True,
-                                theme="monokai",
-                                background_color="#000718",
-                            )
-
-                            try:
-                                self.db.cursor.execute("USE %s" % query_db)
-                                self.db.cursor.execute("EXPLAIN %s" % query)
-
-                                explain_data = self.db.fetchall()
-                            except pymysql.Error as e:
-                                explain_failure = (
-                                    "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
-                                )
-
-                            if explain_data:
-                                explain_table = Table(box=box.ROUNDED, style="#b0bad7")
-
-                                columns = []
-                                for row in explain_data:
-                                    values = []
-                                    for column, value in row.items():
-                                        # Exclude possbile_keys field since it takes up too much space
-                                        if column == "possible_keys":
-                                            continue
-
-                                        # Don't duplicate columns
-                                        if column not in columns:
-                                            explain_table.add_column(column)
-                                            columns.append(column)
-
-                                        if column == "key" and value is None:
-                                            value = "[b white on red]NO INDEX[/b white on red]"
-
-                                        if column == "rows":
-                                            value = format_number(value)
-
-                                        values.append(str(value))
-
-                                    explain_table.add_row(*values, style="grey93")
-
-                                screen_data = Group(
-                                    Align.center(table),
-                                    "",
-                                    Align.center(formatted_query),
-                                    "",
-                                    Align.center(explain_table),
-                                )
-                            else:
-                                screen_data = Group(
-                                    Align.center(table),
-                                    "",
-                                    Align.center(formatted_query),
-                                    "",
-                                    Align.center(explain_failure),
-                                )
-                        else:
-                            screen_data = Align.center(table)
-
-                        self.app.push_screen(CommandScreen(self.app_version, self.host, screen_data))
+                        return
+                elif filter_name == "query_time":
+                    if filter_value.isnumeric():
+                        self.query_time_filter = int(filter_value)
                     else:
-                        self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
+                        self.update_footer("[bright_red]Query time must be an integer!")
+                        return
+                elif filter_name == "query_text":
+                    self.query_filter = filter_value
+
+                self.update_footer("Now filtering %s by [b #91abec]%s[/b #91abec]" % (filter_name, filter_value))
 
             self.app.push_screen(
-                CommandPopup(message="Specify a Thread ID to explain its query"),
+                CommandPopup(message="Select which field you'd like to filter by", show_filter_options=True),
                 command_get_input,
             )
-
-        elif key == "H":
-
-            def command_get_input(host):
-                found = False
-                # Since our filtering is done by the processlist query, the value needs to be what's in host cache
-                for ip, addr in self.host_cache.items():
-                    if host == addr:
-                        self.host_filter = ip
-
-                        found = True
-
-                if host and not found:
-                    self.update_footer("Host [b #91abec]%s[/b #91abec] was not found processlist" % host)
-
-            self.app.push_screen(CommandPopup(message="Specify a host to filter by"), command_get_input)
 
         elif key == "i":
             if self.show_idle_queries:
                 self.show_idle_queries = False
                 self.sort_by_time_descending = True
+
+                self.update_footer("Processlist will now hide idle queries")
             else:
                 self.show_idle_queries = True
                 self.sort_by_time_descending = False
+
+                self.update_footer("Processlist will now show idle queries")
 
         elif key == "k":
 
@@ -756,33 +642,177 @@ class Dolphie:
         elif key == "s":
             if self.sort_by_time_descending:
                 self.sort_by_time_descending = False
+                self.update_footer("Processlist will now sort queries in ascending order")
             else:
                 self.sort_by_time_descending = True
+                self.update_footer("Processlist will now sort queries in descending order")
 
         elif key == "S":
             if self.show_last_executed_query:
                 self.show_last_executed_query = False
+                self.update_footer("Processlist will now hide last executed query")
             else:
                 self.show_last_executed_query = True
+                self.update_footer("Processlist will now show last executed query")
 
         elif key == "t":
-            if self.show_trxs_only:
-                self.show_trxs_only = False
-            else:
-                self.show_trxs_only = True
 
-        elif key == "T":
+            def command_get_input(thread_id):
+                if thread_id:
+                    if thread_id in self.processlist_threads:
+                        row_style = Style(color="grey93")
+                        table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
+                        table.add_column("")
+                        table.add_column("")
 
-            def command_get_input(time):
-                if time.isnumeric():
-                    self.time_filter = int(time)
-                else:
-                    self.update_footer("[indian_red]Time must be an integer")
+                        table.add_row("[#c5c7d2]Thread ID", str(thread_id), style=row_style)
+                        table.add_row(
+                            "[#c5c7d2]User",
+                            self.processlist_threads[thread_id]["user"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Host",
+                            self.processlist_threads[thread_id]["host"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Database",
+                            self.processlist_threads[thread_id]["db"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Command",
+                            self.processlist_threads[thread_id]["command"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]State",
+                            self.processlist_threads[thread_id]["state"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Time",
+                            self.processlist_threads[thread_id]["hhmmss_time"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Rows Locked",
+                            self.processlist_threads[thread_id]["trx_rows_locked"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]Rows Modified",
+                            self.processlist_threads[thread_id]["trx_rows_modified"],
+                            style=row_style,
+                        )
+                        if (
+                            "innodb_thread_concurrency" in self.variables
+                            and self.variables["innodb_thread_concurrency"]
+                        ):
+                            table.add_row(
+                                "[#c5c7d2]Tickets",
+                                self.processlist_threads[thread_id]["trx_concurrency_tickets"],
+                                style=row_style,
+                            )
+                        table.add_row("", "")
+                        table.add_row(
+                            "[#c5c7d2]TRX State",
+                            self.processlist_threads[thread_id]["trx_state"],
+                            style=row_style,
+                        )
+                        table.add_row(
+                            "[#c5c7d2]TRX Operation",
+                            self.processlist_threads[thread_id]["trx_operation_state"],
+                            style=row_style,
+                        )
+
+                        query = sqlformat(self.processlist_threads[thread_id]["query"], reindent_aligned=True)
+                        query_db = self.processlist_threads[thread_id]["db"]
+
+                        if query and query_db:
+                            explain_failure = None
+                            explain_data = None
+
+                            formatted_query = Syntax(
+                                query,
+                                "sql",
+                                line_numbers=False,
+                                word_wrap=True,
+                                theme="monokai",
+                                background_color="#000718",
+                            )
+
+                            try:
+                                self.db.cursor.execute("USE %s" % query_db)
+                                self.db.cursor.execute("EXPLAIN %s" % query)
+
+                                explain_data = self.db.fetchall()
+                            except pymysql.Error as e:
+                                explain_failure = (
+                                    "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
+                                )
+
+                            if explain_data:
+                                explain_table = Table(box=box.ROUNDED, style="#b0bad7")
+
+                                columns = []
+                                for row in explain_data:
+                                    values = []
+                                    for column, value in row.items():
+                                        # Exclude possbile_keys field since it takes up too much space
+                                        if column == "possible_keys":
+                                            continue
+
+                                        # Don't duplicate columns
+                                        if column not in columns:
+                                            explain_table.add_column(column)
+                                            columns.append(column)
+
+                                        if column == "key" and value is None:
+                                            value = "[b white on red]NO INDEX[/b white on red]"
+
+                                        if column == "rows":
+                                            value = format_number(value)
+
+                                        values.append(str(value))
+
+                                    explain_table.add_row(*values, style="grey93")
+
+                                screen_data = Group(
+                                    Align.center(table),
+                                    "",
+                                    Align.center(formatted_query),
+                                    "",
+                                    Align.center(explain_table),
+                                )
+                            else:
+                                screen_data = Group(
+                                    Align.center(table),
+                                    "",
+                                    Align.center(formatted_query),
+                                    "",
+                                    Align.center(explain_failure),
+                                )
+                        else:
+                            screen_data = Align.center(table)
+
+                        self.app.push_screen(CommandScreen(self.app_version, self.host, screen_data))
+                    else:
+                        self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
 
             self.app.push_screen(
-                CommandPopup(message="Specify minimum time to display for queries"),
+                CommandPopup(message="Specify a Thread ID to explain its query"),
                 command_get_input,
             )
+
+        elif key == "T":
+            if self.show_trxs_only:
+                self.show_trxs_only = False
+                self.update_footer("Processlist will no longer only show queries with a running transaction")
+            else:
+                self.show_trxs_only = True
+                self.update_footer("Processlist will now show only queries with a running transaction")
 
         elif key == "u":
             user_stat_data = self.create_user_stats_table()
@@ -793,17 +823,6 @@ class Dolphie:
                     "[indian_red]This command requires Userstat variable or Performance Schema to be enabled"
                 )
 
-        elif key == "U":
-            self.app.push_screen(
-                CommandPopup(message="Specify a user to filter by", variable="user_filter"),
-                self.command_input_to_variable,
-            )
-
-        elif key == "Y":
-            self.app.push_screen(
-                CommandPopup(message="Specify a database to filter by", variable="db_filter"),
-                self.command_input_to_variable,
-            )
         elif key == "v":
 
             def command_get_input(input_variable):
@@ -884,27 +903,13 @@ class Dolphie:
         elif key == "question_mark":
             row_style = Style(color="grey93")
 
-            filters = {
-                "C": "Clear all filters",
-                "H": "Filter by host/IP",
-                "Q": "Filter by query text",
-                "T": "Filter by minimum query time",
-                "Y": "Filter by database",
-                "U": "Filter by user",
-            }
-            table_filters = Table(box=box.ROUNDED, style="#b0bad7", title="Filters", title_style="bold")
-            table_filters.add_column("Key", justify="center", style="b #91abec")
-            table_filters.add_column("Description")
-            for key, description in sorted(filters.items()):
-                table_filters.add_row("[#91abec]%s" % key, description, style=row_style)
-
             keys = {
                 "1": "Switch between using Processlist/Performance Schema for listing queries",
                 "2": "Display output from SHOW ENGINE INNODB STATUS",
                 "a": "Show/hide additional processlist columns",
                 "d": "Display all databases",
-                "e": "Explain query of a thread and display thread information",
-                "E": "Display error log from Performance Schema",
+                "e": "Display error log from Performance Schema",
+                "f": "Filter processlist by a supported field",
                 "i": "Show/hide idle queries",
                 "k": "Kill a query by thread ID",
                 "K": "Kill a query by either user/host/time range",
@@ -913,7 +918,8 @@ class Dolphie:
                 "p": "Pause Dolphie",
                 "q": "Quit Dolphie",
                 "r": "Set the refresh interval",
-                "t": "Show/hide running transactions only",
+                "t": "Show details of a thread along with an EXPLAIN of its query",
+                "T": "Show/hide running transactions only",
                 "s": "Sort query list by time in descending/ascending order",
                 "S": "Show/hide last executed query for sleeping thread (Performance Schema only)",
                 "u": "List users (results vary depending on if userstat variable is enabled)",
@@ -943,7 +949,6 @@ class Dolphie:
                     "The percentage of how many lookups there are from Adapative Hash Index compared to it not"
                     " being used"
                 ),
-                "Pending AIO": "W means writes, R means reads. The values should normally be 0",
                 "Diff": "This is the size difference of the binary log between each refresh interval",
                 "Cache Hit": "The percentage of how many binary log lookups are from cache instead of from disk",
                 "History List": "History list length (number of un-purged row changes in InnoDB's undo logs)",
@@ -966,11 +971,8 @@ class Dolphie:
             for datapoint, description in sorted(datapoints.items()):
                 table_info.add_row("[#91abec]%s" % datapoint, description, style=row_style)
 
-            table_grid = Table.grid()
-            table_grid.add_row(table_keys, table_filters)
-
             screen_data = Group(
-                Align.center(table_grid),
+                Align.center(table_keys),
                 "",
                 Align.center(table_info),
             )

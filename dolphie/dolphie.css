@@ -69,6 +69,60 @@ TopBar {
     padding-top: 1;
 }
 
+CommandPopup > Vertical {
+    background: #181e2e;
+    border: thick #212941;
+    height: auto;
+    width: auto;
+}
+CommandPopup > Vertical > * {
+    width: auto;
+    height: auto;
+}
+CommandPopup Input {
+    width: 40;
+    margin: 1 2;
+    background: #181e2e;
+    border: solid #687bb0;
+}
+CommandPopup Input>.input--placeholder {
+    color: #7e8dac;
+}
+CommandPopup Button {
+    margin-right: 1;
+}
+CommandPopup Label {
+    text-style: bold;
+    width: 100%;
+    content-align: center middle;
+}
+CommandPopup #buttons {
+    width: 100%;
+    align-horizontal: center;
+}
+CommandPopup RadioSet {
+    background: #181e2e;
+    border: none;
+    padding-top: 1;
+    align: center middle;
+    width: 100%;
+}
+CommandPopup RadioSet ToggleButton.-selected > .toggle--button {
+    color: #62c39a;
+}
+CommandPopup RadioButton .toggle--button {
+    background: #343d56;
+}
+CommandPopup RadioSet:focus > RadioButton.-selected > .toggle--label {
+    text-style: underline;
+}
+CommandPopup RadioSet:focus > .toggle--label:focus {
+    text-style: underline;
+}
+CommandPopup RadioSet ToggleButton:hover {
+    background: #181e2e;
+}
+
 Button.-primary {
     background: #21315d;
     border-top: tall #486297;
