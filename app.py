@@ -27,7 +27,7 @@ from rich.prompt import Prompt
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
-from textual.widgets import Label, Static, Switch
+from textual.widgets import DataTable, Label, Static, Switch
 
 
 def parse_args(dolphie: Dolphie):
@@ -462,23 +462,24 @@ class DolphieApp(App):
 
     def compose(self) -> ComposeResult:
         yield self.dolphie.header
-        with Horizontal(id="main_switch_container"):
-            yield Label("Dashboard")
-            yield Switch(animate=False, id="switch_dashboard")
-            yield Label("Processlist")
-            yield Switch(animate=False, id="switch_processlist")
-            yield Label("Replication")
-            yield Switch(animate=False, id="switch_replication")
-            yield Label("InnoDB IO")
-            yield Switch(animate=False, id="switch_innodb_io")
-            yield Label("InnoDB Locks")
-            yield Switch(animate=False, id="switch_innodb_locks")
-        yield Static(id="dashboard_panel", classes="panel")
-        yield Static(id="replica_panel", classes="panel")
-        yield Static(id="innodb_io_panel", classes="panel")
-        yield Static(id="innodb_locks_panel", classes="panel")
-        yield VerticalScroll(self.dolphie.processlist_datatable, id="processlist_panel", classes="panel")
-        yield Static(id="footer")
+        with VerticalScroll():
+            with Horizontal(id="main_switch_container"):
+                yield Label("Dashboard")
+                yield Switch(animate=False, id="switch_dashboard")
+                yield Label("Processlist")
+                yield Switch(animate=False, id="switch_processlist")
+                yield Label("Replication")
+                yield Switch(animate=False, id="switch_replication")
+                yield Label("InnoDB IO")
+                yield Switch(animate=False, id="switch_innodb_io")
+                yield Label("InnoDB Locks")
+                yield Switch(animate=False, id="switch_innodb_locks")
+            yield Static(id="dashboard_panel", classes="panel")
+            yield Static(id="replica_panel", classes="panel")
+            yield Static(id="innodb_io_panel", classes="panel")
+            yield Static(id="innodb_locks_panel", classes="panel")
+            yield DataTable(id="processlist_panel", classes="panel", show_cursor=False)
+            yield Static(id="footer")
 
 
 def main():

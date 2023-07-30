@@ -47,13 +47,18 @@ def create_panel(dolphie: Dolphie) -> DataTable:
         ]
     )
 
-    dolphie.processlist_datatable.clear(columns=True)
+    processlist_datatable = dolphie.app.query_one("#processlist_panel")
+    if len(processlist_datatable.columns) != len(columns):
+        processlist_datatable.clear(columns=True)
+    else:
+        processlist_datatable.clear()
 
-    for column_data in columns:
-        column_name = column_data["name"]
-        column_key = column_data["field"]
-        column_width = column_data["width"]
-        dolphie.processlist_datatable.add_column(column_name, key=column_key, width=column_width)
+    if not processlist_datatable.columns:
+        for column_data in columns:
+            column_name = column_data["name"]
+            column_key = column_data["field"]
+            column_width = column_data["width"]
+            processlist_datatable.add_column(column_name, key=column_key, width=column_width)
 
     for id, thread in dolphie.processlist_threads.items():
         if thread["command"] == "Killed":
@@ -74,7 +79,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
 
             row_values.append(value)
 
-        dolphie.processlist_datatable.add_row(*row_values)
+        processlist_datatable.add_row(*row_values)
 
 
 def fetch_data(dolphie: Dolphie):

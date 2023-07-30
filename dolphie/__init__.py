@@ -25,7 +25,6 @@ from rich.syntax import Syntax
 from rich.table import Table
 from sqlparse import format as sqlformat
 from textual.app import App
-from textual.widgets import DataTable
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -39,7 +38,6 @@ class Dolphie:
     def __init__(self, app: App):
         self.app = app
         self.console = Console()
-        self.processlist_datatable = DataTable(show_cursor=False)
 
         # Config options
         self.user: str = None
@@ -291,7 +289,7 @@ class Dolphie:
             else:
                 self.show_additional_query_columns = True
 
-        elif key == "C":
+        elif key == "c":
             self.user_filter = ""
             self.db_filter = ""
             self.host_filter = ""
@@ -514,7 +512,7 @@ class Dolphie:
             if output:
                 deadlock = output.group(1)
 
-                deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
+                deadlock = deadlock.replace("***", "[#f1fb82]*****[/#f1fb82]")
                 screen_data = deadlock
             else:
                 screen_data = Align.center("No deadlock detected")
@@ -856,6 +854,7 @@ class Dolphie:
                 "1": "Switch between using Processlist/Performance Schema for listing queries",
                 "2": "Display output from SHOW ENGINE INNODB STATUS",
                 "a": "Show/hide additional processlist columns",
+                "c": "Clear all filters set",
                 "d": "Display all databases",
                 "e": "Display error log from Performance Schema",
                 "f": "Filter processlist by a supported field",

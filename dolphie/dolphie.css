@@ -173,7 +173,8 @@ Switch.-on > .switch--slider {
 }
 
 #main_switch_container {
-    align: center middle;
+    dock: top;
+    align: center top;
     padding-top: 1;
     height: auto;
 }

@@ -251,27 +251,29 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         )
 
         table.add_row("[#c5c7d2]GTID", "%s" % data["gtid"])
+
         if data["mysql_gtid_enabled"]:
             executed_gtid_set = data["Executed_Gtid_Set"]
             retrieved_gtid_set = data["Retrieved_Gtid_Set"]
 
-            for m in re.findall(r"(\w+-\w+-\w+-\w+-)(\w+)", retrieved_gtid_set):
-                source_id = m[0] + m[1]
-                if source_id == dolphie.server_uuid:
-                    retrieved_gtid_set = retrieved_gtid_set.replace(m[0], "[#969aad]…[medium_spring_green]")
+            # Compile the regular expression patterns outside the loops for efficiency
+            pattern = re.compile(r"\b(\w+-\w+-\w+-\w+-)(\w+:\d+-\d+)\b")
+
+            def replace_gtid(match):
+                gtid_prefix = match.group(1)
+                last_part = match.group(2).split(":")[0]  # Get the last part before the colon
+                gtid_suffix = ":" + match.group(2).split(":")[1]  # Get the part after the colon
+
+                if gtid_prefix + last_part == dolphie.server_uuid:
+                    return f"… [#54efae]{last_part}[/#54efae]{gtid_suffix}"
                 else:
-                    retrieved_gtid_set = retrieved_gtid_set.replace(m[0], "[#969aad]…[#91abec]")
+                    return f"… [#91abec]{last_part}[/#91abec]{gtid_suffix}"
 
-                retrieved_gtid_set = retrieved_gtid_set.replace(m[1], "%s" % m[1])
+            # Process retrieved_gtid_set
+            retrieved_gtid_set = pattern.sub(replace_gtid, retrieved_gtid_set)
 
-            for m in re.findall(r"(\w+-\w+-\w+-\w+-)(\w+)", executed_gtid_set):
-                source_id = m[0] + m[1]
-                if source_id == dolphie.server_uuid:
-                    executed_gtid_set = executed_gtid_set.replace(m[0], "[#969aad]…[medium_spring_green]")
-                else:
-                    executed_gtid_set = executed_gtid_set.replace(m[0], "[#969aad]…[#91abec]")
-
-                executed_gtid_set = executed_gtid_set.replace(m[1], "%s" % m[1])
+            # Process executed_gtid_set
+            executed_gtid_set = pattern.sub(replace_gtid, executed_gtid_set)
 
             table.add_row("[#c5c7d2]Auto Position", "%s" % data["Auto_Position"])
             table.add_row("[#c5c7d2]Retrieved GTID Set", "%s" % retrieved_gtid_set)
