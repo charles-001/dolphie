@@ -14,7 +14,7 @@ from dolphie.ManualException import ManualException
 from dolphie.Queries import Queries
 from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log import EventLog
-from dolphie.Widgets.popup import CommandPopup
+from dolphie.Widgets.modal import CommandModal
 from dolphie.Widgets.topbar import TopBar
 from packaging.version import parse as parse_version
 from rich import box
@@ -324,7 +324,7 @@ class Dolphie:
 
             # Sort the databases by name
             for database in databases:
-                tables[table_counter].add_row(database["SCHEMA_NAME"], style="grey93")
+                tables[table_counter].add_row(database["SCHEMA_NAME"])
                 db_counter += 1
 
                 if db_counter > row_per_count and table_counter < max_num_tables:
@@ -354,6 +354,10 @@ class Dolphie:
             def command_get_input(filter_data):
                 filter_name = filter_data[0]
                 filter_value = filter_data[1]
+
+                if not filter_value:
+                    self.update_footer("[#fc7979]You did not specify a filter value")
+                    return
 
                 if filter_name == "user":
                     self.user_filter = next(
@@ -394,7 +398,7 @@ class Dolphie:
                 self.update_footer("Now filtering %s by [b #91abec]%s[/b #91abec]" % (filter_name, filter_value))
 
             self.app.push_screen(
-                CommandPopup(message="Select which field you'd like to filter by", show_filter_options=True),
+                CommandModal(message="Select which field you'd like to filter by", show_filter_options=True),
                 command_get_input,
             )
 
@@ -413,125 +417,91 @@ class Dolphie:
         elif key == "k":
 
             def command_get_input(thread_id):
-                if thread_id:
-                    if thread_id in self.processlist_threads:
-                        try:
-                            if self.host_is_rds:
-                                self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                            else:
-                                self.db.cursor.execute("KILL %s" % thread_id)
+                if not thread_id:
+                    self.update_footer("[#fc7979]You did not specify a Thread ID")
+                    return
 
-                            self.update_footer("Killed thread [b #91abec]%s[/b #91abec]" % thread_id)
-                        except Exception as e:
-                            self.update_footer("[b][indian_red]Error[/b]: %s" % e.args[1])
-                    else:
-                        self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
+                if thread_id in self.processlist_threads:
+                    try:
+                        if self.host_is_rds:
+                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                        else:
+                            self.db.cursor.execute("KILL %s" % thread_id)
 
-            self.app.push_screen(CommandPopup(message="Specify a Thread ID to kill"), command_get_input)
+                        self.update_footer("Killed thread [b #91abec]%s[/b #91abec]" % thread_id)
+                    except Exception as e:
+                        self.update_footer("[b][#fc7979]Error[/b]: %s" % e.args[1])
+                else:
+                    self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
+
+            self.app.push_screen(CommandModal(message="Specify a Thread ID to kill"), command_get_input)
 
         elif key == "K":
-            include_sleep = self.console.input("[#91abec]Include queries in sleep state? (y/n)[/#91abec]: ")
 
-            if include_sleep != "y" and include_sleep != "n":
-                self.update_footer("[indian_red]Invalid option")
-            else:
-                kill_type = self.console.input("[#91abec]Kill by username/hostname/time range (u/h/t)[/#91abec]: ")
-                threads_killed = 0
+            def command_get_input(data):
+                def execute_kill(thread_id):
+                    if self.host_is_rds:
+                        self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                    else:
+                        self.db.cursor.execute("KILL %s" % thread_id)
 
-                commands_without_sleep = ["Query", "Execute"]
-                commands_with_sleep = ["Query", "Execute", "Sleep"]
+                kill_type = data[0]
+                kill_value = data[1]
+                include_sleeping_queries = data[2]
 
-                if kill_type == "u":
-                    user = self.console.input("[#91abec]User[/#91abec]: ")
+                if not kill_value:
+                    self.update_footer("[#fc7979]You did not specify a %s" % kill_type)
+                    return
 
-                    for thread_id, thread in self.processlist_threads.items():
-                        try:
-                            if thread["user"] == user:
-                                if include_sleep == "y":
-                                    if thread["command"] in commands_with_sleep:
-                                        if self.host_is_rds:
-                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                                        else:
-                                            self.db.cursor.execute("KILL %s" % thread_id)
-
-                                        threads_killed += 1
-                                else:
-                                    if thread["command"] in commands_without_sleep:
-                                        if self.host_is_rds:
-                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                                        else:
-                                            self.db.cursor.execute("KILL %s" % thread_id)
-
-                                        threads_killed += 1
-                        except pymysql.OperationalError:
-                            continue
-
-                elif kill_type == "h":
-                    host = self.console.input("[#91abec]Host/IP[/#91abec]: ")
-
-                    for thread_id, thread in self.processlist_threads.items():
-                        try:
-                            if thread["host"] == host:
-                                if include_sleep == "y":
-                                    if thread["command"] in commands_with_sleep:
-                                        if self.host_is_rds:
-                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                                        else:
-                                            self.db.cursor.execute("KILL %s" % thread_id)
-
-                                        threads_killed += 1
-                                else:
-                                    if thread["command"] in commands_without_sleep:
-                                        if self.host_is_rds:
-                                            self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                                        else:
-                                            self.db.cursor.execute("KILL %s" % thread_id)
-
-                                        threads_killed += 1
-                        except pymysql.OperationalError:
-                            continue
-
-                elif kill_type == "t":
-                    time = self.console.input("[#91abec]Time range (ex. 10-20)[/#91abec]: ")
-
-                    if re.search(r"(\d+-\d+)", time):
-                        time_range = time.split("-")
+                if kill_type == "username":
+                    key = "user"
+                elif kill_type == "host":
+                    key = "host"
+                elif kill_type == "time_range":
+                    key = "time"
+                    if re.search(r"(\d+-\d+)", kill_value):
+                        time_range = kill_value.split("-")
                         lower_limit = int(time_range[0])
                         upper_limit = int(time_range[1])
 
                         if lower_limit > upper_limit:
-                            self.update_footer("[indian_red]Invalid time range! Lower limit can't be higher than upper")
-                        else:
-                            for thread_id, thread in self.processlist_threads.items():
-                                try:
-                                    if thread["time"] >= lower_limit and thread["time"] <= upper_limit:
-                                        if include_sleep == "y":
-                                            if thread["command"] in commands_with_sleep:
-                                                if self.host_is_rds:
-                                                    self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                                                else:
-                                                    self.db.cursor.execute("KILL %s" % thread_id)
-
-                                                threads_killed += 1
-                                        else:
-                                            if thread["command"] in commands_without_sleep:
-                                                if self.host_is_rds:
-                                                    self.db.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                                                else:
-                                                    self.db.cursor.execute("KILL %s" % thread_id)
-
-                                                threads_killed += 1
-                                except pymysql.OperationalError:
-                                    continue
+                            self.update_footer("[#fc7979]Invalid time range! Lower limit can't be higher than upper")
+                            return
                     else:
-                        self.update_footer("[indian_red]Invalid time range")
+                        self.update_footer("[#fc7979]Invalid time range")
+                        return
                 else:
-                    self.update_footer("[indian_red]Invalid option")
+                    self.update_footer("[#fc7979]Invalid option")
+                    return
+
+                threads_killed = 0
+                commands_to_kill = ["Query", "Execute"]
+                if include_sleeping_queries:
+                    commands_to_kill.append("Sleep")
+
+                for thread_id, thread in self.processlist_threads.items():
+                    try:
+                        if thread["command"] in commands_to_kill:
+                            if kill_type == "time_range":
+                                if thread["time"] >= lower_limit and thread["time"] <= upper_limit:
+                                    execute_kill(thread_id)
+                                    threads_killed += 1
+                            else:
+                                if thread[key] == kill_value:
+                                    execute_kill(thread_id)
+                                    threads_killed += 1
+                    except pymysql.OperationalError:
+                        continue
 
                 if threads_killed:
-                    self.update_footer("[grey93]Killed [#91abec]%s [grey93]threads" % threads_killed)
+                    self.update_footer("Killed [#91abec]%s[/#91abec] threads" % threads_killed)
                 else:
-                    self.update_footer("[#91abec]No threads were killed")
+                    self.update_footer("No threads were killed")
+
+            self.app.push_screen(
+                CommandModal(message="Kill thread(s) based around parameters", show_kill_options=True),
+                command_get_input,
+            )
 
         elif key == "l":
             deadlock = ""
@@ -546,7 +516,6 @@ class Dolphie:
 
                 deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
                 screen_data = deadlock
-                self.console.print(deadlock, highlight=False)
             else:
                 screen_data = Align.center("No deadlock detected")
 
@@ -617,12 +586,6 @@ class Dolphie:
                 self.pause_refresh = False
                 self.update_footer("", hide=True)
 
-        elif key == "Q":
-            self.app.push_screen(
-                CommandPopup(message="Specify a query text to filter by", variable="query_filter"),
-                self.command_input_to_variable,
-            )
-
         elif key == "q":
             sys.exit()
 
@@ -635,7 +598,7 @@ class Dolphie:
                     self.update_footer("[indian_red]Input must be an integer")
 
             self.app.push_screen(
-                CommandPopup(message="Specify refresh interval (in seconds)"),
+                CommandModal(message="Specify refresh interval (in seconds)"),
                 command_get_input,
             )
 
@@ -660,51 +623,42 @@ class Dolphie:
             def command_get_input(thread_id):
                 if thread_id:
                     if thread_id in self.processlist_threads:
-                        row_style = Style(color="grey93")
                         table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
                         table.add_column("")
                         table.add_column("")
 
-                        table.add_row("[#c5c7d2]Thread ID", str(thread_id), style=row_style)
+                        table.add_row("[#c5c7d2]Thread ID", str(thread_id))
                         table.add_row(
                             "[#c5c7d2]User",
                             self.processlist_threads[thread_id]["user"],
-                            style=row_style,
                         )
                         table.add_row(
                             "[#c5c7d2]Host",
                             self.processlist_threads[thread_id]["host"],
-                            style=row_style,
                         )
                         table.add_row(
                             "[#c5c7d2]Database",
                             self.processlist_threads[thread_id]["db"],
-                            style=row_style,
                         )
                         table.add_row(
                             "[#c5c7d2]Command",
                             self.processlist_threads[thread_id]["command"],
-                            style=row_style,
                         )
                         table.add_row(
                             "[#c5c7d2]State",
                             self.processlist_threads[thread_id]["state"],
-                            style=row_style,
                         )
                         table.add_row(
                             "[#c5c7d2]Time",
                             self.processlist_threads[thread_id]["hhmmss_time"],
-                            style=row_style,
                         )
                         table.add_row(
                             "[#c5c7d2]Rows Locked",
                             self.processlist_threads[thread_id]["trx_rows_locked"],
-                            style=row_style,
                         )
                         table.add_row(
                             "[#c5c7d2]Rows Modified",
                             self.processlist_threads[thread_id]["trx_rows_modified"],
-                            style=row_style,
                         )
                         if (
                             "innodb_thread_concurrency" in self.variables
@@ -713,18 +667,15 @@ class Dolphie:
                             table.add_row(
                                 "[#c5c7d2]Tickets",
                                 self.processlist_threads[thread_id]["trx_concurrency_tickets"],
-                                style=row_style,
                             )
                         table.add_row("", "")
                         table.add_row(
                             "[#c5c7d2]TRX State",
                             self.processlist_threads[thread_id]["trx_state"],
-                            style=row_style,
                         )
                         table.add_row(
                             "[#c5c7d2]TRX Operation",
                             self.processlist_threads[thread_id]["trx_operation_state"],
-                            style=row_style,
                         )
 
                         query = sqlformat(self.processlist_threads[thread_id]["query"], reindent_aligned=True)
@@ -777,7 +728,7 @@ class Dolphie:
 
                                         values.append(str(value))
 
-                                    explain_table.add_row(*values, style="grey93")
+                                    explain_table.add_row(*values)
 
                                 screen_data = Group(
                                     Align.center(table),
@@ -802,7 +753,7 @@ class Dolphie:
                         self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
 
             self.app.push_screen(
-                CommandPopup(message="Specify a Thread ID to explain its query"),
+                CommandModal(message="Specify a Thread ID to display its details"),
                 command_get_input,
             )
 
@@ -855,7 +806,7 @@ class Dolphie:
 
                 # Loop variables
                 for variable, value in display_variables.items():
-                    tables[variable_num].add_row("[#c5c7d2]%s" % variable, str(value), style="grey93")
+                    tables[variable_num].add_row("[#c5c7d2]%s" % variable, str(value))
 
                     if variable_counter == row_per_count and row_counter != max_num_tables:
                         row_counter += 1
@@ -878,7 +829,7 @@ class Dolphie:
                         self.update_footer("No variable(s) found that match [b #91abec]%s[/b #91abec]" % input_variable)
 
             self.app.push_screen(
-                CommandPopup(message="Specify a variable to wildcard search\n([dim]leave blank for all[/dim])"),
+                CommandModal(message="Specify a variable to wildcard search\n[dim](leave blank for all)[/dim]"),
                 command_get_input,
             )
 
@@ -901,8 +852,6 @@ class Dolphie:
                 screen_data = Align.center("\nThere are currently no hosts resolved")
 
         elif key == "question_mark":
-            row_style = Style(color="grey93")
-
             keys = {
                 "1": "Switch between using Processlist/Performance Schema for listing queries",
                 "2": "Display output from SHOW ENGINE INNODB STATUS",
@@ -914,9 +863,9 @@ class Dolphie:
                 "k": "Kill a query by thread ID",
                 "K": "Kill a query by either user/host/time range",
                 "l": "Show latest deadlock detected",
-                "m": "Display memory usage - limits to only 30 rows",
-                "p": "Pause Dolphie",
-                "q": "Quit Dolphie",
+                "m": "Display memory usage",
+                "p": "Pause refreshing",
+                "q": "Quit",
                 "r": "Set the refresh interval",
                 "t": "Show details of a thread along with an EXPLAIN of its query",
                 "T": "Show/hide running transactions only",
@@ -932,7 +881,7 @@ class Dolphie:
             table_keys.add_column("Description")
 
             for key, description in sorted(keys.items()):
-                table_keys.add_row("[#91abec]%s" % key, description, style=row_style)
+                table_keys.add_row("[#91abec]%s" % key, description)
 
             datapoints = {
                 "Read Only": "If the host is in read-only mode",
@@ -969,12 +918,18 @@ class Dolphie:
             table_info.add_column("Datapoint", style="#91abec")
             table_info.add_column("Description")
             for datapoint, description in sorted(datapoints.items()):
-                table_info.add_row("[#91abec]%s" % datapoint, description, style=row_style)
+                table_info.add_row("[#91abec]%s" % datapoint, description)
 
             screen_data = Group(
                 Align.center(table_keys),
                 "",
                 Align.center(table_info),
+                "",
+                Align.center(
+                    "[#bbc8e8][b]Note[/b]: Textual puts your terminal in application mode which disables clicking and"
+                    " dragging to select text.\nTo see how to select text on your terminal, visit:"
+                    " https://tinyurl.com/dolphie-select-text"
+                ),
             )
 
         if screen_data:
@@ -1091,7 +1046,7 @@ class Dolphie:
                 else:
                     row_values.append(value or "")
 
-            table.add_row(*row_values, style="grey93")
+            table.add_row(*row_values)
 
         return table if user_stats else False
 

@@ -25,7 +25,7 @@ DataTable {
     overflow: hidden;
 }
 
-CommandPopup {
+CommandModal {
     align: center middle;
     height: 40;
 }
@@ -50,7 +50,7 @@ TopBar {
 #topbar_help {
     width: 1fr;
     content-align: right middle;
-    color: #a8b5d2
+    color: #8f9fc1;
 }
 
 #footer {
@@ -69,58 +69,73 @@ TopBar {
     padding-top: 1;
 }
 
-CommandPopup > Vertical {
+CommandModal > Vertical {
     background: #181e2e;
     border: thick #212941;
     height: auto;
     width: auto;
 }
-CommandPopup > Vertical > * {
+CommandModal > Vertical > * {
     width: auto;
     height: auto;
 }
-CommandPopup Input {
+CommandModal #kill_container {
+    width: 100%;
+    height: 6;
+}
+CommandModal #button_container {
+    width: 100%;
+    align-horizontal: center;
+}
+CommandModal Input {
     width: 40;
     margin: 1 2;
     background: #181e2e;
     border: solid #687bb0;
 }
-CommandPopup Input>.input--placeholder {
+CommandModal Input>.input--placeholder {
     color: #7e8dac;
 }
-CommandPopup Button {
+CommandModal Button {
     margin-right: 1;
 }
-CommandPopup Label {
+CommandModal Label {
     text-style: bold;
     width: 100%;
     content-align: center middle;
 }
-CommandPopup #buttons {
-    width: 100%;
-    align-horizontal: center;
-}
-CommandPopup RadioSet {
+CommandModal RadioSet {
     background: #181e2e;
     border: none;
     padding-top: 1;
     align: center middle;
     width: 100%;
 }
-CommandPopup RadioSet ToggleButton.-selected > .toggle--button {
-    color: #62c39a;
-}
-CommandPopup RadioButton .toggle--button {
+CommandModal RadioButton .toggle--button {
     background: #343d56;
 }
-CommandPopup RadioSet:focus > RadioButton.-selected > .toggle--label {
-    text-style: underline;
-}
-CommandPopup RadioSet:focus > .toggle--label:focus {
-    text-style: underline;
-}
-CommandPopup RadioSet ToggleButton:hover {
+CommandModal RadioSet ToggleButton:hover {
     background: #181e2e;
+}
+CommandModal RadioSet:focus > RadioButton.-selected > .toggle--label {
+    text-style: none;
+}
+CommandModal Checkbox {
+    background: #181e2e;
+    border: none;
+    padding-top: 1;
+    content-align: center middle;
+    width: 100%;
+}
+CommandModal Checkbox .toggle--button {
+    background: #343d56;
+}
+CommandModal ToggleButton:focus > .toggle--label {
+    text-style: none;
+}
+CommandModal ToggleButton.-on > .toggle--button {
+    color: #62c39a;
+    text-style: bold;
 }
 
 Button.-primary {

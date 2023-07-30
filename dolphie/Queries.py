@@ -190,7 +190,6 @@ Queries = {
             sys.memory_by_user_by_current_bytes
         WHERE
             user != "background"
-        LIMIT 30
     """,
     "memory_by_code_area": """
         SELECT
@@ -203,7 +202,6 @@ Queries = {
             SUBSTRING_INDEX( event_name, '/', 2 )
         ORDER BY
             SUM( current_alloc ) DESC
-        LIMIT 30
     """,
     "memory_by_host": """
         SELECT
@@ -214,7 +212,6 @@ Queries = {
             sys.memory_by_host_by_current_bytes
         WHERE
             host != "background"
-        LIMIT 30
     """,
     "databases": """
         SELECT
