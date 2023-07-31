@@ -13,7 +13,7 @@ from rich.table import Table
 
 def create_panel(dolphie: Dolphie):
     # Return an empty table if the host doesn't support this panel
-    if dolphie.display_replication_panel and not dolphie.replica_data and not dolphie.replica_status:
+    if dolphie.display_replication_panel and not dolphie.replica_data and not dolphie.replication_status:
         dolphie.update_footer(
             "[b indian_red]Cannot use this panel![/b indian_red] This host is not a replica and has no"
             " replicas connected"
@@ -25,8 +25,8 @@ def create_panel(dolphie: Dolphie):
     table_grid = Table.grid()
     table_replication = Table()
 
-    if dolphie.replica_status:
-        table_replication = create_table(dolphie, dolphie.replica_status)
+    if dolphie.replication_status:
+        table_replication = create_table(dolphie, dolphie.replication_status)
 
     # Stack tables in groups of 3
     tables = sorted(dolphie.replica_tables.items())
@@ -37,11 +37,11 @@ def create_panel(dolphie: Dolphie):
     if num_tables % 3 != 0:
         table_grid.add_row(*[table for _, table in tables[num_tables - (num_tables % 3) :]])
 
-    if dolphie.replica_status:
+    if dolphie.replication_status:
         # GTID Sets can be very long, so we don't center align replication table or else table
         # will increase/decrease in size a lot
-        if ("Executed_Gtid_Set" in dolphie.replica_status and dolphie.replica_status["Executed_Gtid_Set"]) or (
-            "Using_Gtid" in dolphie.replica_status and dolphie.replica_status["Using_Gtid"] != "No"
+        if ("Executed_Gtid_Set" in dolphie.replication_status and dolphie.replication_status["Executed_Gtid_Set"]) or (
+            "Using_Gtid" in dolphie.replication_status and dolphie.replication_status["Using_Gtid"] != "No"
         ):
             panel_data = Group(
                 Align.left(table_replication),
@@ -242,7 +242,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     return table
 
 
-def fetch_replicas_table_data(dolphie: Dolphie):
+def fetch_replica_table_data(dolphie: Dolphie):
     replica_tables = {}
     for row in dolphie.replica_data:
         thread_id = row["id"]
@@ -268,16 +268,16 @@ def fetch_replicas_table_data(dolphie: Dolphie):
 
             replica_connection = dolphie.replica_connections[thread_id]
             replica_connection["cursor"] = replica_connection["connection"].cursor(pymysql.cursors.DictCursor)
-            replica_connection["cursor"].execute(Queries["replica_status"])
+            replica_connection["cursor"].execute(Queries["replication_status"])
             replica_data = replica_connection["cursor"].fetchone()
 
             if replica_data:
                 replica_tables[host] = create_table(dolphie, replica_data, list_replica_thread_id=thread_id)
         except pymysql.Error as e:
-            table = Table(box.ROUNDED, show_header=False, style="#b0bad7")
+            table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
 
             table.add_column()
-            table.add_column(width=30)
+            table.add_column()
 
             table.add_row("[#c5c7d2]Host", host)
             table.add_row("[#c5c7d2]User", row["user"])

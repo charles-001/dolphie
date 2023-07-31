@@ -50,7 +50,7 @@ def create_panel(dolphie: Dolphie) -> Table:
         use_performance_schema_status = "YES"
 
     if variables["read_only"] == "ON":
-        if not dolphie.replica_status:
+        if not dolphie.replication_status:
             variables["read_only"] = "YES ([indian_red]SHOULD BE NO?[/indian_red])"
         else:
             variables["read_only"] = "YES"
@@ -325,8 +325,8 @@ def create_panel(dolphie: Dolphie) -> Table:
     ###############
     # Replication #
     ###############
-    if dolphie.replica_status and not dolphie.display_replication_panel:
-        tables_to_add.append(replication_panel.create_table(dolphie, dolphie.replica_status, dashboard_table=True))
+    if dolphie.replication_status and not dolphie.display_replication_panel:
+        tables_to_add.append(replication_panel.create_table(dolphie, dolphie.replication_status, dashboard_table=True))
 
     ###############
     # Statisitics #

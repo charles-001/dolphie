@@ -60,9 +60,7 @@ class EventLog(Screen):
             self.app.pop_screen()
 
     def compose(self) -> ComposeResult:
-        yield TopBar(
-            app_version=self.app_version, host=self.host, help="press any key to return (except navigation keys)"
-        )
+        yield TopBar(app_version=self.app_version, host=self.host)
         with Horizontal():
             yield Label("System")
             yield Switch(animate=False, id="system")

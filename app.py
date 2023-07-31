@@ -16,6 +16,7 @@ from dolphie import Dolphie
 from dolphie.ManualException import ManualException
 from dolphie.Panels import dashboard_panel, innodb_panel, query_panel, replication_panel
 from dolphie.Queries import Queries
+from dolphie.Widgets.topbar import TopBar
 from rich.prompt import Prompt
 from rich.traceback import Traceback
 from textual import events, work
@@ -317,7 +318,8 @@ Environment variables support these options:
     dolphie.hide_dashboard = parameter_options["hide_dashboard"]
 
     # Update header's host
-    dolphie.header.host = dolphie.host
+    header = dolphie.app.query_one("#topbar_host")
+    header.update(dolphie.host)
 
 
 class DolphieApp(App):
@@ -344,14 +346,14 @@ class DolphieApp(App):
             dolphie.innodb_status = dolphie.main_db_connection.fetch_data("innodb_status")
 
         if dolphie.display_dashboard_panel or dolphie.display_replication_panel:
-            dolphie.replica_status = dolphie.main_db_connection.fetch_data("replica_status")
+            dolphie.replication_status = dolphie.main_db_connection.fetch_data("replication_status")
 
             if dolphie.display_replication_panel:
                 dolphie.replica_data = dolphie.main_db_connection.fetch_data(
                     "find_replicas", dolphie.use_performance_schema
                 )
 
-                dolphie.replica_tables = replication_panel.fetch_replicas_table_data(dolphie)
+                dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
 
         if dolphie.display_processlist_panel:
             dolphie.processlist_threads = query_panel.fetch_data(dolphie)
@@ -479,7 +481,7 @@ class DolphieApp(App):
                 panel.display = event.value
 
     def compose(self) -> ComposeResult:
-        yield self.dolphie.header
+        yield TopBar(app_version=self.dolphie.app_version, help="press ? for help")
         with VerticalScroll():
             with Horizontal(id="main_switch_container"):
                 yield Label("Dashboard")

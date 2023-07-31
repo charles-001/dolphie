@@ -16,7 +16,6 @@ from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.modal import CommandModal
 from dolphie.Widgets.new_version_modal import NewVersionModal
-from dolphie.Widgets.topbar import TopBar
 from packaging.version import parse as parse_version
 from rich import box
 from rich.align import Align
@@ -38,6 +37,7 @@ except Exception:
 class Dolphie:
     def __init__(self, app: App):
         self.app = app
+        self.app_version = __version__
 
         # Config options
         self.user: str = None
@@ -79,8 +79,10 @@ class Dolphie:
         self.variables: dict = {}
         self.statuses: dict = {}
         self.primary_status: dict = {}
-        self.replica_status: dict = {}
+        self.replication_status: dict = {}
         self.innodb_status: dict = {}
+
+        # These are for replicas in replication panel
         self.replica_data: dict = {}
         self.replica_connections: dict = {}
         self.replica_tables: dict = {}
@@ -96,8 +98,8 @@ class Dolphie:
         self.main_db_connection: Database = None
         # Secondary connection is for ad-hoc commands that are not a part of the worker thread
         self.secondary_db_connection: Database = None
-
-        self.connection_id: int = None
+        self.main_db_connection_id: int = None
+        self.secondary_db_connection_id: int = None
         self.use_performance_schema: bool = False
         self.performance_schema_enabled: bool = False
         self.innodb_locks_sql: bool = False
@@ -106,10 +108,8 @@ class Dolphie:
         self.mysql_version: str = None
         self.host_distro: str = None
 
+        # Misc
         self.footer_timer = None
-
-        self.app_version = __version__
-        self.header = TopBar(app_version=self.app_version)
 
     def check_for_update(self):
         # Query PyPI API to get the latest version
@@ -148,7 +148,10 @@ class Dolphie:
         self.secondary_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
 
         query = "SELECT CONNECTION_ID() AS connection_id"
-        self.connection_id = self.main_db_connection.fetchone(query, "connection_id")
+        self.main_db_connection_id = self.main_db_connection.fetchone(query, "connection_id")
+
+        query = "SELECT CONNECTION_ID() AS connection_id"
+        self.secondary_db_connection_id = self.secondary_db_connection.fetchone(query, "connection_id")
 
         query = "SELECT @@performance_schema"
         performance_schema = self.main_db_connection.fetchone(query, "@@performance_schema")

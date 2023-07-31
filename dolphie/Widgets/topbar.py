@@ -11,7 +11,7 @@ class TopBar(Container):
     def __init__(self, app_version="", host="", help=""):
         super().__init__()
 
-        self.help = "press ? for help"
+        self.help = "press any key to return (except navigation keys)"
         if help:
             self.help = help
 

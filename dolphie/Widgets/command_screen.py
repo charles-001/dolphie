@@ -25,7 +25,5 @@ class CommandScreen(Screen):
             self.app.pop_screen()
 
     def compose(self) -> ComposeResult:
-        yield TopBar(
-            app_version=self.app_version, host=self.host, help="press any key to return (except navigation keys)"
-        )
+        yield TopBar(app_version=self.app_version, host=self.host)
         yield VerticalScroll(Static(self.data))
