@@ -78,7 +78,7 @@ class Dolphie:
         self.host_cache_from_file: dict = {}
         self.variables: dict = {}
         self.statuses: dict = {}
-        self.primary_status: dict = {}
+        self.binlog_status: dict = {}
         self.replication_status: dict = {}
         self.innodb_status: dict = {}
 
@@ -214,6 +214,8 @@ class Dolphie:
             self.innodb_locks_sql = Queries["locks_query-8"]
 
         self.server_uuid = self.main_db_connection.fetchone(server_uuid_query, "@@server_uuid")
+
+        self.update_footer("", hide=True)
 
     def command_input_to_variable(self, return_data):
         variable = return_data[0]

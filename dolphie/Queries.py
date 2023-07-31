@@ -223,7 +223,7 @@ Queries = {
     """,
     "status": "SHOW GLOBAL STATUS",
     "variables": "SHOW GLOBAL VARIABLES",
-    "primary_status": "SHOW MASTER STATUS",
+    "binlog_status": "SHOW MASTER STATUS",
     "replication_status": "SHOW SLAVE STATUS",
     "innodb_status": "SHOW ENGINE INNODB STATUS",
 }

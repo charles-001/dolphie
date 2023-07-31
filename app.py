@@ -14,7 +14,12 @@ from datetime import datetime
 import myloginpath
 from dolphie import Dolphie
 from dolphie.ManualException import ManualException
-from dolphie.Panels import dashboard_panel, innodb_panel, query_panel, replication_panel
+from dolphie.Panels import (
+    dashboard_panel,
+    innodb_panel,
+    processlist_panel,
+    replication_panel,
+)
 from dolphie.Queries import Queries
 from dolphie.Widgets.topbar import TopBar
 from rich.prompt import Prompt
@@ -335,28 +340,41 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1 or self.dolphie.pause_refresh:
             return
 
-        dolphie = self.dolphie
+        try:
+            dolphie = self.dolphie
 
-        if dolphie.display_dashboard_panel:
-            dolphie.primary_status = dolphie.main_db_connection.fetch_data("primary_status")
+            if not dolphie.main_db_connection:
+                self.dolphie.db_connect()
 
-        if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
-            dolphie.statuses = dolphie.main_db_connection.fetch_data("status")
-            dolphie.variables = dolphie.main_db_connection.fetch_data("variables")
-            dolphie.innodb_status = dolphie.main_db_connection.fetch_data("innodb_status")
+            if dolphie.display_dashboard_panel:
+                dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
 
-        if dolphie.display_dashboard_panel or dolphie.display_replication_panel:
-            dolphie.replication_status = dolphie.main_db_connection.fetch_data("replication_status")
+            if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
+                dolphie.statuses = dolphie.main_db_connection.fetch_data("status")
+                dolphie.variables = dolphie.main_db_connection.fetch_data("variables")
+                dolphie.innodb_status = dolphie.main_db_connection.fetch_data("innodb_status")
 
-            if dolphie.display_replication_panel:
-                dolphie.replica_data = dolphie.main_db_connection.fetch_data(
-                    "find_replicas", dolphie.use_performance_schema
-                )
+            if dolphie.display_dashboard_panel or dolphie.display_replication_panel:
+                dolphie.replication_status = dolphie.main_db_connection.fetch_data("replication_status")
 
-                dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
+                if dolphie.display_replication_panel:
+                    dolphie.replica_data = dolphie.main_db_connection.fetch_data(
+                        "find_replicas", dolphie.use_performance_schema
+                    )
 
-        if dolphie.display_processlist_panel:
-            dolphie.processlist_threads = query_panel.fetch_data(dolphie)
+                    dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
+
+            if dolphie.display_processlist_panel:
+                dolphie.processlist_threads = processlist_panel.fetch_data(dolphie)
+
+            # If we're not displaying the replication panel, close all replica connections
+            if not dolphie.display_replication_panel and dolphie.replica_connections:
+                for connection in dolphie.replica_connections.values():
+                    connection["connection"].close()
+
+                dolphie.replica_connections = {}
+        except ManualException as e:
+            self.exit(message=e.output())
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         if event.state != WorkerState.SUCCESS:
@@ -378,7 +396,7 @@ class DolphieApp(App):
 
         processlist = self.query_one("#processlist_panel")
         if processlist.display:
-            query_panel.create_panel(self.dolphie)
+            processlist_panel.create_panel(self.dolphie)
 
         replica = self.query_one("#replication_panel")
         if replica.display:
@@ -400,37 +418,35 @@ class DolphieApp(App):
         self.dolphie.capture_key(event.key)
 
     def on_mount(self):
-        parse_args(self.dolphie)
-        self.dolphie.db_connect()
-        self.dolphie.load_host_cache_file()
+        dolphie = self.dolphie
 
-        # Set the panels by default to not show
-        panels = self.query(".panel")
-        for panel in panels:
-            panel.display = False
-        footer = self.query_one("#footer")
-        footer.display = False
+        parse_args(dolphie)
+        dolphie.load_host_cache_file()
 
-        # To not make the default panels lag when they're first shown, we set display to true here
-        # instead of toggle
-        processlist = self.query_one("#processlist_panel")
-        processlist.display = True
-        self.dolphie.display_processlist_panel = True
+        # Set these panels by default to not show
+        panels_to_disable = ["replication_panel", "innodb_panel"]
+        for panel in panels_to_disable:
+            self.query_one(f"#{panel}").display = False
 
-        if not self.dolphie.hide_dashboard:
-            dashboard = self.query_one("#dashboard_panel")
-            dashboard.display = True
-            self.dolphie.display_dashboard_panel = True
+        dolphie.display_processlist_panel = True
+        if dolphie.hide_dashboard:
+            self.query_one("#dashboard_panel").display = False
+            dolphie.display_dashboard_panel = False
+        else:
+            self.query_one("#dashboard_panel").update("[b #91abec]Loading[/b #91abec]")
+            dolphie.display_dashboard_panel = True
 
         # Set default switches to be toggled on
         switches_to_toggle_on = ["switch_dashboard", "switch_processlist"]
         for switch_name in switches_to_toggle_on:
-            if switch_name == "switch_dashboard" and self.dolphie.hide_dashboard:
+            if switch_name == "switch_dashboard" and dolphie.hide_dashboard:
                 continue
 
             self.query_one(f"#{switch_name}").toggle()
 
-        self.dolphie.check_for_update()
+        dolphie.check_for_update()
+
+        dolphie.update_footer("[b #91abec]Connecting to MySQL[/b #91abec]", temporary=False)
 
         self.worker_fetch_data()
 
@@ -461,18 +477,10 @@ class DolphieApp(App):
         panel = panels.get(event.switch.id)
         if panel:
             if panel.display != event.value:
-                if panel.id == "replication_panel":
-                    if panel.display:
-                        for connection in dolphie.replica_connections.values():
-                            connection["connection"].close()
-
-                        dolphie.replica_connections = {}
-
                 if panel.id == "processlist_panel":
                     panel.clear()
-
-                if panel.id != "processlist_panel":
-                    panel.update("[b #91abec]Loading[/b #91abec]…")
+                else:
+                    panel.update("[b #91abec]Loading[/b #91abec]")
 
                 # Update Dolphie's display_* attributes
                 setattr(dolphie, f"display_{panel.id}", event.value)

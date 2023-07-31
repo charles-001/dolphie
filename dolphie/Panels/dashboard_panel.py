@@ -15,7 +15,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     innodb_status = dolphie.innodb_status
     saved_status = dolphie.saved_status
     loop_duration_seconds = dolphie.loop_duration_seconds
-    primary_status = dolphie.primary_status
+    binlog_status = dolphie.binlog_status
 
     tables_to_add = []
     uptime = str(timedelta(seconds=statuses["Uptime"]))
@@ -271,7 +271,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     ##############
     table_primary = Table()
 
-    if primary_status:
+    if binlog_status:
         table_primary = Table(
             show_header=False,
             box=table_box,
@@ -282,10 +282,10 @@ def create_panel(dolphie: Dolphie) -> Table:
 
         if dolphie.previous_binlog_position == 0:
             diff_binlog_position = 0
-        elif dolphie.previous_binlog_position > primary_status["Position"]:
+        elif dolphie.previous_binlog_position > binlog_status["Position"]:
             diff_binlog_position = "Binlog Rotated"
         else:
-            diff_binlog_position = format_bytes(primary_status["Position"] - dolphie.previous_binlog_position)
+            diff_binlog_position = format_bytes(binlog_status["Position"] - dolphie.previous_binlog_position)
 
         binlog_cache = 100
         binlog_cache_disk = statuses["Binlog_cache_disk_use"]
@@ -298,14 +298,14 @@ def create_panel(dolphie: Dolphie) -> Table:
 
         table_primary.add_column()
         table_primary.add_column(max_width=40)
-        table_primary.add_row("[#c5c7d2]File name", "%s" % str(primary_status["File"]))
+        table_primary.add_row("[#c5c7d2]File name", "%s" % str(binlog_status["File"]))
         table_primary.add_row(
             "[#c5c7d2]Position",
-            "%s" % (str(primary_status["Position"])),
+            "%s" % (str(binlog_status["Position"])),
         )
         table_primary.add_row(
             "[#c5c7d2]Size",
-            "%s" % format_bytes(primary_status["Position"]),
+            "%s" % format_bytes(binlog_status["Position"]),
         )
         table_primary.add_row("[#c5c7d2]Diff", "%s" % diff_binlog_position)
         table_primary.add_row("[#c5c7d2]Cache Hit", "%s%%" % str(binlog_cache))
@@ -319,8 +319,8 @@ def create_panel(dolphie: Dolphie) -> Table:
         tables_to_add.append(table_primary)
 
         # Save some variables to be used in next refresh
-        if dolphie.primary_status:
-            dolphie.previous_binlog_position = dolphie.primary_status["Position"]
+        if dolphie.binlog_status:
+            dolphie.previous_binlog_position = dolphie.binlog_status["Position"]
 
     ###############
     # Replication #

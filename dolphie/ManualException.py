@@ -13,8 +13,7 @@ class ManualException(Exception):
     def output(self):
         table_exception = Table(
             box=box.SIMPLE_HEAVY,
-            style="grey70",
-            title="  Dolphie :dolphin:",
+            title="  Dolphie:dolphin:",
             title_style=Style(bold=True),
             title_justify="left",
             header_style=Style(color="indian_red", bold=True),
