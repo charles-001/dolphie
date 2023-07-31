@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from dolphie import Dolphie
 from dolphie.Functions import format_bytes, format_number
-from dolphie.Panels import replica_panel
+from dolphie.Panels import replication_panel
 from rich import box
 from rich.style import Style
 from rich.table import Table
@@ -325,9 +325,8 @@ def create_panel(dolphie: Dolphie) -> Table:
     ###############
     # Replication #
     ###############
-    replica = dolphie.app.query_one("#replica_panel")
-    if dolphie.replica_status and not replica.display:
-        tables_to_add.append(replica_panel.create_table(dolphie, dolphie.replica_status, dashboard_table=True))
+    if dolphie.replica_status and not dolphie.display_replication_panel:
+        tables_to_add.append(replication_panel.create_table(dolphie, dolphie.replica_status, dashboard_table=True))
 
     ###############
     # Statisitics #

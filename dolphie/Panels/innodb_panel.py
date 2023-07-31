@@ -18,11 +18,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_box = box.ROUNDED
     table_line_color = "#b0bad7"
 
-    # Only run this if dashboard isn't turned on
-    dashboard = dolphie.app.query_one("#dashboard_panel")
-    if not dashboard.display:
-        innodb_status = dolphie.fetch_data("innodb_status")
-
     table_innodb_information = Table(
         box=table_box,
         style=table_line_color,

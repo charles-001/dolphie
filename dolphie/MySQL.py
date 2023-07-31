@@ -1,6 +1,7 @@
 import pymysql
 from dolphie.Functions import detect_encoding
 from dolphie.ManualException import ManualException
+from dolphie.Queries import Queries
 
 
 class Database:
@@ -86,6 +87,57 @@ class Database:
                 return value.decode()
         else:
             return value
+
+    def fetch_data(self, command, performance_schema=False):
+        command_data = {}
+
+        if command == "status" or command == "variables":
+            self.execute(Queries[command])
+            data = self.fetchall()
+
+            for row in data:
+                variable = row["Variable_name"]
+                value = row["Value"]
+
+                try:
+                    converted_value = row["Value"]
+
+                    if converted_value.isnumeric():
+                        converted_value = int(converted_value)
+                except (UnicodeDecodeError, AttributeError):
+                    converted_value = value
+
+                command_data[variable] = converted_value
+
+        elif command == "innodb_status":
+            data = self.fetchone(Queries[command], "Status")
+            command_data["status"] = data
+
+        elif command == "find_replicas":
+            if performance_schema:
+                find_replicas_query = Queries["ps_find_replicas"]
+            else:
+                find_replicas_query = Queries["pl_find_replicas"]
+
+            self.execute(find_replicas_query)
+            command_data = self.fetchall()
+        else:
+            self.execute(Queries[command])
+            data = self.fetchall()
+
+            for row in data:
+                for column, value in row.items():
+                    try:
+                        converted_value = value
+
+                        if converted_value.isnumeric():
+                            converted_value = int(converted_value)
+                    except (UnicodeDecodeError, AttributeError):
+                        converted_value = value
+
+                    command_data[column] = converted_value
+
+        return command_data
 
     def close(self):
         if self.connection:

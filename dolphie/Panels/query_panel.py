@@ -8,8 +8,6 @@ from textual.widgets import DataTable
 
 
 def create_panel(dolphie: Dolphie) -> DataTable:
-    fetch_data(dolphie)
-
     columns = [
         {"name": "Thread ID", "field": "id", "width": 11, "format_number": False},
         {"name": "Username", "field": "user", "width": 13, "format_number": False},
@@ -166,10 +164,10 @@ def fetch_data(dolphie: Dolphie):
     else:
         processlist_query = processlist_query.replace("$placeholder", "")
 
-    dolphie.processlist_threads = {}
+    processlist_threads = {}
     # Run the processlist query
-    dolphie.db.execute(processlist_query)
-    threads = dolphie.db.fetchall()
+    dolphie.main_connection.execute(processlist_query)
+    threads = dolphie.main_connection.fetchall()
 
     for thread in threads:
         # Don't include Dolphie's thread
@@ -213,7 +211,7 @@ def fetch_data(dolphie: Dolphie):
         else:
             host = dolphie.get_hostname(host)
 
-        dolphie.processlist_threads[str(thread["id"])] = {
+        processlist_threads[str(thread["id"])] = {
             "id": str(thread["id"]),
             "user": thread["user"],
             "host": host,
@@ -230,3 +228,5 @@ def fetch_data(dolphie: Dolphie):
             "trx_concurrency_tickets": thread["trx_concurrency_tickets"],
             "query": query,
         }
+
+    return processlist_threads

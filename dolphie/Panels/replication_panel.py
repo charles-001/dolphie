@@ -15,27 +15,23 @@ def create_panel(dolphie: Dolphie):
     table_box = box.ROUNDED
     table_line_color = "#b0bad7"
 
-    table_grid = Table.grid(pad_edge=True)
+    table_grid = Table.grid()
     table_replication = Table()
 
-    # Only run this if dashboard isn't turned on
-    dashboard = dolphie.app.query_one("#dashboard_panel")
-    if not dashboard.display:
-        dolphie.replica_status = dolphie.fetch_data("replica_status")
+    if dolphie.display_replication_panel and not dolphie.replica_data and not dolphie.replica_status:
+        dolphie.update_footer(
+            "[b indian_red]Cannot use this panel![/b indian_red] This host is not a replica and has no"
+            " replicas connected"
+        )
+        dolphie.app.query_one("#switch_replication").toggle()
+
+        return Table()
 
     if dolphie.replica_status:
         table_replication = create_table(dolphie, dolphie.replica_status)
 
-    if dolphie.use_performance_schema:
-        find_replicas_query = Queries["ps_find_replicas"]
-    else:
-        find_replicas_query = Queries["pl_find_replicas"]
-
-    dolphie.db.cursor.execute(find_replicas_query)
-    data = dolphie.db.fetchall()
-
     tables = {}
-    for row in data:
+    for row in dolphie.replica_data:
         thread_id = row["id"]
 
         # Resolve IPs to addresses and add to cache for fast lookup
@@ -120,7 +116,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         db_cursor = dolphie.replica_connections[list_replica_thread_id]["cursor"]
     else:
         replica_previous_replica_sbm = dolphie.previous_replica_sbm
-        db_cursor = dolphie.db.cursor
+        db_cursor = dolphie.secondary_connection.cursor
 
     if data["Slave_IO_Running"].lower() == "no":
         data["Slave_IO_Running"] = "[#fc7979]NO[/#fc7979]"

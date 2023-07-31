@@ -14,20 +14,15 @@ from datetime import datetime
 import myloginpath
 from dolphie import Dolphie
 from dolphie.ManualException import ManualException
-from dolphie.Panels import (
-    dashboard_panel,
-    innodb_io_panel,
-    innodb_locks_panel,
-    query_panel,
-    replica_panel,
-)
+from dolphie.Panels import dashboard_panel, innodb_panel, query_panel, replication_panel
 from dolphie.Queries import Queries
 from rich.prompt import Prompt
 from rich.traceback import Traceback
-from textual import events
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import DataTable, Label, Static, Switch
+from textual.worker import Worker, WorkerState
 
 
 def parse_args(dolphie: Dolphie):
@@ -333,42 +328,61 @@ class DolphieApp(App):
         super().__init__()
         self.dolphie = Dolphie(self)
 
-    def update_display(self):
+    @work(exclusive=True)
+    def worker_fetch_data(self):
         if len(self.screen_stack) > 1 or self.dolphie.pause_refresh:
-            self.set_timer(self.dolphie.refresh_interval, self.update_display)
+            return
+
+        dolphie = self.dolphie
+        dolphie.statuses = dolphie.main_connection.fetch_data("status")
+
+        if dolphie.display_dashboard_panel:
+            dolphie.variables = dolphie.main_connection.fetch_data("variables")
+            dolphie.primary_status = dolphie.main_connection.fetch_data("primary_status")
+
+        if dolphie.display_dashboard_panel or dolphie.display_replication_panel:
+            dolphie.replica_status = dolphie.main_connection.fetch_data("replica_status")
+
+            if dolphie.display_replication_panel:
+                dolphie.replica_data = dolphie.main_connection.fetch_data(
+                    "find_replicas", dolphie.use_performance_schema
+                )
+
+        if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
+            dolphie.innodb_status = dolphie.main_connection.fetch_data("innodb_status")
+
+        if dolphie.display_processlist_panel:
+            dolphie.processlist_threads = query_panel.fetch_data(dolphie)
+
+    def on_worker_state_changed(self, event: Worker.StateChanged):
+        if event.state != WorkerState.SUCCESS:
+            return
+
+        if len(self.screen_stack) > 1 or self.dolphie.pause_refresh:
+            self.set_timer(self.dolphie.refresh_interval, self.worker_fetch_data)
             return
 
         dolphie = self.dolphie
         loop_time = datetime.now()
 
-        dolphie.statuses = dolphie.fetch_data("status")
         if not dolphie.saved_status:
             dolphie.saved_status = dolphie.statuses.copy()
 
         dashboard = self.query_one("#dashboard_panel")
         if dashboard.display:
-            dolphie.variables = dolphie.fetch_data("variables")
-            dolphie.primary_status = dolphie.fetch_data("primary_status")
-            dolphie.replica_status = dolphie.fetch_data("replica_status")
-            dolphie.innodb_status = dolphie.fetch_data("innodb_status")
-
             dashboard.update(dashboard_panel.create_panel(self.dolphie))
 
         processlist = self.query_one("#processlist_panel")
         if processlist.display:
             query_panel.create_panel(self.dolphie)
 
-        replica = self.query_one("#replica_panel")
+        replica = self.query_one("#replication_panel")
         if replica.display:
-            replica.update(replica_panel.create_panel(self.dolphie))
+            replica.update(replication_panel.create_panel(self.dolphie))
 
-        innodb_io = self.query_one("#innodb_io_panel")
-        if innodb_io.display:
-            innodb_io.update(innodb_io_panel.create_panel(self.dolphie))
-
-        innodb_locks = self.query_one("#innodb_locks_panel")
-        if innodb_locks.display:
-            innodb_locks.update(innodb_locks_panel.create_panel(self.dolphie))
+        innodb = self.query_one("#innodb_io_panel")
+        if innodb.display:
+            innodb.update(innodb_panel.create_panel(self.dolphie))
 
         # This is for the many stats per second in Dolphie
         dolphie.saved_status = dolphie.statuses.copy()
@@ -376,7 +390,7 @@ class DolphieApp(App):
         dolphie.loop_duration_seconds = (loop_time - dolphie.previous_main_loop_time).total_seconds()
         dolphie.previous_main_loop_time = loop_time
 
-        self.set_timer(self.dolphie.refresh_interval, self.update_display)
+        self.set_timer(self.dolphie.refresh_interval, self.worker_fetch_data)
 
     def on_key(self, event: events.Key):
         self.dolphie.capture_key(event.key)
@@ -397,9 +411,11 @@ class DolphieApp(App):
         # instead of toggle
         processlist = self.query_one("#processlist_panel")
         processlist.display = True
+        self.dolphie.display_processlist_panel = True
         if not self.dolphie.hide_dashboard:
             dashboard = self.query_one("#dashboard_panel")
             dashboard.display = True
+            self.dolphie.display_dashboard_panel = True
 
         # Set default switches to be toggled on
         switches_to_toggle_on = ["switch_dashboard", "switch_processlist"]
@@ -410,7 +426,8 @@ class DolphieApp(App):
             self.query_one(f"#{switch_name}").toggle()
 
         self.dolphie.check_for_update()
-        self.update_display()
+
+        self.worker_fetch_data()
 
     def _handle_exception(self, error: Exception) -> None:
         self.bell()
@@ -427,50 +444,35 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1:
             return
 
+        dolphie = self.dolphie
+
         panels = {
             "switch_dashboard": self.query_one("#dashboard_panel"),
             "switch_processlist": self.query_one("#processlist_panel"),
-            "switch_replication": self.query_one("#replica_panel"),
-            "switch_innodb_io": self.query_one("#innodb_io_panel"),
-            "switch_innodb_locks": self.query_one("#innodb_locks_panel"),
+            "switch_replication": self.query_one("#replication_panel"),
+            "switch_innodb": self.query_one("#innodb_io_panel"),
         }
 
         panel = panels.get(event.switch.id)
         if panel:
             if panel.display != event.value:
-                if panel.id == "replica_panel":
-                    if self.dolphie.use_performance_schema:
-                        find_replicas_query = Queries["ps_find_replicas"]
-                    else:
-                        find_replicas_query = Queries["pl_find_replicas"]
-
-                    self.dolphie.db.cursor.execute(find_replicas_query)
-                    data = self.dolphie.db.fetchall()
-                    if not data and not self.dolphie.replica_status:
-                        self.dolphie.update_footer(
-                            "[b indian_red]Cannot use this panel![/b indian_red] This host is not a replica and has no"
-                            " replicas connected"
-                        )
-                        event.switch.toggle()
-                        return
-
+                if panel.id == "replication_panel":
                     if panel.display:
-                        for connection in self.dolphie.replica_connections.values():
+                        for connection in dolphie.replica_connections.values():
                             connection["connection"].close()
 
-                        self.dolphie.replica_connections = {}
-                elif panel.id == "innodb_locks_panel":
-                    if not self.dolphie.innodb_locks_sql:
-                        self.dolphie.update_footer(
-                            "[b indian_red]Cannot use this panel![/b indian_red] InnoDB Locks panel isn't supported for"
-                            " this host's version"
-                        )
-                        event.switch.toggle()
-                        return
+                        dolphie.replica_connections = {}
+
+                if panel.id == "processlist_panel":
+                    panel.clear()
 
                 if panel.id != "processlist_panel":
                     panel.update("[b #91abec]Loading[/b #91abec]…")
 
+                # Update Dolphie's display_* attributes
+                setattr(dolphie, f"display_{panel.id}", event.value)
+
+                # Set the panel to be displayed or not
                 panel.display = event.value
 
     def compose(self) -> ComposeResult:
@@ -483,14 +485,11 @@ class DolphieApp(App):
                 yield Switch(animate=False, id="switch_processlist")
                 yield Label("Replication")
                 yield Switch(animate=False, id="switch_replication")
-                yield Label("InnoDB IO")
-                yield Switch(animate=False, id="switch_innodb_io")
-                yield Label("InnoDB Locks")
-                yield Switch(animate=False, id="switch_innodb_locks")
+                yield Label("InnoDB")
+                yield Switch(animate=False, id="switch_innodb")
             yield Static(id="dashboard_panel", classes="panel")
-            yield Static(id="replica_panel", classes="panel")
+            yield Static(id="replication_panel", classes="panel")
             yield Static(id="innodb_io_panel", classes="panel")
-            yield Static(id="innodb_locks_panel", classes="panel")
             yield DataTable(id="processlist_panel", classes="panel", show_cursor=False)
             yield Static(id="footer")
 
