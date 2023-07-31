@@ -38,6 +38,6 @@ class ManualException(Exception):
         table_exception.add_row("")
 
         if self.reason:
-            table_exception.add_row("[indian_red]%s" % self.reason)
+            table_exception.add_row(self.reason, style="indian_red")
 
         return table_exception

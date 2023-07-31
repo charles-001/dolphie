@@ -70,7 +70,7 @@ def create_panel(dolphie: Dolphie) -> Table:
             table.add_column(column, no_wrap=True, header_style=row_style, overflow=overflow)
 
     # This variable is to cut off query so it's the perfect width for the auto-sized column that matches terminal width
-    query_characters = round((dolphie.console.size.width / 2) - ((len(columns) * 4) + 6))
+    query_characters = round((dolphie.app.size.width / 2) - ((len(columns) * 4) + 6))
 
     for id, thread in innodb_lock_threads.items():
         b_wait_secs = "0s"
@@ -86,14 +86,14 @@ def create_panel(dolphie: Dolphie) -> Table:
             waiting_query = waiting_query.ljust(query_characters)
 
         elif len(waiting_query) < query_characters:
-            waiting_query = waiting_query.ljust(dolphie.console.size.width)
+            waiting_query = waiting_query.ljust(dolphie.app.size.width)
 
         blocking_query = thread["b_query"]
         if not blocking_query:
             blocking_query = blocking_query.ljust(query_characters)
 
         elif len(blocking_query) < query_characters:
-            blocking_query = blocking_query.ljust(dolphie.console.size.width)
+            blocking_query = blocking_query.ljust(dolphie.app.size.width)
 
         # Change values to what we want
         thread["w_age"] = "%ss" % thread["w_age"]

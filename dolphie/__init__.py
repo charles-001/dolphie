@@ -8,18 +8,19 @@ from importlib import metadata
 
 import pymysql
 import requests
-from dolphie.Database import Database
 from dolphie.Functions import format_bytes, format_number, format_sys_table_memory
 from dolphie.ManualException import ManualException
+from dolphie.MySQL import Database
 from dolphie.Queries import Queries
 from dolphie.Widgets.command_screen import CommandScreen
-from dolphie.Widgets.event_log import EventLog
+from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.modal import CommandModal
+from dolphie.Widgets.new_version_modal import NewVersionModal
 from dolphie.Widgets.topbar import TopBar
 from packaging.version import parse as parse_version
 from rich import box
 from rich.align import Align
-from rich.console import Console, Group
+from rich.console import Group
 from rich.style import Style
 from rich.syntax import Syntax
 from rich.table import Table
@@ -30,14 +31,13 @@ try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
     __version__ = metadata.version(__package__ or __name__)
 except Exception:
-    __package_name__ = "N/A"
+    __package_name__ = "Dolphie"
     __version__ = "N/A"
 
 
 class Dolphie:
     def __init__(self, app: App):
         self.app = app
-        self.console = Console()
 
         # Config options
         self.user: str = None
@@ -102,7 +102,7 @@ class Dolphie:
         # Query PyPI API to get the latest version
         try:
             url = f"https://pypi.org/pypi/{__package_name__}/json"
-            response = requests.get(url)
+            response = requests.get(url, timeout=3)
 
             if response.status_code == 200:
                 data = response.json()
@@ -112,34 +112,15 @@ class Dolphie:
 
                 # Compare the current version with the latest version
                 if parse_version(latest_version) > parse_version(__version__):
-                    self.console.print(
-                        (
-                            "[bright_green]New version available!\n\n[grey93]Current version:"
-                            f" [#91abec]{__version__}\n[grey93]Latest version:"
-                            f" [#91abec]{latest_version}\n\n[grey93]Please update to the latest version at your"
-                            " convenience\n[grey66]You can find more details at:"
-                            " [underline]https://github.com/charles-001/dolphie[/underline]\n\n[#91abec]Press any key"
-                            " to continue"
-                        ),
-                        highlight=False,
-                    )
-
-                    key = self.kb.key_press_blocking()
-                    if key:
-                        pass
-            else:
-                self.console.print(
-                    f"[indian_red]Failed to retrieve package information from PyPI![/indian_red] URL: {url} - Code:"
-                    f" {response.status_code}"
-                )
+                    self.app.push_screen(NewVersionModal(current_version=__version__, latest_version=latest_version))
         except Exception:
-            return
+            pass
 
     def update_footer(self, output, hide=False, temporary=True):
         footer = self.app.query_one("#footer")
 
         footer.display = True
-        footer.update(f"[gray93]{output}")
+        footer.update(output)
 
         if hide:
             footer.display = False
@@ -353,10 +334,6 @@ class Dolphie:
                 filter_name = filter_data[0]
                 filter_value = filter_data[1]
 
-                if not filter_value:
-                    self.update_footer("[#fc7979]You did not specify a filter value")
-                    return
-
                 if filter_name == "user":
                     self.user_filter = next(
                         (data["user"] for data in self.processlist_threads.values() if filter_value == data["user"]),
@@ -364,7 +341,7 @@ class Dolphie:
                     )
                     if not self.user_filter:
                         self.update_footer(
-                            f"[#fc7979]User[/#fc7979] {filter_value}[#fc7979] was not found in processlist"
+                            f"[indian_red]User[/indian_red] {filter_value}[indian_red] was not found in processlist"
                         )
                         return
                 elif filter_name == "database":
@@ -374,14 +351,14 @@ class Dolphie:
                     )
                     if not self.db_filter:
                         self.update_footer(
-                            f"[#fc7979]Database[/#fc7979] {filter_value}[#fc7979] was not found in processlist"
+                            f"[indian_red]Database[/indian_red] {filter_value}[indian_red] was not found in processlist"
                         )
                         return
                 elif filter_name == "host":
                     self.host_filter = next((ip for ip, addr in self.host_cache.items() if filter_value == addr), None)
                     if not self.host_filter:
                         self.update_footer(
-                            f"[#fc7979]Host[/#fc7979] {filter_value}[#fc7979] was not found in processlist"
+                            f"[indian_red]Host[/indian_red] {filter_value}[indian_red] was not found in processlist"
                         )
                         return
                 elif filter_name == "query_time":
@@ -416,7 +393,7 @@ class Dolphie:
 
             def command_get_input(thread_id):
                 if not thread_id:
-                    self.update_footer("[#fc7979]You did not specify a Thread ID")
+                    self.update_footer("[indian_red]You did not specify a Thread ID")
                     return
 
                 if thread_id in self.processlist_threads:
@@ -428,7 +405,7 @@ class Dolphie:
 
                         self.update_footer("Killed thread [b #91abec]%s[/b #91abec]" % thread_id)
                     except Exception as e:
-                        self.update_footer("[b][#fc7979]Error[/b]: %s" % e.args[1])
+                        self.update_footer("[b][indian_red]Error killing query[/b]: %s" % e.args[1])
                 else:
                     self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
 
@@ -448,7 +425,7 @@ class Dolphie:
                 include_sleeping_queries = data[2]
 
                 if not kill_value:
-                    self.update_footer("[#fc7979]You did not specify a %s" % kill_type)
+                    self.update_footer("[indian_red]You did not specify a %s" % kill_type)
                     return
 
                 if kill_type == "username":
@@ -463,13 +440,13 @@ class Dolphie:
                         upper_limit = int(time_range[1])
 
                         if lower_limit > upper_limit:
-                            self.update_footer("[#fc7979]Invalid time range! Lower limit can't be higher than upper")
+                            self.update_footer("[indian_red]Invalid time range! Lower limit can't be higher than upper")
                             return
                     else:
-                        self.update_footer("[#fc7979]Invalid time range")
+                        self.update_footer("[indian_red]Invalid time range")
                         return
                 else:
-                    self.update_footer("[#fc7979]Invalid option")
+                    self.update_footer("[indian_red]Invalid option")
                     return
 
                 threads_killed = 0
@@ -488,8 +465,9 @@ class Dolphie:
                                 if thread[key] == kill_value:
                                     execute_kill(thread_id)
                                     threads_killed += 1
-                    except pymysql.OperationalError:
-                        continue
+                    except Exception as e:
+                        self.update_footer("[b][indian_red]Error killing query[/b]: %s" % e.args[1])
+                        return
 
                 if threads_killed:
                     self.update_footer("Killed [#91abec]%s[/#91abec] threads" % threads_killed)
@@ -497,7 +475,7 @@ class Dolphie:
                     self.update_footer("No threads were killed")
 
             self.app.push_screen(
-                CommandModal(message="Kill thread(s) based around parameters", show_kill_options=True),
+                CommandModal(message="Kill threads based around parameters", show_kill_options=True),
                 command_get_input,
             )
 
@@ -769,7 +747,8 @@ class Dolphie:
                 screen_data = Align.center(user_stat_data)
             else:
                 self.update_footer(
-                    "[indian_red]This command requires Userstat variable or Performance Schema to be enabled"
+                    "[b indian_red]Cannot use this command![/b indian_red] It requires Userstat variable or Performance"
+                    " Schema to be enabled"
                 )
 
         elif key == "v":

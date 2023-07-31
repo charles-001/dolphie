@@ -22,8 +22,8 @@ from dolphie.Panels import (
     replica_panel,
 )
 from dolphie.Queries import Queries
-from rich.align import Align
 from rich.prompt import Prompt
+from rich.traceback import Traceback
 from textual import events
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, VerticalScroll
@@ -327,7 +327,7 @@ Environment variables support these options:
 
 class DolphieApp(App):
     TITLE = "Dolphie"
-    CSS_PATH = "dolphie/dolphie.css"
+    CSS_PATH = "dolphie/Dolphie.css"
 
     def __init__(self):
         super().__init__()
@@ -383,7 +383,6 @@ class DolphieApp(App):
 
     def on_mount(self):
         parse_args(self.dolphie)
-        # self.dolphie.check_for_update()
         self.dolphie.db_connect()
         self.dolphie.load_host_cache_file()
 
@@ -410,7 +409,19 @@ class DolphieApp(App):
 
             self.query_one(f"#{switch_name}").toggle()
 
+        self.dolphie.check_for_update()
         self.update_display()
+
+    def _handle_exception(self, error: Exception) -> None:
+        self.bell()
+
+        # We have a ManualException class that we use to output errors in a nice format
+        if error.__class__.__name__ == "ManualException":
+            message = error.output()
+        else:
+            message = Traceback(show_locals=True, width=None, locals_max_length=5)
+
+        self.exit(message=message)
 
     def on_switch_changed(self, event: Switch.Changed):
         if len(self.screen_stack) > 1:
@@ -437,7 +448,8 @@ class DolphieApp(App):
                     data = self.dolphie.db.fetchall()
                     if not data and not self.dolphie.replica_status:
                         self.dolphie.update_footer(
-                            "[b]Cannot use this panel![/b] This host is not a replica and has no replicas connected"
+                            "[b indian_red]Cannot use this panel![/b indian_red] This host is not a replica and has no"
+                            " replicas connected"
                         )
                         event.switch.toggle()
                         return
@@ -450,13 +462,14 @@ class DolphieApp(App):
                 elif panel.id == "innodb_locks_panel":
                     if not self.dolphie.innodb_locks_sql:
                         self.dolphie.update_footer(
-                            "[b]Cannot use this panel![/b] InnoDB Locks panel isn't supported for this host's version"
+                            "[b indian_red]Cannot use this panel![/b indian_red] InnoDB Locks panel isn't supported for"
+                            " this host's version"
                         )
                         event.switch.toggle()
                         return
 
                 if panel.id != "processlist_panel":
-                    panel.update(Align.center("[b #91abec]Loading[/b #91abec]…"))
+                    panel.update("[b #91abec]Loading[/b #91abec]…")
 
                 panel.display = event.value
 

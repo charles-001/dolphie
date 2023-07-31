@@ -5,7 +5,6 @@ from dolphie import Dolphie
 from dolphie.Functions import format_bytes, format_number
 from dolphie.Panels import replica_panel
 from rich import box
-from rich.align import Align
 from rich.style import Style
 from rich.table import Table
 
@@ -383,4 +382,4 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     dashboard_grid.add_row(*tables_to_add)
 
-    return Align.center(dashboard_grid)
+    return dashboard_grid

@@ -10,6 +10,7 @@
     scrollbar-color-active: #8999c4;
 
     color: #ededed;
+    
 }
 
 #_default, CommandScreen, EventLog { # screens
@@ -25,10 +26,11 @@ DataTable {
     overflow: hidden;
 }
 
-CommandModal {
+ModalScreen {
     align: center middle;
     height: 40;
 }
+
 
 TopBar {
     dock: top;
@@ -67,6 +69,7 @@ TopBar {
 }
 .panel {
     padding-top: 1;
+    content-align: center middle;
 }
 
 CommandModal > Vertical {
@@ -118,8 +121,10 @@ CommandModal RadioSet ToggleButton:hover {
     background: #181e2e;
 }
 CommandModal RadioSet:focus > RadioButton.-selected > .toggle--label {
-    text-style: none;
+    text-style: bold;
+    color: #91abec;
 }
+
 CommandModal Checkbox {
     background: #181e2e;
     border: none;
@@ -130,8 +135,12 @@ CommandModal Checkbox {
 CommandModal Checkbox .toggle--button {
     background: #343d56;
 }
-CommandModal ToggleButton:focus > .toggle--label {
+CommandModal RadioSet:focus > .toggle--label {
     text-style: none;
+}
+CommandModal ToggleButton:focus > .toggle--label {
+    text-style: bold;
+    color: #91abec;
 }
 CommandModal ToggleButton.-on > .toggle--button {
     color: #62c39a;
@@ -168,8 +177,23 @@ Switch > .switch--slider {
     color: #424d6f;
     background: #192132;
 }
+Switch:focus > .switch--slider {
+    background: #91abec;
+}
+Switch:hover > .switch--slider {
+    background: #91abec;
+}
 Switch.-on > .switch--slider {
     color: #62c39a;
+    background: #192132;
+}
+Switch.-on:focus > .switch--slider {
+    color: #7bf4c2;
+    background: #192132;
+}
+Switch.-on:hover > .switch--slider {
+    color: #7bf4c2;
+    background: #192132;
 }
 
 #main_switch_container {

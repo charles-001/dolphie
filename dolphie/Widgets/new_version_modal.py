@@ -1,0 +1,55 @@
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
+from textual.screen import ModalScreen
+from textual.widgets import Button, Label
+
+
+class NewVersionModal(ModalScreen):
+    DEFAULT_CSS = """
+        NewVersionModal > Vertical {
+            background: #181e2e;
+            border: thick #212941;
+            height: auto;
+            width: auto;
+        }
+        NewVersionModal > Vertical > * {
+            width: auto;
+            height: auto;
+        }
+        NewVersionModal #title {
+            text-style: bold;
+            width: 100%;
+            margin: 0;
+        }
+        NewVersionModal Label {
+            margin: 1 2;
+            content-align: center middle;
+        }
+        NewVersionModal Horizontal {
+            width: 100%;
+            align-horizontal: center;
+        }
+    """
+    BINDINGS = [
+        Binding("escape", "app.pop_screen", "", show=False),
+    ]
+
+    def __init__(self, current_version, latest_version):
+        super().__init__()
+
+        self.current_version = current_version
+        self.latest_version = latest_version
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Label("[#bbc8e8]New version available!", id="title")
+            yield Label(f"Current version: [#91abec]{self.current_version}")
+            yield Label(f"Latest version:  [#91abec]{self.latest_version}")
+            yield Label("Please update to the latest version at your convenience")
+            yield Label("Find more details at [#bbc8e8]https://github.com/charles-001/dolphie")
+            with Horizontal():
+                yield Button("OK", variant="primary")
+
+    def on_button_pressed(self) -> None:
+        self.app.pop_screen()

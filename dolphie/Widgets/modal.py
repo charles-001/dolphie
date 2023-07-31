@@ -22,13 +22,13 @@ class CommandModal(ModalScreen):
             with Vertical():
                 yield Label(self.message)
                 with RadioSet(id="filter_radio_buttons"):
-                    yield RadioButton("Database", id="database")
+                    yield RadioButton("User", id="user")
                     yield RadioButton("Host/IP", id="host")
+                    yield RadioButton("Database", id="database")
                     yield RadioButton("Query Text", id="query_text")
                     yield RadioButton("Query Time", id="query_time")
-                    yield RadioButton("User", id="user")
                 with Vertical(id="kill_container"):
-                    with RadioSet():
+                    with RadioSet(id="kill_radio_buttons"):
                         yield RadioButton("Username", id="username")
                         yield RadioButton("Host/IP", id="host")
                         yield RadioButton("Time range", id="time_range")
@@ -40,15 +40,29 @@ class CommandModal(ModalScreen):
 
     def on_mount(self):
         input = self.query_one("#modal_input")
-        input.focus()
+        filter_radio_buttons = self.query_one("#filter_radio_buttons")
+        kill_container = self.query_one("#kill_container")
 
-        if not self.show_filter_options:
-            filter_radio_buttons = self.query_one("#filter_radio_buttons")
-            filter_radio_buttons.display = False
+        filter_radio_buttons.display = False
+        kill_container.display = False
 
-        if not self.show_kill_options:
-            kill_container = self.query_one("#kill_container")
-            kill_container.display = False
+        if self.show_filter_options:
+            filter_radio_buttons.display = True
+            filter_radio_buttons.focus()
+
+            input.placeholder = "Select an option from above"
+        elif self.show_kill_options:
+            sleeping_queries_checkbox = self.query_one("#sleeping_queries")
+            sleeping_queries_checkbox.toggle()
+
+            kill_container.display = True
+
+            kill_radio_buttons = self.query_one("#kill_radio_buttons")
+            kill_radio_buttons.focus()
+
+            input.placeholder = "Select an option from above"
+        else:
+            input.focus()
 
     def on_input_submitted(self):
         self.query_one("#submit").press()
