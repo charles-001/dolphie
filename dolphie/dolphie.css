@@ -188,11 +188,11 @@ Switch.-on > .switch--slider {
     background: #192132;
 }
 Switch.-on:focus > .switch--slider {
-    color: #7bf4c2;
+    color: #a6ffda;
     background: #192132;
 }
 Switch.-on:hover > .switch--slider {
-    color: #7bf4c2;
+    color: #a6ffda;
     background: #192132;
 }
 

@@ -83,6 +83,7 @@ class Dolphie:
         self.innodb_status: dict = {}
         self.replica_data: dict = {}
         self.replica_connections: dict = {}
+        self.replica_tables: dict = {}
 
         # Panel display states
         self.display_dashboard_panel: bool = False
@@ -92,9 +93,9 @@ class Dolphie:
 
         # Database connection variables
         # Main connection is used for Textual's worker thread so it can run asynchronous
-        self.main_connection: Database = None
-        # Secondary connection is for ad-hoc commands
-        self.secondary_connection: Database = None
+        self.main_db_connection: Database = None
+        # Secondary connection is for ad-hoc commands that are not a part of the worker thread
+        self.secondary_db_connection: Database = None
 
         self.connection_id: int = None
         self.use_performance_schema: bool = False
@@ -143,14 +144,14 @@ class Dolphie:
             self.footer_timer = self.app.set_timer(7, lambda: setattr(footer, "display", False))
 
     def db_connect(self):
-        self.main_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
-        self.secondary_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
+        self.main_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
+        self.secondary_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
 
         query = "SELECT CONNECTION_ID() AS connection_id"
-        self.connection_id = self.main_connection.fetchone(query, "connection_id")
+        self.connection_id = self.main_db_connection.fetchone(query, "connection_id")
 
         query = "SELECT @@performance_schema"
-        performance_schema = self.main_connection.fetchone(query, "@@performance_schema")
+        performance_schema = self.main_db_connection.fetchone(query, "@@performance_schema")
         if performance_schema == 1:
             self.performance_schema_enabled = True
 
@@ -158,19 +159,19 @@ class Dolphie:
                 self.use_performance_schema = True
 
         query = "SELECT @@version_comment"
-        version_comment = self.main_connection.fetchone(query, "@@version_comment").lower()
+        version_comment = self.main_db_connection.fetchone(query, "@@version_comment").lower()
 
         query = "SELECT @@basedir"
-        basedir = self.main_connection.fetchone(query, "@@basedir")
+        basedir = self.main_db_connection.fetchone(query, "@@basedir")
 
         aurora_version = None
         query = "SHOW GLOBAL VARIABLES LIKE 'aurora_version'"
-        aurora_version_data = self.main_connection.fetchone(query, "Value")
+        aurora_version_data = self.main_db_connection.fetchone(query, "Value")
         if aurora_version_data:
             aurora_version = aurora_version_data["Value"]
 
         query = "SELECT @@version"
-        version = self.main_connection.fetchone(query, "@@version").lower()
+        version = self.main_db_connection.fetchone(query, "@@version").lower()
         version_split = version.split(".")
 
         self.mysql_version = "%s.%s.%s" % (
@@ -209,7 +210,7 @@ class Dolphie:
         elif major_version == 8 and self.use_performance_schema:
             self.innodb_locks_sql = Queries["locks_query-8"]
 
-        self.server_uuid = self.main_connection.fetchone(server_uuid_query, "@@server_uuid")
+        self.server_uuid = self.main_db_connection.fetchone(server_uuid_query, "@@server_uuid")
 
     def command_input_to_variable(self, return_data):
         variable = return_data[0]
@@ -253,8 +254,8 @@ class Dolphie:
             tables = {}
             all_tables = []
 
-            db_count = self.secondary_connection.execute(Queries["databases"])
-            databases = self.secondary_connection.fetchall()
+            db_count = self.secondary_db_connection.execute(Queries["databases"])
+            databases = self.secondary_db_connection.fetchall()
 
             # Determine how many tables to provide data
             max_num_tables = 1 if db_count <= 20 else 3
@@ -296,7 +297,7 @@ class Dolphie:
             if not self.mysql_version.startswith("8"):
                 self.update_footer("Error log command requires MySQL 8")
             else:
-                self.app.push_screen(EventLog(self.app_version, self.host, self.db))
+                self.app.push_screen(EventLog(self.app_version, self.host, self.secondary_db_connection))
 
         elif key == "f":
 
@@ -369,9 +370,9 @@ class Dolphie:
                 if thread_id in self.processlist_threads:
                     try:
                         if self.host_is_rds:
-                            self.secondary_connection.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                            self.secondary_db_connection.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                         else:
-                            self.secondary_connection.cursor.execute("KILL %s" % thread_id)
+                            self.secondary_db_connection.cursor.execute("KILL %s" % thread_id)
 
                         self.update_footer("Killed thread [b #91abec]%s[/b #91abec]" % thread_id)
                     except Exception as e:
@@ -386,9 +387,9 @@ class Dolphie:
             def command_get_input(data):
                 def execute_kill(thread_id):
                     if self.host_is_rds:
-                        self.secondary_connection.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                        self.secondary_db_connection.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                     else:
-                        self.secondary_connection.cursor.execute("KILL %s" % thread_id)
+                        self.secondary_db_connection.cursor.execute("KILL %s" % thread_id)
 
                 kill_type = data[0]
                 kill_value = data[1]
@@ -478,8 +479,8 @@ class Dolphie:
             table1.add_column("Current", header_style=header_style)
             table1.add_column("Total", header_style=header_style)
 
-            self.secondary_connection.execute(Queries["memory_by_user"])
-            data = self.secondary_connection.fetchall()
+            self.secondary_db_connection.execute(Queries["memory_by_user"])
+            data = self.secondary_db_connection.fetchall()
             for row in data:
                 table1.add_row(
                     row["user"],
@@ -494,8 +495,8 @@ class Dolphie:
             table2.add_column("Code Area", header_style=header_style)
             table2.add_column("Current", header_style=header_style)
 
-            self.secondary_connection.execute(Queries["memory_by_code_area"])
-            data = self.secondary_connection.fetchall()
+            self.secondary_db_connection.execute(Queries["memory_by_code_area"])
+            data = self.secondary_db_connection.fetchall()
             for row in data:
                 table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
 
@@ -507,8 +508,8 @@ class Dolphie:
             table3.add_column("Current", header_style=header_style)
             table3.add_column("Total", header_style=header_style)
 
-            self.secondary_connection.execute(Queries["memory_by_host"])
-            data = self.secondary_connection.fetchall()
+            self.secondary_db_connection.execute(Queries["memory_by_host"])
+            data = self.secondary_db_connection.fetchall()
             for row in data:
                 table3.add_row(
                     self.get_hostname(row["host"]),
@@ -641,10 +642,10 @@ class Dolphie:
                             )
 
                             try:
-                                self.secondary_connection.cursor.execute("USE %s" % query_db)
-                                self.secondary_connection.cursor.execute("EXPLAIN %s" % query)
+                                self.secondary_db_connection.cursor.execute("USE %s" % query_db)
+                                self.secondary_db_connection.cursor.execute("EXPLAIN %s" % query)
 
-                                explain_data = self.secondary_connection.fetchall()
+                                explain_data = self.secondary_db_connection.fetchall()
                             except pymysql.Error as e:
                                 explain_failure = (
                                     "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
@@ -733,10 +734,11 @@ class Dolphie:
                 tables = {}
                 display_variables = {}
 
-                for variable, value in self.variables.items():
+                variable_data = self.secondary_db_connection.fetch_data("variables")
+                for variable, value in variable_data.items():
                     if input_variable:
                         if input_variable in variable:
-                            display_variables[variable] = self.variables[variable]
+                            display_variables[variable] = variable_data[variable]
 
                 max_num_tables = 1 if len(display_variables) <= 50 else 2
 
@@ -890,11 +892,11 @@ class Dolphie:
         user_stats = {}
         userstat_enabled = 0
 
-        if self.secondary_connection.execute("SELECT @@userstat", ignore_error=True) == 1:
-            userstat_enabled = self.secondary_connection.cursor.fetchone()["@@userstat"]
+        if self.secondary_db_connection.execute("SELECT @@userstat", ignore_error=True) == 1:
+            userstat_enabled = self.secondary_db_connection.cursor.fetchone()["@@userstat"]
 
         if userstat_enabled:
-            self.secondary_connection.execute(Queries["userstat_user_statisitics"])
+            self.secondary_db_connection.execute(Queries["userstat_user_statisitics"])
 
             columns.update(
                 {
@@ -916,7 +918,7 @@ class Dolphie:
             )
 
         elif self.performance_schema_enabled:
-            self.secondary_connection.execute(Queries["ps_user_statisitics"])
+            self.secondary_db_connection.execute(Queries["ps_user_statisitics"])
 
             columns.update(
                 {
@@ -933,7 +935,7 @@ class Dolphie:
         else:
             return False
 
-        users = self.secondary_connection.fetchall()
+        users = self.secondary_db_connection.fetchall()
         for user in users:
             username = user["user"]
             if userstat_enabled:

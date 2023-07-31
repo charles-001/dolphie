@@ -166,8 +166,8 @@ def fetch_data(dolphie: Dolphie):
 
     processlist_threads = {}
     # Run the processlist query
-    dolphie.main_connection.execute(processlist_query)
-    threads = dolphie.main_connection.fetchall()
+    dolphie.main_db_connection.execute(processlist_query)
+    threads = dolphie.main_db_connection.fetchall()
 
     for thread in threads:
         # Don't include Dolphie's thread

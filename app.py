@@ -334,22 +334,24 @@ class DolphieApp(App):
             return
 
         dolphie = self.dolphie
-        dolphie.statuses = dolphie.main_connection.fetch_data("status")
 
         if dolphie.display_dashboard_panel:
-            dolphie.variables = dolphie.main_connection.fetch_data("variables")
-            dolphie.primary_status = dolphie.main_connection.fetch_data("primary_status")
+            dolphie.primary_status = dolphie.main_db_connection.fetch_data("primary_status")
+
+        if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
+            dolphie.statuses = dolphie.main_db_connection.fetch_data("status")
+            dolphie.variables = dolphie.main_db_connection.fetch_data("variables")
+            dolphie.innodb_status = dolphie.main_db_connection.fetch_data("innodb_status")
 
         if dolphie.display_dashboard_panel or dolphie.display_replication_panel:
-            dolphie.replica_status = dolphie.main_connection.fetch_data("replica_status")
+            dolphie.replica_status = dolphie.main_db_connection.fetch_data("replica_status")
 
             if dolphie.display_replication_panel:
-                dolphie.replica_data = dolphie.main_connection.fetch_data(
+                dolphie.replica_data = dolphie.main_db_connection.fetch_data(
                     "find_replicas", dolphie.use_performance_schema
                 )
 
-        if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
-            dolphie.innodb_status = dolphie.main_connection.fetch_data("innodb_status")
+                dolphie.replica_tables = replication_panel.fetch_replicas_table_data(dolphie)
 
         if dolphie.display_processlist_panel:
             dolphie.processlist_threads = query_panel.fetch_data(dolphie)
@@ -380,7 +382,7 @@ class DolphieApp(App):
         if replica.display:
             replica.update(replication_panel.create_panel(self.dolphie))
 
-        innodb = self.query_one("#innodb_io_panel")
+        innodb = self.query_one("#innodb_panel")
         if innodb.display:
             innodb.update(innodb_panel.create_panel(self.dolphie))
 
@@ -400,7 +402,7 @@ class DolphieApp(App):
         self.dolphie.db_connect()
         self.dolphie.load_host_cache_file()
 
-        # Set default panels to not show
+        # Set the panels by default to not show
         panels = self.query(".panel")
         for panel in panels:
             panel.display = False
@@ -412,6 +414,7 @@ class DolphieApp(App):
         processlist = self.query_one("#processlist_panel")
         processlist.display = True
         self.dolphie.display_processlist_panel = True
+
         if not self.dolphie.hide_dashboard:
             dashboard = self.query_one("#dashboard_panel")
             dashboard.display = True
@@ -450,7 +453,7 @@ class DolphieApp(App):
             "switch_dashboard": self.query_one("#dashboard_panel"),
             "switch_processlist": self.query_one("#processlist_panel"),
             "switch_replication": self.query_one("#replication_panel"),
-            "switch_innodb": self.query_one("#innodb_io_panel"),
+            "switch_innodb": self.query_one("#innodb_panel"),
         }
 
         panel = panels.get(event.switch.id)
@@ -489,7 +492,7 @@ class DolphieApp(App):
                 yield Switch(animate=False, id="switch_innodb")
             yield Static(id="dashboard_panel", classes="panel")
             yield Static(id="replication_panel", classes="panel")
-            yield Static(id="innodb_io_panel", classes="panel")
+            yield Static(id="innodb_panel", classes="panel")
             yield DataTable(id="processlist_panel", classes="panel", show_cursor=False)
             yield Static(id="footer")
 
