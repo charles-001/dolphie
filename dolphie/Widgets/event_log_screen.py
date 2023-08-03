@@ -101,10 +101,7 @@ class EventLog(Screen):
         if active_sql_list:
             where_clause = " OR ".join(active_sql_list)
 
-        table = Table(
-            show_header=True,
-            box=box.SIMPLE,
-        )
+        table = Table(show_header=True, box=box.SIMPLE, style="#52608d")
         table.add_column("Time", style="#8e8f9d")
         table.add_column("Level")
         table.add_column("Event")

@@ -275,7 +275,7 @@ Environment variables support these options:
             setattr(dolphie, option, parameter_options[option])
 
     if parameter_options["ask_password"]:
-        dolphie.password = Prompt.ask("[b steel_blue1]Password", password=True)
+        dolphie.password = Prompt.ask("[b #91abec]Password", password=True)
 
     if not dolphie.host:
         dolphie.host = "localhost"
@@ -322,20 +322,20 @@ Environment variables support these options:
     dolphie.use_processlist = parameter_options["use_processlist"]
     dolphie.hide_dashboard = parameter_options["hide_dashboard"]
 
-    # Update header's host
-    header = dolphie.app.query_one("#topbar_host")
-    header.update(dolphie.host)
-
 
 class DolphieApp(App):
     TITLE = "Dolphie"
-    CSS_PATH = "dolphie/Dolphie.css"
+    CSS_PATH = "Dolphie/Dolphie.css"
 
-    def __init__(self):
+    def __init__(self, dolphie: Dolphie):
         super().__init__()
-        self.dolphie = Dolphie(self)
 
-    @work(exclusive=True)
+        self.dolphie = dolphie
+        dolphie.app = self
+
+        self.console.set_window_title(self.TITLE)
+
+    @work(exclusive=True, thread=True)
     def worker_fetch_data(self):
         if len(self.screen_stack) > 1 or self.dolphie.pause_refresh:
             return
@@ -344,7 +344,7 @@ class DolphieApp(App):
             dolphie = self.dolphie
 
             if not dolphie.main_db_connection:
-                self.dolphie.db_connect()
+                dolphie.db_connect()
 
             if dolphie.display_dashboard_panel:
                 dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
@@ -419,12 +419,10 @@ class DolphieApp(App):
 
     def on_mount(self):
         dolphie = self.dolphie
-
-        parse_args(dolphie)
         dolphie.load_host_cache_file()
 
         # Set these panels by default to not show
-        panels_to_disable = ["replication_panel", "innodb_panel"]
+        panels_to_disable = ["replication_panel", "innodb_panel", "footer"]
         for panel in panels_to_disable:
             self.query_one(f"#{panel}").display = False
 
@@ -446,7 +444,9 @@ class DolphieApp(App):
 
         dolphie.check_for_update()
 
-        dolphie.update_footer("[b #91abec]Connecting to MySQL[/b #91abec]", temporary=False)
+        # Update header's host
+        header = self.app.query_one("#topbar_host")
+        header.update("Connecting to MySQL...")
 
         self.worker_fetch_data()
 
@@ -512,7 +512,10 @@ def main():
     os.environ["TERM"] = "xterm-256color"
     os.environ["COLORTERM"] = "truecolor"
 
-    app = DolphieApp()
+    dolphie = Dolphie()
+    parse_args(dolphie)
+
+    app = DolphieApp(dolphie)
     app.run()
 
 

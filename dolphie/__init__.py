@@ -2,7 +2,6 @@ import ipaddress
 import os
 import re
 import socket
-import sys
 from datetime import datetime
 from importlib import metadata
 
@@ -35,8 +34,8 @@ except Exception:
 
 
 class Dolphie:
-    def __init__(self, app: App):
-        self.app = app
+    def __init__(self):
+        self.app: App = None
         self.app_version = __version__
 
         # Config options
@@ -130,6 +129,9 @@ class Dolphie:
             pass
 
     def update_footer(self, output, hide=False, temporary=True):
+        if len(self.app.screen_stack) > 1:
+            return
+
         footer = self.app.query_one("#footer")
 
         footer.display = True
@@ -138,7 +140,7 @@ class Dolphie:
         if hide:
             footer.display = False
         elif temporary:
-            # Stop existing time if it exists
+            # Stop existing timer if it exists
             if self.footer_timer and self.footer_timer._active:
                 self.footer_timer.stop()
             self.footer_timer = self.app.set_timer(7, lambda: setattr(footer, "display", False))
@@ -215,7 +217,7 @@ class Dolphie:
 
         self.server_uuid = self.main_db_connection.fetchone(server_uuid_query, "@@server_uuid")
 
-        self.update_footer("", hide=True)
+        self.app.query_one("#topbar_host").update(self.host)
 
     def command_input_to_variable(self, return_data):
         variable = return_data[0]
@@ -270,7 +272,7 @@ class Dolphie:
 
             # Create dictionary of tables
             for table_counter in range(1, max_num_tables + 1):
-                tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
+                tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="#52608d")
                 tables[table_counter].add_column("")
 
             # Loop over databases
@@ -472,11 +474,13 @@ class Dolphie:
                 screen_data = Align.center("No deadlock detected")
 
         elif key == "m":
+            table_line_color = "#52608d"
+
             table_grid = Table.grid()
 
             table1 = Table(
                 box=box.ROUNDED,
-                style="#b0bad7",
+                style=table_line_color,
             )
 
             header_style = Style(bold=True)
@@ -495,7 +499,7 @@ class Dolphie:
 
             table2 = Table(
                 box=box.ROUNDED,
-                style="#b0bad7",
+                style=table_line_color,
             )
             table2.add_column("Code Area", header_style=header_style)
             table2.add_column("Current", header_style=header_style)
@@ -507,7 +511,7 @@ class Dolphie:
 
             table3 = Table(
                 box=box.ROUNDED,
-                style="#b0bad7",
+                style=table_line_color,
             )
             table3.add_column("Host", header_style=header_style)
             table3.add_column("Current", header_style=header_style)
@@ -539,7 +543,7 @@ class Dolphie:
                 self.update_footer("", hide=True)
 
         elif key == "q":
-            sys.exit()
+            self.app.exit()
 
         elif key == "r":
 
@@ -575,7 +579,7 @@ class Dolphie:
             def command_get_input(thread_id):
                 if thread_id:
                     if thread_id in self.processlist_threads:
-                        table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
+                        table = Table(box=box.ROUNDED, show_header=False, style="#52608d")
                         table.add_column("")
                         table.add_column("")
 
@@ -657,7 +661,7 @@ class Dolphie:
                                 )
 
                             if explain_data:
-                                explain_table = Table(box=box.ROUNDED, style="#b0bad7")
+                                explain_table = Table(box=box.ROUNDED, style="#52608d")
 
                                 columns = []
                                 for row in explain_data:
@@ -749,7 +753,7 @@ class Dolphie:
 
                 # Create the number of tables we want
                 while table_counter <= max_num_tables:
-                    tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
+                    tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="#52608d")
                     tables[table_counter].add_column("")
                     tables[table_counter].add_column("")
 
@@ -789,7 +793,7 @@ class Dolphie:
 
         elif key == "z":
             if self.host_cache:
-                table = Table(box=box.ROUNDED, style="#b0bad7")
+                table = Table(box=box.ROUNDED, style="#52608d")
                 table.add_column("Host/IP")
                 table.add_column("Hostname (if resolved)")
 
@@ -806,6 +810,8 @@ class Dolphie:
                 screen_data = Align.center("\nThere are currently no hosts resolved")
 
         elif key == "question_mark":
+            table_line_color = "#52608d"
+
             keys = {
                 "1": "Switch between using Processlist/Performance Schema for listing queries",
                 "2": "Display output from SHOW ENGINE INNODB STATUS",
@@ -831,7 +837,7 @@ class Dolphie:
                 "z": "Show all entries in the host cache",
             }
 
-            table_keys = Table(box=box.ROUNDED, style="#b0bad7", title="Commands", title_style="bold")
+            table_keys = Table(box=box.ROUNDED, style=table_line_color, title="Commands", title_style="bold")
             table_keys.add_column("Key", justify="center", style="b #91abec")
             table_keys.add_column("Description")
 
@@ -869,7 +875,7 @@ class Dolphie:
                 "Tickets": "Relates to innodb_concurrency_tickets variable",
             }
 
-            table_info = Table(box=box.ROUNDED, style="#b0bad7", title="Terminology", title_style="bold")
+            table_info = Table(box=box.ROUNDED, style=table_line_color, title="Terminology", title_style="bold")
             table_info.add_column("Datapoint", style="#91abec")
             table_info.add_column("Description")
             for datapoint, description in sorted(datapoints.items()):
@@ -881,9 +887,8 @@ class Dolphie:
                 Align.center(table_info),
                 "",
                 Align.center(
-                    "[#bbc8e8][b]Note[/b]: Textual puts your terminal in application mode which disables clicking and"
-                    " dragging to select text.\nTo see how to select text on your terminal, visit:"
-                    " https://tinyurl.com/dolphie-select-text"
+                    "[#bbc8e8][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
+                    " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-select-text"
                 ),
             )
 
@@ -891,7 +896,7 @@ class Dolphie:
             self.app.push_screen(CommandScreen(self.app_version, self.host, screen_data))
 
     def create_user_stats_table(self):
-        table = Table(header_style="bold white", box=box.ROUNDED, style="#b0bad7")
+        table = Table(header_style="bold white", box=box.ROUNDED, style="#52608d")
 
         columns = {}
         user_stats = {}

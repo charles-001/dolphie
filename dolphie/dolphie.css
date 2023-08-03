@@ -9,21 +9,21 @@
     scrollbar-color-hover: #55658d;
     scrollbar-color-active: #8999c4;
 
-    color: #ededed;
+    color: #e9e9e9;
     
 }
 
 #_default, CommandScreen, EventLog { # screens
-    background: #000718;
+    background: #030918;
 }
 TextLog {
-    background: #000718;
+    background: #030918;
     
 }
 DataTable {
-    background: #000718;
-    align: center middle;
-    overflow: hidden;
+    background: #030918;
+    overflow-x: hidden;
+    max-height: 999999;
 }
 
 ModalScreen {
@@ -94,13 +94,10 @@ CommandModal Input {
     width: 40;
     margin: 1 2;
     background: #181e2e;
-    border: solid #687bb0;
+    border: solid #515f8c;
 }
 CommandModal Input>.input--placeholder {
     color: #7e8dac;
-}
-CommandModal Button {
-    margin-right: 1;
 }
 CommandModal Label {
     text-style: bold;
@@ -119,9 +116,19 @@ CommandModal RadioButton .toggle--button {
 }
 CommandModal RadioSet ToggleButton:hover {
     background: #181e2e;
+    text-style: none;
 }
-CommandModal RadioSet:focus > RadioButton.-selected > .toggle--label {
-    text-style: bold;
+CommandModal RadioSet ToggleButton:hover .toggle--label {
+    text-style: underline;
+    color: #a5b8e7;
+}
+RadioSet:focus > RadioButton.-selected > .toggle--label {
+    text-style: underline;
+}
+CommandModal RadioSet:focus RadioButton.-selected .toggle--label {
+    color: #a5b8e7;
+}
+CommandModal RadioSet > RadioButton.-selected > .toggle--label {
     color: #91abec;
 }
 
@@ -135,12 +142,8 @@ CommandModal Checkbox {
 CommandModal Checkbox .toggle--button {
     background: #343d56;
 }
-CommandModal RadioSet:focus > .toggle--label {
-    text-style: none;
-}
 CommandModal ToggleButton:focus > .toggle--label {
-    text-style: bold;
-    color: #91abec;
+    text-style: underline;
 }
 CommandModal ToggleButton.-on > .toggle--button {
     color: #62c39a;
@@ -170,7 +173,7 @@ Button.-default:hover {
 }
 
 Switch {
-    background: #000718;
+    background: #030918;
     border: none #364774;
 }
 Switch > .switch--slider {

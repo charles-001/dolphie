@@ -116,7 +116,7 @@ Environment variables support these options:
 
 ## Grants required
 #### Least privilege
-1. PROCESS
+1. PROCESS (if you don't use `performance_schema`)
 2. SELECT to `performance_schema` (if used) + `pt-heartbeat table` (if used)
 3. REPLICATION CLIENT
 

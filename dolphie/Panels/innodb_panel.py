@@ -16,7 +16,7 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     table_title_style = Style(bold=True)
     table_box = box.ROUNDED
-    table_line_color = "#b0bad7"
+    table_line_color = "#52608d"
 
     table_innodb_information = Table(
         box=table_box,

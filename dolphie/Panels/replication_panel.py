@@ -61,7 +61,7 @@ def create_panel(dolphie: Dolphie):
 def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thread_id=None):
     table_title_style = Style(bold=True)
     table_box = box.ROUNDED
-    table_line_color = "#b0bad7"
+    table_line_color = "#52608d"
 
     # This is for the replica view
     if list_replica_thread_id:
@@ -200,8 +200,6 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
             "[#c5c7d2]Relay Log",
             "%s ([#969aad]%s[/#969aad])" % (data["Relay_Log_File"], data["Relay_Log_Pos"]),
         )
-
-        table.add_row("[#c5c7d2]GTID", "%s" % data["gtid"])
 
         if data["mysql_gtid_enabled"]:
             executed_gtid_set = data["Executed_Gtid_Set"]

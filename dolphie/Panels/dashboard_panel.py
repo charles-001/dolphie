@@ -27,14 +27,14 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     table_title_style = Style(bold=True)
     table_box = box.ROUNDED
-    table_line_color = "#b0bad7"
+    table_line_color = "#52608d"
 
     ################
     # Information #
     ###############
     table_information = Table(
         show_header=False,
-        box=box.ROUNDED,
+        box=table_box,
         title="Host Information",
         title_style=table_title_style,
         style=table_line_color,
