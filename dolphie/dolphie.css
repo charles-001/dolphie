@@ -1,22 +1,19 @@
 * {
-    scrollbar-background: #192036;
-    scrollbar-background-active: #141b2e;
-
-    scrollbar-background-hover: #141b2e;
+    scrollbar-background: #161c2f;
+    scrollbar-background-hover: #192036;
     scrollbar-background-active: #192036;
 
-    scrollbar-color: #3b496e;
-    scrollbar-color-hover: #55658d;
-    scrollbar-color-active: #8999c4;
+    scrollbar-color: #33405c;
+    scrollbar-color-hover: #3c4b6b;
+    scrollbar-color-active: #526389;
 
     color: #e9e9e9;
-    
 }
 
 #_default, CommandScreen, EventLog { # screens
     background: #030918;
 }
-TextLog {
+RichLog {
     background: #030918;
     
 }
@@ -73,14 +70,28 @@ TopBar {
 }
 
 CommandModal > Vertical {
-    background: #181e2e;
-    border: thick #212941;
+    background: #121626;
+    border: thick #20263d;
     height: auto;
     width: auto;
 }
 CommandModal > Vertical > * {
     width: auto;
     height: auto;
+}
+CommandModal AutoComplete {
+    width: auto;
+    height: auto;
+}
+CommandModal Dropdown {
+    width: 60;
+    background: #151926;
+}
+CommandModal Dropdown .autocomplete--highlight-match {
+    background: #777500;
+}
+CommandModal Dropdown .autocomplete--selection-cursor {
+    background: #283048;
 }
 CommandModal #kill_container {
     width: 100%;
@@ -93,8 +104,8 @@ CommandModal #button_container {
 CommandModal Input {
     width: 40;
     margin: 1 2;
-    background: #181e2e;
-    border: solid #515f8c;
+    background: #121626;
+    border: solid #4d5980;
 }
 CommandModal Input>.input--placeholder {
     color: #7e8dac;
@@ -105,7 +116,7 @@ CommandModal Label {
     content-align: center middle;
 }
 CommandModal RadioSet {
-    background: #181e2e;
+    background: #121626;
     border: none;
     padding-top: 1;
     align: center middle;
@@ -115,7 +126,7 @@ CommandModal RadioButton .toggle--button {
     background: #343d56;
 }
 CommandModal RadioSet ToggleButton:hover {
-    background: #181e2e;
+    background: #121626;
     text-style: none;
 }
 CommandModal RadioSet ToggleButton:hover .toggle--label {
@@ -133,7 +144,7 @@ CommandModal RadioSet > RadioButton.-selected > .toggle--label {
 }
 
 CommandModal Checkbox {
-    background: #181e2e;
+    background: #121626;
     border: none;
     padding-top: 1;
     content-align: center middle;
@@ -151,14 +162,14 @@ CommandModal ToggleButton.-on > .toggle--button {
 }
 
 Button.-primary {
-    background: #21315d;
-    border-top: tall #486297;
-    border-bottom: tall #121927;
+    background: #1b2c5a;
+    border-top: tall #40558c;
+    border-bottom: tall #0d152b;
 }
 Button.-primary:hover {
-    background: #293d74;
-    border-top: tall #586fad;
-    border-bottom: tall #161f36;
+    background: #223467;
+    border-top: tall #48609d;
+    border-bottom: tall #111b37;
 }
 
 Button.-default {

@@ -351,7 +351,11 @@ class Dolphie:
                 self.update_footer("Now filtering %s by [b #91abec]%s[/b #91abec]" % (filter_name, filter_value))
 
             self.app.push_screen(
-                CommandModal(message="Select which field you'd like to filter by", show_filter_options=True),
+                CommandModal(
+                    message="Select which field you'd like to filter by",
+                    show_filter_options=True,
+                    processlist_data=self.processlist_threads,
+                ),
                 command_get_input,
             )
 
@@ -387,7 +391,10 @@ class Dolphie:
                 else:
                     self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
 
-            self.app.push_screen(CommandModal(message="Specify a Thread ID to kill"), command_get_input)
+            self.app.push_screen(
+                CommandModal(message="Specify a Thread ID to kill", processlist_data=self.processlist_threads),
+                command_get_input,
+            )
 
         elif key == "K":
 
@@ -453,7 +460,11 @@ class Dolphie:
                     self.update_footer("No threads were killed")
 
             self.app.push_screen(
-                CommandModal(message="Kill threads based around parameters", show_kill_options=True),
+                CommandModal(
+                    message="Kill threads based around parameters",
+                    show_kill_options=True,
+                    processlist_data=self.processlist_threads,
+                ),
                 command_get_input,
             )
 

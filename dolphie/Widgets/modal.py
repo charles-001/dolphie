@@ -3,6 +3,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, RadioButton, RadioSet
+from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
 
 
 class CommandModal(ModalScreen):
@@ -10,12 +11,20 @@ class CommandModal(ModalScreen):
         Binding("escape", "app.pop_screen", "", show=False),
     ]
 
-    def __init__(self, message, variable=None, show_filter_options=False, show_kill_options=False):
+    def __init__(
+        self, message, variable=None, processlist_data=None, show_filter_options=False, show_kill_options=False
+    ):
         super().__init__()
         self.variable = variable
         self.message = message
         self.show_filter_options = show_filter_options
         self.show_kill_options = show_kill_options
+        self.processlist_data = processlist_data
+
+        self.dropdown_items = []
+        if processlist_data and (not show_filter_options and not show_kill_options):
+            sorted_keys = sorted(processlist_data.keys(), key=lambda x: int(x))
+            self.dropdown_items = [DropdownItem(id) for id in sorted_keys]
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -33,7 +42,10 @@ class CommandModal(ModalScreen):
                         yield RadioButton("Host/IP", id="host")
                         yield RadioButton("Time range", id="time_range")
                     yield Checkbox("Include sleeping queries", id="sleeping_queries")
-                yield Input(id="modal_input")
+                yield AutoComplete(
+                    Input(id="modal_input"),
+                    Dropdown(id="dropdown_items", items=self.dropdown_items),
+                )
             with Horizontal(id="button_container"):
                 yield Button("Submit", id="submit", variant="primary")
                 yield Button("Cancel", id="cancel")
@@ -67,23 +79,40 @@ class CommandModal(ModalScreen):
     def on_input_submitted(self):
         self.query_one("#submit").press()
 
+    def create_dropdown_items(self, field):
+        self.dropdown_items = []
+
+        if field:
+            sorted_array = sorted(set(data.get(field) for _, data in self.processlist_data.items()))
+            self.dropdown_items = [DropdownItem(value) for value in sorted_array]
+
+        self.query_one("#dropdown_items").items = self.dropdown_items
+
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         modal_input = self.query_one("#modal_input")
+
+        self.create_dropdown_items(None)  # empty string to clear dropdown items
+
         if self.show_filter_options:
             if event.pressed.id == "database":
+                self.create_dropdown_items("db")
                 modal_input.placeholder = "Database name"
             elif event.pressed.id == "host":
+                self.create_dropdown_items("host")
                 modal_input.placeholder = "Hostname or IP address"
             elif event.pressed.id == "query_text":
                 modal_input.placeholder = "Partial query text"
             elif event.pressed.id == "query_time":
                 modal_input.placeholder = "Query time (in seconds)"
             elif event.pressed.id == "user":
+                self.create_dropdown_items("user")
                 modal_input.placeholder = "Username"
         elif self.show_kill_options:
             if event.pressed.id == "username":
+                self.create_dropdown_items("user")
                 modal_input.placeholder = "Username"
             elif event.pressed.id == "host":
+                self.create_dropdown_items("host")
                 modal_input.placeholder = "Hostname or IP address"
             elif event.pressed.id == "time_range":
                 modal_input.placeholder = "Time range (ex. 10-20)"

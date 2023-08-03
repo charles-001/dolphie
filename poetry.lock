@@ -445,13 +445,13 @@ test = ["pytest", "pytest-cov"]
 
 [[package]]
 name = "textual"
-version = "0.31.0"
+version = "0.32.0"
 description = "Modern Text User Interface framework"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "textual-0.31.0-py3-none-any.whl", hash = "sha256:1243bccadb28e1ff46bdfe676ee25a6ce52756842bc9dca4d824e0bc4d7d9a42"},
-    {file = "textual-0.31.0.tar.gz", hash = "sha256:e2b43f1c26b21731ee83f558f8d6cb4f7163e3a713854c36cd7785139a0e4e51"},
+    {file = "textual-0.32.0-py3-none-any.whl", hash = "sha256:81fc68406c8806bc864e2f035874a868b4ff0cf466289dce5f7b31869949383b"},
+    {file = "textual-0.32.0.tar.gz", hash = "sha256:f7b6683bc18faee6fd3c47cfbad43fbf8273c5fecc12230d52ce5ee089021327"},
 ]
 
 [package.dependencies]
@@ -459,6 +459,21 @@ importlib-metadata = ">=4.11.3"
 markdown-it-py = {version = ">=2.1.0", extras = ["linkify", "plugins"]}
 rich = ">=13.3.3"
 typing-extensions = ">=4.4.0,<5.0.0"
+
+[[package]]
+name = "textual-autocomplete"
+version = "2.1.0b0"
+description = "Easily add autocomplete dropdowns to your Textual apps."
+optional = false
+python-versions = ">=3.7.8,<4.0.0"
+files = [
+    {file = "textual_autocomplete-2.1.0b0-py3-none-any.whl", hash = "sha256:40a7b2e09f115465de7e339bcee4dc16f03c1e43781ee3aaf5c44f65822a5861"},
+    {file = "textual_autocomplete-2.1.0b0.tar.gz", hash = "sha256:ba31da6e9b77e4c35323c267f958f0b90e1c2ddeca9c825c7d6c29d4d33893ce"},
+]
+
+[package.dependencies]
+textual = ">=0.14.0"
+typing-extensions = ">=4.5.0,<5.0.0"
 
 [[package]]
 name = "typing-extensions"
@@ -520,4 +535,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "94cdf8af8050623c79b55a047cd6bdc09e6deaff02c468992c5436180fb20094"
+content-hash = "909675bf2332e7f598277b0661b2de24814b056f01cfae66f817d4d8def56e43"

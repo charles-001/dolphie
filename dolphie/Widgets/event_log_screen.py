@@ -7,7 +7,7 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.reactive import reactive
 from textual.screen import Screen
-from textual.widgets import Label, Switch, TextLog
+from textual.widgets import Label, RichLog, Switch
 
 
 class EventLog(Screen):
@@ -51,8 +51,8 @@ class EventLog(Screen):
         for switch in switches:
             switch.toggle()
 
-        textlog = self.query_one("#textlog")
-        textlog.focus()
+        richlog = self.query_one("#richlog")
+        richlog.focus()
 
     def on_key(self, event: events.Key):
         exclude_events = ["up", "down", "left", "right", "pageup", "pagedown", "home", "end", "tab", "enter"]
@@ -69,11 +69,11 @@ class EventLog(Screen):
             yield Label("Error")
             yield Switch(animate=False, id="error")
         yield Label("", id="info")
-        yield TextLog(id="textlog", auto_scroll=False, markup=True)
+        yield RichLog(id="richlog", auto_scroll=False, markup=True)
 
     def watch_event_log_data(self):
         info = self.query_one("#info")
-        text_log = self.query_one("#textlog")
+        text_log = self.query_one("#richlog")
         text_log.clear()
 
         active_levels = any(data["active"] for data in self.levels.values())
