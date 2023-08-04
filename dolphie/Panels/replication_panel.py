@@ -119,13 +119,13 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
 
         if replica_sbm != 0:
             if replica_sbm > 20:
-                data["Lag"] = "[#fc7979]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[#fc7979]%s" % "{:0>8}[/#fc7979]".format(str(timedelta(seconds=replica_sbm)))
             elif replica_sbm > 10:
-                data["Lag"] = "[#f1fb82w]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[#f1fb82w]%s[/#f1fb82w]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
             else:
-                data["Lag"] = "[#54efae]%s" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[#54efae]%s[/#54efae]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
         elif replica_sbm == 0:
-            data["Lag"] = "[#54efae]00:00:00"
+            data["Lag"] = "[#54efae]00:00:00[/#54efae]"
 
     data["Master_Host"] = dolphie.get_hostname(data["Master_Host"])
     data["mysql_gtid_enabled"] = False
@@ -176,7 +176,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     else:
         table.add_row(
             "[#c5c7d2]%s Lag" % data["sbm_source"],
-            "%s [#c5c7d2]Speed %s" % (data["Lag"], data["Speed"]),
+            "%s [#c5c7d2]Speed[/#c5c7d2] %s" % (data["Lag"], data["Speed"]),
         )
     if dashboard_table:
         table.add_row("[#c5c7d2]Binlog IO", "%s" % (data["Master_Log_File"]))

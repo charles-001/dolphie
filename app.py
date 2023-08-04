@@ -26,7 +26,7 @@ from rich.prompt import Prompt
 from rich.traceback import Traceback
 from textual import events, work
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll
 from textual.widgets import DataTable, Label, Static, Switch
 from textual.worker import Worker, WorkerState
 
@@ -503,7 +503,9 @@ class DolphieApp(App):
             yield Static(id="dashboard_panel", classes="panel")
             yield Static(id="replication_panel", classes="panel")
             yield Static(id="innodb_panel", classes="panel")
-            yield DataTable(id="processlist_panel", classes="panel", show_cursor=False)
+            yield Container(
+                DataTable(id="processlist_panel", classes="panel", show_cursor=False), id="processlist_container"
+            )
             yield Static(id="footer")
 
 

@@ -20,7 +20,7 @@ RichLog {
 DataTable {
     background: #030918;
     overflow-x: hidden;
-    max-height: 999999;
+    /* max-height: 999999; */
 }
 
 ModalScreen {

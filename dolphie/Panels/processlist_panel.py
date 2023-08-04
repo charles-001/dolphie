@@ -4,7 +4,33 @@ from datetime import timedelta
 from dolphie import Dolphie
 from dolphie.Functions import format_number
 from dolphie.Queries import Queries
+from rich.text import Text
 from textual.widgets import DataTable
+
+
+class TextPlus(Text):
+    """Custom patch for a Rich `Text` object to allow Textual `DataTable`
+    sorting when a Text object is included in a row."""
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain < other.plain
+
+    def __le__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain <= other.plain
+
+    def __gt__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain > other.plain
+
+    def __ge__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain >= other.plain
 
 
 def create_panel(dolphie: Dolphie) -> DataTable:
@@ -46,11 +72,12 @@ def create_panel(dolphie: Dolphie) -> DataTable:
     )
 
     processlist_datatable = dolphie.app.query_one("#processlist_panel")
+
+    # Clear columns or entire datatable if necessary
     if len(processlist_datatable.columns) != len(columns):
         processlist_datatable.clear(columns=True)
-    else:
-        processlist_datatable.clear()
 
+    # Add columns to the datatable if it is empty
     if not processlist_datatable.columns:
         for column_data in columns:
             column_name = column_data["name"]
@@ -58,26 +85,50 @@ def create_panel(dolphie: Dolphie) -> DataTable:
             column_width = column_data["width"]
             processlist_datatable.add_column(column_name, key=column_key, width=column_width)
 
-    for id, thread in dolphie.processlist_threads.items():
+    # Iterate through dolphie.processlist_threads
+    for thread_id, thread in dolphie.processlist_threads.items():
+        # Add or modify the "command" field based on the condition
         if thread["command"] == "Killed":
-            thread["command"] = "[#fc7979]%s" % thread["command"]
+            thread["command"] = "[#fc7979]Killed"
+
+        # Check if the thread_id exists in the datatable
+        if thread_id in processlist_datatable.rows:
+            datatable_row = processlist_datatable.get_row(thread_id)
+
+            # Update the datatable if values differ
+            for column_id, column_data in enumerate(columns):
+                column_name = column_data["field"]
+                column_format_number = column_data["format_number"]
+
+                if column_name == "query":
+                    value = re.sub(r"\s+", " ", thread[column_name])
+                else:
+                    value = format_number(thread[column_name]) if column_format_number else thread[column_name]
+
+                if value != datatable_row[column_id]:
+                    processlist_datatable.update_cell(thread_id, column_name, value)
         else:
-            thread["command"] = thread["command"]
+            # Add a new row to the datatable if thread_id does not exist
+            row_values = []
+            for column_data in columns:
+                column_name = column_data["field"]
+                column_format_number = column_data["format_number"]
 
-        # Add rows for each thread or update existing ones
-        row_values = []
-        for column_data in columns:
-            column_name = column_data["field"]
-            column_format_number = column_data["format_number"]
+                if column_name == "query":
+                    value = re.sub(r"\s+", " ", thread[column_name])
+                else:
+                    value = format_number(thread[column_name]) if column_format_number else thread[column_name]
 
-            if column_name == "query":
-                value = re.sub(r"\s+", " ", thread[column_name])
-            else:
-                value = format_number(thread[column_name]) if column_format_number else thread[column_name]
+                row_values.append(value)
 
-            row_values.append(value)
+            processlist_datatable.add_row(*row_values, key=thread_id)
 
-        processlist_datatable.add_row(*row_values)
+    # Remove rows from processlist_datatable that no longer exist in dolphie.processlist_threads
+    rows_to_remove = set(processlist_datatable.rows.keys()) - set(dolphie.processlist_threads.keys())
+    for id in rows_to_remove:
+        processlist_datatable.remove_row(id)
+
+    processlist_datatable.sort("formatted_time", reverse=dolphie.sort_by_time_descending)
 
 
 def fetch_data(dolphie: Dolphie):
@@ -191,16 +242,18 @@ def fetch_data(dolphie: Dolphie):
             thread_color = "magenta"
         elif query and command != "Sleep" and "Binlog Dump" not in command:
             if time >= 5:
-                thread_color = "[#fc7979]"
+                thread_color = "#fc7979"
             elif time >= 3:
-                thread_color = "[#f1fb82]"
+                thread_color = "#f1fb82"
             elif time <= 2:
-                thread_color = "[#54efae]"
+                thread_color = "#54efae"
 
         hours = time // 3600
         minutes = (time % 3600) // 60
         seconds = time % 60
-        formatted_time = "{}{:02}:{:02}:{:02}".format(thread_color, hours, minutes, seconds)
+        formatted_time = TextPlus("{:02}:{:02}:{:02}".format(hours, minutes, seconds), style=thread_color)
+
+        formatted_time_with_days = TextPlus("{:0>8}".format(str(timedelta(seconds=time))), style=thread_color)
 
         # If after the first loop there's nothing in cache, don't try to resolve anymore.
         # This is an optimization
@@ -216,9 +269,9 @@ def fetch_data(dolphie: Dolphie):
             "user": thread["user"],
             "host": host,
             "db": thread["db"],
-            "formatted_time": formatted_time,
             "time": time,
-            "hhmmss_time": "{}{:0>8}".format(thread_color, str(timedelta(seconds=time))),
+            "formatted_time_with_days": formatted_time_with_days,
+            "formatted_time": formatted_time,
             "command": command,
             "state": thread["state"],
             "trx_state": thread["trx_state"],

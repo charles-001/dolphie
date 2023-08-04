@@ -617,7 +617,7 @@ class Dolphie:
                         )
                         table.add_row(
                             "[#c5c7d2]Time",
-                            self.processlist_threads[thread_id]["hhmmss_time"],
+                            self.processlist_threads[thread_id]["formatted_time_with_days"],
                         )
                         table.add_row(
                             "[#c5c7d2]Rows Locked",
@@ -720,7 +720,9 @@ class Dolphie:
                         self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
 
             self.app.push_screen(
-                CommandModal(message="Specify a Thread ID to display its details"),
+                CommandModal(
+                    message="Specify a Thread ID to display its details", processlist_data=self.processlist_threads
+                ),
                 command_get_input,
             )
 
