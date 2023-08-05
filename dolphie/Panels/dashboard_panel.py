@@ -314,7 +314,7 @@ def create_panel(dolphie: Dolphie) -> Table:
             table_primary.add_row("[#c5c7d2]GTID", "%s" % str(variables["gtid_mode"]))
         else:
             table_primary.add_row()
-        table_primary.add_row()
+        table_primary.add_row("Count", str(len(dolphie.sparkline_qps)))
 
         tables_to_add.append(table_primary)
 
@@ -342,7 +342,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_stats.add_column()
     table_stats.add_column(min_width=7)
 
-    if loop_duration_seconds == 0:
+    if not saved_status:
         queries_per_second = 0
         selects_per_second = 0
         inserts_per_second = 0
@@ -380,5 +380,20 @@ def create_panel(dolphie: Dolphie) -> Table:
     tables_to_add.append(table_stats)
 
     dashboard_grid.add_row(*tables_to_add)
+
+    # Update the sparkline for queries per second
+    sparkline = dolphie.app.query_one("Sparkline")
+    if queries_per_second > 0:
+        dolphie.sparkline_qps.append(queries_per_second)
+
+    # Only keep 120 points of data
+    if len(dolphie.sparkline_qps) >= 120:
+        dolphie.sparkline_qps = dolphie.sparkline_qps[-120:]
+
+    if not sparkline.display and dolphie.sparkline_qps:
+        sparkline.display = True
+
+    sparkline.data = dolphie.sparkline_qps
+    sparkline.refresh()
 
     return dashboard_grid

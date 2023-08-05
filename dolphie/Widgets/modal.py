@@ -51,9 +51,9 @@ class CommandModal(ModalScreen):
                 yield Button("Cancel", id="cancel")
 
     def on_mount(self):
-        input = self.query_one("#modal_input")
-        filter_radio_buttons = self.query_one("#filter_radio_buttons")
-        kill_container = self.query_one("#kill_container")
+        input = self.query_one("#modal_input", Input)
+        filter_radio_buttons = self.query_one("#filter_radio_buttons", RadioSet)
+        kill_container = self.query_one("#kill_container", Vertical)
 
         filter_radio_buttons.display = False
         kill_container.display = False
@@ -64,12 +64,12 @@ class CommandModal(ModalScreen):
 
             input.placeholder = "Select an option from above"
         elif self.show_kill_options:
-            sleeping_queries_checkbox = self.query_one("#sleeping_queries")
+            sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
             sleeping_queries_checkbox.toggle()
 
             kill_container.display = True
 
-            kill_radio_buttons = self.query_one("#kill_radio_buttons")
+            kill_radio_buttons = self.query_one("#kill_radio_buttons", RadioSet)
             kill_radio_buttons.focus()
 
             input.placeholder = "Select an option from above"
@@ -77,7 +77,7 @@ class CommandModal(ModalScreen):
             input.focus()
 
     def on_input_submitted(self):
-        self.query_one("#submit").press()
+        self.query_one("#submit", Button).press()
 
     def create_dropdown_items(self, field):
         self.dropdown_items = []
@@ -86,10 +86,10 @@ class CommandModal(ModalScreen):
             sorted_array = sorted(set(data.get(field) for _, data in self.processlist_data.items()))
             self.dropdown_items = [DropdownItem(value) for value in sorted_array]
 
-        self.query_one("#dropdown_items").items = self.dropdown_items
+        self.query_one("#dropdown_items", Dropdown).items = self.dropdown_items
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
-        modal_input = self.query_one("#modal_input")
+        modal_input = self.query_one("#modal_input", Input)
 
         self.create_dropdown_items(None)  # empty string to clear dropdown items
 
@@ -121,7 +121,7 @@ class CommandModal(ModalScreen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "submit":
-            modal_input = self.query_one("#modal_input")
+            modal_input = self.query_one("#modal_input", Input)
 
             if self.variable:
                 self.dismiss([self.variable, modal_input.value])
@@ -130,7 +130,7 @@ class CommandModal(ModalScreen):
                     if rb.value:
                         self.dismiss([rb.id, modal_input.value])
             elif self.show_kill_options:
-                checkbox_sleeping_queries = self.query_one("#sleeping_queries")
+                checkbox_sleeping_queries = self.query_one("#sleeping_queries", Checkbox)
                 for rb in self.query("#kill_container RadioButton"):
                     if rb.value:
                         self.dismiss([rb.id, modal_input.value, checkbox_sleeping_queries.value])

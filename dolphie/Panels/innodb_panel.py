@@ -203,12 +203,13 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb_activity.add_column("")
     table_innodb_activity.add_column("", min_width=8)
 
-    if loop_duration_seconds == 0:
+    if not saved_status:
         reads_mem_per_second = 0
         reads_disk_per_second = 0
         writes_per_second = 0
         log_waits = 0
         row_lock_waits = 0
+        bp_clean_page_wait = 0
     else:
         reads_mem_per_second = round(
             (statuses["Innodb_buffer_pool_read_requests"] - saved_status["Innodb_buffer_pool_read_requests"])
@@ -228,22 +229,21 @@ def create_panel(dolphie: Dolphie) -> Table:
             (statuses["Innodb_row_lock_waits"] - saved_status["Innodb_row_lock_waits"]) / loop_duration_seconds
         )
 
+        bp_clean_page_wait = (
+            statuses["Innodb_buffer_pool_wait_free"] - saved_status["Innodb_buffer_pool_wait_free"]
+        ) / loop_duration_seconds
+
     table_innodb_activity.add_row("[#c5c7d2]BP reads/s (mem)", format_number(reads_mem_per_second))
     table_innodb_activity.add_row("[#c5c7d2]BP reads/s (disk)", format_number(reads_disk_per_second))
     table_innodb_activity.add_row("[#c5c7d2]BP writes/s", format_number(writes_per_second))
 
-    bp_clean_page_wait = format_number(
-        (statuses["Innodb_buffer_pool_wait_free"] - saved_status["Innodb_buffer_pool_wait_free"])
-        / loop_duration_seconds
-    )
-
     bp_clean_page_wait_color = ""
-    if bp_clean_page_wait != "0":
+    if bp_clean_page_wait:
         bp_clean_page_wait_color = "[#fc7979]"
 
     table_innodb_activity.add_row(
         "[#c5c7d2]BP clean page wait/s",
-        bp_clean_page_wait_color + bp_clean_page_wait,
+        bp_clean_page_wait_color + format_number(bp_clean_page_wait),
     )
     table_innodb_activity.add_row("[#c5c7d2]Log waits/s", format_number(log_waits))
     table_innodb_activity.add_row("[#c5c7d2]Row lock waits/s", format_number(row_lock_waits))
@@ -259,7 +259,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_row_operations.add_column("")
     table_row_operations.add_column("", min_width=8)
 
-    if loop_duration_seconds == 0:
+    if not saved_status:
         reads_per_second = 0
         inserts_per_second = 0
         updates_per_second = 0

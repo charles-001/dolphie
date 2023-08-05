@@ -51,7 +51,7 @@ class EventLog(Screen):
         for switch in switches:
             switch.toggle()
 
-        richlog = self.query_one("#richlog")
+        richlog = self.query_one("#richlog", RichLog)
         richlog.focus()
 
     def on_key(self, event: events.Key):
@@ -72,8 +72,8 @@ class EventLog(Screen):
         yield RichLog(id="richlog", auto_scroll=False, markup=True)
 
     def watch_event_log_data(self):
-        info = self.query_one("#info")
-        text_log = self.query_one("#richlog")
+        info = self.query_one("#info", Label)
+        text_log = self.query_one("#richlog", RichLog)
         text_log.clear()
 
         active_levels = any(data["active"] for data in self.levels.values())

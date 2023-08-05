@@ -20,14 +20,19 @@ RichLog {
 DataTable {
     background: #030918;
     overflow-x: hidden;
-    /* max-height: 999999; */
+}
+
+Sparkline > .sparkline--max-color {
+    color: #2e457b;
+}
+Sparkline > .sparkline--min-color {
+    color: #7b90be;
 }
 
 ModalScreen {
     align: center middle;
     height: 40;
 }
-
 
 TopBar {
     dock: top;

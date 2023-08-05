@@ -8,31 +8,6 @@ from rich.text import Text
 from textual.widgets import DataTable
 
 
-class TextPlus(Text):
-    """Custom patch for a Rich `Text` object to allow Textual `DataTable`
-    sorting when a Text object is included in a row."""
-
-    def __lt__(self, other: object) -> bool:
-        if not isinstance(other, Text):
-            return NotImplemented
-        return self.plain < other.plain
-
-    def __le__(self, other: object) -> bool:
-        if not isinstance(other, Text):
-            return NotImplemented
-        return self.plain <= other.plain
-
-    def __gt__(self, other: object) -> bool:
-        if not isinstance(other, Text):
-            return NotImplemented
-        return self.plain > other.plain
-
-    def __ge__(self, other: object) -> bool:
-        if not isinstance(other, Text):
-            return NotImplemented
-        return self.plain >= other.plain
-
-
 def create_panel(dolphie: Dolphie) -> DataTable:
     columns = [
         {"name": "Thread ID", "field": "id", "width": 11, "format_number": False},
@@ -71,9 +46,9 @@ def create_panel(dolphie: Dolphie) -> DataTable:
         ]
     )
 
-    processlist_datatable = dolphie.app.query_one("#processlist_panel")
+    processlist_datatable = dolphie.app.query_one("#processlist_panel", DataTable)
 
-    # Clear columns or entire datatable if necessary
+    # Clear table if columns change
     if len(processlist_datatable.columns) != len(columns):
         processlist_datatable.clear(columns=True)
 
@@ -100,13 +75,15 @@ def create_panel(dolphie: Dolphie) -> DataTable:
                 column_name = column_data["field"]
                 column_format_number = column_data["format_number"]
 
+                update_width = False
                 if column_name == "query":
                     value = re.sub(r"\s+", " ", thread[column_name])
+                    update_width = True
                 else:
                     value = format_number(thread[column_name]) if column_format_number else thread[column_name]
 
-                if value != datatable_row[column_id]:
-                    processlist_datatable.update_cell(thread_id, column_name, value)
+                if value != datatable_row[column_id] or column_name == "formatted_time":
+                    processlist_datatable.update_cell(thread_id, column_name, value, update_width=update_width)
         else:
             # Add a new row to the datatable if thread_id does not exist
             row_values = []
@@ -240,7 +217,7 @@ def fetch_data(dolphie: Dolphie):
         thread_color = ""
         if "SELECT /*!40001 SQL_NO_CACHE */ *" in query:
             thread_color = "magenta"
-        elif query and command != "Sleep" and "Binlog Dump" not in command:
+        elif query:
             if time >= 5:
                 thread_color = "#fc7979"
             elif time >= 3:
@@ -283,3 +260,28 @@ def fetch_data(dolphie: Dolphie):
         }
 
     return processlist_threads
+
+
+class TextPlus(Text):
+    """Custom patch for a Rich `Text` object to allow Textual `DataTable`
+    sorting when a Text object is included in a row."""
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain < other.plain
+
+    def __le__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain <= other.plain
+
+    def __gt__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain > other.plain
+
+    def __ge__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain >= other.plain

@@ -68,6 +68,7 @@ class Dolphie:
         self.previous_main_loop_time: datetime = datetime.now()
         self.loop_duration_seconds: int = 0
         self.processlist_threads: dict = {}
+        self.processlist_threads_snapshot: dict = {}
         self.pause_refresh: bool = False
         self.first_loop: bool = True
         self.saved_status: bool = None
@@ -80,6 +81,7 @@ class Dolphie:
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
         self.innodb_status: dict = {}
+        self.sparkline_qps: list = []
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -314,7 +316,11 @@ class Dolphie:
 
                 if filter_name == "user":
                     self.user_filter = next(
-                        (data["user"] for data in self.processlist_threads.values() if filter_value == data["user"]),
+                        (
+                            data["user"]
+                            for data in self.processlist_threads_snapshot.values()
+                            if filter_value == data["user"]
+                        ),
                         None,
                     )
                     if not self.user_filter:
@@ -324,7 +330,11 @@ class Dolphie:
                         return
                 elif filter_name == "database":
                     self.db_filter = next(
-                        (data["db"] for data in self.processlist_threads.values() if filter_value == data["db"]),
+                        (
+                            data["db"]
+                            for data in self.processlist_threads_snapshot.values()
+                            if filter_value == data["db"]
+                        ),
                         None,
                     )
                     if not self.db_filter:
@@ -354,7 +364,7 @@ class Dolphie:
                 CommandModal(
                     message="Select which field you'd like to filter by",
                     show_filter_options=True,
-                    processlist_data=self.processlist_threads,
+                    processlist_data=self.processlist_threads_snapshot,
                 ),
                 command_get_input,
             )
@@ -378,7 +388,7 @@ class Dolphie:
                     self.update_footer("[indian_red]You did not specify a Thread ID")
                     return
 
-                if thread_id in self.processlist_threads:
+                if thread_id in self.processlist_threads_snapshot:
                     try:
                         if self.host_is_rds:
                             self.secondary_db_connection.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
@@ -392,7 +402,7 @@ class Dolphie:
                     self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
 
             self.app.push_screen(
-                CommandModal(message="Specify a Thread ID to kill", processlist_data=self.processlist_threads),
+                CommandModal(message="Specify a Thread ID to kill", processlist_data=self.processlist_threads_snapshot),
                 command_get_input,
             )
 
@@ -439,7 +449,7 @@ class Dolphie:
                 if include_sleeping_queries:
                     commands_to_kill.append("Sleep")
 
-                for thread_id, thread in self.processlist_threads.items():
+                for thread_id, thread in self.processlist_threads_snapshot.items():
                     try:
                         if thread["command"] in commands_to_kill:
                             if kill_type == "time_range":
@@ -463,7 +473,7 @@ class Dolphie:
                 CommandModal(
                     message="Kill threads based around parameters",
                     show_kill_options=True,
-                    processlist_data=self.processlist_threads,
+                    processlist_data=self.processlist_threads_snapshot,
                 ),
                 command_get_input,
             )
@@ -589,7 +599,7 @@ class Dolphie:
 
             def command_get_input(thread_id):
                 if thread_id:
-                    if thread_id in self.processlist_threads:
+                    if thread_id in self.processlist_threads_snapshot:
                         table = Table(box=box.ROUNDED, show_header=False, style="#52608d")
                         table.add_column("")
                         table.add_column("")
@@ -597,35 +607,35 @@ class Dolphie:
                         table.add_row("[#c5c7d2]Thread ID", str(thread_id))
                         table.add_row(
                             "[#c5c7d2]User",
-                            self.processlist_threads[thread_id]["user"],
+                            self.processlist_threads_snapshot[thread_id]["user"],
                         )
                         table.add_row(
                             "[#c5c7d2]Host",
-                            self.processlist_threads[thread_id]["host"],
+                            self.processlist_threads_snapshot[thread_id]["host"],
                         )
                         table.add_row(
                             "[#c5c7d2]Database",
-                            self.processlist_threads[thread_id]["db"],
+                            self.processlist_threads_snapshot[thread_id]["db"],
                         )
                         table.add_row(
                             "[#c5c7d2]Command",
-                            self.processlist_threads[thread_id]["command"],
+                            self.processlist_threads_snapshot[thread_id]["command"],
                         )
                         table.add_row(
                             "[#c5c7d2]State",
-                            self.processlist_threads[thread_id]["state"],
+                            self.processlist_threads_snapshot[thread_id]["state"],
                         )
                         table.add_row(
                             "[#c5c7d2]Time",
-                            self.processlist_threads[thread_id]["formatted_time_with_days"],
+                            self.processlist_threads_snapshot[thread_id]["formatted_time_with_days"],
                         )
                         table.add_row(
                             "[#c5c7d2]Rows Locked",
-                            self.processlist_threads[thread_id]["trx_rows_locked"],
+                            self.processlist_threads_snapshot[thread_id]["trx_rows_locked"],
                         )
                         table.add_row(
                             "[#c5c7d2]Rows Modified",
-                            self.processlist_threads[thread_id]["trx_rows_modified"],
+                            self.processlist_threads_snapshot[thread_id]["trx_rows_modified"],
                         )
                         if (
                             "innodb_thread_concurrency" in self.variables
@@ -633,22 +643,22 @@ class Dolphie:
                         ):
                             table.add_row(
                                 "[#c5c7d2]Tickets",
-                                self.processlist_threads[thread_id]["trx_concurrency_tickets"],
+                                self.processlist_threads_snapshot[thread_id]["trx_concurrency_tickets"],
                             )
                         table.add_row("", "")
                         table.add_row(
                             "[#c5c7d2]TRX State",
-                            self.processlist_threads[thread_id]["trx_state"],
+                            self.processlist_threads_snapshot[thread_id]["trx_state"],
                         )
                         table.add_row(
                             "[#c5c7d2]TRX Operation",
-                            self.processlist_threads[thread_id]["trx_operation_state"],
+                            self.processlist_threads_snapshot[thread_id]["trx_operation_state"],
                         )
 
-                        query = sqlformat(self.processlist_threads[thread_id]["query"], reindent_aligned=True)
-                        query_db = self.processlist_threads[thread_id]["db"]
+                        query = sqlformat(self.processlist_threads_snapshot[thread_id]["query"], reindent_aligned=True)
+                        query_db = self.processlist_threads_snapshot[thread_id]["db"]
 
-                        if query and query_db:
+                        if query:
                             explain_failure = None
                             explain_data = None
 
@@ -661,15 +671,16 @@ class Dolphie:
                                 background_color="#000718",
                             )
 
-                            try:
-                                self.secondary_db_connection.cursor.execute("USE %s" % query_db)
-                                self.secondary_db_connection.cursor.execute("EXPLAIN %s" % query)
+                            if query_db:
+                                try:
+                                    self.secondary_db_connection.cursor.execute("USE %s" % query_db)
+                                    self.secondary_db_connection.cursor.execute("EXPLAIN %s" % query)
 
-                                explain_data = self.secondary_db_connection.fetchall()
-                            except pymysql.Error as e:
-                                explain_failure = (
-                                    "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
-                                )
+                                    explain_data = self.secondary_db_connection.fetchall()
+                                except pymysql.Error as e:
+                                    explain_failure = (
+                                        "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
+                                    )
 
                             if explain_data:
                                 explain_table = Table(box=box.ROUNDED, style="#52608d")
@@ -721,7 +732,8 @@ class Dolphie:
 
             self.app.push_screen(
                 CommandModal(
-                    message="Specify a Thread ID to display its details", processlist_data=self.processlist_threads
+                    message="Specify a Thread ID to display its details",
+                    processlist_data=self.processlist_threads_snapshot,
                 ),
                 command_get_input,
             )

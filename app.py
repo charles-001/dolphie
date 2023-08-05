@@ -27,7 +27,7 @@ from rich.traceback import Traceback
 from textual import events, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
-from textual.widgets import DataTable, Label, Static, Switch
+from textual.widgets import DataTable, Label, Sparkline, Static, Switch
 from textual.worker import Worker, WorkerState
 
 
@@ -385,32 +385,33 @@ class DolphieApp(App):
             return
 
         dolphie = self.dolphie
+
         loop_time = datetime.now()
+        dolphie.loop_duration_seconds = (loop_time - dolphie.previous_main_loop_time).total_seconds()
 
-        if not dolphie.saved_status:
-            dolphie.saved_status = dolphie.statuses.copy()
-
-        dashboard = self.query_one("#dashboard_panel")
+        dashboard = self.query_one("#dashboard_panel", Static)
         if dashboard.display:
             dashboard.update(dashboard_panel.create_panel(self.dolphie))
 
-        processlist = self.query_one("#processlist_panel")
+        processlist = self.query_one("#processlist_panel", DataTable)
         if processlist.display:
             processlist_panel.create_panel(self.dolphie)
 
-        replica = self.query_one("#replication_panel")
+        replica = self.query_one("#replication_panel", Static)
         if replica.display:
             replica.update(replication_panel.create_panel(self.dolphie))
 
-        innodb = self.query_one("#innodb_panel")
+        innodb = self.query_one("#innodb_panel", Static)
         if innodb.display:
             innodb.update(innodb_panel.create_panel(self.dolphie))
 
         # This is for the many stats per second in Dolphie
         dolphie.saved_status = dolphie.statuses.copy()
-
-        dolphie.loop_duration_seconds = (loop_time - dolphie.previous_main_loop_time).total_seconds()
         dolphie.previous_main_loop_time = loop_time
+
+        # We take a snapshot of the processlist to be used for commands
+        # since the data can change after a key is pressed
+        dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
         self.set_timer(self.dolphie.refresh_interval, self.worker_fetch_data)
 
@@ -424,14 +425,14 @@ class DolphieApp(App):
         # Set these panels by default to not show
         panels_to_disable = ["replication_panel", "innodb_panel", "footer"]
         for panel in panels_to_disable:
-            self.query_one(f"#{panel}").display = False
+            self.query_one(f"#{panel}", Static).display = False
 
         dolphie.display_processlist_panel = True
         if dolphie.hide_dashboard:
-            self.query_one("#dashboard_panel").display = False
+            self.query_one("#dashboard_panel", Static).display = False
             dolphie.display_dashboard_panel = False
         else:
-            self.query_one("#dashboard_panel").update("[b #91abec]Loading[/b #91abec]")
+            self.query_one("#dashboard_panel", Static).update("[b #91abec]Loading[/b #91abec]")
             dolphie.display_dashboard_panel = True
 
         # Set default switches to be toggled on
@@ -440,13 +441,15 @@ class DolphieApp(App):
             if switch_name == "switch_dashboard" and dolphie.hide_dashboard:
                 continue
 
-            self.query_one(f"#{switch_name}").toggle()
+            self.query_one(f"#{switch_name}", Switch).toggle()
 
         dolphie.check_for_update()
 
         # Update header's host
-        header = self.app.query_one("#topbar_host")
+        header = self.app.query_one("#topbar_host", Label)
         header.update("Connecting to MySQL...")
+
+        self.query_one(Sparkline).display = False
 
         self.worker_fetch_data()
 
@@ -468,10 +471,10 @@ class DolphieApp(App):
         dolphie = self.dolphie
 
         panels = {
-            "switch_dashboard": self.query_one("#dashboard_panel"),
-            "switch_processlist": self.query_one("#processlist_panel"),
-            "switch_replication": self.query_one("#replication_panel"),
-            "switch_innodb": self.query_one("#innodb_panel"),
+            "switch_dashboard": self.query_one("#dashboard_panel", Static),
+            "switch_processlist": self.query_one("#processlist_panel", DataTable),
+            "switch_replication": self.query_one("#replication_panel", Static),
+            "switch_innodb": self.query_one("#innodb_panel", Static),
         }
 
         panel = panels.get(event.switch.id)
@@ -481,6 +484,18 @@ class DolphieApp(App):
                     panel.clear()
                 else:
                     panel.update("[b #91abec]Loading[/b #91abec]")
+
+                if panel.id == "dashboard_panel":
+                    if not event.value:
+                        self.query_one(Sparkline).display = False
+
+                        # Clear sparkline data so its reset
+                        self.dolphie.sparkline_qps = []
+                    else:
+                        # Reset the saved status since the last save would spike the diff if innodb panel isn't
+                        # displayed since it also runs the fetch status command
+                        if not dolphie.display_innodb_panel:
+                            self.dolphie.saved_status = None
 
                 # Update Dolphie's display_* attributes
                 setattr(dolphie, f"display_{panel.id}", event.value)
@@ -501,6 +516,10 @@ class DolphieApp(App):
                 yield Label("InnoDB")
                 yield Switch(animate=False, id="switch_innodb")
             yield Static(id="dashboard_panel", classes="panel")
+            yield Sparkline(
+                [],
+                summary_function=max,
+            )
             yield Static(id="replication_panel", classes="panel")
             yield Static(id="innodb_panel", classes="panel")
             yield Container(
