@@ -32,6 +32,7 @@ Sparkline > .sparkline--min-color {
 ModalScreen {
     align: center middle;
     height: 40;
+    color: #4d5a85;
 }
 
 TopBar {
@@ -69,11 +70,20 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
 }
-.panel {
-    padding-top: 1;
+
+#replication_panel {
+    max-height: 30;
+}
+.panel_data {
     content-align: center middle;
 }
-
+.panel_container {
+    padding-top: 1;
+    height: auto;
+}
+#processlist_panel {
+    padding-top: 1;
+}
 CommandModal > Vertical {
     background: #121626;
     border: thick #20263d;

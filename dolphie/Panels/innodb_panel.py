@@ -21,7 +21,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb_information = Table(
         box=table_box,
         style=table_line_color,
-        title="InnoDB Information",
+        title="General",
         title_style=table_title_style,
         show_header=False,
     )
@@ -72,78 +72,6 @@ def create_panel(dolphie: Dolphie) -> Table:
             "[#c5c7d2]Adapt Hash Idx",
             "%s [#c5c7d2]" % (variables["innodb_adaptive_hash_index"]),
         )
-
-    # Calculate AIO reads
-    total_pending_aio_reads = 0
-    total_pending_aio_writes = 0
-    output = re.search(
-        r"Pending normal aio reads: (?:\d+\s)?\[(.*?)\] , aio writes: (?:\d+\s)?\[(.*?)\]", innodb_status["status"]
-    )
-    if output:
-        match = output.group(1).split(",")
-
-        for aio_read in match:
-            total_pending_aio_reads += int(aio_read)
-
-        match = output.group(2).split(",")
-        for aio_write in match:
-            total_pending_aio_writes += int(aio_write)
-    else:
-        total_pending_aio_reads = "N/A"
-        total_pending_aio_writes = "N/A"
-
-    # Get pending insert buffer, log i/o, and sync i/o
-    pending_ibuf_aio_reads = 0
-    pending_log_ios = 0
-    pending_sync_ios = 0
-
-    search_pattern = re.search(
-        r"ibuf aio reads:\s?(\d+)?, log i/o's:\s?(\d+)?, sync i/o's:\s?(\d+)",
-        innodb_status["status"],
-    )
-    if search_pattern:
-        pending_ibuf_aio_reads = search_pattern.group(1)
-        pending_log_ios = search_pattern.group(2)
-        pending_sync_ios = search_pattern.group(3)
-
-    # Get pending log and buffer pool flushes
-    pending_log_flush = 0
-    pending_buffer_pool_flush = 0
-
-    search_pattern = re.search(r"Pending flushes \(.+?\) log: (\d+); buffer pool: (\d+)", innodb_status["status"])
-    if search_pattern:
-        pending_log_flush = search_pattern.group(1)
-        pending_buffer_pool_flush = search_pattern.group(2)
-
-    table_pending_io = Table(
-        box=table_box,
-        style=table_line_color,
-        title="Pending",
-        title_style=table_title_style,
-        show_header=False,
-    )
-    table_pending_io.add_column("")
-    table_pending_io.add_column("", min_width=5)
-
-    table_pending_io.add_row(
-        "[#c5c7d2]Normal AIO Reads",
-        format_number(total_pending_aio_reads),
-    )
-    table_pending_io.add_row(
-        "[#c5c7d2]Normal AIO Writes",
-        format_number(total_pending_aio_writes),
-    )
-    table_pending_io.add_row(
-        "[#c5c7d2]Insert Buffer Reads",
-        format_number(pending_ibuf_aio_reads),
-    )
-    table_pending_io.add_row("[#c5c7d2]Log IO/s", format_number(pending_log_ios))
-    table_pending_io.add_row("[#c5c7d2]Sync IO/s", format_number(pending_sync_ios))
-    table_pending_io.add_row("[#c5c7d2]Log Flushes", format_number(pending_log_flush))
-    table_pending_io.add_row(
-        "[#c5c7d2]Buffer Pool Flushes",
-        format_number(pending_buffer_pool_flush),
-    )
 
     # Get reads/avg bytes/writes/fsyncs per second
     reads_s = 0
@@ -288,8 +216,6 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     # Put these two tables side-by-side
     table_grid = Table.grid()
-    table_grid.add_row(
-        table_innodb_information, table_innodb_activity, table_row_operations, table_pending_io, table_file_io
-    )
+    table_grid.add_row(table_innodb_information, table_innodb_activity, table_row_operations, table_file_io)
 
     return table_grid

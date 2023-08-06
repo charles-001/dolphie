@@ -12,15 +12,8 @@ from rich.table import Table
 
 
 def create_panel(dolphie: Dolphie):
-    # Return an empty table if the host doesn't support this panel
     if dolphie.display_replication_panel and not dolphie.replica_data and not dolphie.replication_status:
-        dolphie.update_footer(
-            "[b indian_red]Cannot use this panel![/b indian_red] This host is not a replica and has no"
-            " replicas connected"
-        )
-        dolphie.app.query_one("#switch_replication").toggle()
-
-        return Table()
+        return "[#f1fb82]No data to display![/#f1fb82] This host is not a replica and has no replicas connected"
 
     table_grid = Table.grid()
     table_replication = Table()
@@ -31,11 +24,11 @@ def create_panel(dolphie: Dolphie):
     # Stack tables in groups of 3
     tables = sorted(dolphie.replica_tables.items())
     num_tables = len(tables)
-    for i in range(0, num_tables - (num_tables % 3), 3):
-        table_grid.add_row(*[table for _, table in tables[i : i + 3]])
+    for i in range(0, num_tables - (num_tables % 2), 2):
+        table_grid.add_row(*[table for _, table in tables[i : i + 2]])
 
-    if num_tables % 3 != 0:
-        table_grid.add_row(*[table for _, table in tables[num_tables - (num_tables % 3) :]])
+    if num_tables % 2 != 0:
+        table_grid.add_row(*[table for _, table in tables[num_tables - (num_tables % 2) :]])
 
     if dolphie.replication_status:
         # GTID Sets can be very long, so we don't center align replication table or else table

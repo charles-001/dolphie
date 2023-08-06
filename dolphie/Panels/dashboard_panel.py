@@ -314,7 +314,7 @@ def create_panel(dolphie: Dolphie) -> Table:
             table_primary.add_row("[#c5c7d2]GTID", "%s" % str(variables["gtid_mode"]))
         else:
             table_primary.add_row()
-        table_primary.add_row("Count", str(len(dolphie.sparkline_qps)))
+        table_primary.add_row()
 
         tables_to_add.append(table_primary)
 

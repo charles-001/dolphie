@@ -231,18 +231,13 @@ class Dolphie:
         screen_data = None
 
         if key == "1":
-            if self.use_performance_schema:
-                self.use_performance_schema = False
-                self.update_footer("Switched to using [b #91abec]Processlist")
-            else:
-                if self.performance_schema_enabled:
-                    self.use_performance_schema = True
-                    self.update_footer("Switched to using [b #91abec]Performance Schema")
-                else:
-                    self.update_footer("[indian_red]You can't switch to Performance Schema because it isn't enabled")
-
+            self.app.query_one("#switch_dashboard").toggle()
         elif key == "2":
-            screen_data = self.innodb_status["status"]
+            self.app.query_one("#switch_processlist").toggle()
+        elif key == "3":
+            self.app.query_one("#switch_replication").toggle()
+        elif key == "4":
+            self.app.query_one("#switch_innodb").toggle()
 
         elif key == "a":
             if self.show_additional_query_columns:
@@ -494,6 +489,9 @@ class Dolphie:
             else:
                 screen_data = Align.center("No deadlock detected")
 
+        elif key == "o":
+            screen_data = self.innodb_status["status"]
+
         elif key == "m":
             table_line_color = "#52608d"
 
@@ -562,6 +560,17 @@ class Dolphie:
             else:
                 self.pause_refresh = False
                 self.update_footer("", hide=True)
+
+        if key == "P":
+            if self.use_performance_schema:
+                self.use_performance_schema = False
+                self.update_footer("Switched to using [b #91abec]Processlist")
+            else:
+                if self.performance_schema_enabled:
+                    self.use_performance_schema = True
+                    self.update_footer("Switched to using [b #91abec]Performance Schema")
+                else:
+                    self.update_footer("[indian_red]You can't switch to Performance Schema because it isn't enabled")
 
         elif key == "q":
             self.app.exit()
@@ -838,8 +847,6 @@ class Dolphie:
             table_line_color = "#52608d"
 
             keys = {
-                "1": "Switch between using Processlist/Performance Schema for listing queries",
-                "2": "Display output from SHOW ENGINE INNODB STATUS",
                 "a": "Show/hide additional processlist columns",
                 "c": "Clear all filters set",
                 "d": "Display all databases",
@@ -849,8 +856,10 @@ class Dolphie:
                 "k": "Kill a query by thread ID",
                 "K": "Kill a query by either user/host/time range",
                 "l": "Show latest deadlock detected",
+                "o": "Display output from SHOW ENGINE INNODB STATUS",
                 "m": "Display memory usage",
                 "p": "Pause refreshing",
+                "P": "Switch between using Processlist/Performance Schema for listing queries",
                 "q": "Quit",
                 "r": "Set the refresh interval",
                 "t": "Show details of a thread along with an EXPLAIN of its query",
@@ -867,7 +876,19 @@ class Dolphie:
             table_keys.add_column("Description")
 
             for key, description in sorted(keys.items()):
-                table_keys.add_row("[#91abec]%s" % key, description)
+                table_keys.add_row(key, description)
+
+            panels = {
+                "1": "Show/hide Dashboard",
+                "2": "Show/hide InnoDB Information",
+                "3": "Show/hide Processlist",
+                "4": "Show/hide Replication/Replicas",
+            }
+            table_panels = Table(box=box.ROUNDED, style=table_line_color, title="Panels", title_style="bold")
+            table_panels.add_column("Key", justify="center", style="b #91abec")
+            table_panels.add_column("Description")
+            for key, description in sorted(panels.items()):
+                table_panels.add_row(key, description)
 
             datapoints = {
                 "Read Only": "If the host is in read-only mode",
@@ -894,22 +915,21 @@ class Dolphie:
                 "Latency": "How much time it takes to receive data from the host for Dolphie each refresh interval",
                 "Threads": "Con = Connected, Run = Running, Cac = Cached from SHOW GLOBAL STATUS",
                 "Speed": "How many seconds were taken off of replication lag from the last refresh interval",
-                "Query A/Q": (
-                    "How many queries are active/queued in InnoDB. Based on innodb_thread_concurrency variable"
-                ),
                 "Tickets": "Relates to innodb_concurrency_tickets variable",
             }
 
-            table_info = Table(box=box.ROUNDED, style=table_line_color, title="Terminology", title_style="bold")
-            table_info.add_column("Datapoint", style="#91abec")
-            table_info.add_column("Description")
+            table_terminology = Table(box=box.ROUNDED, style=table_line_color, title="Terminology", title_style="bold")
+            table_terminology.add_column("Datapoint", style="#91abec")
+            table_terminology.add_column("Description")
             for datapoint, description in sorted(datapoints.items()):
-                table_info.add_row("[#91abec]%s" % datapoint, description)
+                table_terminology.add_row(datapoint, description)
 
             screen_data = Group(
                 Align.center(table_keys),
                 "",
-                Align.center(table_info),
+                Align.center(table_panels),
+                "",
+                Align.center(table_terminology),
                 "",
                 Align.center(
                     "[#bbc8e8][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
