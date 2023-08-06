@@ -26,10 +26,10 @@ DataTable {
     padding-top: 1;
 }
 Sparkline > .sparkline--max-color {
-    color: #2e457b;
+    color: #869fd9;
 }
 Sparkline > .sparkline--min-color {
-    color: #7b90be;
+    color: #384c7a;
 }
 
 ModalScreen {

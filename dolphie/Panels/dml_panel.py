@@ -47,8 +47,8 @@ def update_sparklines(dolphie: Dolphie):
 
             sparkline_data.append(dml_per_second)
 
-            # Retain only the last 200 data points
-            sparkline_data = sparkline_data[-200:]
+            # Retain only the last 300 data points
+            sparkline_data = sparkline_data[-300:]
 
             dolphie.dml_panel_qps[sparkline.id] = sparkline_data
 
