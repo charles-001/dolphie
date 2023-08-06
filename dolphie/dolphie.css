@@ -22,6 +22,9 @@ DataTable {
     overflow-x: hidden;
 }
 
+.sparkline_label {
+    padding-top: 1;
+}
 Sparkline > .sparkline--max-color {
     color: #2e457b;
 }
@@ -80,6 +83,9 @@ TopBar {
 .panel_container {
     padding-top: 1;
     height: auto;
+}
+#dml_panel {
+    padding-top: 0;
 }
 #processlist_panel {
     padding-top: 1;
@@ -207,21 +213,21 @@ Switch > .switch--slider {
     background: #192132;
 }
 Switch:focus > .switch--slider {
-    background: #91abec;
+    background: #7aa1fb;
 }
 Switch:hover > .switch--slider {
-    background: #91abec;
+    background: #7aa1fb;
 }
 Switch.-on > .switch--slider {
-    color: #62c39a;
+    color: #5c81d7;
     background: #192132;
 }
 Switch.-on:focus > .switch--slider {
-    color: #a6ffda;
+    color: #8caefd;
     background: #192132;
 }
 Switch.-on:hover > .switch--slider {
-    color: #a6ffda;
+    color: #8caefd;
     background: #192132;
 }
 

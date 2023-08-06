@@ -81,7 +81,8 @@ class Dolphie:
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
         self.innodb_status: dict = {}
-        self.sparkline_qps: list = []
+        self.dashboard_panel_qps: list = []
+        self.dml_panel_qps: dict = {}
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -93,6 +94,7 @@ class Dolphie:
         self.display_processlist_panel: bool = False
         self.display_replication_panel: bool = False
         self.display_innodb_panel: bool = False
+        self.display_dml_panel: bool = False
 
         # Database connection variables
         # Main connection is used for Textual's worker thread so it can run asynchronous
@@ -231,13 +233,15 @@ class Dolphie:
         screen_data = None
 
         if key == "1":
-            self.app.query_one("#switch_dashboard").toggle()
+            self.app.query_one("#dashboard_switch").toggle()
         elif key == "2":
-            self.app.query_one("#switch_processlist").toggle()
+            self.app.query_one("#processlist_switch").toggle()
         elif key == "3":
-            self.app.query_one("#switch_replication").toggle()
+            self.app.query_one("#replication_switch").toggle()
         elif key == "4":
-            self.app.query_one("#switch_innodb").toggle()
+            self.app.query_one("#innodb_switch").toggle()
+        elif key == "5":
+            self.app.query_one("#dml_switch").toggle()
 
         elif key == "a":
             if self.show_additional_query_columns:
@@ -871,7 +875,7 @@ class Dolphie:
                 "z": "Show all entries in the host cache",
             }
 
-            table_keys = Table(box=box.ROUNDED, style=table_line_color, title="Commands", title_style="bold")
+            table_keys = Table(box=box.HORIZONTALS, style=table_line_color, title="Commands", title_style="bold")
             table_keys.add_column("Key", justify="center", style="b #91abec")
             table_keys.add_column("Description")
 
@@ -883,8 +887,9 @@ class Dolphie:
                 "2": "Show/hide InnoDB Information",
                 "3": "Show/hide Processlist",
                 "4": "Show/hide Replication/Replicas",
+                "5": "Show/hide DML Sparklines",
             }
-            table_panels = Table(box=box.ROUNDED, style=table_line_color, title="Panels", title_style="bold")
+            table_panels = Table(box=box.HORIZONTALS, style=table_line_color, title="Panels", title_style="bold")
             table_panels.add_column("Key", justify="center", style="b #91abec")
             table_panels.add_column("Description")
             for key, description in sorted(panels.items()):
@@ -918,7 +923,9 @@ class Dolphie:
                 "Tickets": "Relates to innodb_concurrency_tickets variable",
             }
 
-            table_terminology = Table(box=box.ROUNDED, style=table_line_color, title="Terminology", title_style="bold")
+            table_terminology = Table(
+                box=box.HORIZONTALS, style=table_line_color, title="Terminology", title_style="bold"
+            )
             table_terminology.add_column("Datapoint", style="#91abec")
             table_terminology.add_column("Description")
             for datapoint, description in sorted(datapoints.items()):

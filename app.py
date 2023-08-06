@@ -16,6 +16,7 @@ from dolphie import Dolphie
 from dolphie.ManualException import ManualException
 from dolphie.Panels import (
     dashboard_panel,
+    dml_panel,
     innodb_panel,
     processlist_panel,
     replication_panel,
@@ -27,6 +28,7 @@ from rich.traceback import Traceback
 from textual import events, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
+from textual.css.query import NoMatches
 from textual.widgets import DataTable, Label, Sparkline, Static, Switch
 from textual.worker import Worker, WorkerState
 
@@ -346,23 +348,24 @@ class DolphieApp(App):
             if not dolphie.main_db_connection:
                 dolphie.db_connect()
 
+            dolphie.statuses = dolphie.main_db_connection.fetch_data("status")
+
             if dolphie.display_dashboard_panel:
                 dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
 
             if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
-                dolphie.statuses = dolphie.main_db_connection.fetch_data("status")
                 dolphie.variables = dolphie.main_db_connection.fetch_data("variables")
                 dolphie.innodb_status = dolphie.main_db_connection.fetch_data("innodb_status")
 
             if dolphie.display_dashboard_panel or dolphie.display_replication_panel:
                 dolphie.replication_status = dolphie.main_db_connection.fetch_data("replication_status")
 
-                if dolphie.display_replication_panel:
-                    dolphie.replica_data = dolphie.main_db_connection.fetch_data(
-                        "find_replicas", dolphie.use_performance_schema
-                    )
+            if dolphie.display_replication_panel:
+                dolphie.replica_data = dolphie.main_db_connection.fetch_data(
+                    "find_replicas", dolphie.use_performance_schema
+                )
 
-                    dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
+                dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
 
             if dolphie.display_processlist_panel:
                 dolphie.processlist_threads = processlist_panel.fetch_data(dolphie)
@@ -389,27 +392,26 @@ class DolphieApp(App):
         loop_time = datetime.now()
         dolphie.loop_duration_seconds = (loop_time - dolphie.previous_main_loop_time).total_seconds()
 
-        panel = "dashboard_panel"
-        dashboard = self.query_one(f"#{panel}", Container)
-        if dashboard.display:
-            self.query_one(f"#{panel}_data", Static).update(dashboard_panel.create_panel(self.dolphie))
+        try:
+            if dolphie.display_dashboard_panel:
+                self.query_one("#dashboard_panel_data", Static).update(dashboard_panel.create_panel(self.dolphie))
+                qps_sparkline = self.query_one("#dashboard_panel_qps", Sparkline)
+                if not qps_sparkline.display and self.dolphie.dml_panel_qps:
+                    qps_sparkline.display = True
 
-        panel = "processlist_panel"
-        processlist = self.query_one(f"#{panel}", Container)
-        if processlist.display:
-            processlist_panel.create_panel(self.dolphie)
+            if dolphie.display_processlist_panel:
+                processlist_panel.create_panel(self.dolphie)
 
-        panel = "replication_panel"
-        replication = self.query_one(f"#{panel}", VerticalScroll)
-        if replication.display:
-            self.query_one(f"#{panel}_data", Static).update(replication_panel.create_panel(self.dolphie))
+            if dolphie.display_replication_panel:
+                self.query_one("#replication_panel_data", Static).update(replication_panel.create_panel(self.dolphie))
 
-        panel = "innodb_panel"
-        innodb = self.query_one(f"#{panel}", Container)
-        if innodb.display:
-            self.query_one(f"#{panel}_data", Static).update(innodb_panel.create_panel(self.dolphie))
+            if dolphie.display_innodb_panel:
+                self.query_one("#innodb_panel_data", Static).update(innodb_panel.create_panel(self.dolphie))
 
-        # This is for the many stats per second in Dolphie
+            dml_panel.update_sparklines(self.dolphie)
+        except NoMatches:
+            pass
+
         dolphie.saved_status = dolphie.statuses.copy()
         dolphie.previous_main_loop_time = loop_time
 
@@ -427,7 +429,13 @@ class DolphieApp(App):
         dolphie.load_host_cache_file()
 
         # Set these components by default to not show
-        components_to_disable = ["replication_panel", "innodb_panel", "footer", "sparkline_qps"]
+        components_to_disable = [
+            "replication_panel",
+            "innodb_panel",
+            "footer",
+            "dashboard_panel_qps",
+            "dml_panel",
+        ]
         for component in components_to_disable:
             self.query_one(f"#{component}").display = False
 
@@ -440,7 +448,7 @@ class DolphieApp(App):
             dolphie.display_dashboard_panel = True
 
         # Set default switches to be toggled on
-        switches_to_toggle_on = ["switch_dashboard", "switch_processlist"]
+        switches_to_toggle_on = ["dashboard_switch", "processlist_switch"]
         for switch_name in switches_to_toggle_on:
             if switch_name == "switch_dashboard" and dolphie.hide_dashboard:
                 continue
@@ -473,10 +481,11 @@ class DolphieApp(App):
         dolphie = self.dolphie
 
         panels = {
-            "switch_dashboard": self.query_one("#dashboard_panel", Container),
-            "switch_processlist": self.query_one("#processlist_panel", Container),
-            "switch_replication": self.query_one("#replication_panel", VerticalScroll),
-            "switch_innodb": self.query_one("#innodb_panel", Container),
+            "dashboard_switch": self.query_one("#dashboard_panel", Container),
+            "processlist_switch": self.query_one("#processlist_panel", Container),
+            "replication_switch": self.query_one("#replication_panel", VerticalScroll),
+            "innodb_switch": self.query_one("#innodb_panel", Container),
+            "dml_switch": self.query_one("#dml_panel", Container),
         }
 
         panel: Container = panels.get(event.switch.id)
@@ -485,20 +494,12 @@ class DolphieApp(App):
                 if panel.id == "processlist_panel":
                     self.query_one("#processlist_panel_data").clear()
                 else:
-                    self.query_one(f"#{panel.id}_data").update(
-                        f"[b #91abec]Loading {panel.id.split('_panel')[0].capitalize()} Panel[/b #91abec]"
-                    )
-
-                if panel.id == "dashboard_panel":
-                    if not event.value:
-                        # Clear sparkline data so its reset
-                        self.query_one("#sparkline_qps", Sparkline).display = False
-                        self.dolphie.sparkline_qps = []
+                    if panel.id == "dml_panel":
+                        self.query_one("#dashboard_panel_qps", Sparkline).display = not event.value
                     else:
-                        # Reset the saved status since the last save would spike the diff if innodb panel isn't
-                        # displayed since it also runs the fetch status command
-                        if not dolphie.display_innodb_panel:
-                            self.dolphie.saved_status = None
+                        self.query_one(f"#{panel.id}_data").update(
+                            f"[b #91abec]Loading {panel.id.split('_panel')[0].capitalize()} Panel[/b #91abec]"
+                        )
 
                 # Update Dolphie's display_* attributes
                 setattr(dolphie, f"display_{panel.id}", event.value)
@@ -511,20 +512,29 @@ class DolphieApp(App):
         with VerticalScroll(id="main_container"):
             with Horizontal(id="main_switch_container"):
                 yield Label("Dashboard")
-                yield Switch(animate=False, id="switch_dashboard")
+                yield Switch(animate=False, id="dashboard_switch")
                 yield Label("Processlist")
-                yield Switch(animate=False, id="switch_processlist")
+                yield Switch(animate=False, id="processlist_switch")
                 yield Label("Replication")
-                yield Switch(animate=False, id="switch_replication")
+                yield Switch(animate=False, id="replication_switch")
                 yield Label("InnoDB")
-                yield Switch(animate=False, id="switch_innodb")
+                yield Switch(animate=False, id="innodb_switch")
+                yield Label("DML")
+                yield Switch(animate=False, id="dml_switch")
             with Container(id="dashboard_panel", classes="panel_container"):
                 yield Static(id="dashboard_panel_data", classes="panel_data")
-                yield Sparkline(
-                    [],
-                    id="sparkline_qps",
-                    summary_function=max,
-                )
+                yield Sparkline([], id="dashboard_panel_qps")
+            with Container(id="dml_panel", classes="panel_container"):
+                yield Label("Queries", id="dml_panel_data_queries_label", classes="sparkline_label")
+                yield Sparkline([], id="dml_panel_data_queries")
+                yield Label("SELECT", id="dml_panel_data_select_label", classes="sparkline_label")
+                yield Sparkline([], id="dml_panel_data_select")
+                yield Label("INSERT", id="dml_panel_data_insert_label", classes="sparkline_label")
+                yield Sparkline([], id="dml_panel_data_insert")
+                yield Label("UPDATE", id="dml_panel_data_update_label", classes="sparkline_label")
+                yield Sparkline([], id="dml_panel_data_update")
+                yield Label("DELETE", id="dml_panel_data_delete_label", classes="sparkline_label")
+                yield Sparkline([], id="dml_panel_data_delete")
             with VerticalScroll(id="replication_panel", classes="panel_container"):
                 yield Static(id="replication_panel_data", classes="panel_data")
             with Container(id="innodb_panel", classes="panel_container"):

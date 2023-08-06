@@ -377,23 +377,9 @@ def create_panel(dolphie: Dolphie) -> Table:
         "%s" % format_number(rollbacks_per_second),
     )
 
-    tables_to_add.append(table_stats)
+    if not dolphie.display_dml_panel:
+        tables_to_add.append(table_stats)
 
     dashboard_grid.add_row(*tables_to_add)
-
-    # Update the sparkline for queries per second
-    sparkline = dolphie.app.query_one("Sparkline")
-    if queries_per_second > 0:
-        dolphie.sparkline_qps.append(queries_per_second)
-
-    # Only keep 120 points of data
-    if len(dolphie.sparkline_qps) >= 120:
-        dolphie.sparkline_qps = dolphie.sparkline_qps[-120:]
-
-    if not sparkline.display and dolphie.sparkline_qps:
-        sparkline.display = True
-
-    sparkline.data = dolphie.sparkline_qps
-    sparkline.refresh()
 
     return dashboard_grid
