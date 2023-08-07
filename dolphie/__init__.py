@@ -82,7 +82,15 @@ class Dolphie:
         self.replication_status: dict = {}
         self.innodb_status: dict = {}
         self.dashboard_panel_qps: list = []
-        self.dml_panel_qps: dict = {}
+        self.qps_data: dict = {
+            "datetimes": [],
+            "dashboard_panel_queries": {"color": None, "visible": False, "qps": []},
+            "plot_data_queries": {"color": (172, 207, 231), "visible": False, "qps": []},
+            "plot_data_select": {"color": (68, 180, 255), "visible": True, "qps": []},
+            "plot_data_insert": {"color": (84, 239, 174), "visible": True, "qps": []},
+            "plot_data_update": {"color": (252, 213, 121), "visible": True, "qps": []},
+            "plot_data_delete": {"color": (255, 73, 185), "visible": True, "qps": []},
+        }
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -153,6 +161,9 @@ class Dolphie:
         self.main_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
         self.secondary_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
 
+        # Update the host label in the topbar once connected
+        self.app.query_one("#topbar_host").update(self.host)
+
         query = "SELECT CONNECTION_ID() AS connection_id"
         self.main_db_connection_id = self.main_db_connection.fetchone(query, "connection_id")
 
@@ -221,27 +232,44 @@ class Dolphie:
 
         self.server_uuid = self.main_db_connection.fetchone(server_uuid_query, "@@server_uuid")
 
-        self.app.query_one("#topbar_host").update(self.host)
-
     def command_input_to_variable(self, return_data):
         variable = return_data[0]
         value = return_data[1]
         if value:
             setattr(self, variable, value)
 
+    def toggle_panel(self, panel_name):
+        panel = self.app.query_one(f"#{panel_name}")
+
+        new_display = not panel.display
+        panel.display = new_display
+        setattr(self, f"display_{panel_name}", new_display)
+        if panel_name not in ["processlist_panel", "dml_panel"]:
+            self.app.query_one(f"#{panel.id}_data").update(
+                f"[b #91abec]Loading {panel.id.split('_panel')[0].capitalize()} Panel[/b #91abec]"
+            )
+        return new_display
+
     def capture_key(self, key):
         screen_data = None
 
+        if not self.main_db_connection:
+            self.update_footer("Database connection must be established before using commands")
+
+            return
         if key == "1":
-            self.app.query_one("#dashboard_switch").toggle()
+            new_display = self.toggle_panel("dashboard_panel")
+
+            self.app.query_one("#dashboard_panel_queries").display = not new_display
         elif key == "2":
-            self.app.query_one("#processlist_switch").toggle()
+            self.toggle_panel("processlist_panel")
+            self.app.query_one("#processlist_panel_data").clear()
         elif key == "3":
-            self.app.query_one("#replication_switch").toggle()
+            self.toggle_panel("replication_panel")
         elif key == "4":
-            self.app.query_one("#innodb_switch").toggle()
+            self.toggle_panel("innodb_panel")
         elif key == "5":
-            self.app.query_one("#dml_switch").toggle()
+            self.toggle_panel("dml_panel")
 
         elif key == "a":
             if self.show_additional_query_columns:
@@ -884,10 +912,10 @@ class Dolphie:
 
             panels = {
                 "1": "Show/hide Dashboard",
-                "2": "Show/hide InnoDB Information",
-                "3": "Show/hide Processlist",
-                "4": "Show/hide Replication/Replicas",
-                "5": "Show/hide DML Sparklines",
+                "2": "Show/hide Processlist",
+                "3": "Show/hide Replication/Replicas",
+                "4": "Show/hide InnoDB Information",
+                "5": "Show/hide DML QPS Graph",
             }
             table_panels = Table(box=box.HORIZONTALS, style=table_line_color, title="Panels", title_style="bold")
             table_panels.add_column("Key", justify="center", style="b #91abec")

@@ -75,7 +75,7 @@ TopBar {
 }
 
 #replication_panel {
-    max-height: 30;
+    max-height: 20;
 }
 .panel_data {
     content-align: center middle;
@@ -213,10 +213,10 @@ Switch > .switch--slider {
     background: #192132;
 }
 Switch:focus > .switch--slider {
-    background: #7aa1fb;
+    background: #9ab3f0;
 }
 Switch:hover > .switch--slider {
-    background: #7aa1fb;
+    background: #9ab3f0;
 }
 Switch.-on > .switch--slider {
     color: #5c81d7;
@@ -231,13 +231,12 @@ Switch.-on:hover > .switch--slider {
     background: #192132;
 }
 
-#main_switch_container {
-    dock: top;
+#switch_container {
     align: center top;
     padding-top: 1;
     height: auto;
 }
-#main_switch_container > Label {
+#switch_container > Label {
     color: #bbc8e8;
     padding-left: 1;
     text-style: bold;

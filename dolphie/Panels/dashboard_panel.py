@@ -377,8 +377,7 @@ def create_panel(dolphie: Dolphie) -> Table:
         "%s" % format_number(rollbacks_per_second),
     )
 
-    if not dolphie.display_dml_panel:
-        tables_to_add.append(table_stats)
+    tables_to_add.append(table_stats)
 
     dashboard_grid.add_row(*tables_to_add)
 

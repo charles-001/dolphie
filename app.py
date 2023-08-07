@@ -11,12 +11,12 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from configparser import ConfigParser
 from datetime import datetime
 
+import dolphie.QPSManager as QPSManager
 import myloginpath
 from dolphie import Dolphie
 from dolphie.ManualException import ManualException
 from dolphie.Panels import (
     dashboard_panel,
-    dml_panel,
     innodb_panel,
     processlist_panel,
     replication_panel,
@@ -394,21 +394,22 @@ class DolphieApp(App):
 
         try:
             if dolphie.display_dashboard_panel:
-                self.query_one("#dashboard_panel_data", Static).update(dashboard_panel.create_panel(self.dolphie))
-                qps_sparkline = self.query_one("#dashboard_panel_qps", Sparkline)
-                if not qps_sparkline.display and self.dolphie.dml_panel_qps:
+                self.query_one("#dashboard_panel_data", Static).update(dashboard_panel.create_panel(dolphie))
+                qps_sparkline = self.query_one("#dashboard_panel_queries", Sparkline)
+                if not qps_sparkline.display and dolphie.qps_data:
                     qps_sparkline.display = True
 
             if dolphie.display_processlist_panel:
-                processlist_panel.create_panel(self.dolphie)
+                processlist_panel.create_panel(dolphie)
 
             if dolphie.display_replication_panel:
-                self.query_one("#replication_panel_data", Static).update(replication_panel.create_panel(self.dolphie))
+                self.query_one("#replication_panel_data", Static).update(replication_panel.create_panel(dolphie))
 
             if dolphie.display_innodb_panel:
-                self.query_one("#innodb_panel_data", Static).update(innodb_panel.create_panel(self.dolphie))
+                self.query_one("#innodb_panel_data", Static).update(innodb_panel.create_panel(dolphie))
 
-            dml_panel.update_sparklines(self.dolphie)
+            QPSManager.update_data(dolphie)
+            self.query_one("#dml_panel_graph").update(QPSManager.create_plot(dolphie.qps_data))
         except NoMatches:
             pass
 
@@ -433,7 +434,7 @@ class DolphieApp(App):
             "replication_panel",
             "innodb_panel",
             "footer",
-            "dashboard_panel_qps",
+            "dashboard_panel_queries",
             "dml_panel",
         ]
         for component in components_to_disable:
@@ -448,12 +449,11 @@ class DolphieApp(App):
             dolphie.display_dashboard_panel = True
 
         # Set default switches to be toggled on
-        switches_to_toggle_on = ["dashboard_switch", "processlist_switch"]
-        for switch_name in switches_to_toggle_on:
-            if switch_name == "switch_dashboard" and dolphie.hide_dashboard:
-                continue
-
-            self.query_one(f"#{switch_name}", Switch).toggle()
+        dml_switches = self.query("#switch_container Switch")
+        for switch in dml_switches:
+            switch: Switch
+            if switch.id != "dml_panel_queries_switch":
+                switch.toggle()
 
         dolphie.check_for_update()
 
@@ -478,63 +478,30 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1:
             return
 
-        dolphie = self.dolphie
-
-        panels = {
-            "dashboard_switch": self.query_one("#dashboard_panel", Container),
-            "processlist_switch": self.query_one("#processlist_panel", Container),
-            "replication_switch": self.query_one("#replication_panel", VerticalScroll),
-            "innodb_switch": self.query_one("#innodb_panel", Container),
-            "dml_switch": self.query_one("#dml_panel", Container),
-        }
-
-        panel: Container = panels.get(event.switch.id)
-        if panel:
-            if panel.display != event.value:
-                if panel.id == "processlist_panel":
-                    self.query_one("#processlist_panel_data").clear()
-                else:
-                    if panel.id == "dml_panel":
-                        self.query_one("#dashboard_panel_qps", Sparkline).display = not event.value
-                    else:
-                        self.query_one(f"#{panel.id}_data").update(
-                            f"[b #91abec]Loading {panel.id.split('_panel')[0].capitalize()} Panel[/b #91abec]"
-                        )
-
-                # Update Dolphie's display_* attributes
-                setattr(dolphie, f"display_{panel.id}", event.value)
-
-                # Set the panel to be displayed or not
-                panel.display = event.value
+        # Upon switch flip, update the plot data's dictionary to show/hide a DML type
+        dml_type = event.switch.id.split("_")[2]
+        self.dolphie.qps_data[f"plot_data_{dml_type}"]["visible"] = event.value
+        self.query_one("#dml_panel_graph").update(QPSManager.create_plot(self.dolphie.qps_data))
 
     def compose(self) -> ComposeResult:
         yield TopBar(app_version=self.dolphie.app_version, help="press ? for help")
         with VerticalScroll(id="main_container"):
-            with Horizontal(id="main_switch_container"):
-                yield Label("Dashboard")
-                yield Switch(animate=False, id="dashboard_switch")
-                yield Label("Processlist")
-                yield Switch(animate=False, id="processlist_switch")
-                yield Label("Replication")
-                yield Switch(animate=False, id="replication_switch")
-                yield Label("InnoDB")
-                yield Switch(animate=False, id="innodb_switch")
-                yield Label("DML")
-                yield Switch(animate=False, id="dml_switch")
             with Container(id="dashboard_panel", classes="panel_container"):
                 yield Static(id="dashboard_panel_data", classes="panel_data")
-                yield Sparkline([], id="dashboard_panel_qps")
+                yield Sparkline([], id="dashboard_panel_queries")
             with Container(id="dml_panel", classes="panel_container"):
-                yield Label("Queries", id="dml_panel_data_queries_label", classes="sparkline_label")
-                yield Sparkline([], id="dml_panel_data_queries")
-                yield Label("SELECT", id="dml_panel_data_select_label", classes="sparkline_label")
-                yield Sparkline([], id="dml_panel_data_select")
-                yield Label("INSERT", id="dml_panel_data_insert_label", classes="sparkline_label")
-                yield Sparkline([], id="dml_panel_data_insert")
-                yield Label("UPDATE", id="dml_panel_data_update_label", classes="sparkline_label")
-                yield Sparkline([], id="dml_panel_data_update")
-                yield Label("DELETE", id="dml_panel_data_delete_label", classes="sparkline_label")
-                yield Sparkline([], id="dml_panel_data_delete")
+                yield Static(id="dml_panel_graph", classes="panel_data")
+                with Horizontal(id="switch_container"):
+                    yield Label("QUERIES")
+                    yield Switch(animate=False, id="dml_panel_queries_switch")
+                    yield Label("SELECT")
+                    yield Switch(animate=False, id="dml_panel_select_switch")
+                    yield Label("INSERT")
+                    yield Switch(animate=False, id="dml_panel_insert_switch")
+                    yield Label("UPDATE")
+                    yield Switch(animate=False, id="dml_panel_update_switch")
+                    yield Label("DELETE")
+                    yield Switch(animate=False, id="dml_panel_delete_switch")
             with VerticalScroll(id="replication_panel", classes="panel_container"):
                 yield Static(id="replication_panel_data", classes="panel_data")
             with Container(id="innodb_panel", classes="panel_container"):
