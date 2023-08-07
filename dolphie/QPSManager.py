@@ -76,7 +76,7 @@ class create_plot(JupyterMixin):
                 plt.plot(x, y, marker="braille", label=component_name.upper(), color=component_data["color"])
                 max_y_value = max(max_y_value, max(y))
 
-        # I create my own y ticks so it doesn't output a decimal for numbers - kinda hacky but there's no other way
+        # I create my own y ticks to format the numbers how I like them
         max_y_ticks = 5
         y_tick_interval = max_y_value / max_y_ticks
         y_ticks = [i * y_tick_interval for i in range(max_y_ticks + 1)]

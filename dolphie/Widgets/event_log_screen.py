@@ -61,13 +61,13 @@ class EventLog(Screen):
 
     def compose(self) -> ComposeResult:
         yield TopBar(app_version=self.app_version, host=self.host)
+
         with Horizontal():
-            yield Label("System")
-            yield Switch(animate=False, id="system")
-            yield Label("Warning")
-            yield Switch(animate=False, id="warning")
-            yield Label("Error")
-            yield Switch(animate=False, id="error")
+            switch_options = [("System", "system"), ("Warning", "warning"), ("Error", "error")]
+            for label, switch_id in switch_options:
+                yield Label(label)
+                yield Switch(animate=False, id=switch_id)
+
         yield Label("", id="info")
         yield RichLog(id="richlog", auto_scroll=False, markup=True)
 
@@ -92,20 +92,13 @@ class EventLog(Screen):
         self.event_log_data = None
         self.levels[event.switch.id]["active"] = event.value
 
-        where_clause = ""
-        active_sql_list = []
-        for level, data in self.levels.items():
-            if data["active"]:
-                active_sql_list.append(data["sql"])
-
-        if active_sql_list:
-            where_clause = " OR ".join(active_sql_list)
+        active_sql_list = [data["sql"] for data in self.levels.values() if data["active"]]
+        where_clause = " OR ".join(active_sql_list)
 
         table = Table(show_header=True, box=box.SIMPLE, style="#52608d")
         table.add_column("Time", style="#8e8f9d")
         table.add_column("Level")
         table.add_column("Event")
-
         if where_clause:
             query = Queries["error_log"].replace("$placeholder", f"AND ({where_clause})")
             self.db.execute(query)
@@ -121,9 +114,4 @@ class EventLog(Screen):
                 level = f"{level_color}{row['level']}"
                 table.add_row(row["timestamp"].strftime("%Y-%m-%d %H:%M:%S"), level, row["message"])
 
-        if table.rows:
-            self.event_log_data = table
-        else:
-            # We don't use None here like above since if the change is the same as the previous toggle,
-            # it won't trigger watch_ function
-            self.event_log_data = ""
+        self.event_log_data = table if table.rows else ""

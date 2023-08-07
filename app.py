@@ -482,29 +482,29 @@ class DolphieApp(App):
 
     def compose(self) -> ComposeResult:
         yield TopBar(app_version=self.dolphie.app_version, help="press ? for help")
+
         with VerticalScroll(id="main_container"):
             with Container(id="dashboard_panel", classes="panel_container"):
                 yield Static(id="dashboard_panel_data", classes="panel_data")
                 yield Sparkline([], id="dashboard_panel_queries")
+
             with Container(id="dml_panel", classes="panel_container"):
                 yield Static(id="dml_panel_graph", classes="panel_data")
                 with Horizontal(id="switch_container"):
-                    yield Label("QUERIES")
-                    yield Switch(animate=False, id="dml_panel_queries_switch")
-                    yield Label("SELECT")
-                    yield Switch(animate=False, id="dml_panel_select_switch")
-                    yield Label("INSERT")
-                    yield Switch(animate=False, id="dml_panel_insert_switch")
-                    yield Label("UPDATE")
-                    yield Switch(animate=False, id="dml_panel_update_switch")
-                    yield Label("DELETE")
-                    yield Switch(animate=False, id="dml_panel_delete_switch")
+                    dml_types = ["QUERIES", "SELECT", "INSERT", "UPDATE", "DELETE"]
+                    for dml_type in dml_types:
+                        yield Label(dml_type)
+                        yield Switch(animate=False, id=f"dml_panel_{dml_type.lower()}_switch")
+
             with VerticalScroll(id="replication_panel", classes="panel_container"):
                 yield Static(id="replication_panel_data", classes="panel_data")
+
             with Container(id="innodb_panel", classes="panel_container"):
                 yield Static(id="innodb_panel_data", classes="panel_data")
+
             with Container(id="processlist_panel"):
                 yield DataTable(id="processlist_panel_data", classes="panel_data", show_cursor=False)
+
             yield Static(id="footer")
 
 
