@@ -35,7 +35,10 @@ def round_num(n, decimal=2):
 
 
 # This is from https://pypi.org/project/numerize
-def format_number(n, decimal=2):
+def format_number(n, decimal=2, for_plot=False):
+    if n is None or n == "" or n == "0":
+        return "0"
+
     # fmt: off
     sufixes = ["", "K", "M", "B", "T", "Qa", "Qu", "S", "Oc", "No",
                "D", "Ud", "Dd", "Td", "Qt", "Qi", "Se", "Od", "Nd", "V",
@@ -52,34 +55,27 @@ def format_number(n, decimal=2):
                 1e150, 1e153, 1e156, 1e159, 1e162, 1e165, 1e168, 1e171, 1e174, 1e177]
     # fmt: on
 
-    # Some things we send to this function shouldn't be 0
-    if n is None:
-        return "0"
-    elif n == "":
-        return ""
-
     # Convert string to a number format if needed
     if isinstance(n, str):
-        if "." in n:
+        try:
             n = float(n)
-        elif n.isnumeric():
-            n = int(n)
-        else:
-            # If it isn't float/int, return back the original string
+        except ValueError:
             return n
 
-    # minus_buff = n
     n = abs(n)
     for x in range(len(sci_expr)):
         if n >= sci_expr[x] and n < sci_expr[x + 1]:
             sufix = sufixes[x]
             if n >= 1e3:
-                num = str(round_num(n / sci_expr[x], decimal))
+                num = round_num(n / sci_expr[x], decimal)
             else:
-                num = str(n)
-            return f"{num}[#91abec]{sufix}[/#91abec]" if sufix else num
+                num = round_num(n, 0)
+            if not for_plot:
+                return f"{num}[#91abec]{sufix}[/#91abec]" if sufix else num
+            else:
+                return f"{num}{sufix}" if sufix else num
 
-    return str(0)
+    return "0"
 
 
 def format_sys_table_memory(data):

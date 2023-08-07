@@ -395,9 +395,6 @@ class DolphieApp(App):
         try:
             if dolphie.display_dashboard_panel:
                 self.query_one("#dashboard_panel_data", Static).update(dashboard_panel.create_panel(dolphie))
-                qps_sparkline = self.query_one("#dashboard_panel_queries", Sparkline)
-                if not qps_sparkline.display and dolphie.qps_data:
-                    qps_sparkline.display = True
 
             if dolphie.display_processlist_panel:
                 processlist_panel.create_panel(dolphie)
