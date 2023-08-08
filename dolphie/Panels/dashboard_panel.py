@@ -9,16 +9,16 @@ from rich.style import Style
 from rich.table import Table
 
 
-def CreatePanel(dolphie: Dolphie) -> Table:
-    statuses = dolphie.statuses
-    variables = dolphie.variables
+def create_panel(dolphie: Dolphie) -> Table:
+    global_status = dolphie.global_status
+    global_variables = dolphie.global_variables
     innodb_status = dolphie.innodb_status
     saved_status = dolphie.saved_status
     worker_job_time = dolphie.worker_job_time
     binlog_status = dolphie.binlog_status
 
     tables_to_add = []
-    uptime = str(timedelta(seconds=statuses["Uptime"]))
+    uptime = str(timedelta(seconds=global_status["Uptime"]))
 
     dashboard_grid = Table.grid()
     dashboard_grid.add_column()
@@ -49,13 +49,13 @@ def CreatePanel(dolphie: Dolphie) -> Table:
     if dolphie.use_performance_schema:
         use_performance_schema_status = "YES"
 
-    if variables["read_only"] == "ON":
+    if global_variables["read_only"] == "ON":
         if not dolphie.replication_status:
-            variables["read_only"] = "YES ([indian_red]SHOULD BE NO?[/indian_red])"
+            global_variables["read_only"] = "YES ([indian_red]SHOULD BE NO?[/indian_red])"
         else:
-            variables["read_only"] = "YES"
-    elif variables["read_only"] == "OFF":
-        variables["read_only"] = "NO"
+            global_variables["read_only"] = "YES"
+    elif global_variables["read_only"] == "OFF":
+        global_variables["read_only"] = "NO"
 
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
@@ -64,24 +64,24 @@ def CreatePanel(dolphie: Dolphie) -> Table:
     table_information.add_row("[#c5c7d2]Version", "%s %s" % (dolphie.host_distro, dolphie.mysql_version))
     table_information.add_row("[#c5c7d2]Uptime", "%s" % uptime)
     table_information.add_row("[#c5c7d2]Runtime", "%s [#c5c7d2]latency:[/#c5c7d2] %ss" % (runtime, refresh_latency))
-    table_information.add_row("[#c5c7d2]Read Only", "%s" % variables["read_only"])
+    table_information.add_row("[#c5c7d2]Read Only", "%s" % global_variables["read_only"])
     table_information.add_row("[#c5c7d2]Use PS", "%s" % (use_performance_schema_status))
     table_information.add_row(
         "[#c5c7d2]Threads",
         "[#c5c7d2]con[/#c5c7d2] %s[#91abec]/[/#91abec][#c5c7d2]run[/#c5c7d2]"
         " %s[#91abec]/[/#91abec][#c5c7d2]cac[/#c5c7d2] %s"
         % (
-            format_number(statuses["Threads_connected"]),
-            format_number(statuses["Threads_running"]),
-            format_number(statuses["Threads_cached"]),
+            format_number(global_status["Threads_connected"]),
+            format_number(global_status["Threads_running"]),
+            format_number(global_status["Threads_cached"]),
         ),
     )
     table_information.add_row(
         "[#c5c7d2]Tables",
         "[#c5c7d2]open[/#c5c7d2] %s[#91abec]/[/#91abec][#c5c7d2]opened[/#c5c7d2] %s"
         % (
-            format_number(statuses["Open_tables"]),
-            format_number(statuses["Opened_tables"]),
+            format_number(global_status["Open_tables"]),
+            format_number(global_status["Opened_tables"]),
         ),
     )
 
@@ -102,11 +102,11 @@ def CreatePanel(dolphie: Dolphie) -> Table:
     table_innodb.add_column(width=9)
 
     # Calculate Checkpoint Efficiency
-    innodb_log_file_size = variables["innodb_log_file_size"]
+    innodb_log_file_size = global_variables["innodb_log_file_size"]
 
     # MariaDB Support
-    if "innodb_log_files_in_group" in variables:
-        innodb_log_files_in_group = variables["innodb_log_files_in_group"]
+    if "innodb_log_files_in_group" in global_variables:
+        innodb_log_files_in_group = global_variables["innodb_log_files_in_group"]
     else:
         innodb_log_files_in_group = 1
 
@@ -166,8 +166,8 @@ def CreatePanel(dolphie: Dolphie) -> Table:
     # Calculate InnoDB memory read hit efficiency
     innodb_efficiency = "N/A"
 
-    ib_pool_disk_reads = statuses["Innodb_buffer_pool_reads"]
-    ib_pool_mem_reads = statuses["Innodb_buffer_pool_read_requests"]
+    ib_pool_disk_reads = global_status["Innodb_buffer_pool_reads"]
+    ib_pool_mem_reads = global_status["Innodb_buffer_pool_read_requests"]
     if ib_pool_disk_reads >= ib_pool_mem_reads:
         innodb_efficiency = "[#fc7979]0.00%"
     elif ib_pool_mem_reads > ib_pool_disk_reads:
@@ -183,7 +183,7 @@ def CreatePanel(dolphie: Dolphie) -> Table:
     # Calculate AHI Hit efficiency
     hash_searches = 0
     non_hash_searches = 0
-    if variables["innodb_adaptive_hash_index"] == "ON":
+    if global_variables["innodb_adaptive_hash_index"] == "ON":
         output = re.search(r"(\d+\.?\d+) hash searches\/s, (\d+\.?\d+) non-hash searches\/s", innodb_status["status"])
         if output:
             hash_searches = float(output.group(1))
@@ -240,8 +240,8 @@ def CreatePanel(dolphie: Dolphie) -> Table:
     table_innodb.add_row("[#c5c7d2]AHI Hit", "%s" % (hash_search_efficiency))
 
     # Don't show thread concurrency information if it isn't set to on, instead show buffer pool stats
-    if "innodb_thread_concurrency" in variables and variables["innodb_thread_concurrency"]:
-        concurrency_ratio = round((queries_active / variables["innodb_thread_concurrency"]) * 100)
+    if "innodb_thread_concurrency" in global_variables and global_variables["innodb_thread_concurrency"]:
+        concurrency_ratio = round((queries_active / global_variables["innodb_thread_concurrency"]) * 100)
 
         if concurrency_ratio >= 80:
             queries_active_formatted = "[#fc7979]%s" % format_number(queries_active)
@@ -252,13 +252,15 @@ def CreatePanel(dolphie: Dolphie) -> Table:
 
         table_innodb.add_row(
             "[#c5c7d2]Query Active",
-            "%s [#91abec]/[/#91abec] %s" % (queries_active_formatted, variables["innodb_thread_concurrency"]),
+            "%s [#91abec]/[/#91abec] %s" % (queries_active_formatted, global_variables["innodb_thread_concurrency"]),
         )
         table_innodb.add_row("[#c5c7d2]Query Queued", "%s" % format_number(queries_queued))
     else:
-        table_innodb.add_row("[#c5c7d2]BP Size", "%s" % (format_bytes(float(variables["innodb_buffer_pool_size"]))))
         table_innodb.add_row(
-            "[#c5c7d2]BP Dirty", "%s" % (format_bytes(float(statuses["Innodb_buffer_pool_bytes_dirty"])))
+            "[#c5c7d2]BP Size", "%s" % (format_bytes(float(global_variables["innodb_buffer_pool_size"])))
+        )
+        table_innodb.add_row(
+            "[#c5c7d2]BP Dirty", "%s" % (format_bytes(float(global_status["Innodb_buffer_pool_bytes_dirty"])))
         )
 
     table_innodb.add_row("[#c5c7d2]History List", "%s" % format_number(history_list_length))
@@ -288,8 +290,8 @@ def CreatePanel(dolphie: Dolphie) -> Table:
             diff_binlog_position = format_bytes(binlog_status["Position"] - dolphie.previous_binlog_position)
 
         binlog_cache = 100
-        binlog_cache_disk = statuses["Binlog_cache_disk_use"]
-        binlog_cache_mem = statuses["Binlog_cache_use"]
+        binlog_cache_disk = global_status["Binlog_cache_disk_use"]
+        binlog_cache_mem = global_status["Binlog_cache_use"]
         if binlog_cache_disk and binlog_cache_mem:
             if binlog_cache_disk >= binlog_cache_mem:
                 innodb_efficiency = "[#fc7979]0.00%"
@@ -310,15 +312,15 @@ def CreatePanel(dolphie: Dolphie) -> Table:
         table_primary.add_row("[#c5c7d2]Diff", "%s" % diff_binlog_position)
         table_primary.add_row("[#c5c7d2]Cache Hit", "%s%%" % str(binlog_cache))
         # MariaDB Support
-        if "gtid_mode" in variables:
-            table_primary.add_row("[#c5c7d2]GTID", "%s" % str(variables["gtid_mode"]))
+        if "gtid_mode" in global_variables:
+            table_primary.add_row("[#c5c7d2]GTID", "%s" % str(global_variables["gtid_mode"]))
         else:
             table_primary.add_row()
         table_primary.add_row()
 
         tables_to_add.append(table_primary)
 
-        # Save some variables to be used in next refresh
+        # Save some global_variables to be used in next refresh
         if dolphie.binlog_status:
             dolphie.previous_binlog_position = dolphie.binlog_status["Position"]
 
@@ -351,14 +353,14 @@ def CreatePanel(dolphie: Dolphie) -> Table:
         replaces_per_second = 0
         rollbacks_per_second = 0
     else:
-        queries_per_second = round((statuses["Queries"] - saved_status["Queries"]) / worker_job_time)
+        queries_per_second = round((global_status["Queries"] - saved_status["Queries"]) / worker_job_time)
 
-        selects_per_second = round((statuses["Com_select"] - saved_status["Com_select"]) / worker_job_time)
-        inserts_per_second = round((statuses["Com_insert"] - saved_status["Com_insert"]) / worker_job_time)
-        updates_per_second = round((statuses["Com_update"] - saved_status["Com_update"]) / worker_job_time)
-        deletes_per_second = round((statuses["Com_delete"] - saved_status["Com_delete"]) / worker_job_time)
-        replaces_per_second = round((statuses["Com_replace"] - saved_status["Com_replace"]) / worker_job_time)
-        rollbacks_per_second = round((statuses["Com_rollback"] - saved_status["Com_rollback"]) / worker_job_time)
+        selects_per_second = round((global_status["Com_select"] - saved_status["Com_select"]) / worker_job_time)
+        inserts_per_second = round((global_status["Com_insert"] - saved_status["Com_insert"]) / worker_job_time)
+        updates_per_second = round((global_status["Com_update"] - saved_status["Com_update"]) / worker_job_time)
+        deletes_per_second = round((global_status["Com_delete"] - saved_status["Com_delete"]) / worker_job_time)
+        replaces_per_second = round((global_status["Com_replace"] - saved_status["Com_replace"]) / worker_job_time)
+        rollbacks_per_second = round((global_status["Com_rollback"] - saved_status["Com_rollback"]) / worker_job_time)
 
     table_stats.add_row(
         "[#c5c7d2]Queries",

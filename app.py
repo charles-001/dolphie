@@ -11,10 +11,10 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from configparser import ConfigParser
 from datetime import datetime
 
-import dolphie.Grapher as Grapher
 import myloginpath
 from dolphie import Dolphie
 from dolphie.ManualException import ManualException
+from dolphie.MetricManager import MetricData, MetricManager
 from dolphie.Panels import (
     dashboard_panel,
     innodb_panel,
@@ -341,6 +341,8 @@ class DolphieApp(App):
         super().__init__()
 
         self.dolphie = dolphie
+        self.metric_manager = MetricManager()
+
         dolphie.app = self
 
         self.console.set_window_title(self.TITLE)
@@ -360,14 +362,14 @@ class DolphieApp(App):
             if not dolphie.main_db_connection:
                 dolphie.db_connect()
 
-            dolphie.statuses = dolphie.main_db_connection.fetch_data("status")
+            dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
             dolphie.fetch_replication_data(connection=dolphie.main_db_connection)
 
             if dolphie.display_dashboard_panel:
                 dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
 
             if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
-                dolphie.variables = dolphie.main_db_connection.fetch_data("variables")
+                dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
                 dolphie.innodb_status = dolphie.main_db_connection.fetch_data("innodb_status")
 
             if dolphie.display_replication_panel:
@@ -401,30 +403,47 @@ class DolphieApp(App):
 
             try:
                 if dolphie.display_dashboard_panel:
-                    self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.CreatePanel(dolphie))
+                    self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(dolphie))
 
                 if dolphie.display_processlist_panel:
-                    processlist_panel.CreatePanel(dolphie)
+                    processlist_panel.create_panel(dolphie)
 
                 if dolphie.display_replication_panel:
-                    self.query_one("#panel_replication_data", Static).update(replication_panel.CreatePanel(dolphie))
+                    self.query_one("#panel_replication_data", Static).update(replication_panel.create_panel(dolphie))
 
                 if dolphie.display_innodb_panel:
-                    self.query_one("#panel_innodb_data", Static).update(innodb_panel.CreatePanel(dolphie))
+                    self.query_one("#panel_innodb_data", Static).update(innodb_panel.create_panel(dolphie))
 
-                dolphie.update_dml_qps_graph_metrics()
-                self.query_one("#graph_dml_qps").update(Grapher.CreateGraph("dml_qps", dolphie.dml_qps_graph_metrics))
-
-                self.query_one("#graph_replication_lag").update(
-                    Grapher.CreateGraph("replica_lag", dolphie.replica_lag_graph_metrics)
+                self.metric_manager.refresh_data(
+                    dolphie.worker_start_time,
+                    dolphie.worker_job_time,
+                    dolphie.global_status,
+                    dolphie.saved_status,
+                    dolphie.replica_lag,
                 )
+                self.metric_manager.update_global_status_metrics()
+
+                if dolphie.replication_status:
+                    self.metric_manager.update_replica_lag_metrics()
+
+                self.query_one("#graph_dml_qps").update(self.metric_manager.create_dml_qps_graph())
+                self.query_one("#graph_replication_lag").update(self.metric_manager.create_replica_lag_graph())
+
+                # Update the sparkline for queries per second
+                sparkline = self.app.query_one("#panel_dashboard_queries_qps")
+                sparkline_data = self.metric_manager.global_status_metrics.queries.values
+                if not sparkline.display and sparkline_data:
+                    sparkline.display = True
+
+                sparkline.data = sparkline_data
+                sparkline.refresh()
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
                 # with worker thread/state change due to asynchronous nature of the worker thread
                 pass
 
             # Save these status for comparison on the next refresh
-            dolphie.saved_status = dolphie.statuses.copy()
+            dolphie.saved_status = dolphie.global_status.copy()
 
             # We take a snapshot of the processlist to be used for commands
             # since the data can change after a key is pressed
@@ -490,8 +509,10 @@ class DolphieApp(App):
 
         # Upon switch flip, update the plot data's dictionary to show/hide a DML type
         dml_type = event.switch.id.split("_")[2]
-        self.dolphie.dml_qps_graph_metrics[f"graph_metric_{dml_type}"]["visible"] = event.value
-        self.query_one("#graph_dml_qps").update(Grapher.CreateGraph("dml_qps", self.dolphie.dml_qps_graph_metrics))
+        self.query_one("#graph_dml_qps").update(self.metric_manager.create_dml_qps_graph())
+        metric_info = getattr(self.metric_manager.global_status_metrics, dml_type)
+        if isinstance(metric_info, MetricData):
+            metric_info.visible = event.value
 
     def compose(self) -> ComposeResult:
         yield TopBar(app_version=self.dolphie.app_version, help="press ? for help")

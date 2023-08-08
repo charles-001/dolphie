@@ -7,9 +7,9 @@ from rich.style import Style
 from rich.table import Table
 
 
-def CreatePanel(dolphie: Dolphie) -> Table:
-    variables = dolphie.variables
-    statuses = dolphie.statuses
+def create_panel(dolphie: Dolphie) -> Table:
+    global_variables = dolphie.global_variables
+    global_status = dolphie.global_status
     worker_job_time = dolphie.worker_job_time
     saved_status = dolphie.saved_status
     innodb_status = dolphie.innodb_status
@@ -30,47 +30,50 @@ def CreatePanel(dolphie: Dolphie) -> Table:
 
     table_innodb_information.add_row(
         "[#c5c7d2]BP Size",
-        format_bytes(float(variables["innodb_buffer_pool_size"])),
+        format_bytes(float(global_variables["innodb_buffer_pool_size"])),
     )
     table_innodb_information.add_row(
         "[#c5c7d2]BP Available",
-        format_bytes(float(variables["innodb_buffer_pool_size"]) - float(statuses["Innodb_buffer_pool_bytes_data"])),
+        format_bytes(
+            float(global_variables["innodb_buffer_pool_size"]) - float(global_status["Innodb_buffer_pool_bytes_data"])
+        ),
     )
     table_innodb_information.add_row(
         "[#c5c7d2]BP Dirty",
-        format_bytes(float(statuses["Innodb_buffer_pool_bytes_dirty"])),
+        format_bytes(float(global_status["Innodb_buffer_pool_bytes_dirty"])),
     )
     # MariaDB Support
-    if "innodb_buffer_pool_instances" in variables:
-        bp_instances = str(variables["innodb_buffer_pool_instances"])
+    if "innodb_buffer_pool_instances" in global_variables:
+        bp_instances = str(global_variables["innodb_buffer_pool_instances"])
     else:
         bp_instances = 1
     table_innodb_information.add_row("[#c5c7d2]BP Instances", str(bp_instances))
     table_innodb_information.add_row(
         "[#c5c7d2]BP Pages Free",
-        format_number(float(statuses["Innodb_buffer_pool_pages_free"])),
+        format_number(float(global_status["Innodb_buffer_pool_pages_free"])),
     )
 
     # MariaDB Support
-    if "innodb_log_files_in_group" in variables:
-        log_files_in_group = variables["innodb_log_files_in_group"]
+    if "innodb_log_files_in_group" in global_variables:
+        log_files_in_group = global_variables["innodb_log_files_in_group"]
     else:
         log_files_in_group = 1
 
     table_innodb_information.add_row(
         "[#c5c7d2]Total Log Size",
-        format_bytes(variables["innodb_log_file_size"] * log_files_in_group),
+        format_bytes(global_variables["innodb_log_file_size"] * log_files_in_group),
     )
 
-    if "innodb_adaptive_hash_index_parts" in variables.keys():
+    if "innodb_adaptive_hash_index_parts" in global_variables.keys():
         table_innodb_information.add_row(
             "[#c5c7d2]Adapt Hash Idx",
-            "%s (%s)" % (variables["innodb_adaptive_hash_index"], variables["innodb_adaptive_hash_index_parts"]),
+            "%s (%s)"
+            % (global_variables["innodb_adaptive_hash_index"], global_variables["innodb_adaptive_hash_index_parts"]),
         )
     else:
         table_innodb_information.add_row(
             "[#c5c7d2]Adapt Hash Idx",
-            "%s [#c5c7d2]" % (variables["innodb_adaptive_hash_index"]),
+            "%s [#c5c7d2]" % (global_variables["innodb_adaptive_hash_index"]),
         )
 
     # Get reads/avg bytes/writes/fsyncs per second
@@ -140,25 +143,25 @@ def CreatePanel(dolphie: Dolphie) -> Table:
         bp_clean_page_wait = 0
     else:
         reads_mem_per_second = round(
-            (statuses["Innodb_buffer_pool_read_requests"] - saved_status["Innodb_buffer_pool_read_requests"])
+            (global_status["Innodb_buffer_pool_read_requests"] - saved_status["Innodb_buffer_pool_read_requests"])
             / worker_job_time
         )
         reads_disk_per_second = round(
-            (statuses["Innodb_buffer_pool_reads"] - saved_status["Innodb_buffer_pool_reads"]) / worker_job_time
+            (global_status["Innodb_buffer_pool_reads"] - saved_status["Innodb_buffer_pool_reads"]) / worker_job_time
         )
         writes_per_second = round(
-            (statuses["Innodb_buffer_pool_write_requests"] - saved_status["Innodb_buffer_pool_write_requests"])
+            (global_status["Innodb_buffer_pool_write_requests"] - saved_status["Innodb_buffer_pool_write_requests"])
             / worker_job_time
         )
 
-        log_waits = round((statuses["Innodb_log_waits"] - saved_status["Innodb_log_waits"]) / worker_job_time)
+        log_waits = round((global_status["Innodb_log_waits"] - saved_status["Innodb_log_waits"]) / worker_job_time)
 
         row_lock_waits = round(
-            (statuses["Innodb_row_lock_waits"] - saved_status["Innodb_row_lock_waits"]) / worker_job_time
+            (global_status["Innodb_row_lock_waits"] - saved_status["Innodb_row_lock_waits"]) / worker_job_time
         )
 
         bp_clean_page_wait = (
-            statuses["Innodb_buffer_pool_wait_free"] - saved_status["Innodb_buffer_pool_wait_free"]
+            global_status["Innodb_buffer_pool_wait_free"] - saved_status["Innodb_buffer_pool_wait_free"]
         ) / worker_job_time
 
     table_innodb_activity.add_row("[#c5c7d2]BP reads/s (mem)", format_number(reads_mem_per_second))
@@ -175,7 +178,7 @@ def CreatePanel(dolphie: Dolphie) -> Table:
     )
     table_innodb_activity.add_row("[#c5c7d2]Log waits/s", format_number(log_waits))
     table_innodb_activity.add_row("[#c5c7d2]Row lock waits/s", format_number(row_lock_waits))
-    table_innodb_activity.add_row("[#c5c7d2]Row lock time avg", "%sms" % str(statuses["Innodb_row_lock_time_avg"]))
+    table_innodb_activity.add_row("[#c5c7d2]Row lock time avg", "%sms" % str(global_status["Innodb_row_lock_time_avg"]))
 
     table_row_operations = Table(
         box=table_box,
@@ -193,15 +196,17 @@ def CreatePanel(dolphie: Dolphie) -> Table:
         updates_per_second = 0
         deletes_per_second = 0
     else:
-        reads_per_second = round((statuses["Innodb_rows_read"] - saved_status["Innodb_rows_read"]) / worker_job_time)
+        reads_per_second = round(
+            (global_status["Innodb_rows_read"] - saved_status["Innodb_rows_read"]) / worker_job_time
+        )
         inserts_per_second = round(
-            (statuses["Innodb_rows_inserted"] - saved_status["Innodb_rows_inserted"]) / worker_job_time
+            (global_status["Innodb_rows_inserted"] - saved_status["Innodb_rows_inserted"]) / worker_job_time
         )
         updates_per_second = round(
-            (statuses["Innodb_rows_updated"] - saved_status["Innodb_rows_updated"]) / worker_job_time
+            (global_status["Innodb_rows_updated"] - saved_status["Innodb_rows_updated"]) / worker_job_time
         )
         deletes_per_second = round(
-            (statuses["Innodb_rows_deleted"] - saved_status["Innodb_rows_deleted"]) / worker_job_time
+            (global_status["Innodb_rows_deleted"] - saved_status["Innodb_rows_deleted"]) / worker_job_time
         )
 
     table_row_operations.add_row("[#c5c7d2]Reads", format_number(reads_per_second))

@@ -8,7 +8,7 @@ from rich.text import Text
 from textual.widgets import DataTable
 
 
-def CreatePanel(dolphie: Dolphie) -> DataTable:
+def create_panel(dolphie: Dolphie) -> DataTable:
     columns = [
         {"name": "Thread ID", "field": "id", "width": 11, "format_number": False},
         {"name": "Username", "field": "user", "width": 13, "format_number": False},

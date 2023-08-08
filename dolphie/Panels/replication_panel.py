@@ -11,7 +11,7 @@ from rich.style import Style
 from rich.table import Table
 
 
-def CreatePanel(dolphie: Dolphie):
+def create_panel(dolphie: Dolphie):
     if dolphie.display_replication_panel and not dolphie.replica_data and not dolphie.replication_status:
         return "[#f1fb82]No data to display![/#f1fb82] This host is not a replica and has no replicas connected"
 

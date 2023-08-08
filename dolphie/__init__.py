@@ -63,7 +63,7 @@ class Dolphie:
         self.query_time_filter: str = 0
         self.query_filter: str = None
 
-        # Loop variables
+        # Loop global_variables
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
@@ -77,13 +77,13 @@ class Dolphie:
         self.previous_replica_sbm: int = 0
         self.host_cache: dict = {}
         self.host_cache_from_file: dict = {}
-        self.variables: dict = {}
-        self.statuses: dict = {}
+        self.global_variables: dict = {}
+        self.global_status: dict = {}
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
         self.innodb_status: dict = {}
         self.dashboard_panel_qps: list = []
-        self.dml_qps_graph_metrics: dict = {
+        self.global_status_metrics: dict = {
             "datetimes": [],
             "dashboard_metric_queries": {"color": None, "visible": False, "qps": []},
             "graph_metric_queries": {"color": (172, 207, 231), "visible": False, "qps": []},
@@ -108,7 +108,7 @@ class Dolphie:
         self.display_innodb_panel: bool = False
         self.display_dml_panel: bool = False
 
-        # Database connection variables
+        # Database connection global_variables
         # Main connection is used for Textual's worker thread so it can run asynchronous
         self.main_db_connection: Database = None
         # Secondary connection is for ad-hoc commands that are not a part of the worker thread
@@ -683,8 +683,8 @@ class Dolphie:
                             self.processlist_threads_snapshot[thread_id]["trx_rows_modified"],
                         )
                         if (
-                            "innodb_thread_concurrency" in self.variables
-                            and self.variables["innodb_thread_concurrency"]
+                            "innodb_thread_concurrency" in self.global_variables
+                            and self.global_variables["innodb_thread_concurrency"]
                         ):
                             table.add_row(
                                 "[#c5c7d2]Tickets",
@@ -811,15 +811,15 @@ class Dolphie:
                 variable_num = 1
                 all_tables = []
                 tables = {}
-                display_variables = {}
+                display_global_variables = {}
 
-                variable_data = self.secondary_db_connection.fetch_data("variables")
+                variable_data = self.secondary_db_connection.fetch_data("global_variables")
                 for variable, value in variable_data.items():
                     if input_variable:
                         if input_variable in variable:
-                            display_variables[variable] = variable_data[variable]
+                            display_global_variables[variable] = variable_data[variable]
 
-                max_num_tables = 1 if len(display_variables) <= 50 else 2
+                max_num_tables = 1 if len(display_global_variables) <= 50 else 2
 
                 # Create the number of tables we want
                 while table_counter <= max_num_tables:
@@ -829,11 +829,11 @@ class Dolphie:
 
                     table_counter += 1
 
-                # Calculate how many variables per table
-                row_per_count = len(display_variables) // max_num_tables
+                # Calculate how many global_variables per table
+                row_per_count = len(display_global_variables) // max_num_tables
 
-                # Loop variables
-                for variable, value in display_variables.items():
+                # Loop global_variables
+                for variable, value in display_global_variables.items():
                     tables[variable_num].add_row("[#c5c7d2]%s" % variable, str(value))
 
                     if variable_counter == row_per_count and row_counter != max_num_tables:
@@ -847,7 +847,7 @@ class Dolphie:
                 all_tables = [table_data for table_data in tables.values() if table_data]
 
                 # Add the data into a single tuple for add_row
-                if display_variables:
+                if display_global_variables:
                     table_grid.add_row(*all_tables)
                     screen_data = Align.center(table_grid)
 
@@ -903,7 +903,7 @@ class Dolphie:
                 "s": "Sort query list by time in descending/ascending order",
                 "S": "Show/hide last executed query for sleeping thread (Performance Schema only)",
                 "u": "List users (results vary depending on if userstat variable is enabled)",
-                "v": "Variable wildcard search via SHOW VARIABLES",
+                "v": "Variable wildcard search via SHOW global_variables",
                 "z": "Show all entries in the host cache",
             }
 
@@ -1169,45 +1169,8 @@ class Dolphie:
         if replica_cursor:
             return replica_lag_source, replica_lag
         else:
-            # Add to our graph data for replication lag
-            if self.replication_status:
-                self.replica_lag_graph_metrics["datetimes"].append(self.worker_start_time.strftime("%H:%M:%S"))
-                self.replica_lag_graph_metrics["metrics"].append(replica_lag)
-
             # Save the previous replica lag for to determine Speed data point
             self.previous_replica_sbm = self.replica_lag
 
             self.replica_lag_source = replica_lag_source
             self.replica_lag = replica_lag
-
-    def update_dml_qps_graph_metrics(self):
-        DML_TYPES = {
-            "queries": "Queries",
-            "select": "Com_select",
-            "insert": "Com_insert",
-            "update": "Com_update",
-            "delete": "Com_delete",
-        }
-        if self.saved_status:
-            for component, data in self.dml_qps_graph_metrics.items():
-                if component == "datetimes":
-                    continue
-
-                dml_type = component.split("_")[-1]
-                status_key = DML_TYPES.get(dml_type, None)
-
-                if status_key is not None:
-                    qps_value = round(
-                        (self.statuses[status_key] - self.saved_status[status_key]) / self.worker_job_time
-                    )
-                    data["qps"].append(qps_value)
-
-                if component == "dashboard_metric_queries":
-                    sparkline = self.app.query_one("#panel_dashboard_queries_qps")
-                    if not sparkline.display:
-                        sparkline.display = True
-
-                    sparkline.data = data["qps"]
-                    sparkline.refresh()
-
-            self.dml_qps_graph_metrics["datetimes"].append(self.worker_start_time.strftime("%H:%M:%S"))
