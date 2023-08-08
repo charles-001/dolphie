@@ -7,10 +7,10 @@ from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie) -> Table:
+def CreatePanel(dolphie: Dolphie) -> Table:
     variables = dolphie.variables
     statuses = dolphie.statuses
-    loop_duration_seconds = dolphie.loop_duration_seconds
+    worker_job_time = dolphie.worker_job_time
     saved_status = dolphie.saved_status
     innodb_status = dolphie.innodb_status
 
@@ -141,25 +141,25 @@ def create_panel(dolphie: Dolphie) -> Table:
     else:
         reads_mem_per_second = round(
             (statuses["Innodb_buffer_pool_read_requests"] - saved_status["Innodb_buffer_pool_read_requests"])
-            / loop_duration_seconds
+            / worker_job_time
         )
         reads_disk_per_second = round(
-            (statuses["Innodb_buffer_pool_reads"] - saved_status["Innodb_buffer_pool_reads"]) / loop_duration_seconds
+            (statuses["Innodb_buffer_pool_reads"] - saved_status["Innodb_buffer_pool_reads"]) / worker_job_time
         )
         writes_per_second = round(
             (statuses["Innodb_buffer_pool_write_requests"] - saved_status["Innodb_buffer_pool_write_requests"])
-            / loop_duration_seconds
+            / worker_job_time
         )
 
-        log_waits = round((statuses["Innodb_log_waits"] - saved_status["Innodb_log_waits"]) / loop_duration_seconds)
+        log_waits = round((statuses["Innodb_log_waits"] - saved_status["Innodb_log_waits"]) / worker_job_time)
 
         row_lock_waits = round(
-            (statuses["Innodb_row_lock_waits"] - saved_status["Innodb_row_lock_waits"]) / loop_duration_seconds
+            (statuses["Innodb_row_lock_waits"] - saved_status["Innodb_row_lock_waits"]) / worker_job_time
         )
 
         bp_clean_page_wait = (
             statuses["Innodb_buffer_pool_wait_free"] - saved_status["Innodb_buffer_pool_wait_free"]
-        ) / loop_duration_seconds
+        ) / worker_job_time
 
     table_innodb_activity.add_row("[#c5c7d2]BP reads/s (mem)", format_number(reads_mem_per_second))
     table_innodb_activity.add_row("[#c5c7d2]BP reads/s (disk)", format_number(reads_disk_per_second))
@@ -193,17 +193,15 @@ def create_panel(dolphie: Dolphie) -> Table:
         updates_per_second = 0
         deletes_per_second = 0
     else:
-        reads_per_second = round(
-            (statuses["Innodb_rows_read"] - saved_status["Innodb_rows_read"]) / loop_duration_seconds
-        )
+        reads_per_second = round((statuses["Innodb_rows_read"] - saved_status["Innodb_rows_read"]) / worker_job_time)
         inserts_per_second = round(
-            (statuses["Innodb_rows_inserted"] - saved_status["Innodb_rows_inserted"]) / loop_duration_seconds
+            (statuses["Innodb_rows_inserted"] - saved_status["Innodb_rows_inserted"]) / worker_job_time
         )
         updates_per_second = round(
-            (statuses["Innodb_rows_updated"] - saved_status["Innodb_rows_updated"]) / loop_duration_seconds
+            (statuses["Innodb_rows_updated"] - saved_status["Innodb_rows_updated"]) / worker_job_time
         )
         deletes_per_second = round(
-            (statuses["Innodb_rows_deleted"] - saved_status["Innodb_rows_deleted"]) / loop_duration_seconds
+            (statuses["Innodb_rows_deleted"] - saved_status["Innodb_rows_deleted"]) / worker_job_time
         )
 
     table_row_operations.add_row("[#c5c7d2]Reads", format_number(reads_per_second))

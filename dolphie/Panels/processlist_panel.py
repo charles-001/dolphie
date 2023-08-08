@@ -2,13 +2,13 @@ import re
 from datetime import timedelta
 
 from dolphie import Dolphie
-from dolphie.Functions import format_number
+from dolphie.Functions import format_number, format_time
 from dolphie.Queries import Queries
 from rich.text import Text
 from textual.widgets import DataTable
 
 
-def create_panel(dolphie: Dolphie) -> DataTable:
+def CreatePanel(dolphie: Dolphie) -> DataTable:
     columns = [
         {"name": "Thread ID", "field": "id", "width": 11, "format_number": False},
         {"name": "Username", "field": "user", "width": 13, "format_number": False},
@@ -225,21 +225,11 @@ def fetch_data(dolphie: Dolphie):
             elif time <= 2:
                 thread_color = "#54efae"
 
-        hours = time // 3600
-        minutes = (time % 3600) // 60
-        seconds = time % 60
-        formatted_time = TextPlus("{:02}:{:02}:{:02}".format(hours, minutes, seconds), style=thread_color)
-
+        formatted_time = TextPlus(format_time(time), style=thread_color)
         formatted_time_with_days = TextPlus("{:0>8}".format(str(timedelta(seconds=time))), style=thread_color)
 
-        # If after the first loop there's nothing in cache, don't try to resolve anymore.
-        # This is an optimization
         host = thread["host"].split(":")[0]
-        if dolphie.first_loop is False:
-            if dolphie.host_cache:
-                host = dolphie.get_hostname(host)
-        else:
-            host = dolphie.get_hostname(host)
+        host = dolphie.get_hostname(host)
 
         processlist_threads[str(thread["id"])] = {
             "id": str(thread["id"]),

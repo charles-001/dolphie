@@ -1,11 +1,11 @@
 import plotext as plt
-from dolphie.Functions import format_number
+from dolphie.Functions import format_number, format_time
 from rich.ansi import AnsiDecoder
 from rich.console import Group
 from rich.jupyter import JupyterMixin
 
 
-class create_graph(JupyterMixin):
+class CreateGraph(JupyterMixin):
     def __init__(self, graph_source, graph_data):
         self.graph_source = graph_source
         self.graph_data = graph_data
@@ -29,7 +29,7 @@ class create_graph(JupyterMixin):
             y = self.graph_data["metrics"]
 
             if y:
-                plt.plot(x, y, marker="braille", label="Lag (secs)", color=(68, 180, 255))
+                plt.plot(x, y, marker="braille", label="Lag", color=(68, 180, 255))
                 max_y_value = max(max_y_value, max(y))
         elif self.graph_source == "dml_qps":
             for component, component_data in self.graph_data.items():
@@ -46,14 +46,20 @@ class create_graph(JupyterMixin):
 
         # I create my own y ticks to format the numbers how I like them
         max_y_ticks = 5
-        y_tick_interval = max_y_value / max_y_ticks
 
+        y_tick_interval = max_y_value / max_y_ticks
         if y_tick_interval >= 1:
             y_ticks = [i * y_tick_interval for i in range(max_y_ticks + 1)]
-            y_labels = [format_number(val, for_plot=True, decimal=1) for val in y_ticks]
+            if self.graph_source == "replica_lag":
+                y_labels = [format_time(val) for val in y_ticks]
+            elif self.graph_source == "dml_qps":
+                y_labels = [format_number(val, for_plot=True, decimal=1) for val in y_ticks]
         else:
             y_ticks = [i for i in range(int(max_y_value) + 1)]
-            y_labels = [format_number(val, for_plot=True, decimal=1) for val in y_ticks]
+            if self.graph_source == "replica_lag":
+                y_labels = [format_time(val) for val in y_ticks]
+            elif self.graph_source == "dml_qps":
+                y_labels = [format_number(val, for_plot=True, decimal=1) for val in y_ticks]
 
         plt.yticks(y_ticks, y_labels)
 

@@ -11,7 +11,7 @@ from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie):
+def CreatePanel(dolphie: Dolphie):
     if dolphie.display_replication_panel and not dolphie.replica_data and not dolphie.replication_status:
         return "[#f1fb82]No data to display![/#f1fb82] This host is not a replica and has no replicas connected"
 
@@ -90,7 +90,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
             dolphie.replica_connections[list_replica_thread_id]["previous_sbm"] = replica_sbm
 
         if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
-            data["Speed"] = round((replica_previous_replica_sbm - replica_sbm) / dolphie.refresh_interval)
+            data["Speed"] = round((replica_previous_replica_sbm - replica_sbm) / dolphie.worker_job_time)
 
         if replica_sbm != 0:
             if replica_sbm > 20:

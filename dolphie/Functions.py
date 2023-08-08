@@ -14,6 +14,13 @@ def format_bytes(bytes_value):
     return f"{bytes_value:.2f}[#91abec]{units[unit_index]}"
 
 
+def format_time(seconds):
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    seconds = int(seconds % 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
 def detect_encoding(text):
     # Since BLOB/BINARY data can be involved, we need to auto-detect what the encoding is
     # for queries since it can be anything. If I let pymsql use unicode by default I got

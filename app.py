@@ -353,6 +353,10 @@ class DolphieApp(App):
         try:
             dolphie = self.dolphie
 
+            dolphie.worker_start_time = datetime.now()
+            dolphie.worker_job_time = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
+            dolphie.worker_previous_start_time = dolphie.worker_start_time
+
             if not dolphie.main_db_connection:
                 dolphie.db_connect()
 
@@ -382,52 +386,51 @@ class DolphieApp(App):
                     connection["connection"].close()
 
                 dolphie.replica_connections = {}
+
+            dolphie.worker_job_count += 1
         except ManualException as e:
             self.exit(message=e.output())
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
-        if event.state != WorkerState.SUCCESS:
-            return
+        if event.state == WorkerState.SUCCESS:
+            dolphie = self.dolphie
 
-        if len(self.screen_stack) > 1 or self.dolphie.pause_refresh:
+            if len(self.screen_stack) > 1 or dolphie.pause_refresh:
+                self.set_timer(0.5, self.worker_fetch_data)
+                return
+
+            try:
+                if dolphie.display_dashboard_panel:
+                    self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.CreatePanel(dolphie))
+
+                if dolphie.display_processlist_panel:
+                    processlist_panel.CreatePanel(dolphie)
+
+                if dolphie.display_replication_panel:
+                    self.query_one("#panel_replication_data", Static).update(replication_panel.CreatePanel(dolphie))
+
+                if dolphie.display_innodb_panel:
+                    self.query_one("#panel_innodb_data", Static).update(innodb_panel.CreatePanel(dolphie))
+
+                dolphie.update_dml_qps_graph_metrics()
+                self.query_one("#graph_dml_qps").update(Grapher.CreateGraph("dml_qps", dolphie.dml_qps_graph_metrics))
+
+                self.query_one("#graph_replication_lag").update(
+                    Grapher.CreateGraph("replica_lag", dolphie.replica_lag_graph_metrics)
+                )
+            except NoMatches:
+                # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
+                # with worker thread/state change due to asynchronous nature of the worker thread
+                pass
+
+            # Save these status for comparison on the next refresh
+            dolphie.saved_status = dolphie.statuses.copy()
+
+            # We take a snapshot of the processlist to be used for commands
+            # since the data can change after a key is pressed
+            dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
+
             self.set_timer(self.dolphie.refresh_interval, self.worker_fetch_data)
-            return
-
-        dolphie = self.dolphie
-
-        loop_time = datetime.now()
-        dolphie.loop_duration_seconds = (loop_time - dolphie.previous_main_loop_time).total_seconds()
-
-        try:
-            if dolphie.display_dashboard_panel:
-                self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(dolphie))
-
-            if dolphie.display_processlist_panel:
-                processlist_panel.create_panel(dolphie)
-
-            if dolphie.display_replication_panel:
-                self.query_one("#panel_replication_data", Static).update(replication_panel.create_panel(dolphie))
-
-            if dolphie.display_innodb_panel:
-                self.query_one("#panel_innodb_data", Static).update(innodb_panel.create_panel(dolphie))
-
-            dolphie.update_dml_qps_graph_metrics()
-            self.query_one("#graph_dml_qps").update(Grapher.create_graph("dml_qps", dolphie.dml_qps_graph_metrics))
-
-            self.query_one("#graph_replication_lag").update(
-                Grapher.create_graph("replica_lag", dolphie.replica_lag_graph_metrics)
-            )
-        except NoMatches:
-            pass
-
-        dolphie.saved_status = dolphie.statuses.copy()
-        dolphie.previous_main_loop_time = loop_time
-
-        # We take a snapshot of the processlist to be used for commands
-        # since the data can change after a key is pressed
-        dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
-
-        self.set_timer(self.dolphie.refresh_interval, self.worker_fetch_data)
 
     def on_key(self, event: events.Key):
         self.dolphie.capture_key(event.key)
@@ -488,7 +491,7 @@ class DolphieApp(App):
         # Upon switch flip, update the plot data's dictionary to show/hide a DML type
         dml_type = event.switch.id.split("_")[2]
         self.dolphie.dml_qps_graph_metrics[f"graph_metric_{dml_type}"]["visible"] = event.value
-        self.query_one("#graph_dml_qps").update(Grapher.create_graph("dml_qps", self.dolphie.dml_qps_graph_metrics))
+        self.query_one("#graph_dml_qps").update(Grapher.CreateGraph("dml_qps", self.dolphie.dml_qps_graph_metrics))
 
     def compose(self) -> ComposeResult:
         yield TopBar(app_version=self.dolphie.app_version, help="press ? for help")

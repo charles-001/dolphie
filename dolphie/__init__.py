@@ -65,12 +65,13 @@ class Dolphie:
 
         # Loop variables
         self.dolphie_start_time: datetime = datetime.now()
-        self.previous_main_loop_time: datetime = datetime.now()
-        self.loop_duration_seconds: int = 0
+        self.worker_start_time: datetime = datetime.now()
+        self.worker_previous_start_time: datetime = datetime.now()
+        self.worker_job_count: int = 0
+        self.worker_job_time: int = 0
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
         self.pause_refresh: bool = False
-        self.first_loop: bool = True
         self.saved_status: bool = None
         self.previous_binlog_position: int = 0
         self.previous_replica_sbm: int = 0
@@ -1131,8 +1132,6 @@ class Dolphie:
         return hostname
 
     def fetch_replication_data(self, connection=None, replica_cursor=None):
-        self.replication_status = None
-
         if self.heartbeat_table:
             query = Queries["heartbeat_replica_lag"]
             replica_lag_source = "HB"
@@ -1143,25 +1142,26 @@ class Dolphie:
             query = Queries["replication_status"]
             replica_lag_source = "Replica"
 
-        if connection:
+        if replica_cursor:
+            replica_cursor.execute(query)
+            replica_lag_data = replica_cursor.fetchone()
+        elif connection:
+            # Determine if this server is a replica or not
             self.main_db_connection.execute(Queries["replication_status"])
             replica_lag_data = self.main_db_connection.fetchone()
             self.replication_status = replica_lag_data
 
-            self.main_db_connection.execute(query)
-            replica_lag_data = self.main_db_connection.fetchone()
-        else:
-            replica_cursor.execute(query)
-            replica_lag_data = replica_cursor.fetchone()
+            if self.replication_status:
+                # Use a better way to detect replication lag if available
+                if replica_lag_source != "Replica":
+                    self.main_db_connection.execute(query)
+                    replica_lag_data = self.main_db_connection.fetchone()
 
         if replica_lag_data:
             replica_lag = int(replica_lag_data["Seconds_Behind_Master"])
 
             if replica_lag < 0:
                 replica_lag = 0
-
-            if not replica_cursor and replica_lag_source == "Replica":
-                self.replication_status = replica_lag_data
         else:
             replica_lag_source = None
             replica_lag = 0
@@ -1171,8 +1171,7 @@ class Dolphie:
         else:
             # Add to our graph data for replication lag
             if self.replication_status:
-                formatted_datetime = datetime.now().strftime("%H:%M:%S")
-                self.replica_lag_graph_metrics["datetimes"].append(formatted_datetime)
+                self.replica_lag_graph_metrics["datetimes"].append(self.worker_start_time.strftime("%H:%M:%S"))
                 self.replica_lag_graph_metrics["metrics"].append(replica_lag)
 
             # Save the previous replica lag for to determine Speed data point
@@ -1199,7 +1198,7 @@ class Dolphie:
 
                 if status_key is not None:
                     qps_value = round(
-                        (self.statuses[status_key] - self.saved_status[status_key]) / self.loop_duration_seconds
+                        (self.statuses[status_key] - self.saved_status[status_key]) / self.worker_job_time
                     )
                     data["qps"].append(qps_value)
 
@@ -1211,5 +1210,4 @@ class Dolphie:
                     sparkline.data = data["qps"]
                     sparkline.refresh()
 
-            formatted_datetime = datetime.now().strftime("%H:%M:%S")
-            self.dml_qps_graph_metrics["datetimes"].append(formatted_datetime)
+            self.dml_qps_graph_metrics["datetimes"].append(self.worker_start_time.strftime("%H:%M:%S"))

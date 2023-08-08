@@ -9,12 +9,12 @@ from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie) -> Table:
+def CreatePanel(dolphie: Dolphie) -> Table:
     statuses = dolphie.statuses
     variables = dolphie.variables
     innodb_status = dolphie.innodb_status
     saved_status = dolphie.saved_status
-    loop_duration_seconds = dolphie.loop_duration_seconds
+    worker_job_time = dolphie.worker_job_time
     binlog_status = dolphie.binlog_status
 
     tables_to_add = []
@@ -40,10 +40,10 @@ def create_panel(dolphie: Dolphie) -> Table:
         style=table_line_color,
     )
 
-    if loop_duration_seconds < 1:
+    if worker_job_time < 1:
         refresh_latency = 0
     else:
-        refresh_latency = str(round(loop_duration_seconds - dolphie.refresh_interval, 2))
+        refresh_latency = str(round(worker_job_time - dolphie.refresh_interval, 2))
 
     use_performance_schema_status = "NO"
     if dolphie.use_performance_schema:
@@ -351,14 +351,14 @@ def create_panel(dolphie: Dolphie) -> Table:
         replaces_per_second = 0
         rollbacks_per_second = 0
     else:
-        queries_per_second = round((statuses["Queries"] - saved_status["Queries"]) / loop_duration_seconds)
+        queries_per_second = round((statuses["Queries"] - saved_status["Queries"]) / worker_job_time)
 
-        selects_per_second = round((statuses["Com_select"] - saved_status["Com_select"]) / loop_duration_seconds)
-        inserts_per_second = round((statuses["Com_insert"] - saved_status["Com_insert"]) / loop_duration_seconds)
-        updates_per_second = round((statuses["Com_update"] - saved_status["Com_update"]) / loop_duration_seconds)
-        deletes_per_second = round((statuses["Com_delete"] - saved_status["Com_delete"]) / loop_duration_seconds)
-        replaces_per_second = round((statuses["Com_replace"] - saved_status["Com_replace"]) / loop_duration_seconds)
-        rollbacks_per_second = round((statuses["Com_rollback"] - saved_status["Com_rollback"]) / loop_duration_seconds)
+        selects_per_second = round((statuses["Com_select"] - saved_status["Com_select"]) / worker_job_time)
+        inserts_per_second = round((statuses["Com_insert"] - saved_status["Com_insert"]) / worker_job_time)
+        updates_per_second = round((statuses["Com_update"] - saved_status["Com_update"]) / worker_job_time)
+        deletes_per_second = round((statuses["Com_delete"] - saved_status["Com_delete"]) / worker_job_time)
+        replaces_per_second = round((statuses["Com_replace"] - saved_status["Com_replace"]) / worker_job_time)
+        rollbacks_per_second = round((statuses["Com_rollback"] - saved_status["Com_rollback"]) / worker_job_time)
 
     table_stats.add_row(
         "[#c5c7d2]Queries",
