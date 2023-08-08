@@ -56,7 +56,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     table_box = box.ROUNDED
     table_line_color = "#52608d"
 
-    # This is for the replica view
+    # This is for the view of replicas
     if list_replica_thread_id:
         if dolphie.replica_connections[list_replica_thread_id]["previous_sbm"] is not None:
             replica_previous_replica_sbm = dolphie.replica_connections[list_replica_thread_id]["previous_sbm"]
@@ -64,7 +64,6 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         db_cursor = dolphie.replica_connections[list_replica_thread_id]["cursor"]
     else:
         replica_previous_replica_sbm = dolphie.previous_replica_sbm
-        db_cursor = dolphie.secondary_db_connection.cursor
 
     if data["Slave_IO_Running"].lower() == "no":
         data["Slave_IO_Running"] = "[#fc7979]NO[/#fc7979]"
@@ -76,28 +75,11 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     else:
         data["Slave_SQL_Running"] = "[#54efae]Yes[/#54efae]"
 
-    data["sbm_source"] = "Replica"
-    # Use performance schema for seconds behind if host is MySQL 8
-    if dolphie.mysql_version.startswith("8") and dolphie.performance_schema_enabled:
-        db_cursor.execute(Queries["ps_replica_lag"])
-        replica_lag_data = db_cursor.fetchone()
-
-        data["sbm_source"] = "PS"
-        if replica_lag_data["secs_behind"]:
-            data["Seconds_Behind_Master"] = int(replica_lag_data["secs_behind"])
-        else:
-            data["Seconds_Behind_Master"] = 0
-    # Use heartbeat table from pt-toolkit if specified
-    elif dolphie.heartbeat_table:
-        try:
-            db_cursor.execute(Queries["heartbeat_replica_lag"])
-            replica_lag_data = db_cursor.fetchone()
-
-            if replica_lag_data["secs_behind"] is not None:
-                data["sbm_source"] = "HB"
-                data["Seconds_Behind_Master"] = int(replica_lag_data["secs_behind"])
-        except pymysql.Error:
-            pass
+    if list_replica_thread_id:
+        data["SBM_Source"], data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica_cursor=db_cursor)
+    else:
+        data["SBM_Source"] = dolphie.replica_lag_source
+        data["Seconds_Behind_Master"] = dolphie.replica_lag
 
     data["Speed"] = 0
     # Colorize seconds behind
@@ -168,7 +150,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         table.add_row("[#c5c7d2]Lag", "")
     else:
         table.add_row(
-            "[#c5c7d2]%s Lag" % data["sbm_source"],
+            "[#c5c7d2]%s Lag" % data["SBM_Source"],
             "%s [#c5c7d2]Speed[/#c5c7d2] %s" % (data["Lag"], data["Speed"]),
         )
     if dashboard_table:

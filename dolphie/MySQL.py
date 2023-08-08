@@ -69,7 +69,30 @@ class Database:
         # Return the list of processed rows
         return rows
 
-    def fetchone(self, query, field, values=None):
+    def fetchone(self):
+        processed_row = {}
+
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+
+        # Iterate over each field-value pair in the row dictionary
+        for field, value in row.items():
+            if isinstance(value, (bytes, bytearray)):
+                # If the value is an instance of bytes or bytearray, decode it
+                if "query" in field:
+                    # If the field name contains the word 'query', detect the encoding
+                    processed_row[field] = value.decode(detect_encoding(value))
+                else:
+                    # Otherwise, decode the value as utf-8 by default
+                    processed_row[field] = value.decode()
+            else:
+                # Otherwise, use the original value
+                processed_row[field] = value
+
+        return processed_row
+
+    def fetch_value_from_field(self, query, field, values=None):
         self.execute(query, values)
         data = self.cursor.fetchone()
 
@@ -88,7 +111,7 @@ class Database:
         else:
             return value
 
-    def fetch_data(self, command, performance_schema=False):
+    def fetch_data(self, command, performance_schema=None):
         command_data = {}
 
         if command == "status" or command == "variables":
@@ -110,7 +133,7 @@ class Database:
                 command_data[variable] = converted_value
 
         elif command == "innodb_status":
-            data = self.fetchone(Queries[command], "Status")
+            data = self.fetch_value_from_field(Queries[command], "Status")
             command_data["status"] = data
 
         elif command == "find_replicas":

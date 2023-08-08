@@ -95,7 +95,7 @@ Queries = {
             IFNULL(TIMESTAMPDIFF(
                 SECOND,
                 MIN(APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP),
-            NOW()), "0") AS secs_behind
+            NOW()), "0") AS Seconds_Behind_Master
         FROM
             performance_schema.replication_applier_status_by_worker
         WHERE
@@ -103,7 +103,7 @@ Queries = {
     """,
     "heartbeat_replica_lag": """
         SELECT
-            TIMESTAMPDIFF(SECOND, MAX(ts), NOW()) AS secs_behind
+            TIMESTAMPDIFF(SECOND, MAX(ts), NOW()) AS Seconds_Behind_Master
         FROM
             $placeholder
     """,

@@ -82,15 +82,18 @@ class Dolphie:
         self.replication_status: dict = {}
         self.innodb_status: dict = {}
         self.dashboard_panel_qps: list = []
-        self.qps_data: dict = {
+        self.dml_qps_graph_metrics: dict = {
             "datetimes": [],
-            "dashboard_panel_queries": {"color": None, "visible": False, "qps": []},
-            "plot_data_queries": {"color": (172, 207, 231), "visible": False, "qps": []},
-            "plot_data_select": {"color": (68, 180, 255), "visible": True, "qps": []},
-            "plot_data_insert": {"color": (84, 239, 174), "visible": True, "qps": []},
-            "plot_data_update": {"color": (252, 213, 121), "visible": True, "qps": []},
-            "plot_data_delete": {"color": (255, 73, 185), "visible": True, "qps": []},
+            "dashboard_metric_queries": {"color": None, "visible": False, "qps": []},
+            "graph_metric_queries": {"color": (172, 207, 231), "visible": False, "qps": []},
+            "graph_metric_select": {"color": (68, 180, 255), "visible": True, "qps": []},
+            "graph_metric_insert": {"color": (84, 239, 174), "visible": True, "qps": []},
+            "graph_metric_update": {"color": (252, 213, 121), "visible": True, "qps": []},
+            "graph_metric_delete": {"color": (255, 73, 185), "visible": True, "qps": []},
         }
+        self.replica_lag_graph_metrics: dict = {"datetimes": [], "metrics": []}
+        self.replica_lag_source: str = None
+        self.replica_lag: int = None
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -165,13 +168,13 @@ class Dolphie:
         self.app.query_one("#topbar_host").update(self.host)
 
         query = "SELECT CONNECTION_ID() AS connection_id"
-        self.main_db_connection_id = self.main_db_connection.fetchone(query, "connection_id")
+        self.main_db_connection_id = self.main_db_connection.fetch_value_from_field(query, "connection_id")
 
         query = "SELECT CONNECTION_ID() AS connection_id"
-        self.secondary_db_connection_id = self.secondary_db_connection.fetchone(query, "connection_id")
+        self.secondary_db_connection_id = self.secondary_db_connection.fetch_value_from_field(query, "connection_id")
 
         query = "SELECT @@performance_schema"
-        performance_schema = self.main_db_connection.fetchone(query, "@@performance_schema")
+        performance_schema = self.main_db_connection.fetch_value_from_field(query, "@@performance_schema")
         if performance_schema == 1:
             self.performance_schema_enabled = True
 
@@ -179,19 +182,19 @@ class Dolphie:
                 self.use_performance_schema = True
 
         query = "SELECT @@version_comment"
-        version_comment = self.main_db_connection.fetchone(query, "@@version_comment").lower()
+        version_comment = self.main_db_connection.fetch_value_from_field(query, "@@version_comment").lower()
 
         query = "SELECT @@basedir"
-        basedir = self.main_db_connection.fetchone(query, "@@basedir")
+        basedir = self.main_db_connection.fetch_value_from_field(query, "@@basedir")
 
         aurora_version = None
         query = "SHOW GLOBAL VARIABLES LIKE 'aurora_version'"
-        aurora_version_data = self.main_db_connection.fetchone(query, "Value")
+        aurora_version_data = self.main_db_connection.fetch_value_from_field(query, "Value")
         if aurora_version_data:
             aurora_version = aurora_version_data["Value"]
 
         query = "SELECT @@version"
-        version = self.main_db_connection.fetchone(query, "@@version").lower()
+        version = self.main_db_connection.fetch_value_from_field(query, "@@version").lower()
         version_split = version.split(".")
 
         self.mysql_version = "%s.%s.%s" % (
@@ -230,7 +233,7 @@ class Dolphie:
         elif major_version == 8 and self.use_performance_schema:
             self.innodb_locks_sql = Queries["locks_query-8"]
 
-        self.server_uuid = self.main_db_connection.fetchone(server_uuid_query, "@@server_uuid")
+        self.server_uuid = self.main_db_connection.fetch_value_from_field(server_uuid_query, "@@server_uuid")
 
     def command_input_to_variable(self, return_data):
         variable = return_data[0]
@@ -239,14 +242,14 @@ class Dolphie:
             setattr(self, variable, value)
 
     def toggle_panel(self, panel_name):
-        panel = self.app.query_one(f"#{panel_name}")
+        panel = self.app.query_one(f"#panel_{panel_name}")
 
         new_display = not panel.display
         panel.display = new_display
-        setattr(self, f"display_{panel_name}", new_display)
-        if panel_name not in ["processlist_panel", "dml_panel"]:
+        setattr(self, f"display_{panel_name}_panel", new_display)
+        if panel_name not in ["processlist", "dml_qps"]:
             self.app.query_one(f"#{panel.id}_data").update(
-                f"[b #91abec]Loading {panel.id.split('_panel')[0].capitalize()} Panel[/b #91abec]"
+                f"[b #91abec]Loading {panel.id.split('panel_')[1].capitalize()} Panel[/b #91abec]"
             )
         return new_display
 
@@ -258,18 +261,18 @@ class Dolphie:
 
             return
         if key == "1":
-            new_display = self.toggle_panel("dashboard_panel")
+            new_display = self.toggle_panel("dashboard")
 
-            self.app.query_one("#dashboard_panel_queries").display = not new_display
+            self.app.query_one("#panel_dashboard_queries_qps").display = not new_display
         elif key == "2":
-            self.toggle_panel("processlist_panel")
-            self.app.query_one("#processlist_panel_data").clear()
+            self.toggle_panel("processlist")
+            self.app.query_one("#panel_processlist_data").clear()
         elif key == "3":
-            self.toggle_panel("replication_panel")
+            self.toggle_panel("replication")
         elif key == "4":
-            self.toggle_panel("innodb_panel")
+            self.toggle_panel("innodb")
         elif key == "5":
-            self.toggle_panel("dml_panel")
+            self.toggle_panel("dml_qps")
 
         elif key == "a":
             if self.show_additional_query_columns:
@@ -1126,3 +1129,87 @@ class Dolphie:
             hostname = host
 
         return hostname
+
+    def fetch_replication_data(self, connection=None, replica_cursor=None):
+        self.replication_status = None
+
+        if self.heartbeat_table:
+            query = Queries["heartbeat_replica_lag"]
+            replica_lag_source = "HB"
+        elif self.mysql_version.startswith("8") and self.performance_schema_enabled:
+            query = Queries["ps_replica_lag"]
+            replica_lag_source = "PS"
+        else:
+            query = Queries["replication_status"]
+            replica_lag_source = "Replica"
+
+        if connection:
+            self.main_db_connection.execute(Queries["replication_status"])
+            replica_lag_data = self.main_db_connection.fetchone()
+            self.replication_status = replica_lag_data
+
+            self.main_db_connection.execute(query)
+            replica_lag_data = self.main_db_connection.fetchone()
+        else:
+            replica_cursor.execute(query)
+            replica_lag_data = replica_cursor.fetchone()
+
+        if replica_lag_data:
+            replica_lag = int(replica_lag_data["Seconds_Behind_Master"])
+
+            if replica_lag < 0:
+                replica_lag = 0
+
+            if not replica_cursor and replica_lag_source == "Replica":
+                self.replication_status = replica_lag_data
+        else:
+            replica_lag_source = None
+            replica_lag = 0
+
+        if replica_cursor:
+            return replica_lag_source, replica_lag
+        else:
+            # Add to our graph data for replication lag
+            if self.replication_status:
+                formatted_datetime = datetime.now().strftime("%H:%M:%S")
+                self.replica_lag_graph_metrics["datetimes"].append(formatted_datetime)
+                self.replica_lag_graph_metrics["metrics"].append(replica_lag)
+
+            # Save the previous replica lag for to determine Speed data point
+            self.previous_replica_sbm = self.replica_lag
+
+            self.replica_lag_source = replica_lag_source
+            self.replica_lag = replica_lag
+
+    def update_dml_qps_graph_metrics(self):
+        DML_TYPES = {
+            "queries": "Queries",
+            "select": "Com_select",
+            "insert": "Com_insert",
+            "update": "Com_update",
+            "delete": "Com_delete",
+        }
+        if self.saved_status:
+            for component, data in self.dml_qps_graph_metrics.items():
+                if component == "datetimes":
+                    continue
+
+                dml_type = component.split("_")[-1]
+                status_key = DML_TYPES.get(dml_type, None)
+
+                if status_key is not None:
+                    qps_value = round(
+                        (self.statuses[status_key] - self.saved_status[status_key]) / self.loop_duration_seconds
+                    )
+                    data["qps"].append(qps_value)
+
+                if component == "dashboard_metric_queries":
+                    sparkline = self.app.query_one("#panel_dashboard_queries_qps")
+                    if not sparkline.display:
+                        sparkline.display = True
+
+                    sparkline.data = data["qps"]
+                    sparkline.refresh()
+
+            formatted_datetime = datetime.now().strftime("%H:%M:%S")
+            self.dml_qps_graph_metrics["datetimes"].append(formatted_datetime)

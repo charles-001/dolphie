@@ -73,10 +73,20 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
 }
-
-#replication_panel {
-    max-height: 20;
+TabPane {
+    padding: 0;
 }
+Tab.-active:focus {
+    text-style: bold underline;
+}
+Tabs:focus .underline--bar {
+    color: #caddfe;
+}
+Underline > .underline--bar {
+    background: #2e3f5f;
+    color: #82a5e1;
+}
+
 .panel_data {
     content-align: center middle;
 }
@@ -84,12 +94,16 @@ TopBar {
     padding-top: 1;
     height: auto;
 }
-#dml_panel {
+#panel_replication {
+    max-height: 20;
+}
+#panel_dml_qps {
     padding-top: 0;
 }
-#processlist_panel {
+#panel_processlist {
     padding-top: 1;
 }
+
 CommandModal > Vertical {
     background: #121626;
     border: thick #20263d;
@@ -213,21 +227,21 @@ Switch > .switch--slider {
     background: #192132;
 }
 Switch:focus > .switch--slider {
-    background: #9ab3f0;
+    background: #95b5fd;
 }
 Switch:hover > .switch--slider {
-    background: #9ab3f0;
+    background: #95b5fd;
 }
 Switch.-on > .switch--slider {
     color: #5c81d7;
     background: #192132;
 }
 Switch.-on:focus > .switch--slider {
-    color: #8caefd;
+    color: #95b5fd;
     background: #192132;
 }
 Switch.-on:hover > .switch--slider {
-    color: #8caefd;
+    color: #95b5fd;
     background: #192132;
 }
 

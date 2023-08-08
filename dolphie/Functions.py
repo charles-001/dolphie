@@ -36,7 +36,7 @@ def round_num(n, decimal=2):
 
 # This is from https://pypi.org/project/numerize
 def format_number(n, decimal=2, for_plot=False):
-    if n is None or n == "" or n == "0":
+    if not n:
         return "0"
 
     # fmt: off
@@ -67,15 +67,13 @@ def format_number(n, decimal=2, for_plot=False):
         if n >= sci_expr[x] and n < sci_expr[x + 1]:
             sufix = sufixes[x]
             if n >= 1e3:
-                num = round_num(n / sci_expr[x], decimal)
+                num = str(round_num(n / sci_expr[x], decimal))
             else:
-                num = round_num(n, 0)
+                num = str(round_num(n, 0))
             if not for_plot:
                 return f"{num}[#91abec]{sufix}[/#91abec]" if sufix else num
             else:
                 return f"{num}{sufix}" if sufix else num
-
-    return "0"
 
 
 def format_sys_table_memory(data):

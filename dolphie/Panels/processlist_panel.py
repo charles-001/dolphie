@@ -46,7 +46,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
         ]
     )
 
-    processlist_datatable = dolphie.app.query_one("#processlist_panel_data", DataTable)
+    processlist_datatable = dolphie.app.query_one("#panel_processlist_data", DataTable)
 
     # Clear table if columns change
     if len(processlist_datatable.columns) != len(columns):

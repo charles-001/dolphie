@@ -11,7 +11,7 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from configparser import ConfigParser
 from datetime import datetime
 
-import dolphie.QPSManager as QPSManager
+import dolphie.Grapher as Grapher
 import myloginpath
 from dolphie import Dolphie
 from dolphie.ManualException import ManualException
@@ -29,7 +29,15 @@ from textual import events, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.css.query import NoMatches
-from textual.widgets import DataTable, Label, Sparkline, Static, Switch
+from textual.widgets import (
+    DataTable,
+    Label,
+    Sparkline,
+    Static,
+    Switch,
+    TabbedContent,
+    TabPane,
+)
 from textual.worker import Worker, WorkerState
 
 
@@ -349,6 +357,7 @@ class DolphieApp(App):
                 dolphie.db_connect()
 
             dolphie.statuses = dolphie.main_db_connection.fetch_data("status")
+            dolphie.fetch_replication_data(connection=dolphie.main_db_connection)
 
             if dolphie.display_dashboard_panel:
                 dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
@@ -356,9 +365,6 @@ class DolphieApp(App):
             if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
                 dolphie.variables = dolphie.main_db_connection.fetch_data("variables")
                 dolphie.innodb_status = dolphie.main_db_connection.fetch_data("innodb_status")
-
-            if dolphie.display_dashboard_panel or dolphie.display_replication_panel:
-                dolphie.replication_status = dolphie.main_db_connection.fetch_data("replication_status")
 
             if dolphie.display_replication_panel:
                 dolphie.replica_data = dolphie.main_db_connection.fetch_data(
@@ -394,19 +400,23 @@ class DolphieApp(App):
 
         try:
             if dolphie.display_dashboard_panel:
-                self.query_one("#dashboard_panel_data", Static).update(dashboard_panel.create_panel(dolphie))
+                self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(dolphie))
 
             if dolphie.display_processlist_panel:
                 processlist_panel.create_panel(dolphie)
 
             if dolphie.display_replication_panel:
-                self.query_one("#replication_panel_data", Static).update(replication_panel.create_panel(dolphie))
+                self.query_one("#panel_replication_data", Static).update(replication_panel.create_panel(dolphie))
 
             if dolphie.display_innodb_panel:
-                self.query_one("#innodb_panel_data", Static).update(innodb_panel.create_panel(dolphie))
+                self.query_one("#panel_innodb_data", Static).update(innodb_panel.create_panel(dolphie))
 
-            QPSManager.update_data(dolphie)
-            self.query_one("#dml_panel_graph").update(QPSManager.create_plot(dolphie.qps_data))
+            dolphie.update_dml_qps_graph_metrics()
+            self.query_one("#graph_dml_qps").update(Grapher.create_graph("dml_qps", dolphie.dml_qps_graph_metrics))
+
+            self.query_one("#graph_replication_lag").update(
+                Grapher.create_graph("replica_lag", dolphie.replica_lag_graph_metrics)
+            )
         except NoMatches:
             pass
 
@@ -428,21 +438,21 @@ class DolphieApp(App):
 
         # Set these components by default to not show
         components_to_disable = [
-            "replication_panel",
-            "innodb_panel",
+            "panel_replication",
+            "panel_innodb",
             "footer",
-            "dashboard_panel_queries",
-            "dml_panel",
+            "panel_dashboard_queries_qps",
+            "panel_dml_qps",
         ]
         for component in components_to_disable:
             self.query_one(f"#{component}").display = False
 
         dolphie.display_processlist_panel = True
         if dolphie.hide_dashboard:
-            self.query_one("#dashboard_panel", Container).display = False
+            self.query_one("#panel_dashboard", Container).display = False
             dolphie.display_dashboard_panel = False
         else:
-            self.query_one("#dashboard_panel_data", Static).update("[b #91abec]Loading Dashboard panel[/b #91abec]")
+            self.query_one("#panel_dashboard_data", Static).update("[b #91abec]Loading Dashboard panel[/b #91abec]")
             dolphie.display_dashboard_panel = True
 
         # Set default switches to be toggled on
@@ -477,33 +487,38 @@ class DolphieApp(App):
 
         # Upon switch flip, update the plot data's dictionary to show/hide a DML type
         dml_type = event.switch.id.split("_")[2]
-        self.dolphie.qps_data[f"plot_data_{dml_type}"]["visible"] = event.value
-        self.query_one("#dml_panel_graph").update(QPSManager.create_plot(self.dolphie.qps_data))
+        self.dolphie.dml_qps_graph_metrics[f"graph_metric_{dml_type}"]["visible"] = event.value
+        self.query_one("#graph_dml_qps").update(Grapher.create_graph("dml_qps", self.dolphie.dml_qps_graph_metrics))
 
     def compose(self) -> ComposeResult:
         yield TopBar(app_version=self.dolphie.app_version, help="press ? for help")
 
         with VerticalScroll(id="main_container"):
-            with Container(id="dashboard_panel", classes="panel_container"):
-                yield Static(id="dashboard_panel_data", classes="panel_data")
-                yield Sparkline([], id="dashboard_panel_queries")
+            with Container(id="panel_dashboard", classes="panel_container"):
+                yield Static(id="panel_dashboard_data", classes="panel_data")
+                yield Sparkline([], id="panel_dashboard_queries_qps")
 
-            with Container(id="dml_panel", classes="panel_container"):
-                yield Static(id="dml_panel_graph", classes="panel_data")
-                with Horizontal(id="switch_container"):
-                    dml_types = ["QUERIES", "SELECT", "INSERT", "UPDATE", "DELETE"]
-                    for dml_type in dml_types:
-                        yield Label(dml_type)
-                        yield Switch(animate=False, id=f"dml_panel_{dml_type.lower()}_switch")
+            with Container(id="panel_dml_qps", classes="panel_container"):
+                with TabbedContent(initial="tab_dml"):
+                    with TabPane("DML", id="tab_dml"):
+                        yield Static(id="graph_dml_qps", classes="panel_data")
 
-            with VerticalScroll(id="replication_panel", classes="panel_container"):
-                yield Static(id="replication_panel_data", classes="panel_data")
+                        with Horizontal(id="switch_container"):
+                            dml_types = ["QUERIES", "SELECT", "INSERT", "UPDATE", "DELETE"]
+                            for dml_type in dml_types:
+                                yield Label(dml_type)
+                                yield Switch(animate=False, id=f"dml_panel_{dml_type.lower()}_switch")
+                    with TabPane("Replication", id="tab_replication_lag"):
+                        yield Static(id="graph_replication_lag", classes="panel_data")
 
-            with Container(id="innodb_panel", classes="panel_container"):
-                yield Static(id="innodb_panel_data", classes="panel_data")
+            with VerticalScroll(id="panel_replication", classes="panel_container"):
+                yield Static(id="panel_replication_data", classes="panel_data")
 
-            with Container(id="processlist_panel"):
-                yield DataTable(id="processlist_panel_data", classes="panel_data", show_cursor=False)
+            with Container(id="panel_innodb", classes="panel_container"):
+                yield Static(id="panel_innodb_data", classes="panel_data")
+
+            with Container(id="panel_processlist"):
+                yield DataTable(id="panel_processlist_data", classes="panel_data", show_cursor=False)
 
             yield Static(id="footer")
 
