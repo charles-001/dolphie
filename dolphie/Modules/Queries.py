@@ -225,6 +225,20 @@ class MySQLQueries:
         ORDER BY
             SCHEMA_NAME
     """
+    innodb_metrics: str = """
+        SELECT
+            NAME,
+            COUNT
+        FROM
+            information_schema.INNODB_METRICS
+    """
+    checkpoint_age_8: str = """
+        SELECT
+            STORAGE_ENGINES ->> '$."InnoDB"."LSN"' - STORAGE_ENGINES ->> '$."InnoDB"."LSN_checkpoint"' AS checkpoint_age
+        FROM
+            performance_schema.log_status
+           
+    """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"
     binlog_status: str = "SHOW MASTER STATUS"

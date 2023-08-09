@@ -14,7 +14,7 @@ from datetime import datetime
 import myloginpath
 from dolphie import Dolphie
 from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.MetricManager import MetricData, MetricManager
+from dolphie.Modules.MetricManager import MetricData
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Panels import (
     dashboard_panel,
@@ -341,7 +341,6 @@ class DolphieApp(App):
         super().__init__()
 
         self.dolphie = dolphie
-        self.metric_manager = MetricManager()
         dolphie.app = self
 
         self.console.set_window_title(self.TITLE)
@@ -361,14 +360,20 @@ class DolphieApp(App):
             if not dolphie.main_db_connection:
                 dolphie.db_connect()
 
+            dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
             dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
+
+            if dolphie.mysql_version.startswith("8"):
+                dolphie.global_status["Innodb_checkpoint_age"] = dolphie.main_db_connection.fetch_value_from_field(
+                    MySQLQueries.checkpoint_age_8, "checkpoint_age"
+                )
+
             dolphie.fetch_replication_data(connection=dolphie.main_db_connection)
 
             if dolphie.display_dashboard_panel:
                 dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
 
             if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
-                dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
                 dolphie.innodb_status = dolphie.main_db_connection.fetch_data("innodb_status")
 
             if dolphie.display_replication_panel:
@@ -400,17 +405,16 @@ class DolphieApp(App):
                 self.set_timer(0.5, self.worker_fetch_data)
                 return
 
-            self.metric_manager.refresh_data(
+            dolphie.metric_manager.refresh_data(
                 dolphie.worker_start_time,
                 dolphie.worker_job_time,
+                dolphie.global_variables,
                 dolphie.global_status,
-                dolphie.saved_status,
                 dolphie.replica_lag,
             )
-            self.metric_manager.update_global_status_metrics()
-
-            if dolphie.replication_status:
-                self.metric_manager.update_replica_lag_metrics()
+            dolphie.metric_manager.update_global_status_metrics()
+            dolphie.metric_manager.metric_checkpoint_age(save_metric=True)
+            dolphie.metric_manager.update_replica_lag_metrics(dolphie.replication_status)
 
             try:
                 if dolphie.display_dashboard_panel:
@@ -425,24 +429,26 @@ class DolphieApp(App):
                 if dolphie.display_innodb_panel:
                     self.query_one("#panel_innodb_data", Static).update(innodb_panel.create_panel(dolphie))
 
-                self.query_one("#graph_dml_qps").update(self.metric_manager.create_dml_qps_graph())
-                self.query_one("#graph_replication_lag").update(self.metric_manager.create_replica_lag_graph())
+                self.query_one("#graph_dml_qps").update(dolphie.metric_manager.create_dml_qps_graph())
+                self.query_one("#graph_replication_lag").update(dolphie.metric_manager.create_replica_lag_graph())
+                self.query_one("#graph_innodb_checkpoint").update(
+                    dolphie.metric_manager.create_innodb_checkpoint_graph()
+                )
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
                 # with worker thread/state change due to asynchronous nature of the worker thread
                 pass
 
+            dolphie.metric_manager.update_last_value_metrics()
+
             # Update the sparkline for queries per second
             sparkline = self.app.query_one("#panel_dashboard_queries_qps")
-            sparkline_data = self.metric_manager.global_status_metrics.queries.values
+            sparkline_data = dolphie.metric_manager.global_status_metrics.Queries.values
             if not sparkline.display and sparkline_data:
                 sparkline.display = True
 
             sparkline.data = sparkline_data
             sparkline.refresh()
-
-            # Save these status for comparison on the next refresh
-            dolphie.saved_status = dolphie.global_status.copy()
 
             # We take a snapshot of the processlist to be used for commands
             # since the data can change after a key is pressed
@@ -507,11 +513,15 @@ class DolphieApp(App):
             return
 
         # Upon switch flip, update the plot data's dictionary to show/hide a DML type
-        dml_type = event.switch.id.split("_")[2]
-        self.query_one("#graph_dml_qps").update(self.metric_manager.create_dml_qps_graph())
-        metric_info = getattr(self.metric_manager.global_status_metrics, dml_type)
-        if isinstance(metric_info, MetricData):
-            metric_info.visible = event.value
+        metric = event.switch.id.split("_")[2]
+        if metric == "queries":
+            metric = "Queries"
+        else:
+            metric = f"Com_{metric}"
+
+        self.query_one("#graph_dml_qps").update(self.dolphie.metric_manager.create_dml_qps_graph())
+        metric_info: MetricData = getattr(self.dolphie.metric_manager.global_status_metrics, metric)
+        metric_info.visible = event.value
 
     def compose(self) -> ComposeResult:
         yield TopBar(app_version=self.dolphie.app_version, help="press ? for help")
@@ -527,12 +537,14 @@ class DolphieApp(App):
                         yield Static(id="graph_dml_qps", classes="panel_data")
 
                         with Horizontal(id="switch_container"):
-                            dml_types = ["QUERIES", "SELECT", "INSERT", "UPDATE", "DELETE"]
+                            dml_types = ["Queries", "SELECT", "INSERT", "UPDATE", "DELETE"]
                             for dml_type in dml_types:
                                 yield Label(dml_type)
                                 yield Switch(animate=False, id=f"dml_panel_{dml_type.lower()}_switch")
                     with TabPane("Replication", id="tab_replication_lag"):
                         yield Static(id="graph_replication_lag", classes="panel_data")
+                    with TabPane("InnoDB Checkpoint", id="tab_innodb_checkpoint"):
+                        yield Static(id="graph_innodb_checkpoint", classes="panel_data")
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")

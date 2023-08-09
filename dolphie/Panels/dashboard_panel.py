@@ -13,7 +13,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     global_status = dolphie.global_status
     global_variables = dolphie.global_variables
     innodb_status = dolphie.innodb_status
-    saved_status = dolphie.saved_status
     worker_job_time = dolphie.worker_job_time
     binlog_status = dolphie.binlog_status
 
@@ -100,41 +99,6 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     table_innodb.add_column()
     table_innodb.add_column(width=9)
-
-    # Calculate Checkpoint Efficiency
-    innodb_log_file_size = global_variables["innodb_log_file_size"]
-
-    # MariaDB Support
-    if "innodb_log_files_in_group" in global_variables:
-        innodb_log_files_in_group = global_variables["innodb_log_files_in_group"]
-    else:
-        innodb_log_files_in_group = 1
-
-    # Save what percentage of log files InnoDB will start to aggressively flush
-    # to disk due to checkpointing based on version
-    if dolphie.mysql_version.startswith("8"):
-        version_threshold = 0.875
-    else:
-        version_threshold = 0.81
-
-    checkpoint_efficiency = "N/A"
-    log_sequence_number_match = re.search(r"Log sequence number\s*(\d+)", innodb_status["status"])
-    last_checkpoint_match = re.search(r"Last checkpoint at\s*(\d+)", innodb_status["status"])
-    if log_sequence_number_match and last_checkpoint_match:
-        checkpoint_age = int(log_sequence_number_match.group(1)) - int(last_checkpoint_match.group(1))
-
-        max_checkpoint_age = innodb_log_file_size * innodb_log_files_in_group * version_threshold
-        if checkpoint_age >= max_checkpoint_age:
-            checkpoint_efficiency = "[#fc7979]0.00%"
-        elif max_checkpoint_age > checkpoint_age:
-            checkpoint_efficiency = round(100 - (checkpoint_age / max_checkpoint_age * 100), 2)
-
-            if checkpoint_efficiency > 40:
-                checkpoint_efficiency = "[#54efae]%s%%" % checkpoint_efficiency
-            elif checkpoint_efficiency > 20:
-                checkpoint_efficiency = "[#f1fb82]%s%%" % checkpoint_efficiency
-            else:
-                checkpoint_efficiency = "[#fc7979]%s%%" % checkpoint_efficiency
 
     # Get history list length
     output = re.search(r"History list length (\d+)", innodb_status["status"])
@@ -236,7 +200,7 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     # Add data to our table
     table_innodb.add_row("[#c5c7d2]Read Hit", "%s" % innodb_efficiency)
-    table_innodb.add_row("[#c5c7d2]Chkpt Age", "%s" % checkpoint_efficiency)
+    table_innodb.add_row("[#c5c7d2]Chkpt Age", "%s" % dolphie.metric_manager.metric_checkpoint_age())
     table_innodb.add_row("[#c5c7d2]AHI Hit", "%s" % (hash_search_efficiency))
 
     # Don't show thread concurrency information if it isn't set to on, instead show buffer pool stats
@@ -344,40 +308,13 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_stats.add_column()
     table_stats.add_column(min_width=7)
 
-    if not saved_status:
-        queries_per_second = 0
-        selects_per_second = 0
-        inserts_per_second = 0
-        updates_per_second = 0
-        deletes_per_second = 0
-        replaces_per_second = 0
-        rollbacks_per_second = 0
-    else:
-        queries_per_second = round((global_status["Queries"] - saved_status["Queries"]) / worker_job_time)
-
-        selects_per_second = round((global_status["Com_select"] - saved_status["Com_select"]) / worker_job_time)
-        inserts_per_second = round((global_status["Com_insert"] - saved_status["Com_insert"]) / worker_job_time)
-        updates_per_second = round((global_status["Com_update"] - saved_status["Com_update"]) / worker_job_time)
-        deletes_per_second = round((global_status["Com_delete"] - saved_status["Com_delete"]) / worker_job_time)
-        replaces_per_second = round((global_status["Com_replace"] - saved_status["Com_replace"]) / worker_job_time)
-        rollbacks_per_second = round((global_status["Com_rollback"] - saved_status["Com_rollback"]) / worker_job_time)
-
-    table_stats.add_row(
-        "[#c5c7d2]Queries",
-        "%s" % format_number(queries_per_second),
-    )
-    table_stats.add_row("[#c5c7d2]SELECT", "%s" % format_number(selects_per_second))
-    table_stats.add_row("[#c5c7d2]INSERT", "%s" % format_number(inserts_per_second))
-    table_stats.add_row("[#c5c7d2]UPDATE", "%s" % format_number(updates_per_second))
-    table_stats.add_row("[#c5c7d2]DELETE", "%s" % format_number(deletes_per_second))
-    table_stats.add_row(
-        "[#c5c7d2]REPLACE",
-        "%s" % format_number(replaces_per_second),
-    )
-    table_stats.add_row(
-        "[#c5c7d2]ROLLBACK",
-        "%s" % format_number(rollbacks_per_second),
-    )
+    table_stats.add_row("[#c5c7d2]Queries", dolphie.metric_manager.metric_status_per_sec("Queries", format=True))
+    table_stats.add_row("[#c5c7d2]SELECT", dolphie.metric_manager.metric_status_per_sec("Com_select", format=True))
+    table_stats.add_row("[#c5c7d2]INSERT", dolphie.metric_manager.metric_status_per_sec("Com_insert", format=True))
+    table_stats.add_row("[#c5c7d2]UPDATE", dolphie.metric_manager.metric_status_per_sec("Com_update", format=True))
+    table_stats.add_row("[#c5c7d2]DELETE", dolphie.metric_manager.metric_status_per_sec("Com_delete", format=True))
+    table_stats.add_row("[#c5c7d2]REPLACE", dolphie.metric_manager.metric_status_per_sec("Com_replace", format=True))
+    table_stats.add_row("[#c5c7d2]ROLLBACK", dolphie.metric_manager.metric_status_per_sec("Com_rollback", format=True))
 
     tables_to_add.append(table_stats)
 

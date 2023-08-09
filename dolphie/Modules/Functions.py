@@ -3,7 +3,7 @@ from decimal import Decimal
 import charset_normalizer
 
 
-def format_bytes(bytes_value):
+def format_bytes(bytes_value, format=True):
     units = ["B", "KB", "MB", "GB", "TB"]
     unit_index = 0
 
@@ -11,7 +11,10 @@ def format_bytes(bytes_value):
         bytes_value /= 1024
         unit_index += 1
 
-    return f"{bytes_value:.2f}[#91abec]{units[unit_index]}"
+    if format:
+        return f"{bytes_value:.2f}[#91abec]{units[unit_index]}"
+    else:
+        return f"{bytes_value:.2f}{units[unit_index]}"
 
 
 def format_time(seconds):

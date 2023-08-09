@@ -13,6 +13,7 @@ from dolphie.Modules.Functions import (
     format_sys_table_memory,
 )
 from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.MetricManager import MetricManager
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Widgets.command_screen import CommandScreen
@@ -41,6 +42,7 @@ class Dolphie:
     def __init__(self):
         self.app: App = None
         self.app_version = __version__
+        self.metric_manager = MetricManager()
 
         # Config options
         self.user: str = None
@@ -76,11 +78,11 @@ class Dolphie:
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
         self.pause_refresh: bool = False
-        self.saved_status: bool = None
         self.previous_binlog_position: int = 0
         self.previous_replica_sbm: int = 0
         self.host_cache: dict = {}
         self.host_cache_from_file: dict = {}
+        self.innodb_metrics: dict = {}
         self.global_variables: dict = {}
         self.global_status: dict = {}
         self.binlog_status: dict = {}
@@ -239,6 +241,7 @@ class Dolphie:
             self.innodb_locks_sql = MySQLQueries.locks_query_8
 
         self.server_uuid = self.main_db_connection.fetch_value_from_field(server_uuid_query, "@@server_uuid")
+        self.metric_manager.mysql_version = self.mysql_version
 
     def command_input_to_variable(self, return_data):
         variable = return_data[0]
@@ -679,8 +682,8 @@ class Dolphie:
                         query_db = thread_data["db"]
 
                         if query:
-                            explain_failure = None
-                            explain_data = None
+                            explain_failure = ""
+                            explain_data = ""
 
                             formatted_query = Syntax(
                                 query,
