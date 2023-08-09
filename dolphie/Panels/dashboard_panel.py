@@ -2,7 +2,7 @@ import re
 from datetime import datetime, timedelta
 
 from dolphie import Dolphie
-from dolphie.Functions import format_bytes, format_number
+from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Panels import replication_panel
 from rich import box
 from rich.style import Style

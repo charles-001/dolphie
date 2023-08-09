@@ -7,10 +7,14 @@ from importlib import metadata
 
 import pymysql
 import requests
-from dolphie.Functions import format_bytes, format_number, format_sys_table_memory
-from dolphie.ManualException import ManualException
-from dolphie.MySQL import Database
-from dolphie.Queries import Queries
+from dolphie.Modules.Functions import (
+    format_bytes,
+    format_number,
+    format_sys_table_memory,
+)
+from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.MySQL import Database
+from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.modal import CommandModal
@@ -228,11 +232,11 @@ class Dolphie:
         server_uuid_query = "SELECT @@server_uuid"
         if "MariaDB" in self.host_distro and major_version >= 10:
             server_uuid_query = "SELECT @@server_id AS @@server_uuid"
-            self.innodb_locks_sql = Queries["locks_query-5"]
+            self.innodb_locks_sql = MySQLQueries.locks_query_5
         elif major_version == 5:
-            self.innodb_locks_sql = Queries["locks_query-5"]
+            self.innodb_locks_sql = MySQLQueries.locks_query_5
         elif major_version == 8 and self.use_performance_schema:
-            self.innodb_locks_sql = Queries["locks_query-8"]
+            self.innodb_locks_sql = MySQLQueries.locks_query_8
 
         self.server_uuid = self.main_db_connection.fetch_value_from_field(server_uuid_query, "@@server_uuid")
 
@@ -294,7 +298,7 @@ class Dolphie:
             tables = {}
             all_tables = []
 
-            db_count = self.secondary_db_connection.execute(Queries["databases"])
+            db_count = self.secondary_db_connection.execute(MySQLQueries.databases)
             databases = self.secondary_db_connection.fetchall()
 
             # Determine how many tables to provide data
@@ -543,7 +547,7 @@ class Dolphie:
             table1.add_column("Current", header_style=header_style)
             table1.add_column("Total", header_style=header_style)
 
-            self.secondary_db_connection.execute(Queries["memory_by_user"])
+            self.secondary_db_connection.execute(MySQLQueries.memory_by_user)
             data = self.secondary_db_connection.fetchall()
             for row in data:
                 table1.add_row(
@@ -559,7 +563,7 @@ class Dolphie:
             table2.add_column("Code Area", header_style=header_style)
             table2.add_column("Current", header_style=header_style)
 
-            self.secondary_db_connection.execute(Queries["memory_by_code_area"])
+            self.secondary_db_connection.execute(MySQLQueries.memory_by_code_area)
             data = self.secondary_db_connection.fetchall()
             for row in data:
                 table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
@@ -572,7 +576,7 @@ class Dolphie:
             table3.add_column("Current", header_style=header_style)
             table3.add_column("Total", header_style=header_style)
 
-            self.secondary_db_connection.execute(Queries["memory_by_host"])
+            self.secondary_db_connection.execute(MySQLQueries.memory_by_host)
             data = self.secondary_db_connection.fetchall()
             for row in data:
                 table3.add_row(
@@ -645,63 +649,34 @@ class Dolphie:
             def command_get_input(thread_id):
                 if thread_id:
                     if thread_id in self.processlist_threads_snapshot:
+                        thread_data = self.processlist_threads_snapshot[thread_id]
+
                         table = Table(box=box.ROUNDED, show_header=False, style="#52608d")
                         table.add_column("")
                         table.add_column("")
 
                         table.add_row("[#c5c7d2]Thread ID", str(thread_id))
-                        table.add_row(
-                            "[#c5c7d2]User",
-                            self.processlist_threads_snapshot[thread_id]["user"],
-                        )
-                        table.add_row(
-                            "[#c5c7d2]Host",
-                            self.processlist_threads_snapshot[thread_id]["host"],
-                        )
-                        table.add_row(
-                            "[#c5c7d2]Database",
-                            self.processlist_threads_snapshot[thread_id]["db"],
-                        )
-                        table.add_row(
-                            "[#c5c7d2]Command",
-                            self.processlist_threads_snapshot[thread_id]["command"],
-                        )
-                        table.add_row(
-                            "[#c5c7d2]State",
-                            self.processlist_threads_snapshot[thread_id]["state"],
-                        )
-                        table.add_row(
-                            "[#c5c7d2]Time",
-                            self.processlist_threads_snapshot[thread_id]["formatted_time_with_days"],
-                        )
-                        table.add_row(
-                            "[#c5c7d2]Rows Locked",
-                            self.processlist_threads_snapshot[thread_id]["trx_rows_locked"],
-                        )
-                        table.add_row(
-                            "[#c5c7d2]Rows Modified",
-                            self.processlist_threads_snapshot[thread_id]["trx_rows_modified"],
-                        )
+                        table.add_row("[#c5c7d2]User", thread_data["user"])
+                        table.add_row("[#c5c7d2]Host", thread_data["host"])
+                        table.add_row("[#c5c7d2]Database", thread_data["db"])
+                        table.add_row("[#c5c7d2]Command", thread_data["command"])
+                        table.add_row("[#c5c7d2]State", thread_data["state"])
+                        table.add_row("[#c5c7d2]Time", thread_data["formatted_time_with_days"])
+                        table.add_row("[#c5c7d2]Rows Locked", thread_data["trx_rows_locked"])
+                        table.add_row("[#c5c7d2]Rows Modified", thread_data["trx_rows_modified"])
+
                         if (
                             "innodb_thread_concurrency" in self.global_variables
                             and self.global_variables["innodb_thread_concurrency"]
                         ):
-                            table.add_row(
-                                "[#c5c7d2]Tickets",
-                                self.processlist_threads_snapshot[thread_id]["trx_concurrency_tickets"],
-                            )
-                        table.add_row("", "")
-                        table.add_row(
-                            "[#c5c7d2]TRX State",
-                            self.processlist_threads_snapshot[thread_id]["trx_state"],
-                        )
-                        table.add_row(
-                            "[#c5c7d2]TRX Operation",
-                            self.processlist_threads_snapshot[thread_id]["trx_operation_state"],
-                        )
+                            table.add_row("[#c5c7d2]Tickets", thread_data["trx_concurrency_tickets"])
 
-                        query = sqlformat(self.processlist_threads_snapshot[thread_id]["query"], reindent_aligned=True)
-                        query_db = self.processlist_threads_snapshot[thread_id]["db"]
+                        table.add_row("", "")
+                        table.add_row("[#c5c7d2]TRX State", thread_data["trx_state"])
+                        table.add_row("[#c5c7d2]TRX Operation", thread_data["trx_operation_state"])
+
+                        query = sqlformat(thread_data["query"], reindent_aligned=True)
+                        query_db = thread_data["db"]
 
                         if query:
                             explain_failure = None
@@ -813,11 +788,13 @@ class Dolphie:
                 tables = {}
                 display_global_variables = {}
 
-                variable_data = self.secondary_db_connection.fetch_data("global_variables")
+                variable_data = self.secondary_db_connection.fetch_data("variables")
                 for variable, value in variable_data.items():
                     if input_variable:
                         if input_variable in variable:
                             display_global_variables[variable] = variable_data[variable]
+                    else:
+                        display_global_variables[variable] = variable_data[variable]
 
                 max_num_tables = 1 if len(display_global_variables) <= 50 else 2
 
@@ -990,7 +967,7 @@ class Dolphie:
             userstat_enabled = self.secondary_db_connection.cursor.fetchone()["@@userstat"]
 
         if userstat_enabled:
-            self.secondary_db_connection.execute(Queries["userstat_user_statisitics"])
+            self.secondary_db_connection.execute(MySQLQueries.userstat_user_statisitics)
 
             columns.update(
                 {
@@ -1012,7 +989,7 @@ class Dolphie:
             )
 
         elif self.performance_schema_enabled:
-            self.secondary_db_connection.execute(Queries["ps_user_statisitics"])
+            self.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
 
             columns.update(
                 {
@@ -1133,13 +1110,13 @@ class Dolphie:
 
     def fetch_replication_data(self, connection=None, replica_cursor=None):
         if self.heartbeat_table:
-            query = Queries["heartbeat_replica_lag"]
+            query = MySQLQueries.heartbeat_replica_lag
             replica_lag_source = "HB"
         elif self.mysql_version.startswith("8") and self.performance_schema_enabled:
-            query = Queries["ps_replica_lag"]
+            query = MySQLQueries.ps_replica_lag
             replica_lag_source = "PS"
         else:
-            query = Queries["replication_status"]
+            query = MySQLQueries.replication_status
             replica_lag_source = "Replica"
 
         if replica_cursor:
@@ -1147,7 +1124,7 @@ class Dolphie:
             replica_lag_data = replica_cursor.fetchone()
         elif connection:
             # Determine if this server is a replica or not
-            self.main_db_connection.execute(Queries["replication_status"])
+            self.main_db_connection.execute(MySQLQueries.replication_status)
             replica_lag_data = self.main_db_connection.fetchone()
             self.replication_status = replica_lag_data
 

@@ -13,15 +13,15 @@ from datetime import datetime
 
 import myloginpath
 from dolphie import Dolphie
-from dolphie.ManualException import ManualException
-from dolphie.MetricManager import MetricData, MetricManager
+from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.MetricManager import MetricData, MetricManager
+from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Panels import (
     dashboard_panel,
     innodb_panel,
     processlist_panel,
     replication_panel,
 )
-from dolphie.Queries import Queries
 from dolphie.Widgets.topbar import TopBar
 from rich.prompt import Prompt
 from rich.traceback import Traceback
@@ -297,7 +297,7 @@ Environment variables support these options:
         pattern_match = re.search(r"^(\w+\.\w+)$", parameter_options["heartbeat_table"])
         if pattern_match:
             dolphie.heartbeat_table = parameter_options["heartbeat_table"]
-            Queries["heartbeat_replica_lag"] = Queries["heartbeat_replica_lag"].replace(
+            MySQLQueries.heartbeat_replica_lag = MySQLQueries.heartbeat_replica_lag.replace(
                 "$placeholder", dolphie.heartbeat_table
             )
         else:
@@ -342,7 +342,6 @@ class DolphieApp(App):
 
         self.dolphie = dolphie
         self.metric_manager = MetricManager()
-
         dolphie.app = self
 
         self.console.set_window_title(self.TITLE)
@@ -401,6 +400,18 @@ class DolphieApp(App):
                 self.set_timer(0.5, self.worker_fetch_data)
                 return
 
+            self.metric_manager.refresh_data(
+                dolphie.worker_start_time,
+                dolphie.worker_job_time,
+                dolphie.global_status,
+                dolphie.saved_status,
+                dolphie.replica_lag,
+            )
+            self.metric_manager.update_global_status_metrics()
+
+            if dolphie.replication_status:
+                self.metric_manager.update_replica_lag_metrics()
+
             try:
                 if dolphie.display_dashboard_panel:
                     self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(dolphie))
@@ -414,33 +425,21 @@ class DolphieApp(App):
                 if dolphie.display_innodb_panel:
                     self.query_one("#panel_innodb_data", Static).update(innodb_panel.create_panel(dolphie))
 
-                self.metric_manager.refresh_data(
-                    dolphie.worker_start_time,
-                    dolphie.worker_job_time,
-                    dolphie.global_status,
-                    dolphie.saved_status,
-                    dolphie.replica_lag,
-                )
-                self.metric_manager.update_global_status_metrics()
-
-                if dolphie.replication_status:
-                    self.metric_manager.update_replica_lag_metrics()
-
                 self.query_one("#graph_dml_qps").update(self.metric_manager.create_dml_qps_graph())
                 self.query_one("#graph_replication_lag").update(self.metric_manager.create_replica_lag_graph())
-
-                # Update the sparkline for queries per second
-                sparkline = self.app.query_one("#panel_dashboard_queries_qps")
-                sparkline_data = self.metric_manager.global_status_metrics.queries.values
-                if not sparkline.display and sparkline_data:
-                    sparkline.display = True
-
-                sparkline.data = sparkline_data
-                sparkline.refresh()
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
                 # with worker thread/state change due to asynchronous nature of the worker thread
                 pass
+
+            # Update the sparkline for queries per second
+            sparkline = self.app.query_one("#panel_dashboard_queries_qps")
+            sparkline_data = self.metric_manager.global_status_metrics.queries.values
+            if not sparkline.display and sparkline_data:
+                sparkline.display = True
+
+            sparkline.data = sparkline_data
+            sparkline.refresh()
 
             # Save these status for comparison on the next refresh
             dolphie.saved_status = dolphie.global_status.copy()

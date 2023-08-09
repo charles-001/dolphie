@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Dict, List
 
 import plotext as plt
-from dolphie.Functions import format_number, format_time
+from dolphie.Modules.Functions import format_number, format_time
 from rich.ansi import AnsiDecoder
 from rich.console import Group
 from rich.jupyter import JupyterMixin

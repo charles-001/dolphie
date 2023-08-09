@@ -1,7 +1,7 @@
 import re
 
 from dolphie import Dolphie
-from dolphie.Functions import format_bytes, format_number
+from dolphie.Modules.Functions import format_bytes, format_number
 from rich import box
 from rich.style import Style
 from rich.table import Table

@@ -1,4 +1,4 @@
-from dolphie import Queries
+from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Widgets.topbar import TopBar
 from rich import box
 from rich.table import Table
@@ -100,7 +100,7 @@ class EventLog(Screen):
         table.add_column("Level")
         table.add_column("Event")
         if where_clause:
-            query = Queries["error_log"].replace("$placeholder", f"AND ({where_clause})")
+            query = MySQLQueries.error_log.replace("$placeholder", f"AND ({where_clause})")
             self.db.execute(query)
             data = self.db.fetchall()
 

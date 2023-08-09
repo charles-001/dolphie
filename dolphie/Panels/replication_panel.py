@@ -3,7 +3,7 @@ from datetime import timedelta
 
 import pymysql
 from dolphie import Dolphie
-from dolphie.Queries import Queries
+from dolphie.Modules.Queries import MySQLQueries
 from rich import box
 from rich.align import Align
 from rich.console import Group
@@ -96,7 +96,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
             if replica_sbm > 20:
                 data["Lag"] = "[#fc7979]%s" % "{:0>8}[/#fc7979]".format(str(timedelta(seconds=replica_sbm)))
             elif replica_sbm > 10:
-                data["Lag"] = "[#f1fb82w]%s[/#f1fb82w]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                data["Lag"] = "[#f1fb82]%s[/#f1fb82]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
             else:
                 data["Lag"] = "[#54efae]%s[/#54efae]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
         elif replica_sbm == 0:
@@ -241,7 +241,7 @@ def fetch_replica_table_data(dolphie: Dolphie):
 
             replica_connection = dolphie.replica_connections[thread_id]
             replica_connection["cursor"] = replica_connection["connection"].cursor(pymysql.cursors.DictCursor)
-            replica_connection["cursor"].execute(Queries["replication_status"])
+            replica_connection["cursor"].execute(MySQLQueries.replication_status)
             replica_data = replica_connection["cursor"].fetchone()
 
             if replica_data:

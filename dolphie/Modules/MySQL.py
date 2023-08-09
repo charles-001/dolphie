@@ -1,7 +1,7 @@
 import pymysql
-from dolphie.Functions import detect_encoding
-from dolphie.ManualException import ManualException
-from dolphie.Queries import Queries
+from dolphie.Modules.Functions import detect_encoding
+from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.Queries import MySQLQueries
 
 
 class Database:
@@ -115,7 +115,7 @@ class Database:
         command_data = {}
 
         if command == "status" or command == "variables":
-            self.execute(Queries[command])
+            self.execute(getattr(MySQLQueries, command))
             data = self.fetchall()
 
             for row in data:
@@ -133,19 +133,19 @@ class Database:
                 command_data[variable] = converted_value
 
         elif command == "innodb_status":
-            data = self.fetch_value_from_field(Queries[command], "Status")
+            data = self.fetch_value_from_field(getattr(MySQLQueries, command), "Status")
             command_data["status"] = data
 
         elif command == "find_replicas":
             if performance_schema:
-                find_replicas_query = Queries["ps_find_replicas"]
+                find_replicas_query = MySQLQueries.ps_find_replicas
             else:
-                find_replicas_query = Queries["pl_find_replicas"]
+                find_replicas_query = MySQLQueries.pl_find_replicas
 
             self.execute(find_replicas_query)
             command_data = self.fetchall()
         else:
-            self.execute(Queries[command])
+            self.execute(getattr(MySQLQueries, command))
             data = self.fetchall()
 
             for row in data:

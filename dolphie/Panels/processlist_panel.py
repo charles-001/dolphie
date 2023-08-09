@@ -2,8 +2,8 @@ import re
 from datetime import timedelta
 
 from dolphie import Dolphie
-from dolphie.Functions import format_number, format_time
-from dolphie.Queries import Queries
+from dolphie.Modules.Functions import format_number, format_time
+from dolphie.Modules.Queries import MySQLQueries
 from rich.text import Text
 from textual.widgets import DataTable
 
@@ -34,8 +34,8 @@ def create_panel(dolphie: Dolphie) -> DataTable:
 
     if (
         dolphie.show_additional_query_columns
-        and "innodb_thread_concurrency" in dolphie.variables
-        and dolphie.variables["innodb_thread_concurrency"]
+        and "innodb_thread_concurrency" in dolphie.global_variables
+        and dolphie.global_variables["innodb_thread_concurrency"]
     ):
         columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": True})
 
@@ -110,9 +110,9 @@ def create_panel(dolphie: Dolphie) -> DataTable:
 
 def fetch_data(dolphie: Dolphie):
     if dolphie.use_performance_schema:
-        processlist_query = Queries["ps_query"]
+        processlist_query = MySQLQueries.ps_query
     else:
-        processlist_query = Queries["pl_query"]
+        processlist_query = MySQLQueries.pl_query
 
     if dolphie.sort_by_time_descending:
         if dolphie.use_performance_schema:
