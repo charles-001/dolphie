@@ -521,7 +521,7 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1:
             return
 
-        # Graph name is all parts of the switch id except the last part
+        # Metric instance name is all parts of the switch id except the last part
         metric_instance_name = "_".join(event.switch.id.split("_")[:-1])
         metric = event.switch.name
 
@@ -555,10 +555,6 @@ class DolphieApp(App):
                         with Horizontal(classes="switch_container"):
                             yield from self.generate_switches("dml", self.dolphie.metric_manager.metrics_dml)
 
-                    with TabPane("Replication", id="tab_replication_lag"):
-                        yield Graph(id="graph_replication_lag", classes="panel_data")
-                    with TabPane("InnoDB Checkpoint", id="tab_innodb_checkpoint"):
-                        yield Graph(id="graph_innodb_checkpoint", classes="panel_data")
                     with TabPane("InnoDB Activity", id="tab_innodb_activity"):
                         yield Graph(id="graph_innodb_activity", classes="panel_data")
 
@@ -566,6 +562,11 @@ class DolphieApp(App):
                             yield from self.generate_switches(
                                 "innodb_activity", self.dolphie.metric_manager.metrics_innodb_activity
                             )
+                    with TabPane("InnoDB Checkpoint", id="tab_innodb_checkpoint"):
+                        yield Graph(id="graph_innodb_checkpoint", classes="panel_data")
+
+                    with TabPane("Replication", id="tab_replication_lag"):
+                        yield Graph(id="graph_replication_lag", classes="panel_data")
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")

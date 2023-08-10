@@ -123,17 +123,23 @@ class MetricManager:
 
     def update_metrics_with_per_second_values(self):
         for metric_instance in self.metrics_with_per_second_values:
+            added = False
             for metric_name in dir(metric_instance):
                 metric_data = getattr(metric_instance, metric_name)
 
                 if isinstance(metric_data, MetricData):
+                    # If there's no last value, update last_value and skip adding it
+                    # so we don't have a first skewed value
                     if metric_data.last_value is None:
                         metric_data.last_value = self.global_status[metric_name]
                     else:
                         metric_status_per_sec = self.get_metric_per_sec_global_status(metric_name, format=False)
                         self.add_metric(metric_data, metric_status_per_sec)
 
-            metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
+                        added = True
+
+            if added:
+                metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
 
     def update_metrics_replication_lag(self, replication_status):
         if replication_status:
