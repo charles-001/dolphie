@@ -107,26 +107,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     else:
         history_list_length = "N/A"
 
-    # Calculate AIO reads
-    total_pending_aio_reads = 0
-    total_pending_aio_writes = 0
-    output = re.search(
-        r"Pending normal aio reads: (?:\d+\s)?\[(.*?)\] , aio writes: (?:\d+\s)?\[(.*?)\]",
-        innodb_status["status"],
-    )
-    if output:
-        match = output.group(1).split(",")
-
-        for aio_read in match:
-            total_pending_aio_reads += int(aio_read)
-
-        match = output.group(2).split(",")
-        for aio_write in match:
-            total_pending_aio_writes += int(aio_write)
-    else:
-        total_pending_aio_reads = "N/A"
-        total_pending_aio_writes = "N/A"
-
     # Calculate InnoDB memory read hit efficiency
     innodb_efficiency = "N/A"
 

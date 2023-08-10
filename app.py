@@ -431,18 +431,28 @@ class DolphieApp(App):
 
                 # Refresh our graphs
                 self.query_one("#graph_dml").render_graph(dolphie.metric_manager.metrics_dml)
-                self.query_one("#graph_replication_lag").render_graph(dolphie.metric_manager.metrics_replication_lag)
                 self.query_one("#graph_innodb_checkpoint").render_graph(
                     dolphie.metric_manager.metrics_innodb_checkpoint
                 )
                 self.query_one("#graph_innodb_activity").render_graph(dolphie.metric_manager.metrics_innodb_activity)
 
-                # Hide replication graph if replication is not running
-                replication_tab = self.app.query_one("ContentTab#tab_replication_lag")
+                # Add/remove replication tab based on replication status
+                replication_tab = self.app.query_one("#tabbed_content", TabbedContent)
                 if dolphie.replication_status:
-                    replication_tab.display = True
+                    if not self.app.query("#tab_replication_lag"):
+                        replication_tab.add_pane(
+                            pane=TabPane(
+                                "Replication",
+                                Graph(id="graph_replication_lag", classes="panel_data"),
+                                id="tab_replication_lag",
+                            )
+                        )
+                    self.query_one("#graph_replication_lag").render_graph(
+                        dolphie.metric_manager.metrics_replication_lag
+                    )
                 else:
-                    replication_tab.display = False
+                    if self.app.query("#tab_replication_lag"):
+                        replication_tab.remove_pane("tab_replication_lag")
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
                 # with worker thread/state change due to asynchronous nature of the worker thread
@@ -548,7 +558,7 @@ class DolphieApp(App):
                 yield Sparkline([], id="panel_dashboard_queries_qps")
 
             with Container(id="panel_graphs", classes="panel_container"):
-                with TabbedContent(initial="tab_dml"):
+                with TabbedContent(initial="tab_dml", id="tabbed_content"):
                     with TabPane("DML", id="tab_dml"):
                         yield Graph(id="graph_dml", classes="panel_data")
 
@@ -564,9 +574,6 @@ class DolphieApp(App):
                             )
                     with TabPane("InnoDB Checkpoint", id="tab_innodb_checkpoint"):
                         yield Graph(id="graph_innodb_checkpoint", classes="panel_data")
-
-                    with TabPane("Replication", id="tab_replication_lag"):
-                        yield Graph(id="graph_replication_lag", classes="panel_data")
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")
