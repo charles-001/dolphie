@@ -255,7 +255,7 @@ class Dolphie:
         new_display = not panel.display
         panel.display = new_display
         setattr(self, f"display_{panel_name}_panel", new_display)
-        if panel_name not in ["processlist", "dml_qps"]:
+        if panel_name not in ["processlist", "graphs"]:
             self.app.query_one(f"#{panel.id}_data").update(
                 f"[b #91abec]Loading {panel.id.split('panel_')[1].capitalize()} Panel[/b #91abec]"
             )
@@ -280,7 +280,7 @@ class Dolphie:
         elif key == "4":
             self.toggle_panel("innodb")
         elif key == "5":
-            self.toggle_panel("dml_qps")
+            self.toggle_panel("graphs")
 
         elif key == "a":
             if self.show_additional_query_columns:
@@ -916,7 +916,7 @@ class Dolphie:
                 ),
                 "Chkpt Age": (
                     "This depicts how close InnoDB is before it starts to furiously flush dirty data to disk "
-                    "(Higher is better)"
+                    "(Lower is better)"
                 ),
                 "AHI Hit": (
                     "The percentage of how many lookups there are from Adapative Hash Index compared to it not"

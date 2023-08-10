@@ -14,7 +14,7 @@ from datetime import datetime
 import myloginpath
 from dolphie import Dolphie
 from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.MetricManager import MetricData
+from dolphie.Modules.MetricManager import Graph, MetricData
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Panels import (
     dashboard_panel,
@@ -412,9 +412,9 @@ class DolphieApp(App):
                 dolphie.global_status,
                 dolphie.replica_lag,
             )
-            dolphie.metric_manager.update_global_status_metrics()
-            dolphie.metric_manager.metric_checkpoint_age(save_metric=True)
-            dolphie.metric_manager.update_replica_lag_metrics(dolphie.replication_status)
+            dolphie.metric_manager.update_metrics_with_per_second_values()
+            dolphie.metric_manager.update_metrics_replication_lag(dolphie.replication_status)
+            dolphie.metric_manager.update_metrics_innodb_checkpoint()
 
             try:
                 if dolphie.display_dashboard_panel:
@@ -429,21 +429,30 @@ class DolphieApp(App):
                 if dolphie.display_innodb_panel:
                     self.query_one("#panel_innodb_data", Static).update(innodb_panel.create_panel(dolphie))
 
-                self.query_one("#graph_dml_qps").update(dolphie.metric_manager.create_dml_qps_graph())
-                self.query_one("#graph_replication_lag").update(dolphie.metric_manager.create_replica_lag_graph())
-                self.query_one("#graph_innodb_checkpoint").update(
-                    dolphie.metric_manager.create_innodb_checkpoint_graph()
+                # Refresh our graphs
+                self.query_one("#graph_dml").render_graph(dolphie.metric_manager.metrics_dml)
+                self.query_one("#graph_replication_lag").render_graph(dolphie.metric_manager.metrics_replication_lag)
+                self.query_one("#graph_innodb_checkpoint").render_graph(
+                    dolphie.metric_manager.metrics_innodb_checkpoint
                 )
+                self.query_one("#graph_innodb_activity").render_graph(dolphie.metric_manager.metrics_innodb_activity)
+
+                # Hide replication graph if replication is not running
+                replication_tab = self.app.query_one("ContentTab#tab_replication_lag")
+                if dolphie.replication_status:
+                    replication_tab.display = True
+                else:
+                    replication_tab.display = False
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
                 # with worker thread/state change due to asynchronous nature of the worker thread
                 pass
 
-            dolphie.metric_manager.update_last_value_metrics()
+            dolphie.metric_manager.update_metrics_with_last_value()
 
             # Update the sparkline for queries per second
             sparkline = self.app.query_one("#panel_dashboard_queries_qps")
-            sparkline_data = dolphie.metric_manager.global_status_metrics.Queries.values
+            sparkline_data = dolphie.metric_manager.metrics_dml.Queries.values
             if not sparkline.display and sparkline_data:
                 sparkline.display = True
 
@@ -469,7 +478,7 @@ class DolphieApp(App):
             "panel_innodb",
             "footer",
             "panel_dashboard_queries_qps",
-            "panel_dml_qps",
+            "panel_graphs",
         ]
         for component in components_to_disable:
             self.query_one(f"#{component}").display = False
@@ -483,10 +492,10 @@ class DolphieApp(App):
             dolphie.display_dashboard_panel = True
 
         # Set default switches to be toggled on
-        dml_switches = self.query("#switch_container Switch")
-        for switch in dml_switches:
+        switches = self.query(".switch_container Switch")
+        for switch in switches:
             switch: Switch
-            if switch.id != "dml_panel_queries_switch":
+            if switch.id != "dml_Queries":
                 switch.toggle()
 
         dolphie.check_for_update()
@@ -512,16 +521,23 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1:
             return
 
-        # Upon switch flip, update the plot data's dictionary to show/hide a DML type
-        metric = event.switch.id.split("_")[2]
-        if metric == "queries":
-            metric = "Queries"
-        else:
-            metric = f"Com_{metric}"
+        # Graph name is all parts of the switch id except the last part
+        metric_instance_name = "_".join(event.switch.id.split("_")[:-1])
+        metric = event.switch.name
 
-        self.query_one("#graph_dml_qps").update(self.dolphie.metric_manager.create_dml_qps_graph())
-        metric_info: MetricData = getattr(self.dolphie.metric_manager.global_status_metrics, metric)
-        metric_info.visible = event.value
+        metric_instance = getattr(self.dolphie.metric_manager, f"metrics_{metric_instance_name}")
+        metric_data: MetricData = getattr(metric_instance, metric)
+        metric_data.visible = event.value
+
+        graph_element = self.query_one(f"#graph_{metric_instance_name}")
+        graph_element.render_graph(metric_instance)
+
+    def generate_switches(self, metric_instance_name, metric_instance):
+        for metric, metric_data in metric_instance.__dict__.items():
+            if isinstance(metric_data, MetricData) and metric_data.graphable:
+                switch_id = f"{metric_instance_name}_{metric_data.label}"
+                yield Label(metric_data.label)
+                yield Switch(animate=False, id=switch_id, name=metric)
 
     def compose(self) -> ComposeResult:
         yield TopBar(app_version=self.dolphie.app_version, help="press ? for help")
@@ -531,20 +547,25 @@ class DolphieApp(App):
                 yield Static(id="panel_dashboard_data", classes="panel_data")
                 yield Sparkline([], id="panel_dashboard_queries_qps")
 
-            with Container(id="panel_dml_qps", classes="panel_container"):
+            with Container(id="panel_graphs", classes="panel_container"):
                 with TabbedContent(initial="tab_dml"):
                     with TabPane("DML", id="tab_dml"):
-                        yield Static(id="graph_dml_qps", classes="panel_data")
+                        yield Graph(id="graph_dml", classes="panel_data")
 
-                        with Horizontal(id="switch_container"):
-                            dml_types = ["Queries", "SELECT", "INSERT", "UPDATE", "DELETE"]
-                            for dml_type in dml_types:
-                                yield Label(dml_type)
-                                yield Switch(animate=False, id=f"dml_panel_{dml_type.lower()}_switch")
+                        with Horizontal(classes="switch_container"):
+                            yield from self.generate_switches("dml", self.dolphie.metric_manager.metrics_dml)
+
                     with TabPane("Replication", id="tab_replication_lag"):
-                        yield Static(id="graph_replication_lag", classes="panel_data")
+                        yield Graph(id="graph_replication_lag", classes="panel_data")
                     with TabPane("InnoDB Checkpoint", id="tab_innodb_checkpoint"):
-                        yield Static(id="graph_innodb_checkpoint", classes="panel_data")
+                        yield Graph(id="graph_innodb_checkpoint", classes="panel_data")
+                    with TabPane("InnoDB Activity", id="tab_innodb_activity"):
+                        yield Graph(id="graph_innodb_activity", classes="panel_data")
+
+                        with Horizontal(classes="switch_container"):
+                            yield from self.generate_switches(
+                                "innodb_activity", self.dolphie.metric_manager.metrics_innodb_activity
+                            )
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")

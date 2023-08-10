@@ -200,7 +200,7 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     # Add data to our table
     table_innodb.add_row("[#c5c7d2]Read Hit", "%s" % innodb_efficiency)
-    table_innodb.add_row("[#c5c7d2]Chkpt Age", "%s" % dolphie.metric_manager.metric_checkpoint_age())
+    table_innodb.add_row("[#c5c7d2]Chkpt Age", "%s" % dolphie.metric_manager.get_metric_checkpoint_age(format=True))
     table_innodb.add_row("[#c5c7d2]AHI Hit", "%s" % (hash_search_efficiency))
 
     # Don't show thread concurrency information if it isn't set to on, instead show buffer pool stats
@@ -308,13 +308,13 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_stats.add_column()
     table_stats.add_column(min_width=7)
 
-    table_stats.add_row("[#c5c7d2]Queries", dolphie.metric_manager.metric_status_per_sec("Queries", format=True))
-    table_stats.add_row("[#c5c7d2]SELECT", dolphie.metric_manager.metric_status_per_sec("Com_select", format=True))
-    table_stats.add_row("[#c5c7d2]INSERT", dolphie.metric_manager.metric_status_per_sec("Com_insert", format=True))
-    table_stats.add_row("[#c5c7d2]UPDATE", dolphie.metric_manager.metric_status_per_sec("Com_update", format=True))
-    table_stats.add_row("[#c5c7d2]DELETE", dolphie.metric_manager.metric_status_per_sec("Com_delete", format=True))
-    table_stats.add_row("[#c5c7d2]REPLACE", dolphie.metric_manager.metric_status_per_sec("Com_replace", format=True))
-    table_stats.add_row("[#c5c7d2]ROLLBACK", dolphie.metric_manager.metric_status_per_sec("Com_rollback", format=True))
+    table_stats.add_row("[#c5c7d2]Queries", dolphie.metric_manager.get_metric_per_sec_global_status("Queries"))
+    table_stats.add_row("[#c5c7d2]SELECT", dolphie.metric_manager.get_metric_per_sec_global_status("Com_select"))
+    table_stats.add_row("[#c5c7d2]INSERT", dolphie.metric_manager.get_metric_per_sec_global_status("Com_insert"))
+    table_stats.add_row("[#c5c7d2]UPDATE", dolphie.metric_manager.get_metric_per_sec_global_status("Com_update"))
+    table_stats.add_row("[#c5c7d2]DELETE", dolphie.metric_manager.get_metric_per_sec_global_status("Com_delete"))
+    table_stats.add_row("[#c5c7d2]REPLACE", dolphie.metric_manager.get_metric_per_sec_global_status("Com_replace"))
+    table_stats.add_row("[#c5c7d2]ROLLBACK", dolphie.metric_manager.get_metric_per_sec_global_status("Com_rollback"))
 
     tables_to_add.append(table_stats)
 

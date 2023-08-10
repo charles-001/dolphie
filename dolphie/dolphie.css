@@ -21,7 +21,12 @@ DataTable {
     background: #030918;
     overflow-x: hidden;
 }
-
+Graph {
+    height: 15;
+}
+Horizontal {
+    height: auto;
+}
 .sparkline_label {
     padding-top: 1;
 }
@@ -245,12 +250,12 @@ Switch.-on:hover > .switch--slider {
     background: #192132;
 }
 
-#switch_container {
+.switch_container {
     align: center top;
     padding-top: 1;
     height: auto;
 }
-#switch_container > Label {
+.switch_container > Label {
     color: #bbc8e8;
     padding-left: 1;
     text-style: bold;
