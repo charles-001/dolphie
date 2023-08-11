@@ -27,7 +27,9 @@ Graph {
 Horizontal {
     height: auto;
 }
-
+LoadingIndicator {
+    color: #8fb0ee;
+}
 ModalScreen {
     align: center middle;
     height: 40;

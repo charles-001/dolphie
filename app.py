@@ -27,6 +27,7 @@ from textual.css.query import NoMatches
 from textual.widgets import (
     DataTable,
     Label,
+    LoadingIndicator,
     Sparkline,
     Static,
     Switch,
@@ -365,12 +366,12 @@ class DolphieApp(App):
         try:
             dolphie = self.dolphie
 
+            if not dolphie.main_db_connection or not dolphie.main_db_connection.connection.open:
+                dolphie.db_connect()
+
             dolphie.worker_start_time = datetime.now()
             dolphie.worker_job_time = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
             dolphie.worker_previous_start_time = dolphie.worker_start_time
-
-            if not dolphie.main_db_connection:
-                dolphie.db_connect()
 
             dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
             dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
@@ -411,7 +412,11 @@ class DolphieApp(App):
         if event.state == WorkerState.SUCCESS:
             dolphie = self.dolphie
 
-            if len(self.screen_stack) > 1 or dolphie.pause_refresh:
+            if (
+                len(self.screen_stack) > 1
+                or dolphie.pause_refresh
+                or not self.dolphie.main_db_connection.connection.open
+            ):
                 self.set_timer(0.5, self.worker_fetch_data)
                 return
 
@@ -429,6 +434,12 @@ class DolphieApp(App):
             dolphie.metric_manager.update_metrics_innodb_checkpoint()
 
             try:
+                loading_indicator = self.app.query_one("LoadingIndicator")
+                if loading_indicator.display:
+                    loading_indicator.display = False
+                    self.dolphie.toggle_panel("dashboard", show_loading=False)
+                    self.dolphie.toggle_panel("processlist", show_loading=False)
+
                 if dolphie.display_dashboard_panel:
                     self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(dolphie))
 
@@ -496,21 +507,22 @@ class DolphieApp(App):
 
         # Set these components by default to not show
         components_to_disable = [
-            "panel_replication",
-            "panel_innodb",
-            "footer",
-            "panel_dashboard_queries_qps",
-            "panel_graphs",
+            ".panel_container",
+            "#panel_processlist",
+            "Sparkline",
+            "#footer",
         ]
         for component in components_to_disable:
-            self.query_one(f"#{component}").display = False
+            display_off_components = self.query(f"{component}")
+            for display_off_component in display_off_components:
+                display_off_component.display = False
 
         dolphie.display_processlist_panel = True
         if dolphie.hide_dashboard:
             self.query_one("#panel_dashboard", Container).display = False
             dolphie.display_dashboard_panel = False
         else:
-            self.query_one("#panel_dashboard_data", Static).update("[b #91abec]Loading Dashboard panel[/b #91abec]")
+            # self.query_one("#panel_dashboard_data", Static).update("[b #91abec]Loading Dashboard panel[/b #91abec]")
             dolphie.display_dashboard_panel = True
 
         # Set default switches to be toggled on
@@ -519,10 +531,6 @@ class DolphieApp(App):
             switch: Switch
             if switch.id != "dml_Queries":
                 switch.toggle()
-
-        # Update header's host
-        header = self.app.query_one("#topbar_host", Label)
-        header.update("Connecting to MySQL...")
 
         dolphie.check_for_update()
 
@@ -562,9 +570,10 @@ class DolphieApp(App):
                 yield Switch(animate=False, id=switch_id, name=metric)
 
     def compose(self) -> ComposeResult:
-        yield TopBar(app_version=self.dolphie.app_version, help="press ? for help")
+        yield TopBar(host=self.dolphie.host, app_version=self.dolphie.app_version, help="press ? for help")
 
         with VerticalScroll(id="main_container"):
+            yield LoadingIndicator()
             with Container(id="panel_dashboard", classes="panel_container"):
                 yield Static(id="panel_dashboard_data", classes="panel_data")
                 yield Sparkline([], id="panel_dashboard_queries_qps")
@@ -598,7 +607,6 @@ class DolphieApp(App):
 
             with Container(id="panel_processlist"):
                 yield DataTable(id="panel_processlist_data", classes="panel_data", show_cursor=False)
-
             yield Static(id="footer")
 
 

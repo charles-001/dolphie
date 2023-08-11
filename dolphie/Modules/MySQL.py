@@ -34,6 +34,9 @@ class Database:
         # Prefix all queries with dolphie so they can be identified in the processlist
         query = "/* dolphie */ " + query
 
+        if not self.connection.open:
+            return None
+
         try:
             return self.cursor.execute(query, values)
         except Exception as e:

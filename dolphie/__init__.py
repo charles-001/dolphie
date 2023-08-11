@@ -101,7 +101,6 @@ class Dolphie:
         self.display_dashboard_panel: bool = False
         self.display_processlist_panel: bool = False
         self.display_replication_panel: bool = False
-        self.display_innodb_panel: bool = False
         self.display_dml_panel: bool = False
 
         # Database connection global_variables
@@ -245,16 +244,23 @@ class Dolphie:
         if value:
             setattr(self, variable, value)
 
-    def toggle_panel(self, panel_name):
+    def toggle_panel(self, panel_name, show_loading=True):
         panel = self.app.query_one(f"#panel_{panel_name}")
 
         new_display = not panel.display
         panel.display = new_display
         setattr(self, f"display_{panel_name}_panel", new_display)
         if panel_name not in ["processlist", "graphs"]:
-            self.app.query_one(f"#{panel.id}_data").update(
-                f"[b #91abec]Loading {panel.id.split('panel_')[1].capitalize()} Panel[/b #91abec]"
-            )
+            if show_loading:
+                self.app.query_one(f"#{panel.id}_data").update(
+                    f"[b #91abec]Loading {panel.id.split('panel_')[1].capitalize()} Panel[/b #91abec]"
+                )
+            else:
+                self.app.query_one(f"#{panel.id}_data").update("")
+
+        if panel_name == "processlist":
+            self.app.query_one("#panel_processlist_data").clear(columns=True)
+
         return new_display
 
     def capture_key(self, key):
@@ -286,9 +292,13 @@ class Dolphie:
                     if data["password"]:
                         self.password = data["password"]
 
-                    self.db_connect()
-
                     self.metric_manager = MetricManager()
+                    self.main_db_connection.close()
+                    self.secondary_db_connection.close()
+                    self.toggle_panel("dashboard", show_loading=False)
+                    self.toggle_panel("processlist", show_loading=False)
+
+                    self.app.query_one("LoadingIndicator").display = True
                     self.app.query_one("#panel_dashboard_queries_qps").display = False
 
             self.app.push_screen(QuickSwitchHostModal(quick_switch_hosts=self.quick_switch_hosts), command_get_input)
