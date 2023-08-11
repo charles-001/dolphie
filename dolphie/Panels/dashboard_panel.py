@@ -39,7 +39,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     if dolphie.worker_job_time < 1:
         refresh_latency = 0
     else:
-        refresh_latency = str(round(dolphie.worker_job_time - dolphie.refresh_interval, 2))
+        refresh_latency = round(dolphie.worker_job_time - dolphie.refresh_interval, 2)
 
     use_performance_schema_status = "NO"
     if dolphie.use_performance_schema:
@@ -57,11 +57,11 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     table_information.add_column()
     table_information.add_column(width=25)
-    table_information.add_row("[#c5c7d2]Version", "%s %s" % (dolphie.host_distro, dolphie.mysql_version))
-    table_information.add_row("[#c5c7d2]Uptime", "%s" % uptime)
-    table_information.add_row("[#c5c7d2]Runtime", "%s [#c5c7d2]latency:[/#c5c7d2] %ss" % (runtime, refresh_latency))
-    table_information.add_row("[#c5c7d2]Read Only", "%s" % global_variables["read_only"])
-    table_information.add_row("[#c5c7d2]Use PS", "%s" % (use_performance_schema_status))
+    table_information.add_row("[#c5c7d2]Version", f"{dolphie.host_distro} {dolphie.mysql_version}")
+    table_information.add_row("[#c5c7d2]Uptime", uptime)
+    table_information.add_row("[#c5c7d2]Runtime", f"{runtime} [#c5c7d2]latency:[/#c5c7d2] {refresh_latency}s")
+    table_information.add_row("[#c5c7d2]Read Only", global_variables["read_only"])
+    table_information.add_row("[#c5c7d2]Use PS", use_performance_schema_status)
     table_information.add_row(
         "[#c5c7d2]Threads",
         "[#c5c7d2]con[/#c5c7d2] %s[#91abec]/[/#91abec][#c5c7d2]run[/#c5c7d2]"
@@ -97,9 +97,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb.add_column()
     table_innodb.add_column(width=9)
 
-    history_list_length = "N/A"
-    if "trx_rseg_history_len" in dolphie.innodb_metrics:
-        history_list_length = dolphie.innodb_metrics["trx_rseg_history_len"]
+    history_list_length = dolphie.innodb_metrics.get("trx_rseg_history_len", "N/A")
 
     # Calculate InnoDB memory read hit efficiency
     innodb_efficiency = "N/A"
@@ -123,19 +121,19 @@ def create_panel(dolphie: Dolphie) -> Table:
 
         innodb_efficiency = f"[{color_code}]{efficiency:.2f}%"
 
-    hash_search_efficiency = dolphie.metric_manager.get_metric_adaptive_hash_index()
-
     # Add data to our table
-    table_innodb.add_row("[#c5c7d2]Read Hit", "%s" % innodb_efficiency)
-    table_innodb.add_row("[#c5c7d2]Chkpt Age", "%s" % dolphie.metric_manager.get_metric_checkpoint_age(format=True))
-    table_innodb.add_row("[#c5c7d2]AHI Hit", "%s" % (hash_search_efficiency))
-    table_innodb.add_row("[#c5c7d2]BP Size", "%s" % (format_bytes(float(global_variables["innodb_buffer_pool_size"]))))
+    table_innodb.add_row("[#c5c7d2]Read Hit", innodb_efficiency)
+    table_innodb.add_row("[#c5c7d2]Chkpt Age", dolphie.metric_manager.get_metric_checkpoint_age(format=True))
+    table_innodb.add_row("[#c5c7d2]AHI Hit", dolphie.metric_manager.get_metric_adaptive_hash_index())
+    table_innodb.add_row("[#c5c7d2]BP Size", format_bytes(global_variables["innodb_buffer_pool_size"]))
     table_innodb.add_row(
-        "[#c5c7d2]BP Dirty", "%s" % (format_bytes(float(global_status["Innodb_buffer_pool_bytes_dirty"])))
+        "[#c5c7d2]BP Available",
+        format_bytes(
+            dolphie.global_variables["innodb_buffer_pool_size"] - dolphie.global_status["Innodb_buffer_pool_bytes_data"]
+        ),
     )
-
-    table_innodb.add_row("[#c5c7d2]History List", "%s" % format_number(history_list_length))
-    table_innodb.add_row("[#c5c7d2]", "")
+    table_innodb.add_row("[#c5c7d2]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
+    table_innodb.add_row("[#c5c7d2]History List", format_number(history_list_length))
 
     tables_to_add.append(table_innodb)
 
@@ -171,7 +169,7 @@ def create_panel(dolphie: Dolphie) -> Table:
 
         table_primary.add_column()
         table_primary.add_column(max_width=40)
-        table_primary.add_row("[#c5c7d2]File name", "%s" % str(binlog_status["File"]))
+        table_primary.add_row("[#c5c7d2]File name", binlog_status["File"])
         table_primary.add_row(
             "[#c5c7d2]Position",
             "%s" % (str(binlog_status["Position"])),
@@ -180,11 +178,12 @@ def create_panel(dolphie: Dolphie) -> Table:
             "[#c5c7d2]Size",
             "%s" % format_bytes(binlog_status["Position"]),
         )
-        table_primary.add_row("[#c5c7d2]Diff", "%s" % diff_binlog_position)
-        table_primary.add_row("[#c5c7d2]Cache Hit", "%s%%" % str(binlog_cache))
-        # MariaDB Support
-        if "gtid_mode" in global_variables:
-            table_primary.add_row("[#c5c7d2]GTID", "%s" % str(global_variables["gtid_mode"]))
+        table_primary.add_row("[#c5c7d2]Diff", str(diff_binlog_position))
+        table_primary.add_row("[#c5c7d2]Cache Hit", f"{binlog_cache}%")
+
+        gtid_mode = global_variables.get("gtid_mode", None)
+        if gtid_mode:
+            table_primary.add_row("[#c5c7d2]GTID", gtid_mode)
         else:
             table_primary.add_row()
         table_primary.add_row()

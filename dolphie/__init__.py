@@ -275,8 +275,6 @@ class Dolphie:
         elif key == "3":
             self.toggle_panel("replication")
         elif key == "4":
-            self.toggle_panel("innodb")
-        elif key == "5":
             self.toggle_panel("graphs")
 
         elif key == "grave_accent":
@@ -912,8 +910,7 @@ class Dolphie:
                 "1": "Show/hide Dashboard",
                 "2": "Show/hide Processlist",
                 "3": "Show/hide Replication/Replicas",
-                "4": "Show/hide InnoDB Information",
-                "5": "Show/hide DML QPS Graph",
+                "4": "Show/hide DML QPS Graph",
             }
             table_panels = Table(box=box.HORIZONTALS, style=table_line_color, title="Panels", title_style="bold")
             table_panels.add_column("Key", justify="center", style="b #91abec")

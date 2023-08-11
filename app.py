@@ -16,12 +16,7 @@ from dolphie import Dolphie
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MetricManager import Graph, MetricData
 from dolphie.Modules.Queries import MySQLQueries
-from dolphie.Panels import (
-    dashboard_panel,
-    innodb_panel,
-    processlist_panel,
-    replication_panel,
-)
+from dolphie.Panels import dashboard_panel, processlist_panel, replication_panel
 from dolphie.Widgets.topbar import TopBar
 from rich.prompt import Prompt
 from rich.traceback import Traceback
@@ -442,9 +437,6 @@ class DolphieApp(App):
 
                 if dolphie.display_replication_panel:
                     self.query_one("#panel_replication_data", Static).update(replication_panel.create_panel(dolphie))
-
-                if dolphie.display_innodb_panel:
-                    self.query_one("#panel_innodb_data", Static).update(innodb_panel.create_panel(dolphie))
 
                 # Refresh our graphs
                 self.query_one("#graph_dml").render_graph(dolphie.metric_manager.metrics_dml)
