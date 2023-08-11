@@ -9,6 +9,12 @@ from textual.widgets import Static
 
 
 @dataclass
+class MetricSource:
+    global_status = "global_status"
+    innodb_metrics = "innodb_metrics"
+
+
+@dataclass
 class MetricData:
     label: str
     color: tuple[int, int, int]
@@ -22,6 +28,7 @@ class MetricData:
 @dataclass
 class DMLMetrics:
     datetimes: List[str]
+    metric_source: MetricSource
     Queries: MetricData
     Com_select: MetricData
     Com_insert: MetricData
@@ -34,12 +41,14 @@ class DMLMetrics:
 @dataclass
 class ReplicationLagMetrics:
     datetimes: List[str]
+    metric_source: MetricSource
     lag: MetricData
 
 
 @dataclass
 class InnoDBCheckpointMetrics:
     datetimes: List[str]
+    metric_source: MetricSource
     checkpoint_age: MetricData
     checkpoint_age_sync_flush: int
     checkpoint_age_max: int
@@ -48,9 +57,18 @@ class InnoDBCheckpointMetrics:
 @dataclass
 class InnoDBActivityMetrics:
     datetimes: List[str]
+    metric_source: MetricSource
     Innodb_buffer_pool_write_requests: MetricData
     Innodb_buffer_pool_read_requests: MetricData
     Innodb_buffer_pool_reads: MetricData
+
+
+@dataclass
+class AdaptiveHashIndexMetrics:
+    datetimes: List[str]
+    metric_source: str
+    adaptive_hash_searches: MetricData
+    adaptive_hash_searches_btree: MetricData
 
 
 class MetricManager:
@@ -63,26 +81,29 @@ class MetricManager:
 
         self.metrics_dml = DMLMetrics(
             datetimes=[],
+            metric_source=MetricSource.global_status,
             Queries=MetricData(label="Queries", color=(172, 207, 231), visible=False, save_history=True),
             Com_select=MetricData(label="SELECT", color=(68, 180, 255), visible=True, save_history=True),
             Com_insert=MetricData(label="INSERT", color=(84, 239, 174), visible=True, save_history=True),
             Com_update=MetricData(label="UPDATE", color=(252, 213, 121), visible=True, save_history=True),
-            Com_delete=MetricData(label="DELETE", color=(255, 73, 185), visible=True, save_history=True),
+            Com_delete=MetricData(label="DELETE", color=(255, 73, 112), visible=True, save_history=True),
             Com_replace=MetricData(
-                label="REPLACE", color=(255, 73, 185), visible=False, save_history=False, graphable=False
+                label="REPLACE", color=(255, 73, 112), visible=False, save_history=False, graphable=False
             ),
             Com_rollback=MetricData(
-                label="ROLLBACK", color=(255, 73, 185), visible=False, save_history=False, graphable=False
+                label="ROLLBACK", color=(255, 73, 112), visible=False, save_history=False, graphable=False
             ),
         )
 
         self.metrics_replication_lag = ReplicationLagMetrics(
             datetimes=[],
+            metric_source=None,
             lag=MetricData(label="Lag", color=(68, 180, 255), visible=False, save_history=True),
         )
 
         self.metrics_innodb_checkpoint = InnoDBCheckpointMetrics(
             datetimes=[],
+            metric_source=MetricSource.global_status,
             checkpoint_age=MetricData(label="Age", color=(68, 180, 255), visible=True, save_history=True),
             checkpoint_age_max=0,
             checkpoint_age_sync_flush=0,
@@ -90,6 +111,7 @@ class MetricManager:
 
         self.metrics_innodb_activity = InnoDBActivityMetrics(
             datetimes=[],
+            metric_source=MetricSource.global_status,
             Innodb_buffer_pool_read_requests=MetricData(
                 label="Read Requests", color=(68, 180, 255), visible=True, save_history=True
             ),
@@ -97,11 +119,24 @@ class MetricManager:
                 label="Write Requests", color=(84, 239, 174), visible=True, save_history=True
             ),
             Innodb_buffer_pool_reads=MetricData(
-                label="Disk Reads", color=(255, 73, 185), visible=True, save_history=True
+                label="Disk Reads", color=(255, 73, 112), visible=True, save_history=True
             ),
         )
 
-        self.metrics_with_per_second_values = [self.metrics_dml, self.metrics_innodb_activity]
+        self.metrics_adaptive_hash_index = AdaptiveHashIndexMetrics(
+            datetimes=[],
+            metric_source=MetricSource.innodb_metrics,
+            adaptive_hash_searches_btree=MetricData(
+                label="Miss", color=(255, 73, 112), visible=True, save_history=True
+            ),
+            adaptive_hash_searches=MetricData(label="Hit", color=(84, 239, 174), visible=True, save_history=True),
+        )
+
+        self.metrics_with_per_second_values = [
+            self.metrics_dml,
+            self.metrics_innodb_activity,
+            self.metrics_adaptive_hash_index,
+        ]
 
     def refresh_data(
         self,
@@ -109,12 +144,14 @@ class MetricManager:
         worker_job_time: float,
         global_variables: Dict[str, int],
         global_status: Dict[str, int],
+        innodb_metrics: Dict[str, int],
         replication_lag: int,
     ):
         self.worker_start_time = worker_start_time
         self.worker_job_time = worker_job_time
         self.global_variables = global_variables
         self.global_status = global_status
+        self.innodb_metrics = innodb_metrics
         self.replication_lag = replication_lag
 
     def add_metric(self, metric_data: MetricData, value: int):
@@ -124,18 +161,22 @@ class MetricManager:
     def update_metrics_with_per_second_values(self):
         for metric_instance in self.metrics_with_per_second_values:
             added = False
+
+            if metric_instance.metric_source == MetricSource.global_status:
+                metrics_data = self.global_status
+            elif metric_instance.metric_source == MetricSource.innodb_metrics:
+                metrics_data = self.innodb_metrics
+
             for metric_name in dir(metric_instance):
                 metric_data = getattr(metric_instance, metric_name)
 
                 if isinstance(metric_data, MetricData):
-                    # If there's no last value, update last_value and skip adding it
-                    # so we don't have a first skewed value
                     if metric_data.last_value is None:
-                        metric_data.last_value = self.global_status[metric_name]
+                        if metric_name in metrics_data:
+                            metric_data.last_value = metrics_data.get(metric_name, 0)
                     else:
-                        metric_status_per_sec = self.get_metric_per_sec_global_status(metric_name, format=False)
+                        metric_status_per_sec = self.get_metric_calculate_per_sec(metric_name, format=False)
                         self.add_metric(metric_data, metric_status_per_sec)
-
                         added = True
 
             if added:
@@ -159,11 +200,16 @@ class MetricManager:
         self.add_metric(self.metrics_innodb_checkpoint.checkpoint_age, checkpoint_age_bytes)
         self.metrics_innodb_checkpoint.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
 
-    def get_metric_per_sec_global_status(self, metric_name, format=True):
+    def get_metric_calculate_per_sec(self, metric_name, format=True):
         for metric_instance in self.metrics_with_per_second_values:
             if hasattr(metric_instance, metric_name):
+                if metric_instance.metric_source == MetricSource.global_status:
+                    metrics_data = self.global_status
+                elif metric_instance.metric_source == MetricSource.innodb_metrics:
+                    metrics_data = self.innodb_metrics
+
                 last_value = getattr(metric_instance, metric_name).last_value
-                metric_diff = self.global_status[metric_name] - last_value
+                metric_diff = metrics_data.get(metric_name, 0) - last_value
                 metric_per_sec = round(metric_diff / self.worker_job_time)
 
                 if format:
@@ -172,38 +218,69 @@ class MetricManager:
                     return metric_per_sec
 
     def get_metric_checkpoint_age(self, format):
-        CHECKPOINT_AGE_FORMATS = {
-            "high": "[#fc7979]%s%%",
-            "medium": "[#f1fb82]%s%%",
-            "low": "[#54efae]%s%%",
-        }
-
         innodb_log_files_in_group = self.global_variables.get("innodb_log_files_in_group", 1)
+        checkpoint_age_bytes = round(self.global_status.get("Innodb_checkpoint_age", 0))
+        max_checkpoint_age_bytes = round(
+            self.global_variables.get("innodb_log_file_size", 0) * innodb_log_files_in_group
+        )
 
-        checkpoint_age_bytes = round(self.global_status["Innodb_checkpoint_age"])
-        max_checkpoint_age_bytes = round(self.global_variables["innodb_log_file_size"] * innodb_log_files_in_group)
+        if checkpoint_age_bytes == 0 and max_checkpoint_age_bytes == 0:
+            return "N/A"
+
         checkpoint_age_sync_flush_bytes = round(max_checkpoint_age_bytes * 0.825)
         checkpoint_age_ratio = round(checkpoint_age_bytes / max_checkpoint_age_bytes * 100, 2)
 
         if format:
             if checkpoint_age_ratio >= 80:
-                checkpoint_age_format = CHECKPOINT_AGE_FORMATS["high"]
+                color_code = "#fc7979"
             elif checkpoint_age_ratio >= 60:
-                checkpoint_age_format = CHECKPOINT_AGE_FORMATS["medium"]
+                color_code = "#f1fb82"
             else:
-                checkpoint_age_format = CHECKPOINT_AGE_FORMATS["low"]
+                color_code = "#54efae"
 
-            return checkpoint_age_format % checkpoint_age_ratio
+            return f"[{color_code}]{checkpoint_age_ratio}%"
         else:
             return max_checkpoint_age_bytes, checkpoint_age_sync_flush_bytes, checkpoint_age_bytes
+
+    def get_metric_adaptive_hash_index(self):
+        if self.global_variables.get("innodb_adaptive_hash_index") == "OFF":
+            return "OFF"
+
+        # Get per second value
+        previous_hits = self.metrics_adaptive_hash_index.adaptive_hash_searches.last_value
+        previous_misses = self.metrics_adaptive_hash_index.adaptive_hash_searches_btree.last_value
+        current_hits = self.innodb_metrics.get("adaptive_hash_searches", 0)
+        current_misses = self.innodb_metrics.get("adaptive_hash_searches_btree", 0)
+
+        hits = current_hits - previous_hits
+        misses = current_misses - previous_misses
+
+        if hits == 0 and misses == 0:
+            return "Inactive"
+
+        efficiency = (hits / (hits + misses)) * 100
+
+        if efficiency > 70:
+            color_code = "#54efae"
+        elif efficiency > 50:
+            color_code = "#f1fb82"
+        else:
+            color_code = "#fc7979"
+
+        return f"[{color_code}]{efficiency:.2f}%"
 
     def update_metrics_with_last_value(self):
         # We set the last value for specific metrics that need it so they can get per second values
         for metric_instance in self.metrics_with_per_second_values:
+            if metric_instance.metric_source == MetricSource.global_status:
+                metrics_data = self.global_status
+            elif metric_instance.metric_source == MetricSource.innodb_metrics:
+                metrics_data = self.innodb_metrics
+
             for metric_name in dir(metric_instance):
                 metric_data = getattr(metric_instance, metric_name)
                 if isinstance(metric_data, MetricData):
-                    metric_data.last_value = self.global_status[metric_name]
+                    metric_data.last_value = metrics_data.get(metric_name, 0)
 
 
 class Graph(Static):
@@ -237,7 +314,7 @@ class Graph(Static):
             if y:
                 plt.plot(x, y, marker="braille", label=self.data.lag.label, color=self.data.lag.color)
                 max_y_value = max(max_y_value, max(y))
-        elif type(self.data) in [DMLMetrics, InnoDBActivityMetrics]:
+        elif type(self.data) in [DMLMetrics, InnoDBActivityMetrics, AdaptiveHashIndexMetrics]:
             for metric_data in self.data.__dict__.values():
                 if isinstance(metric_data, MetricData) and metric_data.visible:
                     x = self.data.datetimes
@@ -293,6 +370,7 @@ class Graph(Static):
             DMLMetrics: lambda val: format_number(val, for_plot=True, decimal=1),
             InnoDBActivityMetrics: lambda val: format_number(val, for_plot=True, decimal=1),
             InnoDBCheckpointMetrics: lambda val: format_bytes(val, format=False),
+            AdaptiveHashIndexMetrics: lambda val: format_number(val, for_plot=True, decimal=1),
         }
 
         data_type = type(self.data)

@@ -1,4 +1,3 @@
-import re
 from datetime import datetime, timedelta
 
 from dolphie import Dolphie
@@ -12,8 +11,6 @@ from rich.table import Table
 def create_panel(dolphie: Dolphie) -> Table:
     global_status = dolphie.global_status
     global_variables = dolphie.global_variables
-    innodb_status = dolphie.innodb_status
-    worker_job_time = dolphie.worker_job_time
     binlog_status = dolphie.binlog_status
 
     tables_to_add = []
@@ -39,10 +36,10 @@ def create_panel(dolphie: Dolphie) -> Table:
         style=table_line_color,
     )
 
-    if worker_job_time < 1:
+    if dolphie.worker_job_time < 1:
         refresh_latency = 0
     else:
-        refresh_latency = str(round(worker_job_time - dolphie.refresh_interval, 2))
+        refresh_latency = str(round(dolphie.worker_job_time - dolphie.refresh_interval, 2))
 
     use_performance_schema_status = "NO"
     if dolphie.use_performance_schema:
@@ -100,115 +97,45 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb.add_column()
     table_innodb.add_column(width=9)
 
-    # Get history list length
-    output = re.search(r"History list length (\d+)", innodb_status["status"])
-    if output:
-        history_list_length = output.group(1)
-    else:
-        history_list_length = "N/A"
+    history_list_length = "N/A"
+    if "trx_rseg_history_len" in dolphie.innodb_metrics:
+        history_list_length = dolphie.innodb_metrics["trx_rseg_history_len"]
 
     # Calculate InnoDB memory read hit efficiency
     innodb_efficiency = "N/A"
 
-    ib_pool_disk_reads = global_status["Innodb_buffer_pool_reads"]
-    ib_pool_mem_reads = global_status["Innodb_buffer_pool_read_requests"]
+    ib_pool_disk_reads = global_status.get("Innodb_buffer_pool_reads", 0)
+    ib_pool_mem_reads = global_status.get(
+        "Innodb_buffer_pool_read_requests", 1
+    )  # Default to 1 to avoid division by zero
+
     if ib_pool_disk_reads >= ib_pool_mem_reads:
         innodb_efficiency = "[#fc7979]0.00%"
-    elif ib_pool_mem_reads > ib_pool_disk_reads:
-        innodb_efficiency = round(100 - (ib_pool_disk_reads / ib_pool_mem_reads * 100), 2)
+    else:
+        efficiency = 100 - (ib_pool_disk_reads / ib_pool_mem_reads * 100)
 
-        if innodb_efficiency > 90:
-            innodb_efficiency = "[#54efae]%s%%" % innodb_efficiency
-        elif innodb_efficiency > 80:
-            innodb_efficiency = "[#f1fb82]%s%%" % innodb_efficiency
+        if efficiency > 90:
+            color_code = "#54efae"
+        elif efficiency > 80:
+            color_code = "#f1fb82"
         else:
-            innodb_efficiency = "[#fc7979]%s%%" % innodb_efficiency
+            color_code = "#fc7979"
 
-    # Calculate AHI Hit efficiency
-    hash_searches = 0
-    non_hash_searches = 0
-    if global_variables["innodb_adaptive_hash_index"] == "ON":
-        output = re.search(r"(\d+\.?\d+) hash searches\/s, (\d+\.?\d+) non-hash searches\/s", innodb_status["status"])
-        if output:
-            hash_searches = float(output.group(1))
-            non_hash_searches = float(output.group(2))
+        innodb_efficiency = f"[{color_code}]{efficiency:.2f}%"
 
-            if non_hash_searches == 0 and hash_searches == 0:
-                hash_search_efficiency = "Inactive"
-            elif non_hash_searches >= hash_searches:
-                hash_search_efficiency = "[#fc7979]0.00%"
-            elif hash_searches > non_hash_searches:
-                hash_search_efficiency = round(100 - (non_hash_searches / hash_searches * 100), 2)
-
-                if hash_search_efficiency > 70:
-                    hash_search_efficiency = "[#54efae]%s%%" % hash_search_efficiency
-                elif hash_search_efficiency > 50:
-                    hash_search_efficiency = "[#f1fb82]%s%%" % hash_search_efficiency
-                else:
-                    hash_search_efficiency = "[#fc7979]%s%%" % hash_search_efficiency
-        else:
-            hash_search_efficiency = "N/A"
-    else:
-        hash_search_efficiency = "OFF"
-
-    # Get queries inside InnoDB
-    output = re.search(r"(\d+) queries inside InnoDB, (\d+) queries in queue", innodb_status["status"])
-    if output:
-        queries_active = int(output.group(1))
-        queries_queued = int(output.group(2))
-    else:
-        queries_active = "N/A"
-        queries_queued = "N/A"
-
-    # Calculate unpurged transactions
-    output = re.search(r"Trx id counter (\d+)", innodb_status["status"])
-    if output:
-        trx_id_counter = int(output.group(1))
-    else:
-        trx_id_counter = None
-
-    output = re.search(r"Purge done for trx's n:o < (\d+)", innodb_status["status"])
-    if output:
-        purge_done_for_trx = int(output.group(1))
-    else:
-        purge_done_for_trx = None
-
-    if trx_id_counter is not None and purge_done_for_trx is not None:
-        unpurged_trx = str(trx_id_counter - purge_done_for_trx)
-    else:
-        trx_id_counter = "N/A"
+    hash_search_efficiency = dolphie.metric_manager.get_metric_adaptive_hash_index()
 
     # Add data to our table
     table_innodb.add_row("[#c5c7d2]Read Hit", "%s" % innodb_efficiency)
     table_innodb.add_row("[#c5c7d2]Chkpt Age", "%s" % dolphie.metric_manager.get_metric_checkpoint_age(format=True))
     table_innodb.add_row("[#c5c7d2]AHI Hit", "%s" % (hash_search_efficiency))
-
-    # Don't show thread concurrency information if it isn't set to on, instead show buffer pool stats
-    if "innodb_thread_concurrency" in global_variables and global_variables["innodb_thread_concurrency"]:
-        concurrency_ratio = round((queries_active / global_variables["innodb_thread_concurrency"]) * 100)
-
-        if concurrency_ratio >= 80:
-            queries_active_formatted = "[#fc7979]%s" % format_number(queries_active)
-        elif concurrency_ratio >= 60:
-            queries_active_formatted = "[#f1fb82]%s" % format_number(queries_active)
-        else:
-            queries_active_formatted = "%s" % format_number(queries_active)
-
-        table_innodb.add_row(
-            "[#c5c7d2]Query Active",
-            "%s [#91abec]/[/#91abec] %s" % (queries_active_formatted, global_variables["innodb_thread_concurrency"]),
-        )
-        table_innodb.add_row("[#c5c7d2]Query Queued", "%s" % format_number(queries_queued))
-    else:
-        table_innodb.add_row(
-            "[#c5c7d2]BP Size", "%s" % (format_bytes(float(global_variables["innodb_buffer_pool_size"])))
-        )
-        table_innodb.add_row(
-            "[#c5c7d2]BP Dirty", "%s" % (format_bytes(float(global_status["Innodb_buffer_pool_bytes_dirty"])))
-        )
+    table_innodb.add_row("[#c5c7d2]BP Size", "%s" % (format_bytes(float(global_variables["innodb_buffer_pool_size"]))))
+    table_innodb.add_row(
+        "[#c5c7d2]BP Dirty", "%s" % (format_bytes(float(global_status["Innodb_buffer_pool_bytes_dirty"])))
+    )
 
     table_innodb.add_row("[#c5c7d2]History List", "%s" % format_number(history_list_length))
-    table_innodb.add_row("[#c5c7d2]Unpurged TRX", "%s" % format_number(unpurged_trx))
+    table_innodb.add_row("[#c5c7d2]", "")
 
     tables_to_add.append(table_innodb)
 
@@ -288,13 +215,13 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_stats.add_column()
     table_stats.add_column(min_width=7)
 
-    table_stats.add_row("[#c5c7d2]Queries", dolphie.metric_manager.get_metric_per_sec_global_status("Queries"))
-    table_stats.add_row("[#c5c7d2]SELECT", dolphie.metric_manager.get_metric_per_sec_global_status("Com_select"))
-    table_stats.add_row("[#c5c7d2]INSERT", dolphie.metric_manager.get_metric_per_sec_global_status("Com_insert"))
-    table_stats.add_row("[#c5c7d2]UPDATE", dolphie.metric_manager.get_metric_per_sec_global_status("Com_update"))
-    table_stats.add_row("[#c5c7d2]DELETE", dolphie.metric_manager.get_metric_per_sec_global_status("Com_delete"))
-    table_stats.add_row("[#c5c7d2]REPLACE", dolphie.metric_manager.get_metric_per_sec_global_status("Com_replace"))
-    table_stats.add_row("[#c5c7d2]ROLLBACK", dolphie.metric_manager.get_metric_per_sec_global_status("Com_rollback"))
+    table_stats.add_row("[#c5c7d2]Queries", dolphie.metric_manager.get_metric_calculate_per_sec("Queries"))
+    table_stats.add_row("[#c5c7d2]SELECT", dolphie.metric_manager.get_metric_calculate_per_sec("Com_select"))
+    table_stats.add_row("[#c5c7d2]INSERT", dolphie.metric_manager.get_metric_calculate_per_sec("Com_insert"))
+    table_stats.add_row("[#c5c7d2]UPDATE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_update"))
+    table_stats.add_row("[#c5c7d2]DELETE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_delete"))
+    table_stats.add_row("[#c5c7d2]REPLACE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_replace"))
+    table_stats.add_row("[#c5c7d2]ROLLBACK", dolphie.metric_manager.get_metric_calculate_per_sec("Com_rollback"))
 
     tables_to_add.append(table_stats)
 

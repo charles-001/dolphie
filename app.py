@@ -129,7 +129,17 @@ Environment variables support these options:
         type=str,
         help=(
             "Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line "
-            "using format: ip=hostname [default: %(default)s]"
+            "using format: ip=hostname [default: ~/.dolphie_host_cache]"
+        ),
+    )
+    parser.add_argument(
+        "-q",
+        "--quick-switch-hosts-file",
+        dest="quick_switch_hosts_file",
+        type=str,
+        help=(
+            "Specify where the file is that stores the hosts you connect to for quick switching [default:"
+            " ~/dolphie_quick_switch_hosts]"
         ),
     )
     parser.add_argument(
@@ -223,14 +233,14 @@ Environment variables support these options:
         "-V", "--version", action="version", version=dolphie.app_version, help="Display version and exit"
     )
 
+    home_dir = os.path.expanduser("~")
+
     parameter_options = vars(parser.parse_args())  # Convert object to dict
     basic_options = ["user", "password", "host", "port", "socket"]
 
-    # Use specified config file if there is one, else use standard ~/.my.cnf
+    dolphie.config_file = f"{home_dir}/.my.cnf"
     if parameter_options["config_file"]:
         dolphie.config_file = parameter_options["config_file"]
-    else:
-        dolphie.config_file = "%s/.my.cnf" % os.path.expanduser("~")
 
     # Use config file for login credentials
     if os.path.isfile(dolphie.config_file):
@@ -322,15 +332,22 @@ Environment variables support these options:
     if parameter_options["ssl_key"]:
         dolphie.ssl["key"] = parameter_options["ssl_key"]
 
+    dolphie.host_cache_file = f"{home_dir}/dolphie_host_cache"
     if parameter_options["host_cache_file"]:
         dolphie.host_cache_file = parameter_options["host_cache_file"]
-    else:
-        dolphie.host_cache_file = os.path.dirname(os.path.abspath(__file__)) + "/host_cache"
+
+    dolphie.quick_switch_hosts_file = f"{home_dir}/dolphie_quick_switch_hosts"
+    if parameter_options["quick_switch_hosts_file"]:
+        dolphie.quick_switch_hosts_file = parameter_options["quick_switch_hosts_file"]
 
     dolphie.show_trxs_only = parameter_options["show_trxs_only"]
     dolphie.show_additional_query_columns = parameter_options["show_additional_query_columns"]
     dolphie.use_processlist = parameter_options["use_processlist"]
     dolphie.hide_dashboard = parameter_options["hide_dashboard"]
+
+    if os.path.exists(dolphie.quick_switch_hosts_file):
+        with open(dolphie.quick_switch_hosts_file, "r") as file:
+            dolphie.quick_switch_hosts = [line.strip() for line in file]
 
 
 class DolphieApp(App):
@@ -362,6 +379,7 @@ class DolphieApp(App):
 
             dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
             dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
+            dolphie.innodb_metrics = dolphie.main_db_connection.fetch_data("innodb_metrics")
 
             if dolphie.mysql_version.startswith("8"):
                 dolphie.global_status["Innodb_checkpoint_age"] = dolphie.main_db_connection.fetch_value_from_field(
@@ -372,9 +390,6 @@ class DolphieApp(App):
 
             if dolphie.display_dashboard_panel:
                 dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
-
-            if dolphie.display_dashboard_panel or dolphie.display_innodb_panel:
-                dolphie.innodb_status = dolphie.main_db_connection.fetch_data("innodb_status")
 
             if dolphie.display_replication_panel:
                 dolphie.replica_data = dolphie.main_db_connection.fetch_data(
@@ -406,12 +421,14 @@ class DolphieApp(App):
                 return
 
             dolphie.metric_manager.refresh_data(
-                dolphie.worker_start_time,
-                dolphie.worker_job_time,
-                dolphie.global_variables,
-                dolphie.global_status,
-                dolphie.replica_lag,
+                worker_start_time=dolphie.worker_start_time,
+                worker_job_time=dolphie.worker_job_time,
+                global_variables=dolphie.global_variables,
+                global_status=dolphie.global_status,
+                innodb_metrics=dolphie.innodb_metrics,
+                replication_lag=dolphie.replica_lag,
             )
+
             dolphie.metric_manager.update_metrics_with_per_second_values()
             dolphie.metric_manager.update_metrics_replication_lag(dolphie.replication_status)
             dolphie.metric_manager.update_metrics_innodb_checkpoint()
@@ -435,6 +452,9 @@ class DolphieApp(App):
                     dolphie.metric_manager.metrics_innodb_checkpoint
                 )
                 self.query_one("#graph_innodb_activity").render_graph(dolphie.metric_manager.metrics_innodb_activity)
+                self.query_one("#graph_adaptive_hash_index").render_graph(
+                    dolphie.metric_manager.metrics_adaptive_hash_index
+                )
 
                 # Add/remove replication tab based on replication status
                 replication_tab = self.app.query_one("#tabbed_content", TabbedContent)
@@ -508,11 +528,11 @@ class DolphieApp(App):
             if switch.id != "dml_Queries":
                 switch.toggle()
 
-        dolphie.check_for_update()
-
         # Update header's host
         header = self.app.query_one("#topbar_host", Label)
         header.update("Connecting to MySQL...")
+
+        dolphie.check_for_update()
 
         self.worker_fetch_data()
 
@@ -574,6 +594,9 @@ class DolphieApp(App):
                             )
                     with TabPane("InnoDB Checkpoint", id="tab_innodb_checkpoint"):
                         yield Graph(id="graph_innodb_checkpoint", classes="panel_data")
+
+                    with TabPane("Adaptive Hash Index", id="tab_adaptive_hash_index"):
+                        yield Graph(id="graph_adaptive_hash_index", classes="panel_data")
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")

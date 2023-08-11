@@ -7,6 +7,28 @@ from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
 
 
 class CommandModal(ModalScreen):
+    CSS = """
+        CommandModal > Vertical {
+            background: #121626;
+            border: thick #20263d;
+            height: auto;
+            width: auto;
+        }
+        CommandModal > Vertical > * {
+            width: auto;
+            height: auto;
+        }
+        CommandModal #kill_container {
+            width: 100%;
+            height: 6;
+        }
+        CommandModal Label {
+            text-style: bold;
+            width: 100%;
+            content-align: center middle;
+            padding-bottom: 1;
+        }
+    """
     BINDINGS = [
         Binding("escape", "app.pop_screen", "", show=False),
     ]
@@ -46,7 +68,7 @@ class CommandModal(ModalScreen):
                     Input(id="modal_input"),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
                 )
-            with Horizontal(id="button_container"):
+            with Horizontal(classes="button_container"):
                 yield Button("Submit", id="submit", variant="primary")
                 yield Button("Cancel", id="cancel")
 

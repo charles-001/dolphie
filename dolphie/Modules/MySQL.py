@@ -133,8 +133,8 @@ class Database:
                 command_data[variable] = converted_value
 
         elif command == "innodb_status":
-            data = self.fetch_value_from_field(getattr(MySQLQueries, command), "Status")
-            command_data["status"] = data
+            data = self.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
+            command_data = data
 
         elif command == "find_replicas":
             if performance_schema:
@@ -144,6 +144,16 @@ class Database:
 
             self.execute(find_replicas_query)
             command_data = self.fetchall()
+
+        elif command == "innodb_metrics":
+            self.execute(MySQLQueries.innodb_metrics)
+            data = self.fetchall()
+
+            for row in data:
+                metric = row["NAME"]
+                value = row["COUNT"]
+
+                command_data[metric] = value
         else:
             self.execute(getattr(MySQLQueries, command))
             data = self.fetchall()

@@ -27,15 +27,6 @@ Graph {
 Horizontal {
     height: auto;
 }
-.sparkline_label {
-    padding-top: 1;
-}
-Sparkline > .sparkline--max-color {
-    color: #869fd9;
-}
-Sparkline > .sparkline--min-color {
-    color: #384c7a;
-}
 
 ModalScreen {
     align: center middle;
@@ -73,11 +64,6 @@ TopBar {
     content-align: center middle;
 }
 
-.datatable--header {
-    background: #00000000;
-    color: #bbc8e8;
-    text-style: bold;
-}
 TabPane {
     padding: 0;
 }
@@ -91,6 +77,35 @@ Underline > .underline--bar {
     background: #2e3f5f;
     color: #82a5e1;
 }
+AutoComplete {
+    width: auto;
+    height: auto;
+}
+Dropdown {
+    width: 60;
+    background: #151926;
+}
+Dropdown .autocomplete--highlight-match {
+    background: #777500;
+}
+Dropdown .autocomplete--selection-cursor {
+    background: #283048;
+}
+Input {
+    width: 40;
+    margin: 0 2;
+    background: #121626;
+    border: solid #4d5980;
+}
+Input>.input--placeholder {
+    color: #7e8dac;
+}
+
+.datatable--header {
+    background: #00000000;
+    color: #bbc8e8;
+    text-style: bold;
+}
 
 .panel_data {
     content-align: center middle;
@@ -99,6 +114,32 @@ Underline > .underline--bar {
     padding-top: 1;
     height: auto;
 }
+.button_container {
+    width: 100%;
+    align-horizontal: center;
+    padding-top: 1;
+}
+.sparkline_label {
+    padding-top: 1;
+}
+.switch_container {
+    align: center top;
+    padding-top: 1;
+    height: auto;
+}
+.switch_container > Label {
+    color: #bbc8e8;
+    padding-left: 1;
+    text-style: bold;
+}
+
+Sparkline > .sparkline--max-color {
+    color: #869fd9;
+}
+Sparkline > .sparkline--min-color {
+    color: #384c7a;
+}
+
 #panel_replication {
     max-height: 20;
 }
@@ -107,98 +148,6 @@ Underline > .underline--bar {
 }
 #panel_processlist {
     padding-top: 1;
-}
-
-CommandModal > Vertical {
-    background: #121626;
-    border: thick #20263d;
-    height: auto;
-    width: auto;
-}
-CommandModal > Vertical > * {
-    width: auto;
-    height: auto;
-}
-CommandModal AutoComplete {
-    width: auto;
-    height: auto;
-}
-CommandModal Dropdown {
-    width: 60;
-    background: #151926;
-}
-CommandModal Dropdown .autocomplete--highlight-match {
-    background: #777500;
-}
-CommandModal Dropdown .autocomplete--selection-cursor {
-    background: #283048;
-}
-CommandModal #kill_container {
-    width: 100%;
-    height: 6;
-}
-CommandModal #button_container {
-    width: 100%;
-    align-horizontal: center;
-}
-CommandModal Input {
-    width: 40;
-    margin: 1 2;
-    background: #121626;
-    border: solid #4d5980;
-}
-CommandModal Input>.input--placeholder {
-    color: #7e8dac;
-}
-CommandModal Label {
-    text-style: bold;
-    width: 100%;
-    content-align: center middle;
-}
-CommandModal RadioSet {
-    background: #121626;
-    border: none;
-    padding-top: 1;
-    align: center middle;
-    width: 100%;
-}
-CommandModal RadioButton .toggle--button {
-    background: #343d56;
-}
-CommandModal RadioSet ToggleButton:hover {
-    background: #121626;
-    text-style: none;
-}
-CommandModal RadioSet ToggleButton:hover .toggle--label {
-    text-style: underline;
-    color: #a5b8e7;
-}
-RadioSet:focus > RadioButton.-selected > .toggle--label {
-    text-style: underline;
-}
-CommandModal RadioSet:focus RadioButton.-selected .toggle--label {
-    color: #a5b8e7;
-}
-CommandModal RadioSet > RadioButton.-selected > .toggle--label {
-    color: #91abec;
-}
-
-CommandModal Checkbox {
-    background: #121626;
-    border: none;
-    padding-top: 1;
-    content-align: center middle;
-    width: 100%;
-}
-CommandModal Checkbox .toggle--button {
-    background: #343d56;
-}
-CommandModal ToggleButton:focus > .toggle--label {
-    text-style: underline;
-}
-CommandModal ToggleButton.-on > .toggle--button {
-    color: #62c39a;
-    text-style: bold;
 }
 
 Button.-primary {
@@ -250,13 +199,47 @@ Switch.-on:hover > .switch--slider {
     background: #192132;
 }
 
-.switch_container {
-    align: center top;
-    padding-top: 1;
-    height: auto;
+RadioSet {
+    background: #121626;
+    border: none;
+    align: center middle;
+    width: 100%;
 }
-.switch_container > Label {
-    color: #bbc8e8;
-    padding-left: 1;
+RadioButton .toggle--button {
+    background: #343d56;
+}
+RadioSet ToggleButton:hover {
+    background: #121626;
+    text-style: none;
+}
+RadioSet ToggleButton:hover .toggle--label {
+    text-style: underline;
+    color: #a5b8e7;
+}
+RadioSet:focus > RadioButton.-selected > .toggle--label {
+    text-style: underline;
+}
+RadioSet:focus RadioButton.-selected .toggle--label {
+    color: #a5b8e7;
+}
+RadioSet > RadioButton.-selected > .toggle--label {
+    color: #91abec;
+}
+
+Checkbox {
+    background: #121626;
+    border: none;
+    padding-top: 1;
+    content-align: center middle;
+    width: 100%;
+}
+Checkbox .toggle--button {
+    background: #343d56;
+}
+ToggleButton:focus > .toggle--label {
+    text-style: underline;
+}
+ToggleButton.-on > .toggle--button {
+    color: #62c39a;
     text-style: bold;
 }

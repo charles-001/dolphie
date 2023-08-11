@@ -20,6 +20,7 @@ from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.modal import CommandModal
 from dolphie.Widgets.new_version_modal import NewVersionModal
+from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from packaging.version import parse as parse_version
 from rich import box
 from rich.align import Align
@@ -53,6 +54,7 @@ class Dolphie:
         self.ssl: dict = {}
         self.config_file: str = None
         self.host_cache_file: str = None
+        self.quick_switch_hosts_file: str = None
         self.debug: bool = False
         self.refresh_interval: int = 1
         self.use_processlist: bool = False
@@ -69,7 +71,6 @@ class Dolphie:
         self.query_time_filter: str = 0
         self.query_filter: str = None
 
-        # Loop global_variables
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
@@ -80,6 +81,7 @@ class Dolphie:
         self.pause_refresh: bool = False
         self.previous_binlog_position: int = 0
         self.previous_replica_sbm: int = 0
+        self.quick_switch_hosts: list = []
         self.host_cache: dict = {}
         self.host_cache_from_file: dict = {}
         self.innodb_metrics: dict = {}
@@ -87,18 +89,6 @@ class Dolphie:
         self.global_status: dict = {}
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
-        self.innodb_status: dict = {}
-        self.dashboard_panel_qps: list = []
-        self.global_status_metrics: dict = {
-            "datetimes": [],
-            "dashboard_metric_queries": {"color": None, "visible": False, "qps": []},
-            "graph_metric_queries": {"color": (172, 207, 231), "visible": False, "qps": []},
-            "graph_metric_select": {"color": (68, 180, 255), "visible": True, "qps": []},
-            "graph_metric_insert": {"color": (84, 239, 174), "visible": True, "qps": []},
-            "graph_metric_update": {"color": (252, 213, 121), "visible": True, "qps": []},
-            "graph_metric_delete": {"color": (255, 73, 185), "visible": True, "qps": []},
-        }
-        self.replica_lag_graph_metrics: dict = {"datetimes": [], "metrics": []}
         self.replica_lag_source: str = None
         self.replica_lag: int = None
 
@@ -241,7 +231,13 @@ class Dolphie:
             self.innodb_locks_sql = MySQLQueries.locks_query_8
 
         self.server_uuid = self.main_db_connection.fetch_value_from_field(server_uuid_query, "@@server_uuid")
-        self.metric_manager.mysql_version = self.mysql_version
+
+        # Add host to quick switch hosts file if it doesn't exist
+        with open(self.quick_switch_hosts_file, "a+") as file:
+            file.seek(0)  # Move the cursor to the beginning of the file so it knows what already exists
+            lines = file.readlines()
+            if self.host + "\n" not in lines:
+                file.write(self.host + "\n")
 
     def command_input_to_variable(self, return_data):
         variable = return_data[0]
@@ -268,6 +264,7 @@ class Dolphie:
             self.update_footer("Database connection must be established before using commands")
 
             return
+
         if key == "1":
             new_display = self.toggle_panel("dashboard")
 
@@ -281,6 +278,22 @@ class Dolphie:
             self.toggle_panel("innodb")
         elif key == "5":
             self.toggle_panel("graphs")
+
+        elif key == "grave_accent":
+
+            def command_get_input(data):
+                if self.host != data["host"]:
+                    self.host = data["host"]
+
+                    if data["password"]:
+                        self.password = data["password"]
+
+                    self.db_connect()
+
+                    self.metric_manager = MetricManager()
+                    self.app.query_one("#panel_dashboard_queries_qps").display = False
+
+            self.app.push_screen(QuickSwitchHostModal(quick_switch_hosts=self.quick_switch_hosts), command_get_input)
 
         elif key == "a":
             if self.show_additional_query_columns:
@@ -521,7 +534,7 @@ class Dolphie:
             output = re.search(
                 r"------------------------\nLATEST\sDETECTED\sDEADLOCK\n------------------------"
                 "\n(.*?)------------\nTRANSACTIONS",
-                self.innodb_status["status"],
+                self.secondary_db_connection.fetch_data("innodb_status"),
                 flags=re.S,
             )
             if output:
@@ -533,7 +546,7 @@ class Dolphie:
                 screen_data = Align.center("No deadlock detected")
 
         elif key == "o":
-            screen_data = self.innodb_status["status"]
+            screen_data = self.secondary_db_connection.fetch_data("innodb_status")
 
         elif key == "m":
             table_line_color = "#52608d"
@@ -863,6 +876,7 @@ class Dolphie:
             table_line_color = "#52608d"
 
             keys = {
+                "`": "Quickly connect to another host",
                 "a": "Show/hide additional processlist columns",
                 "c": "Clear all filters set",
                 "d": "Display all databases",
@@ -891,7 +905,7 @@ class Dolphie:
             table_keys.add_column("Key", justify="center", style="b #91abec")
             table_keys.add_column("Description")
 
-            for key, description in sorted(keys.items()):
+            for key, description in keys.items():
                 table_keys.add_row(key, description)
 
             panels = {

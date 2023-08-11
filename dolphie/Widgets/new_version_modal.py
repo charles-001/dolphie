@@ -6,7 +6,7 @@ from textual.widgets import Button, Label
 
 
 class NewVersionModal(ModalScreen):
-    DEFAULT_CSS = """
+    CSS = """
         NewVersionModal > Vertical {
             background: #181e2e;
             border: thick #212941;
@@ -43,7 +43,7 @@ class NewVersionModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Label("[#bbc8e8]New version available!", id="title")
+            yield Label("[#54efae]New version available!", id="title")
             yield Label(f"Current version: [#91abec]{self.current_version}")
             yield Label(f"Latest version:  [#91abec]{self.latest_version}")
             yield Label("Please update to the latest version at your convenience")
