@@ -457,6 +457,10 @@ class DolphieApp(App):
                     dolphie.metric_manager.metrics_innodb_checkpoint
                 )
                 self.query_one("#graph_innodb_activity").render_graph(dolphie.metric_manager.metrics_innodb_activity)
+                self.query_one("#graph_innodb_redo_log").render_graph(dolphie.metric_manager.metrics_innodb_redo_log)
+                self.query_one("#graph_innodb_redo_log_hourly").render_graph(
+                    dolphie.metric_manager.metrics_innodb_redo_log
+                )
                 self.query_one("#graph_adaptive_hash_index").render_graph(
                     dolphie.metric_manager.metrics_adaptive_hash_index
                 )
@@ -597,6 +601,11 @@ class DolphieApp(App):
                             )
                     with TabPane("InnoDB Checkpoint", id="tab_innodb_checkpoint"):
                         yield Graph(id="graph_innodb_checkpoint", classes="panel_data")
+
+                    with TabPane("InnoDB Redo Log", id="tab_innodb_redo_log"):
+                        with Horizontal():
+                            yield Graph(id="graph_innodb_redo_log", classes="panel_data")
+                            yield Graph(bar=True, id="graph_innodb_redo_log_hourly", classes="panel_data")
 
                     with TabPane("Adaptive Hash Index", id="tab_adaptive_hash_index"):
                         yield Graph(id="graph_adaptive_hash_index", classes="panel_data")

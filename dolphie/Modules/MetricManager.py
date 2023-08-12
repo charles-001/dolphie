@@ -71,6 +71,14 @@ class AdaptiveHashIndexMetrics:
     adaptive_hash_searches_btree: MetricData
 
 
+@dataclass
+class InnoDBRedoLogMetrics:
+    datetimes: List[str]
+    metric_source: str
+    Innodb_os_log_written: MetricData
+    redo_log_size: int
+
+
 class MetricManager:
     def __init__(self):
         self.worker_start_time: datetime = None
@@ -98,13 +106,13 @@ class MetricManager:
         self.metrics_replication_lag = ReplicationLagMetrics(
             datetimes=[],
             metric_source=None,
-            lag=MetricData(label="Lag", color=(68, 180, 255), visible=False, save_history=True),
+            lag=MetricData(label="Lag", color=(68, 180, 255), visible=True, save_history=True),
         )
 
         self.metrics_innodb_checkpoint = InnoDBCheckpointMetrics(
             datetimes=[],
             metric_source=MetricSource.global_status,
-            checkpoint_age=MetricData(label="Age", color=(68, 180, 255), visible=True, save_history=True),
+            checkpoint_age=MetricData(label="Uncheckpointed", color=(68, 180, 255), visible=True, save_history=True),
             checkpoint_age_max=0,
             checkpoint_age_sync_flush=0,
         )
@@ -132,10 +140,20 @@ class MetricManager:
             adaptive_hash_searches=MetricData(label="Hit", color=(84, 239, 174), visible=True, save_history=True),
         )
 
+        self.metrics_innodb_redo_log = InnoDBRedoLogMetrics(
+            datetimes=[],
+            metric_source=MetricSource.global_status,
+            Innodb_os_log_written=MetricData(
+                label="Data Written/sec", color=(68, 180, 255), visible=True, save_history=True
+            ),
+            redo_log_size=0,
+        )
+
         self.metrics_with_per_second_values = [
             self.metrics_dml,
             self.metrics_innodb_activity,
             self.metrics_adaptive_hash_index,
+            self.metrics_innodb_redo_log,
         ]
 
     def refresh_data(
@@ -224,6 +242,8 @@ class MetricManager:
             self.global_variables.get("innodb_log_file_size", 0) * innodb_log_files_in_group
         )
 
+        self.metrics_innodb_redo_log.redo_log_size = max_checkpoint_age_bytes
+
         if checkpoint_age_bytes == 0 and max_checkpoint_age_bytes == 0:
             return "N/A"
 
@@ -287,10 +307,11 @@ class MetricManager:
 
 
 class Graph(Static):
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, bar=False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
         self.data = None
+        self.bar = bar
 
     def on_show(self) -> None:
         self.render_graph(self.data)
@@ -310,23 +331,7 @@ class Graph(Static):
         plt.plotsize(self.size.width, self.size.height)
 
         max_y_value = 0
-        if type(self.data) == ReplicationLagMetrics:
-            x = self.data.datetimes
-            y = self.data.lag.values
-
-            if y:
-                plt.plot(x, y, marker="braille", label=self.data.lag.label, color=self.data.lag.color)
-                max_y_value = max(max_y_value, max(y))
-        elif type(self.data) in [DMLMetrics, InnoDBActivityMetrics, AdaptiveHashIndexMetrics]:
-            for metric_data in self.data.__dict__.values():
-                if isinstance(metric_data, MetricData) and metric_data.visible:
-                    x = self.data.datetimes
-                    y = metric_data.values
-
-                    if y:
-                        plt.plot(x, y, marker="braille", label=metric_data.label, color=metric_data.color)
-                        max_y_value = max(max_y_value, max(y))
-        elif type(self.data) == InnoDBCheckpointMetrics:
+        if type(self.data) == InnoDBCheckpointMetrics:
             x = self.data.datetimes
             y = self.data.checkpoint_age.values
 
@@ -350,6 +355,9 @@ class Graph(Static):
                     color="white",
                     style="bold",
                 )
+                plt.text(
+                    format_bytes(y[0], color=False), y=max(y), x=max(x), alignment="right", color="white", style="bold"
+                )
 
                 plt.plot(
                     x,
@@ -359,6 +367,56 @@ class Graph(Static):
                     color=self.data.checkpoint_age.color,
                 )
                 max_y_value = self.data.checkpoint_age_max
+        elif type(self.data) == InnoDBRedoLogMetrics and self.bar:
+            if self.data.Innodb_os_log_written.values:
+                x = [0]
+                y = [
+                    round(
+                        sum(self.data.Innodb_os_log_written.values)
+                        * (3600 / len(self.data.Innodb_os_log_written.values))
+                    )
+                ]
+
+                plt.hline(self.data.redo_log_size, (252, 121, 121))
+                plt.text(
+                    "Log Size",
+                    y=self.data.redo_log_size,
+                    x=0,
+                    alignment="center",
+                    color="white",
+                    style="bold",
+                )
+
+                bar_color = (46, 124, 175)
+                if y[0] >= self.data.redo_log_size:
+                    bar_color = (252, 121, 121)
+
+                plt.text(
+                    format_bytes(y[0], color=False) + "/hr",
+                    y=y[0],
+                    x=0,
+                    alignment="center",
+                    color="white",
+                    style="bold",
+                    background=bar_color,
+                )
+
+                plt.bar(
+                    x,
+                    y,
+                    marker="hd",
+                    color=bar_color,
+                )
+                max_y_value = max(self.data.redo_log_size, max(y))
+        else:
+            for metric_data in self.data.__dict__.values():
+                if isinstance(metric_data, MetricData) and metric_data.visible:
+                    x = self.data.datetimes
+                    y = metric_data.values
+
+                    if y:
+                        plt.plot(x, y, marker="braille", label=metric_data.label, color=metric_data.color)
+                        max_y_value = max(max_y_value, max(y))
 
         max_y_ticks = 5
         y_tick_interval = max_y_value / max_y_ticks
@@ -372,8 +430,9 @@ class Graph(Static):
             ReplicationLagMetrics: lambda val: format_time(val),
             DMLMetrics: lambda val: format_number(val, for_plot=True, decimal=1),
             InnoDBActivityMetrics: lambda val: format_number(val, for_plot=True, decimal=1),
-            InnoDBCheckpointMetrics: lambda val: format_bytes(val, format=False),
+            InnoDBCheckpointMetrics: lambda val: format_bytes(val, color=False),
             AdaptiveHashIndexMetrics: lambda val: format_number(val, for_plot=True, decimal=1),
+            InnoDBRedoLogMetrics: lambda val: format_bytes(val, color=False),
         }
 
         data_type = type(self.data)

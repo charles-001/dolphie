@@ -24,6 +24,12 @@ DataTable {
 Graph {
     height: 15;
 }
+#graph_innodb_redo_log {
+    width: 80%;
+}
+#graph_innodb_redo_log_hourly {
+    width:20%;
+}
 Horizontal {
     height: auto;
 }
