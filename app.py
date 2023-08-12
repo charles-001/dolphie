@@ -377,7 +377,9 @@ class DolphieApp(App):
             dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
             dolphie.innodb_metrics = dolphie.main_db_connection.fetch_data("innodb_metrics")
 
-            if dolphie.mysql_version.startswith("8"):
+            # If we're using MySQL 8, we need to fetch the checkpoint age from the performance schema if it's not
+            # available in global status
+            if dolphie.mysql_version.startswith("8") and not dolphie.global_status.get("Innodb_checkpoint_age"):
                 dolphie.global_status["Innodb_checkpoint_age"] = dolphie.main_db_connection.fetch_value_from_field(
                     MySQLQueries.checkpoint_age_8, "checkpoint_age"
                 )

@@ -273,11 +273,9 @@ class Dolphie:
 
         if key == "1":
             new_display = self.toggle_panel("dashboard")
-
             self.app.query_one("#panel_dashboard_queries_qps").display = not new_display
         elif key == "2":
             self.toggle_panel("processlist")
-            self.app.query_one("#panel_processlist_data").clear()
         elif key == "3":
             self.toggle_panel("replication")
         elif key == "4":
@@ -542,7 +540,7 @@ class Dolphie:
             output = re.search(
                 r"------------------------\nLATEST\sDETECTED\sDEADLOCK\n------------------------"
                 "\n(.*?)------------\nTRANSACTIONS",
-                self.secondary_db_connection.fetch_data("innodb_status"),
+                self.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status"),
                 flags=re.S,
             )
             if output:
@@ -554,7 +552,7 @@ class Dolphie:
                 screen_data = Align.center("No deadlock detected")
 
         elif key == "o":
-            screen_data = self.secondary_db_connection.fetch_data("innodb_status")
+            screen_data = self.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
 
         elif key == "m":
             table_line_color = "#52608d"

@@ -249,8 +249,11 @@ class MetricManager:
         # Get per second value
         previous_hits = self.metrics_adaptive_hash_index.adaptive_hash_searches.last_value
         previous_misses = self.metrics_adaptive_hash_index.adaptive_hash_searches_btree.last_value
-        current_hits = self.innodb_metrics.get("adaptive_hash_searches", 0)
-        current_misses = self.innodb_metrics.get("adaptive_hash_searches_btree", 0)
+        current_hits = self.innodb_metrics.get("adaptive_hash_searches", None)
+        current_misses = self.innodb_metrics.get("adaptive_hash_searches_btree", None)
+
+        if current_hits is None or current_misses is None:
+            return "N/A"
 
         hits = current_hits - previous_hits
         misses = current_misses - previous_misses

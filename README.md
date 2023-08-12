@@ -110,8 +110,8 @@ Environment variables support these options:
 ```
 
 ## Supported MySQL versions
-- MySQL/Percona Server 5.5/5.6/5.7/8.0
-- MariaDB 10+
+- MySQL/Percona Server 5.6/5.7/8.0
+- MariaDB 10+ (somewhat)
 - RDS/Aurora
 
 ## Grants required
@@ -119,19 +119,21 @@ Environment variables support these options:
 1. PROCESS (if you don't use `performance_schema`)
 2. SELECT to `performance_schema` (if used) + `pt-heartbeat table` (if used)
 3. REPLICATION CLIENT
+4. BACKUP_ADMIN (MySQL 8 only)
 
 #### Recommended
-1. PROCESS
+1. PROCESS (if you don't use `performance_schema`)
 2. Global SELECT access (good for explaining queries, listing all databases, etc)
 4. REPLICATION CLIENT
-5. SUPER (only required if you want to kill queries)
+5. SUPER (required if you want to kill queries)
+6. BACKUP_ADMIN (MySQL 8 only)
 
 ## Features
 - Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer (see Help screenshot for panels available)
 - Prefers Performance Schema over Processlist if it's turned on for listing queries. Can be switched to use Processlist by pressing key "1" (or using parameter) since P_S can truncate query length for explaining queries
 - 3 options for finding replica lag in this order of precedence:
-  - `Performance Schema` (MySQL 8 only - most accurate, especially for multi-threaded replication)
-  - `pt-heartbeat table` (specified by parameter)
+  - `Performance Schema` (MySQL 8 only)
+  - `pt-heartbeat table` (specified by `--heartbeat-table`)
   - `SHOW SLAVE STATUS`
 - Host cache file. This provides users a way to specify hostnames for IPs when their network's DNS can't resolve them. An example use case for this is when you connect to your work's VPN and DNS isn't available to resolve IPs. In my opinion, it's a lot easier to look at hostnames than IPs!
 - Supports encrypted login credentials via `mysql_config_editor`

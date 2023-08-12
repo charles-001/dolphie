@@ -34,9 +34,6 @@ class Database:
         # Prefix all queries with dolphie so they can be identified in the processlist
         query = "/* dolphie */ " + query
 
-        if not self.connection.open:
-            return None
-
         try:
             return self.cursor.execute(query, values)
         except Exception as e:
@@ -45,55 +42,35 @@ class Database:
             else:
                 raise ManualException("Failed to execute query\n", query=query, reason=e.args[1])
 
-    def fetchall(self):
-        rows = []
-
-        # Iterate over each row obtained from self.cursor.fetchall()
-        for row in self.cursor.fetchall():
-            processed_row = {}
-
-            # Iterate over each field-value pair in the row dictionary
-            for field, value in row.items():
-                if isinstance(value, (bytes, bytearray)):
-                    # If the value is an instance of bytes or bytearray, decode it
-                    if "query" in field:
-                        # If the field name contains the word 'query', detect the encoding
-                        processed_row[field] = value.decode(detect_encoding(value))
-                    else:
-                        # Otherwise, decode the value as utf-8 by default
-                        processed_row[field] = value.decode()
-                else:
-                    # Otherwise, use the original value
-                    processed_row[field] = value
-
-            # Append the processed row to the rows list
-            rows.append(processed_row)
-
-        # Return the list of processed rows
-        return rows
-
-    def fetchone(self):
+    def process_row(self, row):
         processed_row = {}
 
-        row = self.cursor.fetchone()
-        if not row:
-            return None
-
-        # Iterate over each field-value pair in the row dictionary
         for field, value in row.items():
             if isinstance(value, (bytes, bytearray)):
-                # If the value is an instance of bytes or bytearray, decode it
                 if "query" in field:
-                    # If the field name contains the word 'query', detect the encoding
                     processed_row[field] = value.decode(detect_encoding(value))
                 else:
-                    # Otherwise, decode the value as utf-8 by default
                     processed_row[field] = value.decode()
             else:
-                # Otherwise, use the original value
                 processed_row[field] = value
 
         return processed_row
+
+    def fetchall(self):
+        rows = [self.process_row(row) for row in self.cursor.fetchall()]
+
+        if not rows:
+            return []
+
+        return rows
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+
+        if not row:
+            return []
+
+        return self.process_row(row)
 
     def fetch_value_from_field(self, query, field, values=None):
         self.execute(query, values)
@@ -102,22 +79,17 @@ class Database:
         if not data:
             return None
 
-        value = data[field]
+        value = data.get(field)
         if isinstance(value, (bytes, bytearray)):
-            # If the value is an instance of bytes or bytearray, decode it
             if field == "Status":
-                # If the field name is Status, detect the encoding
                 return value.decode(detect_encoding(value))
-            else:
-                # Otherwise, decode the value as utf-8 by default
-                return value.decode()
-        else:
-            return value
+            return value.decode()
+        return value
 
     def fetch_data(self, command, performance_schema=None):
         command_data = {}
 
-        if command == "status" or command == "variables":
+        if command in {"status", "variables"}:
             self.execute(getattr(MySQLQueries, command))
             data = self.fetchall()
 
@@ -125,27 +97,14 @@ class Database:
                 variable = row["Variable_name"]
                 value = row["Value"]
 
-                try:
-                    converted_value = row["Value"]
-
-                    if converted_value.isnumeric():
-                        converted_value = int(converted_value)
-                except (UnicodeDecodeError, AttributeError):
-                    converted_value = value
+                converted_value = int(value) if value.isnumeric() else value
 
                 command_data[variable] = converted_value
 
-        elif command == "innodb_status":
-            data = self.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
-            command_data = data
-
         elif command == "find_replicas":
-            if performance_schema:
-                find_replicas_query = MySQLQueries.ps_find_replicas
-            else:
-                find_replicas_query = MySQLQueries.pl_find_replicas
+            query = MySQLQueries.ps_find_replicas if performance_schema else MySQLQueries.pl_find_replicas
 
-            self.execute(find_replicas_query)
+            self.execute(query)
             command_data = self.fetchall()
 
         elif command == "innodb_metrics":
@@ -154,24 +113,13 @@ class Database:
 
             for row in data:
                 metric = row["NAME"]
-                value = row["COUNT"]
+                value = int(row["COUNT"])
 
                 command_data[metric] = value
+
         else:
             self.execute(getattr(MySQLQueries, command))
-            data = self.fetchall()
-
-            for row in data:
-                for column, value in row.items():
-                    try:
-                        converted_value = value
-
-                        if converted_value.isnumeric():
-                            converted_value = int(converted_value)
-                    except (UnicodeDecodeError, AttributeError):
-                        converted_value = value
-
-                    command_data[column] = converted_value
+            command_data = self.fetchone()
 
         return command_data
 
