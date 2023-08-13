@@ -280,7 +280,6 @@ class Dolphie:
             self.toggle_panel("replication")
         elif key == "4":
             self.toggle_panel("graphs")
-
         elif key == "grave_accent":
 
             def command_get_input(data):
