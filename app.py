@@ -385,11 +385,6 @@ class DolphieApp(App):
                         MySQLQueries.checkpoint_age, "checkpoint_age"
                     )
 
-                # dolphie.active_redo_logs =
-                dolphie.global_status["Active_redo_logs"] = dolphie.main_db_connection.fetch_value_from_field(
-                    MySQLQueries.active_redo_logs, "count"
-                )
-
             dolphie.fetch_replication_data(connection=dolphie.main_db_connection)
 
             if dolphie.display_dashboard_panel:
@@ -473,10 +468,7 @@ class DolphieApp(App):
                     # Refresh the graph(s) for the selected tab
                     active_graph = self.query_one("#tabbed_content", TabbedContent).active
                     metric_instance_name = active_graph.split("tab_")[1]
-                    metric_instance = getattr(dolphie.metric_manager.metrics, metric_instance_name)
-                    for metric_graph in metric_instance.graphs:
-                        self.query_one(f"#{metric_graph}").render_graph(metric_instance)
-
+                    self.update_graph(metric_instance_name)
                     self.update_stats_label(metric_instance_name)
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
@@ -553,11 +545,7 @@ class DolphieApp(App):
     @on(TabbedContent.TabActivated)
     def tab_changed(self, event: TabbedContent.TabActivated):
         metric_instance_name = event.tab.id.split("tab_")[1]
-        metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
-
-        for metric_graph in metric_instance.graphs:
-            self.app.query_one(f"#{metric_graph}").render_graph(metric_instance)
-
+        self.update_graph(metric_instance_name)
         self.update_stats_label(metric_instance_name)
 
     @on(Switch.Changed)
@@ -572,9 +560,7 @@ class DolphieApp(App):
         metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
         metric_data.visible = event.value
 
-        for metric_graph in metric_instance.graphs:
-            self.app.query_one(f"#{metric_graph}").render_graph(metric_instance)
-
+        self.update_graph(metric_instance_name)
         self.update_stats_label(metric_instance_name)
 
     def generate_switches(self, metric_instance_name):
@@ -585,14 +571,34 @@ class DolphieApp(App):
                 yield Label(metric_data.label)
                 yield Switch(animate=False, id=metric, name=metric_instance_name)
 
+    def update_graph(self, metric_instance_name: str):
+        metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
+
+        for graph_name, metric_graph_instance_name in metric_instance.graphs.items():
+            if metric_graph_instance_name:
+                graph_metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_graph_instance_name)
+            else:
+                graph_metric_instance = metric_instance
+
+            self.query_one(f"#{graph_name}").render_graph(graph_metric_instance)
+
     def update_stats_label(self, metric_instance_name):
         metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
 
+        # Add labels from the source metric instance
         stat_data = {
             metric_data.label: metric_data.values[-1]
             for metric_data in metric_instance.__dict__.values()
             if isinstance(metric_data, MetricManager.MetricData) and metric_data.values
         }
+
+        # Add labels from a linked metric instance
+        for metric_graph_instance_name in metric_instance.graphs.values():
+            if metric_graph_instance_name:
+                graph_metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_graph_instance_name)
+                for metric_data in graph_metric_instance.__dict__.values():
+                    if isinstance(metric_data, MetricManager.MetricData) and metric_data.values:
+                        stat_data[metric_data.label] = metric_data.values[-1]
 
         number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
         formatted_stat_data = "  ".join(
@@ -647,12 +653,14 @@ class DolphieApp(App):
                         yield Label(id="stats_redo_log", classes="stats_data")
                         with Horizontal():
                             yield MetricManager.Graph(id="graph_redo_log", classes="panel_data")
-                            # yield MetricManager.Graph(id="graph_redo_log_active", classes="panel_data")
                             yield MetricManager.Graph(bar=True, id="graph_redo_log_bar", classes="panel_data")
 
                     with TabPane("Adaptive Hash Index", id="tab_adaptive_hash_index"):
                         yield Label(id="stats_adaptive_hash_index", classes="stats_data")
                         yield MetricManager.Graph(id="graph_adaptive_hash_index", classes="panel_data")
+
+                        with Horizontal(classes="switch_container"):
+                            yield from self.generate_switches("adaptive_hash_index")
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")

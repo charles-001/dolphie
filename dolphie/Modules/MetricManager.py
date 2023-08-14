@@ -226,7 +226,6 @@ class AdaptiveHashIndexMetrics:
 @dataclass
 class RedoLogMetrics:
     Innodb_os_log_written: MetricData
-    # Active_redo_logs: MetricData
     graphs: List[str]
     redo_log_size: int = 0
     metric_source: MetricSource = MetricSource.global_status
@@ -244,7 +243,7 @@ class TableCacheMetrics:
 
 
 @dataclass
-class ThreadsMetrics:
+class ThreadMetrics:
     Threads_connected: MetricData
     Threads_running: MetricData
     graphs: List[str]
@@ -253,7 +252,7 @@ class ThreadsMetrics:
 
 
 @dataclass
-class Metrics:
+class MetricInstances:
     dml: DMLMetrics
     replication_lag: ReplicationLagMetrics
     checkpoint: CheckpointMetrics
@@ -261,7 +260,7 @@ class Metrics:
     adaptive_hash_index: AdaptiveHashIndexMetrics
     redo_log: RedoLogMetrics
     table_cache: TableCacheMetrics
-    threads: ThreadsMetrics
+    threads: ThreadMetrics
 
 
 class MetricManager:
@@ -273,9 +272,9 @@ class MetricManager:
         self.replication_lag: int = None
         self.redo_log_size: int = 0
 
-        self.metrics = Metrics(
+        self.metrics = MetricInstances(
             dml=DMLMetrics(
-                graphs=["graph_dml"],
+                graphs={"graph_dml": None},
                 Queries=MetricData(label="Queries", color=MetricColor.gray, visible=False),
                 Com_select=MetricData(label="SELECT", color=MetricColor.blue),
                 Com_insert=MetricData(label="INSERT", color=MetricColor.green),
@@ -289,39 +288,38 @@ class MetricManager:
                 ),
             ),
             replication_lag=ReplicationLagMetrics(
-                graphs=["graph_replication_lag"],
+                graphs={"graph_replication_lag": None},
                 lag=MetricData(label="Lag", color=MetricColor.blue, per_second_calculation=False),
             ),
             checkpoint=CheckpointMetrics(
-                graphs=["graph_checkpoint"],
+                graphs={"graph_checkpoint": None},
                 Innodb_checkpoint_age=MetricData(
                     label="Uncheckpointed", color=MetricColor.blue, per_second_calculation=False
                 ),
             ),
             buffer_pool_requests=BufferPoolRequestsMetrics(
-                graphs=["graph_buffer_pool_requests"],
+                graphs={"graph_buffer_pool_requests": None},
                 Innodb_buffer_pool_read_requests=MetricData(label="Read Requests", color=MetricColor.blue),
                 Innodb_buffer_pool_write_requests=MetricData(label="Write Requests", color=MetricColor.green),
                 Innodb_buffer_pool_reads=MetricData(label="Disk Reads", color=MetricColor.red),
             ),
             adaptive_hash_index=AdaptiveHashIndexMetrics(
-                graphs=["graph_adaptive_hash_index"],
+                graphs={"graph_adaptive_hash_index": None},
                 adaptive_hash_searches=MetricData(label="Hit", color=MetricColor.green),
                 adaptive_hash_searches_btree=MetricData(label="Miss", color=MetricColor.red),
             ),
             redo_log=RedoLogMetrics(
-                graphs=["graph_redo_log", "graph_redo_log_bar"],
+                graphs={"graph_redo_log": None, "graph_redo_log_bar": None},
                 Innodb_os_log_written=MetricData(label="Data Written/sec", color=MetricColor.blue, visible=True),
-                # Active_redo_logs=MetricData(label="Active Logs", color=MetricColor.green, per_second_calculation=False),
             ),
             table_cache=TableCacheMetrics(
-                graphs=["graph_table_cache"],
+                graphs={"graph_table_cache": None},
                 Table_open_cache_hits=MetricData(label="Hit", color=MetricColor.green),
                 Table_open_cache_misses=MetricData(label="Miss", color=MetricColor.red),
                 Table_open_cache_overflows=MetricData(label="Overflow", color=MetricColor.yellow),
             ),
-            threads=ThreadsMetrics(
-                graphs=["graph_threads"],
+            threads=ThreadMetrics(
+                graphs={"graph_threads": None},
                 Threads_connected=MetricData(
                     label="Connected", color=MetricColor.green, visible=False, per_second_calculation=False
                 ),
@@ -490,5 +488,5 @@ class MetricManager:
                 metrics_data = self.innodb_metrics
 
             for metric_name, metric_data in metric_instance.__dict__.items():
-                if isinstance(metric_data, MetricData):
+                if isinstance(metric_data, MetricData) and metric_data.per_second_calculation:
                     metric_data.last_value = metrics_data.get(metric_name, 0)

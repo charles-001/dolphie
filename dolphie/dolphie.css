@@ -158,10 +158,10 @@ Sparkline > .sparkline--min-color {
     padding-top: 1;
 }
 #graph_redo_log {
-    width: 89%;
+    width: 88%;
 }
 #graph_redo_log_bar {
-    width: 11%;
+    width: 12%;
 }
 
 Button.-primary {

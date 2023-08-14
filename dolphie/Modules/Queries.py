@@ -238,12 +238,6 @@ class MySQLQueries:
         FROM
             performance_schema.log_status
     """
-    active_redo_logs: str = """
-        SELECT
-            COUNT(*) AS count
-        FROM
-            performance_schema.innodb_redo_log_files
-    """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"
     binlog_status: str = "SHOW MASTER STATUS"
