@@ -91,6 +91,7 @@ class Dolphie:
         self.replication_status: dict = {}
         self.replica_lag_source: str = None
         self.replica_lag: int = None
+        self.active_redo_logs: int = None
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -101,7 +102,7 @@ class Dolphie:
         self.display_dashboard_panel: bool = False
         self.display_processlist_panel: bool = False
         self.display_replication_panel: bool = False
-        self.display_dml_panel: bool = False
+        self.display_graphs_panel: bool = False
 
         # Database connection global_variables
         # Main connection is used for Textual's worker thread so it can run asynchronous
@@ -299,12 +300,6 @@ class Dolphie:
                     self.app.query_one("LoadingIndicator").display = True
                     self.app.query_one("#panel_dashboard_queries_qps").display = False
 
-            self.panel_display_state = {
-                "dashboard": self.display_dashboard_panel,
-                "processlist": self.display_processlist_panel,
-                "replication": self.display_replication_panel,
-                "graphs": self.display_dml_panel,
-            }
             self.app.push_screen(QuickSwitchHostModal(quick_switch_hosts=self.quick_switch_hosts), command_get_input)
 
         elif key == "a":

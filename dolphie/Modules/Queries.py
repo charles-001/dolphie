@@ -232,11 +232,17 @@ class MySQLQueries:
         FROM
             information_schema.INNODB_METRICS
     """
-    checkpoint_age_8: str = """
+    checkpoint_age: str = """
         SELECT
             STORAGE_ENGINES ->> '$."InnoDB"."LSN"' - STORAGE_ENGINES ->> '$."InnoDB"."LSN_checkpoint"' AS checkpoint_age
         FROM
             performance_schema.log_status
+    """
+    active_redo_logs: str = """
+        SELECT
+            COUNT(*) AS count
+        FROM
+            performance_schema.innodb_redo_log_files
     """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"

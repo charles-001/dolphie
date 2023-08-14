@@ -137,7 +137,10 @@ Input>.input--placeholder {
     padding-left: 1;
     text-style: bold;
 }
-
+.stats_data {
+    width: 100%;
+    content-align: center middle;
+}
 Sparkline > .sparkline--max-color {
     color: #869fd9;
 }
@@ -155,10 +158,10 @@ Sparkline > .sparkline--min-color {
     padding-top: 1;
 }
 #graph_redo_log {
-    width: 80%;
+    width: 89%;
 }
 #graph_redo_log_bar {
-    width:20%;
+    width: 11%;
 }
 
 Button.-primary {

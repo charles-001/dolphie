@@ -11,10 +11,15 @@ def format_bytes(bytes_value, color=True):
         bytes_value /= 1024
         unit_index += 1
 
+    formatted_value = f"{bytes_value:.2f}"
+
+    if formatted_value.endswith(".00"):
+        formatted_value = formatted_value[:-3]  # Remove ".00" from the end
+
     if color:
-        return f"{bytes_value:.2f}[#91abec]{units[unit_index]}"
+        return f"{formatted_value}[#91abec]{units[unit_index]}"
     else:
-        return f"{bytes_value:.2f}{units[unit_index]}"
+        return f"{formatted_value}{units[unit_index]}"
 
 
 def format_time(seconds):
@@ -45,7 +50,7 @@ def round_num(n, decimal=2):
 
 
 # This is from https://pypi.org/project/numerize
-def format_number(n, decimal=2, for_plot=False):
+def format_number(n, decimal=2, color=True):
     if not n:
         return "0"
 
@@ -80,7 +85,7 @@ def format_number(n, decimal=2, for_plot=False):
                 num = str(round_num(n / sci_expr[x], decimal))
             else:
                 num = str(round_num(n, 0))
-            if not for_plot:
+            if color:
                 return f"{num}[#91abec]{sufix}[/#91abec]" if sufix else num
             else:
                 return f"{num}{sufix}" if sufix else num
