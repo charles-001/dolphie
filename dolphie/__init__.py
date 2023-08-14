@@ -292,12 +292,19 @@ class Dolphie:
                     self.metric_manager = MetricManager()
                     self.main_db_connection.close()
                     self.secondary_db_connection.close()
-                    self.toggle_panel("dashboard", show_loading=False)
-                    self.toggle_panel("processlist", show_loading=False)
 
+                    self.dolphie_start_time = datetime.now()
+
+                    self.app.query_one("#main_container").display = False
                     self.app.query_one("LoadingIndicator").display = True
                     self.app.query_one("#panel_dashboard_queries_qps").display = False
 
+            self.panel_display_state = {
+                "dashboard": self.display_dashboard_panel,
+                "processlist": self.display_processlist_panel,
+                "replication": self.display_replication_panel,
+                "graphs": self.display_dml_panel,
+            }
             self.app.push_screen(QuickSwitchHostModal(quick_switch_hosts=self.quick_switch_hosts), command_get_input)
 
         elif key == "a":

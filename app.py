@@ -11,18 +11,16 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from configparser import ConfigParser
 from datetime import datetime
 
-import dolphie.Modules.MetricManager as MM
+import dolphie.Modules.MetricManager as MetricManager
 import myloginpath
 from dolphie import Dolphie
 from dolphie.Modules.ManualException import ManualException
-
-# from dolphie.Modules.MetricManager import Graph, MetricData
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Panels import dashboard_panel, processlist_panel, replication_panel
 from dolphie.Widgets.topbar import TopBar
 from rich.prompt import Prompt
 from rich.traceback import Traceback
-from textual import events, work
+from textual import events, on, work
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.css.query import NoMatches
@@ -430,19 +428,15 @@ class DolphieApp(App):
                 global_variables=dolphie.global_variables,
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
+                replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
-
-            dolphie.metric_manager.update_metrics_with_per_second_values()
-            dolphie.metric_manager.update_metrics_replication_lag(dolphie.replication_status)
-            dolphie.metric_manager.update_metrics_innodb_checkpoint()
 
             try:
                 loading_indicator = self.app.query_one("LoadingIndicator")
                 if loading_indicator.display:
                     loading_indicator.display = False
-                    self.dolphie.toggle_panel("dashboard", show_loading=False)
-                    self.dolphie.toggle_panel("processlist", show_loading=False)
+                    self.app.query_one("#main_container").display = True
 
                 if dolphie.display_dashboard_panel:
                     self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(dolphie))
@@ -454,22 +448,14 @@ class DolphieApp(App):
                     self.query_one("#panel_replication_data", Static).update(replication_panel.create_panel(dolphie))
 
                 # Refresh our graphs
-                dolphie.metric_manager.metrics.dml.graph.render_graph(dolphie.metric_manager.metrics.dml)
-                dolphie.metric_manager.metrics.innodb_checkpoint.graph.render_graph(
-                    dolphie.metric_manager.metrics.innodb_checkpoint
-                )
-                dolphie.metric_manager.metrics.innodb_activity.graph.render_graph(
-                    dolphie.metric_manager.metrics.innodb_activity
-                )
-                dolphie.metric_manager.metrics.innodb_redo_log.graph["innodb_redo_log"].render_graph(
-                    dolphie.metric_manager.metrics.innodb_redo_log
-                )
-                dolphie.metric_manager.metrics.innodb_redo_log.graph["innodb_redo_log_hourly"].render_graph(
-                    dolphie.metric_manager.metrics.innodb_redo_log
-                )
-                dolphie.metric_manager.metrics.adaptive_hash_index.graph.render_graph(
-                    dolphie.metric_manager.metrics.adaptive_hash_index
-                )
+                for metric_name in dolphie.metric_manager.metrics.__dict__.keys():
+                    metric = getattr(dolphie.metric_manager.metrics, metric_name)
+                    for metric_graph in metric.graphs:
+                        # Skip replication graph for the code below
+                        if metric_name == "replication_lag":
+                            continue
+
+                        self.query_one(f"#{metric_graph}").render_graph(metric)
 
                 # Add/remove replication tab based on replication status
                 replication_tab = self.app.query_one("#tabbed_content", TabbedContent)
@@ -478,7 +464,7 @@ class DolphieApp(App):
                         replication_tab.add_pane(
                             pane=TabPane(
                                 "Replication",
-                                MM.Graph(id="graph_replication_lag", classes="panel_data"),
+                                MetricManager.Graph(id="graph_replication_lag", classes="panel_data"),
                                 id="tab_replication_lag",
                             )
                         )
@@ -524,17 +510,18 @@ class DolphieApp(App):
             "Sparkline",
             "#footer",
         ]
+        exempt_components = ["panel_dashboard", "panel_processlist"]
         for component in components_to_disable:
             display_off_components = self.query(f"{component}")
             for display_off_component in display_off_components:
-                display_off_component.display = False
+                if display_off_component.id not in exempt_components:
+                    display_off_component.display = False
 
         dolphie.display_processlist_panel = True
         if dolphie.hide_dashboard:
             self.query_one("#panel_dashboard", Container).display = False
             dolphie.display_dashboard_panel = False
         else:
-            # self.query_one("#panel_dashboard_data", Static).update("[b #91abec]Loading Dashboard panel[/b #91abec]")
             dolphie.display_dashboard_panel = True
 
         # Set default switches to be toggled on
@@ -559,7 +546,16 @@ class DolphieApp(App):
 
         self.exit(message=message)
 
-    def on_switch_changed(self, event: Switch.Changed):
+    @on(TabbedContent.TabActivated)
+    def tab_changed(self, event: TabbedContent.TabActivated):
+        metric_instance_name = event.tab.id.split("tab_")[1]
+        metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
+
+        for metric_graph in metric_instance.graphs:
+            self.app.query_one(f"#{metric_graph}").render_graph(metric_instance)
+
+    @on(Switch.Changed)
+    def switch_changed(self, event: Switch.Changed):
         if len(self.screen_stack) > 1:
             return
 
@@ -568,14 +564,15 @@ class DolphieApp(App):
         metric = event.switch.name
 
         metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
-        metric_data: MM.MetricData = getattr(metric_instance, metric)
+        metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
         metric_data.visible = event.value
 
-        metric_instance.graph.render_graph(metric_instance)
+        for metric_graph in metric_instance.graphs:
+            self.app.query_one(f"#{metric_graph}").render_graph(metric_instance)
 
     def generate_switches(self, metric_instance_name, metric_instance):
         for metric, metric_data in metric_instance.__dict__.items():
-            if isinstance(metric_data, MM.MetricData) and metric_data.graphable:
+            if isinstance(metric_data, MetricManager.MetricData) and metric_data.graphable:
                 switch_id = f"{metric_instance_name}_{metric_data.label}"
                 yield Label(metric_data.label)
                 yield Switch(animate=False, id=switch_id, name=metric)
@@ -583,8 +580,8 @@ class DolphieApp(App):
     def compose(self) -> ComposeResult:
         yield TopBar(host=self.dolphie.host, app_version=self.dolphie.app_version, help="press ? for help")
 
+        yield LoadingIndicator()
         with VerticalScroll(id="main_container"):
-            yield LoadingIndicator()
             with Container(id="panel_dashboard", classes="panel_container"):
                 yield Static(id="panel_dashboard_data", classes="panel_data")
                 yield Sparkline([], id="panel_dashboard_queries_qps")
@@ -592,34 +589,53 @@ class DolphieApp(App):
             with Container(id="panel_graphs", classes="panel_container"):
                 with TabbedContent(initial="tab_dml", id="tabbed_content"):
                     with TabPane("DML", id="tab_dml"):
-                        yield self.dolphie.metric_manager.metrics.dml.graph
+                        yield MetricManager.Graph(id="graph_dml", classes="panel_data")
 
                         with Horizontal(classes="switch_container"):
                             yield from self.generate_switches("dml", self.dolphie.metric_manager.metrics.dml)
 
-                    with TabPane("InnoDB Activity", id="tab_innodb_activity"):
-                        yield self.dolphie.metric_manager.metrics.innodb_activity.graph
+                    with TabPane("Table Cache", id="tab_table_cache"):
+                        yield MetricManager.Graph(id="graph_table_cache", classes="panel_data")
 
                         with Horizontal(classes="switch_container"):
                             yield from self.generate_switches(
-                                "innodb_activity", self.dolphie.metric_manager.metrics.innodb_activity
+                                "table_cache",
+                                self.dolphie.metric_manager.metrics.table_cache,
                             )
-                    with TabPane("InnoDB Checkpoint", id="tab_innodb_checkpoint"):
-                        yield self.dolphie.metric_manager.metrics.innodb_checkpoint.graph
 
-                    with TabPane("InnoDB Redo Log", id="tab_innodb_redo_log"):
+                    with TabPane("Threads", id="tab_threads"):
+                        yield MetricManager.Graph(id="graph_threads", classes="panel_data")
+
+                        with Horizontal(classes="switch_container"):
+                            yield from self.generate_switches(
+                                "threads",
+                                self.dolphie.metric_manager.metrics.threads,
+                            )
+
+                    with TabPane("BP Requests", id="tab_buffer_pool_requests"):
+                        yield MetricManager.Graph(id="graph_buffer_pool_requests", classes="panel_data")
+
+                        with Horizontal(classes="switch_container"):
+                            yield from self.generate_switches(
+                                "buffer_pool_requests",
+                                self.dolphie.metric_manager.metrics.buffer_pool_requests,
+                            )
+                    with TabPane("Checkpoint", id="tab_checkpoint"):
+                        yield MetricManager.Graph(id="graph_checkpoint", classes="panel_data")
+
+                    with TabPane("Redo Log", id="tab_redo_log"):
                         with Horizontal():
-                            yield self.dolphie.metric_manager.metrics.innodb_redo_log.graph["innodb_redo_log"]
-                            yield self.dolphie.metric_manager.metrics.innodb_redo_log.graph["innodb_redo_log_hourly"]
+                            yield MetricManager.Graph(id="graph_redo_log", classes="panel_data")
+                            yield MetricManager.Graph(bar=True, id="graph_redo_log_bar", classes="panel_data")
 
                     with TabPane("Adaptive Hash Index", id="tab_adaptive_hash_index"):
-                        yield self.dolphie.metric_manager.metrics.adaptive_hash_index.graph
+                        yield MetricManager.Graph(id="graph_adaptive_hash_index", classes="panel_data")
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")
 
-            with Container(id="panel_innodb", classes="panel_container"):
-                yield Static(id="panel_innodb_data", classes="panel_data")
+            with Container(id="panel", classes="panel_container"):
+                yield Static(id="panel_data", classes="panel_data")
 
             with Container(id="panel_processlist"):
                 yield DataTable(id="panel_processlist_data", classes="panel_data", show_cursor=False)

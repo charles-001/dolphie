@@ -34,7 +34,7 @@ class Graph(Static):
         plt.plotsize(self.size.width, self.size.height)
 
         max_y_value = 0
-        if type(self.graph_data) == InnoDBCheckpointMetrics:
+        if type(self.graph_data) == CheckpointMetrics:
             x = self.graph_data.datetimes
             y = self.graph_data.checkpoint_age.values
 
@@ -70,7 +70,7 @@ class Graph(Static):
                     color=self.graph_data.checkpoint_age.color,
                 )
                 max_y_value = self.graph_data.checkpoint_age_max
-        elif type(self.graph_data) == InnoDBRedoLogMetrics and self.bar:
+        elif type(self.graph_data) == RedoLogMetrics and self.bar:
             if self.graph_data.Innodb_os_log_written.values:
                 x = [0]
                 y = [
@@ -131,18 +131,15 @@ class Graph(Static):
 
         data_formatters = {
             ReplicationLagMetrics: lambda val: format_time(val),
-            DMLMetrics: lambda val: format_number(val, for_plot=True, decimal=1),
-            InnoDBActivityMetrics: lambda val: format_number(val, for_plot=True, decimal=1),
-            InnoDBCheckpointMetrics: lambda val: format_bytes(val, color=False),
-            AdaptiveHashIndexMetrics: lambda val: format_number(val, for_plot=True, decimal=1),
-            InnoDBRedoLogMetrics: lambda val: format_bytes(val, color=False),
+            CheckpointMetrics: lambda val: format_bytes(val, color=False),
+            RedoLogMetrics: lambda val: format_bytes(val, color=False),
         }
 
         data_type = type(self.graph_data)
         if data_type in data_formatters:
             y_labels = [data_formatters[data_type](val) for val in y_ticks]
         else:
-            y_labels = [val for val in y_ticks]
+            y_labels = [format_number(val, for_plot=True, decimal=1) for val in y_ticks]
 
         plt.yticks(y_ticks, y_labels)
 
@@ -176,7 +173,7 @@ class DMLMetrics:
     Com_delete: MetricData
     Com_replace: MetricData
     Com_rollback: MetricData
-    graph: Graph = Graph(id="graph_dml", classes="panel_data")
+    graphs: List[str]
     metric_source: MetricSource = MetricSource.global_status
     per_second_metric: bool = True
     datetimes: List[str] = field(default_factory=list)
@@ -185,16 +182,16 @@ class DMLMetrics:
 @dataclass
 class ReplicationLagMetrics:
     lag: MetricData
-    graph: Graph = Graph(id="graph_replication_lag", classes="panel_data")
+    graphs: List[str]
     metric_source: MetricSource = MetricSource.none
     per_second_metric: bool = False
     datetimes: List[str] = field(default_factory=list)
 
 
 @dataclass
-class InnoDBCheckpointMetrics:
+class CheckpointMetrics:
     checkpoint_age: MetricData
-    graph: Graph = Graph(id="graph_innodb_checkpoint", classes="panel_data")
+    graphs: List[str]
     metric_source: MetricSource = MetricSource.global_status
     per_second_metric: bool = False
     datetimes: List[str] = field(default_factory=list)
@@ -203,11 +200,11 @@ class InnoDBCheckpointMetrics:
 
 
 @dataclass
-class InnoDBActivityMetrics:
+class BufferPoolRequestsMetrics:
     Innodb_buffer_pool_read_requests: MetricData
     Innodb_buffer_pool_write_requests: MetricData
     Innodb_buffer_pool_reads: MetricData
-    graph: Graph = Graph(id="graph_innodb_activity", classes="panel_data")
+    graphs: List[str]
     metric_source: MetricSource = MetricSource.global_status
     per_second_metric: bool = True
     datetimes: List[str] = field(default_factory=list)
@@ -217,33 +214,52 @@ class InnoDBActivityMetrics:
 class AdaptiveHashIndexMetrics:
     adaptive_hash_searches_btree: MetricData
     adaptive_hash_searches: MetricData
-    graph: Graph = Graph(id="graph_adaptive_hash_index", classes="panel_data")
+    graphs: List[str]
     metric_source: MetricSource = MetricSource.innodb_metrics
     per_second_metric: bool = True
     datetimes: List[str] = field(default_factory=list)
 
 
 @dataclass
-class InnoDBRedoLogMetrics:
+class RedoLogMetrics:
     Innodb_os_log_written: MetricData
-    graph = {
-        "innodb_redo_log": Graph(id="graph_innodb_redo_log", classes="panel_data"),
-        "innodb_redo_log_hourly": Graph(bar=True, id="graph_innodb_redo_log_hourly", classes="panel_data"),
-    }
+    graphs: List[str]
+    redo_log_size: int = 0
     metric_source: MetricSource = MetricSource.global_status
     per_second_metric: bool = True
     datetimes: List[str] = field(default_factory=list)
 
-    redo_log_size: int = 0
+
+@dataclass
+class TableCacheMetrics:
+    Table_open_cache_hits: MetricData
+    Table_open_cache_misses: MetricData
+    Table_open_cache_overflows: MetricData
+    graphs: List[str]
+    metric_source: MetricSource = MetricSource.global_status
+    per_second_metric: bool = True
+    datetimes: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ThreadsMetrics:
+    Threads_connected: MetricData
+    Threads_running: MetricData
+    graphs: List[str]
+    metric_source: MetricSource = MetricSource.global_status
+    per_second_metric: bool = False
+    datetimes: List[str] = field(default_factory=list)
 
 
 class Metrics:
     dml: DMLMetrics
     replication_lag: ReplicationLagMetrics
-    innodb_checkpoint: InnoDBCheckpointMetrics
-    innodb_activity: InnoDBActivityMetrics
+    checkpoint: CheckpointMetrics
+    buffer_pool_requests: BufferPoolRequestsMetrics
     adaptive_hash_index: AdaptiveHashIndexMetrics
-    innodb_redo_log: InnoDBRedoLogMetrics
+    redo_log: RedoLogMetrics
+    table_cache: TableCacheMetrics
+    threads: ThreadsMetrics
 
 
 class MetricManager:
@@ -253,9 +269,12 @@ class MetricManager:
         self.global_variables: Dict[str, int] = None
         self.global_status: Dict[str, int] = None
         self.replication_lag: int = None
+        self.redo_log_size: int = 0
 
         self.metrics = Metrics()
+
         self.metrics.dml = DMLMetrics(
+            graphs=["graph_dml"],
             Queries=MetricData(label="Queries", color=(172, 207, 231), visible=False, save_history=True),
             Com_select=MetricData(label="SELECT", color=(68, 180, 255), visible=True, save_history=True),
             Com_insert=MetricData(label="INSERT", color=(84, 239, 174), visible=True, save_history=True),
@@ -268,13 +287,19 @@ class MetricManager:
                 label="ROLLBACK", color=(255, 73, 112), visible=False, save_history=False, graphable=False
             ),
         )
+
         self.metrics.replication_lag = ReplicationLagMetrics(
+            graphs=["graph_replication_lag"],
             lag=MetricData(label="Lag", color=(68, 180, 255), visible=True, save_history=True),
         )
-        self.metrics.innodb_checkpoint = InnoDBCheckpointMetrics(
-            checkpoint_age=MetricData(label="Uncheckpointed", color=(68, 180, 255), visible=True, save_history=True)
+
+        self.metrics.checkpoint = CheckpointMetrics(
+            graphs=["graph_checkpoint"],
+            checkpoint_age=MetricData(label="Uncheckpointed", color=(68, 180, 255), visible=True, save_history=True),
         )
-        self.metrics.innodb_activity = InnoDBActivityMetrics(
+
+        self.metrics.buffer_pool_requests = BufferPoolRequestsMetrics(
+            graphs=["graph_buffer_pool_requests"],
             Innodb_buffer_pool_read_requests=MetricData(
                 label="Read Requests", color=(68, 180, 255), visible=True, save_history=True
             ),
@@ -285,16 +310,35 @@ class MetricManager:
                 label="Disk Reads", color=(255, 73, 112), visible=True, save_history=True
             ),
         )
+
         self.metrics.adaptive_hash_index = AdaptiveHashIndexMetrics(
+            graphs=["graph_adaptive_hash_index"],
             adaptive_hash_searches_btree=MetricData(
                 label="Miss", color=(255, 73, 112), visible=True, save_history=True
             ),
             adaptive_hash_searches=MetricData(label="Hit", color=(84, 239, 174), visible=True, save_history=True),
         )
-        self.metrics.innodb_redo_log = InnoDBRedoLogMetrics(
+
+        self.metrics.redo_log = RedoLogMetrics(
+            graphs=["graph_redo_log", "graph_redo_log_bar"],
             Innodb_os_log_written=MetricData(
                 label="Data Written/sec", color=(68, 180, 255), visible=True, save_history=True
-            )
+            ),
+        )
+
+        self.metrics.table_cache = TableCacheMetrics(
+            graphs=["graph_table_cache"],
+            Table_open_cache_hits=MetricData(label="Hits", color=(84, 239, 174), visible=True, save_history=True),
+            Table_open_cache_misses=MetricData(label="Misses", color=(255, 73, 112), visible=True, save_history=True),
+            Table_open_cache_overflows=MetricData(
+                label="Overflows", color=(252, 213, 121), visible=True, save_history=True
+            ),
+        )
+
+        self.metrics.threads = ThreadsMetrics(
+            graphs=["graph_threads"],
+            Threads_connected=MetricData(label="Connected", color=(84, 239, 174), visible=True, save_history=True),
+            Threads_running=MetricData(label="Running", color=(255, 73, 112), visible=True, save_history=True),
         )
 
     def refresh_data(
@@ -304,14 +348,31 @@ class MetricManager:
         global_variables: Dict[str, int],
         global_status: Dict[str, int],
         innodb_metrics: Dict[str, int],
-        replication_lag: int,
+        replication_status: Dict[str, str],
+        replication_lag: int,  # this can be from SHOW SLAVE STatus/Performance Schema/heartbeat table
     ):
         self.worker_start_time = worker_start_time
         self.worker_job_time = worker_job_time
         self.global_variables = global_variables
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
+        self.replication_status = replication_status
         self.replication_lag = replication_lag
+
+        # Support MySQL 8.0.30+ redo log size variable
+        innodb_redo_log_capacity = self.global_variables.get("innodb_redo_log_capacity", 0) * 32
+        innodb_log_file_size = round(
+            self.global_variables.get("innodb_log_file_size", 0)
+            * self.global_variables.get("innodb_log_files_in_group", 1)
+        )
+        self.redo_log_size = max(innodb_redo_log_capacity, innodb_log_file_size)
+
+        self.update_metrics_with_per_second_values()
+        self.update_metrics_replication_lag()
+        self.update_metrics_checkpoint()
+        self.update_metrics_threads()
+
+        self.metrics.redo_log.redo_log_size = self.redo_log_size
 
     def add_metric(self, metric_data: MetricData, value: int):
         if metric_data.save_history:
@@ -346,25 +407,28 @@ class MetricManager:
             if added:
                 metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
 
-    def update_metrics_replication_lag(self, replication_status):
-        if replication_status:
+    def update_metrics_replication_lag(self):
+        if self.replication_status:
             metric_instance = self.metrics.replication_lag
             self.add_metric(metric_instance.lag, self.replication_lag)
             metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
 
-    def update_metrics_innodb_checkpoint(self):
+    def update_metrics_threads(self):
+        self.metrics.threads.Threads_connected.values.append(self.global_status.get("Threads_connected", 0))
+        self.metrics.threads.Threads_running.values.append(self.global_status.get("Threads_running", 0))
+        self.metrics.threads.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
+
+    def update_metrics_checkpoint(self):
         (
             max_checkpoint_age_bytes,
             checkpoint_age_sync_flush_bytes,
             checkpoint_age_bytes,
         ) = self.get_metric_checkpoint_age(format=False)
 
-        metric_instance = self.metrics.innodb_checkpoint
-        self.metrics.innodb_redo_log.redo_log_size = max_checkpoint_age_bytes
+        metric_instance = self.metrics.checkpoint
         metric_instance.checkpoint_age_max = max_checkpoint_age_bytes
         metric_instance.checkpoint_age_sync_flush = checkpoint_age_sync_flush_bytes
 
-        print(metric_instance.__dict__.values())
         self.add_metric(metric_instance.checkpoint_age, checkpoint_age_bytes)
         metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
 
@@ -388,11 +452,8 @@ class MetricManager:
                     return metric_per_sec
 
     def get_metric_checkpoint_age(self, format):
-        innodb_log_files_in_group = self.global_variables.get("innodb_log_files_in_group", 1)
         checkpoint_age_bytes = round(self.global_status.get("Innodb_checkpoint_age", 0))
-        max_checkpoint_age_bytes = round(
-            self.global_variables.get("innodb_log_file_size", 0) * innodb_log_files_in_group
-        )
+        max_checkpoint_age_bytes = self.redo_log_size
 
         if checkpoint_age_bytes == 0 and max_checkpoint_age_bytes == 0:
             return "N/A"

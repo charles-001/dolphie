@@ -24,17 +24,14 @@ DataTable {
 Graph {
     height: 15;
 }
-#graph_innodb_redo_log {
-    width: 80%;
-}
-#graph_innodb_redo_log_hourly {
-    width:20%;
-}
+
 Horizontal {
     height: auto;
 }
 LoadingIndicator {
     color: #8fb0ee;
+    height: 20%;
+    content-align: center middle;
 }
 ModalScreen {
     align: center middle;
@@ -156,6 +153,12 @@ Sparkline > .sparkline--min-color {
 }
 #panel_processlist {
     padding-top: 1;
+}
+#graph_redo_log {
+    width: 80%;
+}
+#graph_redo_log_bar {
+    width:20%;
 }
 
 Button.-primary {
