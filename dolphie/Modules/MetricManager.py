@@ -107,6 +107,31 @@ class Graph(Static):
                     color=bar_color,
                 )
                 max_y_value = max(self.graph_data.redo_log_size, max(y))
+        elif type(self.graph_data) == RedoLogActiveCountMetrics:
+            x = self.graph_data.datetimes
+            y = self.graph_data.Active_redo_log_count.values
+
+            if y:
+                plt.hline(1, (3, 9, 24))
+                plt.hline(34, (252, 121, 121))
+                plt.text(
+                    "Max Count",
+                    y=34,
+                    x=max(x),
+                    alignment="right",
+                    color="white",
+                    style="bold",
+                )
+
+                plt.plot(
+                    x,
+                    y,
+                    marker="braille",
+                    label=self.graph_data.Active_redo_log_count.label,
+                    color=self.graph_data.Active_redo_log_count.color,
+                )
+                max_y_value = 32
+
         else:
             for metric_data in self.graph_data.__dict__.values():
                 if isinstance(metric_data, MetricData) and metric_data.visible:
@@ -233,6 +258,14 @@ class RedoLogMetrics:
 
 
 @dataclass
+class RedoLogActiveCountMetrics:
+    Active_redo_log_count: MetricData
+    graphs: List[str]
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+
+
+@dataclass
 class TableCacheMetrics:
     Table_open_cache_hits: MetricData
     Table_open_cache_misses: MetricData
@@ -259,6 +292,7 @@ class MetricInstances:
     buffer_pool_requests: BufferPoolRequestsMetrics
     adaptive_hash_index: AdaptiveHashIndexMetrics
     redo_log: RedoLogMetrics
+    redo_log_active_count: RedoLogActiveCountMetrics
     table_cache: TableCacheMetrics
     threads: ThreadMetrics
 
@@ -309,8 +343,18 @@ class MetricManager:
                 adaptive_hash_searches_btree=MetricData(label="Miss", color=MetricColor.red),
             ),
             redo_log=RedoLogMetrics(
-                graphs={"graph_redo_log": None, "graph_redo_log_bar": None},
-                Innodb_os_log_written=MetricData(label="Data Written/sec", color=MetricColor.blue, visible=True),
+                graphs={
+                    "graph_redo_log": None,
+                    "graph_redo_log_active_count": "redo_log_active_count",
+                    "graph_redo_log_bar": None,
+                },
+                Innodb_os_log_written=MetricData(label="Data Written/sec", color=MetricColor.blue),
+            ),
+            redo_log_active_count=RedoLogActiveCountMetrics(
+                graphs={"graph_redo_log_active_count": None},
+                Active_redo_log_count=MetricData(
+                    label="Active Count", color=MetricColor.blue, per_second_calculation=False
+                ),
             ),
             table_cache=TableCacheMetrics(
                 graphs={"graph_table_cache": None},

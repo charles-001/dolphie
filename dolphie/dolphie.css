@@ -22,7 +22,7 @@ DataTable {
     overflow-x: hidden;
 }
 Graph {
-    height: 15;
+    height: 16;
 }
 
 Horizontal {
@@ -156,12 +156,6 @@ Sparkline > .sparkline--min-color {
 }
 #panel_processlist {
     padding-top: 1;
-}
-#graph_redo_log {
-    width: 88%;
-}
-#graph_redo_log_bar {
-    width: 12%;
 }
 
 Button.-primary {

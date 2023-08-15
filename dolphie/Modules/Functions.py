@@ -17,7 +17,7 @@ def format_bytes(bytes_value, color=True):
         formatted_value = formatted_value[:-3]  # Remove ".00" from the end
 
     if color:
-        return f"{formatted_value}[#91abec]{units[unit_index]}"
+        return f"{formatted_value}[#91abec]{units[unit_index]}[/#91abec]"
     else:
         return f"{formatted_value}{units[unit_index]}"
 

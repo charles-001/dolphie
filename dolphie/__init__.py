@@ -140,6 +140,12 @@ class Dolphie:
         except Exception:
             pass
 
+    def is_mysql_version_at_least(self, target):
+        parsed_source = parse_version(self.mysql_version)
+        parsed_target = parse_version(target)
+
+        return parsed_source >= parsed_target
+
     def update_footer(self, output, hide=False, temporary=True):
         if len(self.app.screen_stack) > 1:
             return
@@ -281,6 +287,7 @@ class Dolphie:
             self.toggle_panel("replication")
         elif key == "4":
             self.toggle_panel("graphs")
+            self.app.update_graph("dml")
         elif key == "grave_accent":
 
             def command_get_input(data):
@@ -361,10 +368,10 @@ class Dolphie:
             )
 
         elif key == "e":
-            if not self.mysql_version.startswith("8"):
-                self.update_footer("Error log command requires MySQL 8")
-            else:
+            if self.is_mysql_version_at_least("8.0"):
                 self.app.push_screen(EventLog(self.app_version, self.host, self.secondary_db_connection))
+            else:
+                self.update_footer("Error log command requires MySQL 8")
 
         elif key == "f":
 
@@ -1135,7 +1142,7 @@ class Dolphie:
         if self.heartbeat_table:
             query = MySQLQueries.heartbeat_replica_lag
             replica_lag_source = "HB"
-        elif self.mysql_version.startswith("8") and self.performance_schema_enabled:
+        elif self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled:
             query = MySQLQueries.ps_replica_lag
             replica_lag_source = "PS"
         else:
