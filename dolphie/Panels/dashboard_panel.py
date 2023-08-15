@@ -100,8 +100,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     history_list_length = dolphie.innodb_metrics.get("trx_rseg_history_len", "N/A")
 
     # Calculate InnoDB memory read hit efficiency
-    innodb_efficiency = "N/A"
-
     ib_pool_disk_reads = global_status.get("Innodb_buffer_pool_reads", 0)
     ib_pool_mem_reads = global_status.get(
         "Innodb_buffer_pool_read_requests", 1

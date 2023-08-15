@@ -114,17 +114,6 @@ def fetch_data(dolphie: Dolphie):
     else:
         processlist_query = MySQLQueries.pl_query
 
-    if dolphie.sort_by_time_descending:
-        if dolphie.use_performance_schema:
-            processlist_query = processlist_query + " ORDER BY processlist_time DESC"
-        else:
-            processlist_query = processlist_query + " ORDER BY LENGTH(Time) DESC, Time DESC"
-    else:
-        if dolphie.use_performance_schema:
-            processlist_query = processlist_query + " ORDER BY processlist_time"
-        else:
-            processlist_query = processlist_query + " ORDER BY LENGTH(Time), Time"
-
     ########################
     # WHERE clause filters #
     ########################
