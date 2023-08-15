@@ -125,7 +125,7 @@ Environment variables support these options:
         type=str,
         help=(
             "Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line "
-            "using format: ip=hostname [default: ~/.dolphie_host_cache]"
+            "using format: ip=hostname [default: ~/dolphie_host_cache]"
         ),
     )
     parser.add_argument(
