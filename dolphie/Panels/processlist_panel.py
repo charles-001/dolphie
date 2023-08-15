@@ -203,14 +203,11 @@ def fetch_data(dolphie: Dolphie):
             continue
 
         command = thread["command"]
-        if dolphie.use_performance_schema and dolphie.show_last_executed_query is False and command == "Sleep":
-            query = ""
+        # Use trx_query over Performance Schema query since it's more accurate
+        if dolphie.use_performance_schema and thread["trx_query"]:
+            query = thread["trx_query"]
         else:
-            # Use trx_query over Performance Schema query since it's more accurate
-            if dolphie.use_performance_schema and thread["trx_query"]:
-                query = thread["trx_query"]
-            else:
-                query = thread["query"]
+            query = thread["query"]
 
         # Determine time color
         time = int(thread["time"])

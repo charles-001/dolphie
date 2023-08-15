@@ -61,7 +61,6 @@ class Dolphie:
         self.show_idle_queries: bool = False
         self.show_trxs_only: bool = False
         self.show_additional_query_columns: bool = False
-        self.show_last_executed_query: bool = False
         self.sort_by_time_descending: bool = True
         self.hide_dashboard: bool = False
         self.heartbeat_table: str = None
@@ -287,7 +286,7 @@ class Dolphie:
             self.toggle_panel("replication")
         elif key == "4":
             self.toggle_panel("graphs")
-            self.app.update_graph("dml")
+            self.app.update_graphs("dml")
         elif key == "grave_accent":
 
             def command_get_input(data):
@@ -658,6 +657,12 @@ class Dolphie:
                 command_get_input,
             )
 
+        elif key == "R":
+            self.metric_manager = MetricManager()
+            active_graph = self.app.query_one("#tabbed_content").active
+            self.app.update_graphs(active_graph.split("tab_")[1])
+            self.update_footer("Metrics have been reset")
+
         elif key == "s":
             if self.sort_by_time_descending:
                 self.sort_by_time_descending = False
@@ -665,14 +670,6 @@ class Dolphie:
             else:
                 self.sort_by_time_descending = True
                 self.update_footer("Processlist will now sort queries in descending order")
-
-        elif key == "S":
-            if self.show_last_executed_query:
-                self.show_last_executed_query = False
-                self.update_footer("Processlist will now hide last executed query")
-            else:
-                self.show_last_executed_query = True
-                self.update_footer("Processlist will now show last executed query")
 
         elif key == "t":
 
@@ -906,10 +903,10 @@ class Dolphie:
                 "P": "Switch between using Processlist/Performance Schema for listing queries",
                 "q": "Quit",
                 "r": "Set the refresh interval",
+                "R": "Reset all metrics",
                 "t": "Show details of a thread along with an EXPLAIN of its query",
                 "T": "Show/hide running transactions only",
                 "s": "Sort query list by time in descending/ascending order",
-                "S": "Show/hide last executed query for sleeping thread (Performance Schema only)",
                 "u": "List users (results vary depending on if userstat variable is enabled)",
                 "v": "Variable wildcard search via SHOW global_variables",
                 "z": "Show all entries in the host cache",
@@ -1137,6 +1134,26 @@ class Dolphie:
             hostname = host
 
         return hostname
+
+    def massage_metrics_data(self):
+        if self.is_mysql_version_at_least("8.0"):
+            # If we're using MySQL 8, we need to fetch the checkpoint age from the performance schema if it's not
+            # available in global status
+            if not self.global_status.get("Innodb_checkpoint_age"):
+                self.global_status["Innodb_checkpoint_age"] = self.main_db_connection.fetch_value_from_field(
+                    MySQLQueries.checkpoint_age, "checkpoint_age"
+                )
+
+            if self.is_mysql_version_at_least("8.0.30"):
+                active_redo_logs_count = self.main_db_connection.fetch_value_from_field(
+                    MySQLQueries.active_redo_logs, "count"
+                )
+                self.global_status["Active_redo_log_count"] = active_redo_logs_count
+
+        # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
+        # which has less precision, but it's good enough
+        if not self.global_status.get("Innodb_lsn_current"):
+            self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
 
     def fetch_replication_data(self, connection=None, replica_cursor=None):
         if self.heartbeat_table:

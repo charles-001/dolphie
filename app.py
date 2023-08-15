@@ -376,22 +376,8 @@ class DolphieApp(App):
             dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
             dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
             dolphie.innodb_metrics = dolphie.main_db_connection.fetch_data("innodb_metrics")
-
-            if self.dolphie.is_mysql_version_at_least("8.0"):
-                # If we're using MySQL 8, we need to fetch the checkpoint age from the performance schema if it's not
-                # available in global status
-                if not dolphie.global_status.get("Innodb_checkpoint_age"):
-                    dolphie.global_status["Innodb_checkpoint_age"] = dolphie.main_db_connection.fetch_value_from_field(
-                        MySQLQueries.checkpoint_age, "checkpoint_age"
-                    )
-
-                if self.dolphie.is_mysql_version_at_least("8.0.30"):
-                    active_redo_logs_count = dolphie.main_db_connection.fetch_value_from_field(
-                        MySQLQueries.active_redo_logs, "count"
-                    )
-                    dolphie.global_status["Active_redo_log_count"] = active_redo_logs_count
-
             dolphie.fetch_replication_data(connection=dolphie.main_db_connection)
+            dolphie.massage_metrics_data()
 
             if dolphie.display_dashboard_panel:
                 dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
@@ -475,7 +461,8 @@ class DolphieApp(App):
                     # Refresh the graph(s) for the selected tab
                     active_graph = self.query_one("#tabbed_content", TabbedContent).active
                     metric_instance_name = active_graph.split("tab_")[1]
-                    self.update_graph(metric_instance_name)
+                    self.update_graphs(metric_instance_name)
+
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
                 # with worker thread/state change due to asynchronous nature of the worker thread
@@ -552,7 +539,7 @@ class DolphieApp(App):
     @on(TabbedContent.TabActivated)
     def tab_changed(self, event: TabbedContent.TabActivated):
         metric_instance_name = event.tab.id.split("tab_")[1]
-        self.update_graph(metric_instance_name)
+        self.update_graphs(metric_instance_name)
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):
@@ -566,7 +553,7 @@ class DolphieApp(App):
         metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
         metric_data.visible = event.value
 
-        self.update_graph(metric_instance_name)
+        self.update_graphs(metric_instance_name)
 
     def generate_switches(self, metric_instance_name):
         metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
@@ -576,52 +563,41 @@ class DolphieApp(App):
                 yield Label(metric_data.label)
                 yield Switch(animate=False, id=metric, name=metric_instance_name)
 
-    def update_graph(self, metric_instance_name):
-        metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
+    def update_graphs(self, tab_metric_instance_name):
+        for metric_instance in self.dolphie.metric_manager.metrics.__dict__.values():
+            if tab_metric_instance_name == metric_instance.tab_name:
+                for graph_name in metric_instance.graphs:
+                    self.query_one(f"#{graph_name}").render_graph(metric_instance)
 
-        for graph_name, metric_graph_instance_name in metric_instance.graphs.items():
-            if metric_graph_instance_name:
-                graph_metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_graph_instance_name)
-            else:
-                graph_metric_instance = metric_instance
+        self.update_stats_label(tab_metric_instance_name)
 
-            self.query_one(f"#{graph_name}").render_graph(graph_metric_instance)
+    def update_stats_label(self, tab_metric_instance_name):
+        stat_data = {}
 
-        self.update_stats_label(metric_instance_name)
-
-    def update_stats_label(self, metric_instance_name):
-        metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
-
-        number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
-        # Add labels from the source metric instance
-        stat_data = {
-            metric_data.label: number_format_func(metric_data.values[-1])
-            for metric_data in metric_instance.__dict__.values()
-            if isinstance(metric_data, MetricManager.MetricData) and metric_data.values
-        }
-
-        # Add labels from a linked metric instance
-        for metric_graph_instance_name in metric_instance.graphs.values():
-            if metric_graph_instance_name:
-                graph_metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_graph_instance_name)
-                number_format_func = MetricManager.get_number_format_function(graph_metric_instance)
-                for metric_data in graph_metric_instance.__dict__.values():
-                    if isinstance(metric_data, MetricManager.MetricData) and metric_data.values:
+        for metric_instance in self.dolphie.metric_manager.metrics.__dict__.values():
+            if hasattr(metric_instance, "tab_name") and metric_instance.tab_name == tab_metric_instance_name:
+                number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
+                for metric_data in metric_instance.__dict__.values():
+                    if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
                         stat_data[metric_data.label] = number_format_func(metric_data.values[-1])
 
         formatted_stat_data = "  ".join(f"[b #bbc8e8]{label}[/b #bbc8e8] {value}" for label, value in stat_data.items())
-
-        self.query_one(f"#stats_{metric_instance_name}").update(formatted_stat_data)
+        self.query_one(f"#stats_{tab_metric_instance_name}").update(formatted_stat_data)
 
     def layout_graphs(self):
         if self.dolphie.is_mysql_version_at_least("8.0.30"):
             self.query_one("#graph_redo_log").styles.width = "55%"
             self.query_one("#graph_redo_log_bar").styles.width = "12%"
             self.query_one("#graph_redo_log_active_count").styles.width = "33%"
+            self.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+            self.query_one("#graph_redo_log_active_count").display = True
         else:
             self.query_one("#graph_redo_log").styles.width = "88%"
             self.query_one("#graph_redo_log_bar").styles.width = "12%"
             self.query_one("#graph_redo_log_active_count").display = False
+
+        self.query_one("#graph_adaptive_hash_index").styles.width = "50%"
+        self.query_one("#graph_adaptive_hash_index_hit_ratio").styles.width = "50%"
 
     def compose(self) -> ComposeResult:
         yield TopBar(host=self.dolphie.host, app_version=self.dolphie.app_version, help="press ? for help")
@@ -674,7 +650,9 @@ class DolphieApp(App):
 
                     with TabPane("Adaptive Hash Index", id="tab_adaptive_hash_index"):
                         yield Label(id="stats_adaptive_hash_index", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_adaptive_hash_index", classes="panel_data")
+                        with Horizontal():
+                            yield MetricManager.Graph(id="graph_adaptive_hash_index", classes="panel_data")
+                            yield MetricManager.Graph(id="graph_adaptive_hash_index_hit_ratio", classes="panel_data")
 
                         with Horizontal(classes="switch_container"):
                             yield from self.generate_switches("adaptive_hash_index")

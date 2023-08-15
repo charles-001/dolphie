@@ -13,19 +13,22 @@ class Graph(Static):
         super().__init__(*args, **kwargs)
 
         self.bar = bar
-        self.graph_data = None
+        self.metric_instance = None
 
     def on_show(self) -> None:
-        self.render_graph(self.graph_data)
+        self.render_graph(self.metric_instance)
 
     def on_resize(self) -> None:
-        self.render_graph(self.graph_data)
+        self.render_graph(self.metric_instance)
 
-    def render_graph(self, graph_data) -> None:
-        self.graph_data = graph_data
+    def render_graph(self, metric_instance) -> None:
+        self.metric_instance = metric_instance
+
+        if self.metric_instance is None:
+            return
 
         plt.clf()
-        plt.date_form("m/d H:M:S")
+        plt.date_form("H:M:S")
         plt.canvas_color((3, 9, 24))
         plt.axes_color((3, 9, 24))
         plt.ticks_color((144, 169, 223))
@@ -33,17 +36,17 @@ class Graph(Static):
         plt.plotsize(self.size.width, self.size.height)
 
         max_y_value = 0
-        if type(self.graph_data) == CheckpointMetrics:
-            x = self.graph_data.datetimes
-            y = self.graph_data.Innodb_checkpoint_age.values
+        if type(self.metric_instance) == CheckpointMetrics:
+            x = self.metric_instance.datetimes
+            y = self.metric_instance.Innodb_checkpoint_age.values
 
             if y:
                 plt.hline(0, (3, 9, 24))
-                plt.hline(self.graph_data.checkpoint_age_sync_flush, (241, 251, 130))
-                plt.hline(self.graph_data.checkpoint_age_max, (252, 121, 121))
+                plt.hline(self.metric_instance.checkpoint_age_sync_flush, (241, 251, 130))
+                plt.hline(self.metric_instance.checkpoint_age_max, (252, 121, 121))
                 plt.text(
                     "Critical",
-                    y=self.graph_data.checkpoint_age_max,
+                    y=self.metric_instance.checkpoint_age_max,
                     x=max(x),
                     alignment="right",
                     color="white",
@@ -51,7 +54,7 @@ class Graph(Static):
                 )
                 plt.text(
                     "Warning",
-                    y=self.graph_data.checkpoint_age_sync_flush,
+                    y=self.metric_instance.checkpoint_age_sync_flush,
                     x=max(x),
                     alignment="right",
                     color="white",
@@ -62,24 +65,24 @@ class Graph(Static):
                     x,
                     y,
                     marker="braille",
-                    label=self.graph_data.Innodb_checkpoint_age.label,
-                    color=self.graph_data.Innodb_checkpoint_age.color,
+                    label=self.metric_instance.Innodb_checkpoint_age.label,
+                    color=self.metric_instance.Innodb_checkpoint_age.color,
                 )
-                max_y_value = self.graph_data.checkpoint_age_max
-        elif type(self.graph_data) == RedoLogMetrics and self.bar:
-            if self.graph_data.Innodb_os_log_written.values:
+                max_y_value = self.metric_instance.checkpoint_age_max
+        elif type(self.metric_instance) == RedoLogMetrics and self.bar:
+            if self.metric_instance.Innodb_lsn_current.values:
                 x = [0]
                 y = [
                     round(
-                        sum(self.graph_data.Innodb_os_log_written.values)
-                        * (3600 / len(self.graph_data.Innodb_os_log_written.values))
+                        sum(self.metric_instance.Innodb_lsn_current.values)
+                        * (3600 / len(self.metric_instance.Innodb_lsn_current.values))
                     )
                 ]
 
-                plt.hline(self.graph_data.redo_log_size, (252, 121, 121))
+                plt.hline(self.metric_instance.redo_log_size, (252, 121, 121))
                 plt.text(
                     "Log Size",
-                    y=self.graph_data.redo_log_size,
+                    y=self.metric_instance.redo_log_size,
                     x=0,
                     alignment="center",
                     color="white",
@@ -87,7 +90,7 @@ class Graph(Static):
                 )
 
                 bar_color = (46, 124, 175)
-                if y[0] >= self.graph_data.redo_log_size:
+                if y[0] >= self.metric_instance.redo_log_size:
                     bar_color = (252, 121, 121)
 
                 plt.text(
@@ -106,10 +109,10 @@ class Graph(Static):
                     marker="hd",
                     color=bar_color,
                 )
-                max_y_value = max(self.graph_data.redo_log_size, max(y))
-        elif type(self.graph_data) == RedoLogActiveCountMetrics:
-            x = self.graph_data.datetimes
-            y = self.graph_data.Active_redo_log_count.values
+                max_y_value = max(self.metric_instance.redo_log_size, max(y))
+        elif type(self.metric_instance) == RedoLogActiveCountMetrics:
+            x = self.metric_instance.datetimes
+            y = self.metric_instance.Active_redo_log_count.values
 
             if y:
                 plt.hline(1, (3, 9, 24))
@@ -127,15 +130,15 @@ class Graph(Static):
                     x,
                     y,
                     marker="braille",
-                    label=self.graph_data.Active_redo_log_count.label,
-                    color=self.graph_data.Active_redo_log_count.color,
+                    label=self.metric_instance.Active_redo_log_count.label,
+                    color=self.metric_instance.Active_redo_log_count.color,
                 )
                 max_y_value = 32
 
         else:
-            for metric_data in self.graph_data.__dict__.values():
+            for metric_data in self.metric_instance.__dict__.values():
                 if isinstance(metric_data, MetricData) and metric_data.visible:
-                    x = self.graph_data.datetimes
+                    x = self.metric_instance.datetimes
                     y = metric_data.values
 
                     if y:
@@ -146,11 +149,11 @@ class Graph(Static):
         y_tick_interval = max_y_value / max_y_ticks
 
         if y_tick_interval >= 1:
-            y_ticks = [i * y_tick_interval for i in range(max_y_ticks + 1) if i * y_tick_interval >= 0]
+            y_ticks = [i * y_tick_interval for i in range(max_y_ticks + 1)]
         else:
             y_ticks = [i for i in range(max_y_value + 1)]
 
-        format_function = get_number_format_function(self.graph_data)
+        format_function = get_number_format_function(self.metric_instance)
         y_labels = [format_function(val) for val in y_ticks]
 
         plt.yticks(y_ticks, y_labels)
@@ -163,9 +166,10 @@ def get_number_format_function(data, color=False):
         ReplicationLagMetrics: lambda val: format_time(val),
         CheckpointMetrics: lambda val: format_bytes(val, color=color),
         RedoLogMetrics: lambda val: format_bytes(val, color=color),
+        AdaptiveHashIndexHitRatioMetrics: lambda val: f"{round(val)}%",
     }
 
-    return data_formatters.get(type(data), lambda val: format_number(val, color=color, decimal=2))
+    return data_formatters.get(type(data), lambda val: format_number(val, color=color))
 
 
 @dataclass
@@ -206,6 +210,7 @@ class DMLMetrics:
     Com_replace: MetricData
     Com_rollback: MetricData
     graphs: List[str]
+    tab_name: str = "dml"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
 
@@ -214,6 +219,7 @@ class DMLMetrics:
 class ReplicationLagMetrics:
     lag: MetricData
     graphs: List[str]
+    tab_name: str = "replication_lag"
     metric_source: MetricSource = MetricSource.none
 
     datetimes: List[str] = field(default_factory=list)
@@ -223,6 +229,7 @@ class ReplicationLagMetrics:
 class CheckpointMetrics:
     Innodb_checkpoint_age: MetricData
     graphs: List[str]
+    tab_name: str = "checkpoint"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     checkpoint_age_max: int = 0
@@ -235,6 +242,7 @@ class BufferPoolRequestsMetrics:
     Innodb_buffer_pool_write_requests: MetricData
     Innodb_buffer_pool_reads: MetricData
     graphs: List[str]
+    tab_name: str = "buffer_pool_requests"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
 
@@ -244,14 +252,26 @@ class AdaptiveHashIndexMetrics:
     adaptive_hash_searches: MetricData
     adaptive_hash_searches_btree: MetricData
     graphs: List[str]
+    tab_name: str = "adaptive_hash_index"
     metric_source: MetricSource = MetricSource.innodb_metrics
     datetimes: List[str] = field(default_factory=list)
 
 
 @dataclass
-class RedoLogMetrics:
-    Innodb_os_log_written: MetricData
+class AdaptiveHashIndexHitRatioMetrics:
+    hit_ratio: MetricData
     graphs: List[str]
+    smoothed_hit_ratio: float = None
+    tab_name: str = "adaptive_hash_index"
+    metric_source: MetricSource = MetricSource.none
+    datetimes: List[str] = field(default_factory=list)
+
+
+@dataclass
+class RedoLogMetrics:
+    Innodb_lsn_current: MetricData
+    graphs: List[str]
+    tab_name: str = "redo_log"
     redo_log_size: int = 0
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
@@ -261,6 +281,7 @@ class RedoLogMetrics:
 class RedoLogActiveCountMetrics:
     Active_redo_log_count: MetricData
     graphs: List[str]
+    tab_name: str = "redo_log"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
 
@@ -271,6 +292,7 @@ class TableCacheMetrics:
     Table_open_cache_misses: MetricData
     Table_open_cache_overflows: MetricData
     graphs: List[str]
+    tab_name: str = "table_cache"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
 
@@ -280,6 +302,7 @@ class ThreadMetrics:
     Threads_connected: MetricData
     Threads_running: MetricData
     graphs: List[str]
+    tab_name: str = "threads"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
 
@@ -291,6 +314,7 @@ class MetricInstances:
     checkpoint: CheckpointMetrics
     buffer_pool_requests: BufferPoolRequestsMetrics
     adaptive_hash_index: AdaptiveHashIndexMetrics
+    adaptive_hash_index_hit_ratio: AdaptiveHashIndexHitRatioMetrics
     redo_log: RedoLogMetrics
     redo_log_active_count: RedoLogActiveCountMetrics
     table_cache: TableCacheMetrics
@@ -308,7 +332,7 @@ class MetricManager:
 
         self.metrics = MetricInstances(
             dml=DMLMetrics(
-                graphs={"graph_dml": None},
+                graphs=["graph_dml"],
                 Queries=MetricData(label="Queries", color=MetricColor.gray, visible=False),
                 Com_select=MetricData(label="SELECT", color=MetricColor.blue),
                 Com_insert=MetricData(label="INSERT", color=MetricColor.green),
@@ -322,48 +346,48 @@ class MetricManager:
                 ),
             ),
             replication_lag=ReplicationLagMetrics(
-                graphs={"graph_replication_lag": None},
+                graphs=["graph_replication_lag"],
                 lag=MetricData(label="Lag", color=MetricColor.blue, per_second_calculation=False),
             ),
             checkpoint=CheckpointMetrics(
-                graphs={"graph_checkpoint": None},
+                graphs=["graph_checkpoint"],
                 Innodb_checkpoint_age=MetricData(
                     label="Uncheckpointed", color=MetricColor.blue, per_second_calculation=False
                 ),
             ),
             buffer_pool_requests=BufferPoolRequestsMetrics(
-                graphs={"graph_buffer_pool_requests": None},
+                graphs=["graph_buffer_pool_requests"],
                 Innodb_buffer_pool_read_requests=MetricData(label="Read Requests", color=MetricColor.blue),
                 Innodb_buffer_pool_write_requests=MetricData(label="Write Requests", color=MetricColor.green),
                 Innodb_buffer_pool_reads=MetricData(label="Disk Reads", color=MetricColor.red),
             ),
             adaptive_hash_index=AdaptiveHashIndexMetrics(
-                graphs={"graph_adaptive_hash_index": None},
+                graphs=["graph_adaptive_hash_index"],
                 adaptive_hash_searches=MetricData(label="Hit", color=MetricColor.green),
                 adaptive_hash_searches_btree=MetricData(label="Miss", color=MetricColor.red),
             ),
+            adaptive_hash_index_hit_ratio=AdaptiveHashIndexHitRatioMetrics(
+                graphs=["graph_adaptive_hash_index_hit_ratio"],
+                hit_ratio=MetricData(label="Hit Ratio", color=MetricColor.green, per_second_calculation=False),
+            ),
             redo_log=RedoLogMetrics(
-                graphs={
-                    "graph_redo_log": None,
-                    "graph_redo_log_active_count": "redo_log_active_count",
-                    "graph_redo_log_bar": None,
-                },
-                Innodb_os_log_written=MetricData(label="Data Written/sec", color=MetricColor.blue),
+                graphs=["graph_redo_log", "graph_redo_log_bar"],
+                Innodb_lsn_current=MetricData(label="Data Written/sec", color=MetricColor.blue),
             ),
             redo_log_active_count=RedoLogActiveCountMetrics(
-                graphs={"graph_redo_log_active_count": None},
+                graphs=["graph_redo_log_active_count"],
                 Active_redo_log_count=MetricData(
-                    label="Active Count", color=MetricColor.blue, per_second_calculation=False
+                    label="Active Count", color=MetricColor.blue, per_second_calculation=False, visible=False
                 ),
             ),
             table_cache=TableCacheMetrics(
-                graphs={"graph_table_cache": None},
+                graphs=["graph_table_cache"],
                 Table_open_cache_hits=MetricData(label="Hit", color=MetricColor.green),
                 Table_open_cache_misses=MetricData(label="Miss", color=MetricColor.red),
                 Table_open_cache_overflows=MetricData(label="Overflow", color=MetricColor.yellow),
             ),
             threads=ThreadMetrics(
-                graphs={"graph_threads": None},
+                graphs=["graph_threads"],
                 Threads_connected=MetricData(
                     label="Connected", color=MetricColor.green, visible=False, per_second_calculation=False
                 ),
@@ -400,6 +424,7 @@ class MetricManager:
         self.update_metrics_with_per_second_values()
         self.update_metrics_replication_lag()
         self.update_metrics_checkpoint()
+        self.update_metrics_adaptive_hash_index_hit_ratio()
 
         self.metrics.redo_log.redo_log_size = self.redo_log_size
 
@@ -437,13 +462,21 @@ class MetricManager:
                         added = True
 
             if added:
-                metric_instance.datetimes.append(self.worker_start_time.strftime("%m/%d %H:%M:%S"))
+                metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
 
     def update_metrics_replication_lag(self):
         if self.replication_status:
             metric_instance = self.metrics.replication_lag
             self.add_metric(metric_instance.lag, self.replication_lag)
-            metric_instance.datetimes.append(self.worker_start_time.strftime("%m/%d %H:%M:%S"))
+            metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
+
+    def update_metrics_adaptive_hash_index_hit_ratio(self):
+        hit_ratio = self.get_metric_adaptive_hash_index(format=False)
+
+        if hit_ratio:
+            metric_instance = self.metrics.adaptive_hash_index_hit_ratio
+            self.add_metric(metric_instance.hit_ratio, hit_ratio)
+            metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
 
     def update_metrics_checkpoint(self):
         (max_checkpoint_age_bytes, checkpoint_age_sync_flush_bytes, _) = self.get_metric_checkpoint_age(format=False)
@@ -473,7 +506,7 @@ class MetricManager:
         checkpoint_age_bytes = round(self.global_status.get("Innodb_checkpoint_age", 0))
         max_checkpoint_age_bytes = self.redo_log_size
 
-        if checkpoint_age_bytes == 0 and max_checkpoint_age_bytes == 0:
+        if checkpoint_age_bytes + max_checkpoint_age_bytes == 0:
             return "N/A"
 
         checkpoint_age_sync_flush_bytes = round(max_checkpoint_age_bytes * 0.825)
@@ -491,37 +524,45 @@ class MetricManager:
         else:
             return max_checkpoint_age_bytes, checkpoint_age_sync_flush_bytes, checkpoint_age_bytes
 
-    def get_metric_adaptive_hash_index(self):
-        if self.global_variables.get("innodb_adaptive_hash_index") == "OFF":
-            return "OFF"
+    def get_metric_adaptive_hash_index(self, format=True):
+        ahi_status = self.global_variables.get("innodb_adaptive_hash_index")
 
-        metric_data = self.metrics.adaptive_hash_index
+        if ahi_status == "OFF":
+            return "OFF" if format else None
 
-        # Get per second value
-        previous_hits = metric_data.adaptive_hash_searches.last_value
-        previous_misses = metric_data.adaptive_hash_searches_btree.last_value
-        current_hits = self.innodb_metrics.get("adaptive_hash_searches", None)
-        current_misses = self.innodb_metrics.get("adaptive_hash_searches_btree", None)
+        current_hits = self.innodb_metrics.get("adaptive_hash_searches", 0)
+        current_misses = self.innodb_metrics.get("adaptive_hash_searches_btree", 0)
 
-        if current_hits is None or current_misses is None:
-            return "N/A"
+        hits = current_hits - self.metrics.adaptive_hash_index.adaptive_hash_searches.last_value
+        misses = current_misses - self.metrics.adaptive_hash_index.adaptive_hash_searches_btree.last_value
+        total_hits_misses = hits + misses
 
-        hits = current_hits - previous_hits
-        misses = current_misses - previous_misses
+        if total_hits_misses <= 0:
+            return "Inactive" if format else None
 
-        if hits == 0 and misses == 0:
-            return "Inactive"
+        hit_ratio = (hits / total_hits_misses) * 100
 
-        efficiency = (hits / (hits + misses)) * 100
+        if format:
+            color_code = (
+                "#54efae"
+                if self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio > 70
+                else "#f1fb82"
+                if self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio > 50
+                else "#fc7979"
+            )
 
-        if efficiency > 70:
-            color_code = "#54efae"
-        elif efficiency > 50:
-            color_code = "#f1fb82"
+            return f"[{color_code}]{self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio:.2f}%[/{color_code}]"
         else:
-            color_code = "#fc7979"
+            smoothing_factor = 0.5
+            smoothed_hit_ratio = self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio
 
-        return f"[{color_code}]{efficiency:.2f}%"
+            if smoothed_hit_ratio is None:
+                smoothed_hit_ratio = hit_ratio
+            else:
+                smoothed_hit_ratio = (1 - smoothing_factor) * smoothed_hit_ratio + smoothing_factor * hit_ratio
+            self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio = smoothed_hit_ratio
+
+            return smoothed_hit_ratio
 
     def update_metrics_with_last_value(self):
         # We set the last value for specific metrics that need it so they can get per second values
