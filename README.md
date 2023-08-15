@@ -3,6 +3,31 @@
 <img src="https://user-images.githubusercontent.com/13244625/187600748-19d2ad15-42e8-4f9c-ada5-a153cdcf4070.png" width="120"><br>
 An intuitive feature-rich top tool for monitoring MySQL in real time
 </p>
+<img width="1383" src="https://github.com/charles-001/dolphie/assets/13244625/db40400c-b4ae-4c73-82ff-569d373f225d">
+<p></p>
+<img width="1383" src="https://github.com/charles-001/dolphie/assets/13244625/a0ba5a5f-7957-4323-b8d9-3d8eb2fa267e">
+<p></p>
+<img width="1383" src="https://github.com/charles-001/dolphie/assets/13244625/93021d46-6e72-4f6c-aabd-afc48ec0d71b">
+<p></p>
+<img width="559" alt="Screenshot 2023-08-15 at 5 34 51 PM" src="https://github.com/charles-001/dolphie/assets/13244625/2affad1e-0c46-49d9-991d-909eca337893">
+<p></p>
+<img width="1383" alt="Screenshot 2023-08-15 at 5 34 51 PM" src="https://github.com/charles-001/dolphie/assets/13244625/6ed9d7e1-0be6-429b-8d18-5b783c891a6b">
+<p></p>
+<img width="1383" alt="Screenshot 2023-08-15 at 5 21 31 PM" src="https://github.com/charles-001/dolphie/assets/13244625/809a41ed-fb55-4440-81f0-4865e7364ca8">
+<p></p>
+<img width="1376" alt="Screenshot 2023-08-15 at 5 20 56 PM" src="https://github.com/charles-001/dolphie/assets/13244625/9a5986a2-976e-4157-bbe5-5d3e12c7fbac">
+<p></p>
+<img width="1380" alt="Screenshot 2023-08-15 at 2 30 20 PM" src="https://github.com/charles-001/dolphie/assets/13244625/e4834bd7-2ead-4f04-9c4f-268d42c09a31">
+<p></p>
+<img width="1383" alt="Screenshot 2023-08-15 at 5 27 36 PM" src="https://github.com/charles-001/dolphie/assets/13244625/d5c2b748-68c9-4823-a092-64f26e32adfd">
+<p></p>
+<img width="1383"src="https://github.com/charles-001/dolphie/assets/13244625/9409c4c6-3e16-4366-a92a-dc0b5fc31526">
+<p></p>
+<img width="1382" alt="Screenshot 2023-08-15 at 5 19 44 PM" src="https://github.com/charles-001/dolphie/assets/13244625/6e08d431-98a0-49d7-aecb-2ad8d837fd07">
+<p></p>
+<img width="1381" alt="Screenshot 2023-08-15 at 5 39 30 PM" src="https://github.com/charles-001/dolphie/assets/13244625/82d39ab2-ef0b-4a5e-a5a6-4e8f1e06fb10">
+<p></p>
+<img width="367" alt="Screenshot 2023-08-15 at 5 37 29 PM" src="https://github.com/charles-001/dolphie/assets/13244625/713fa289-daa3-4a8e-aec6-153bfab8e9b2">
 
 
 ## Installation
