@@ -348,6 +348,22 @@ files = [
 ]
 
 [[package]]
+name = "plotext"
+version = "5.2.8"
+description = "plotext plots directly on terminal"
+optional = false
+python-versions = ">=3.5"
+files = [
+    {file = "plotext-5.2.8-py3-none-any.whl", hash = "sha256:7364cf72e6c9bffaf96158340fd2e0058faf404edbbc1e7a2aed421c8638d475"},
+    {file = "plotext-5.2.8.tar.gz", hash = "sha256:319a287baabeb8576a711995f973a2eba631c887aa6b0f33ab016f12c50ffebe"},
+]
+
+[package.extras]
+completion = ["shtab"]
+image = ["pillow (>=8.4)"]
+video = ["ffpyplayer (>=4.3.5)", "opencv-python (>=4.5.5)", "pafy (>=0.5.5)", "pillow (>=8.4)", "youtube-dl (==2020.12.2)"]
+
+[[package]]
 name = "pycparser"
 version = "2.21"
 description = "C parser in Python"
@@ -445,13 +461,13 @@ test = ["pytest", "pytest-cov"]
 
 [[package]]
 name = "textual"
-version = "0.32.0"
+version = "0.33.0"
 description = "Modern Text User Interface framework"
 optional = false
 python-versions = ">=3.7,<4.0"
 files = [
-    {file = "textual-0.32.0-py3-none-any.whl", hash = "sha256:81fc68406c8806bc864e2f035874a868b4ff0cf466289dce5f7b31869949383b"},
-    {file = "textual-0.32.0.tar.gz", hash = "sha256:f7b6683bc18faee6fd3c47cfbad43fbf8273c5fecc12230d52ce5ee089021327"},
+    {file = "textual-0.33.0-py3-none-any.whl", hash = "sha256:698a093add0fd21c786232bcacde9ff427a9d5dc9ea5deca93437d9453e4ead1"},
+    {file = "textual-0.33.0.tar.gz", hash = "sha256:e0a98b1d9c4458c5bb4269c65d0a7f3e926f197411242d2f8faf80183d47a728"},
 ]
 
 [package.dependencies]
@@ -535,4 +551,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "fa2a4510b7857dd02ac09410991d2dbea2b4da4ff135532e2322877ed6b75a1d"
+content-hash = "2604a0be51a69707a19821eafb90befeb5ce932b2c3cdd86ca45179a9515249f"

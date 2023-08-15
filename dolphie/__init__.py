@@ -923,7 +923,7 @@ class Dolphie:
                 "1": "Show/hide Dashboard",
                 "2": "Show/hide Processlist",
                 "3": "Show/hide Replication/Replicas",
-                "4": "Show/hide DML QPS Graph",
+                "4": "Show/hide Graph Metrics",
             }
             table_panels = Table(box=box.HORIZONTALS, style=table_line_color, title="Panels", title_style="bold")
             table_panels.add_column("Key", justify="center", style="b #91abec")
@@ -936,7 +936,8 @@ class Dolphie:
                 "Use PS": "If Dolphie is using Performance Schema for listing queries",
                 "Read Hit": "The percentage of how many reads are from InnoDB buffer pool compared to from disk",
                 "Lag": (
-                    "Retrieves metric from: Slave -> SHOW SLAVE STATUS, HB -> Heartbeat table, PS -> Performance Schema"
+                    "Retrieves metric from: Replica -> SHOW SLAVE STATUS, HB -> Heartbeat table, PS -> Performance"
+                    " Schema"
                 ),
                 "Chkpt Age": (
                     "This depicts how close InnoDB is before it starts to furiously flush dirty data to disk "
@@ -949,11 +950,8 @@ class Dolphie:
                 "Diff": "This is the size difference of the binary log between each refresh interval",
                 "Cache Hit": "The percentage of how many binary log lookups are from cache instead of from disk",
                 "History List": "History list length (number of un-purged row changes in InnoDB's undo logs)",
-                "Unpurged TRX": (
-                    "How many transactions are between the newest and the last purged in InnoDB's undo logs"
-                ),
                 "QPS": "Queries per second",
-                "Latency": "How much time it takes to receive data from the host for Dolphie each refresh interval",
+                "Latency": "How much time it takes to receive data from the host for each refresh interval",
                 "Threads": "Con = Connected, Run = Running, Cac = Cached from SHOW GLOBAL STATUS",
                 "Speed": "How many seconds were taken off of replication lag from the last refresh interval",
                 "Tickets": "Relates to innodb_concurrency_tickets variable",
