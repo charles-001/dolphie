@@ -135,6 +135,7 @@ Environment variables support these options:
 ## Features
 - Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer (see Help screenshot for panels available)
 - Graphs for many metrics that can give you great insight into how your database is performing
+- Sparkline to show queries per second in a live view
 - Quick switch host for connecting to different hosts instead of reloading the application. It keeps a history of the servers you connect to that provides autocompletion for hostnames
 - Prefers Performance Schema over Processlist if it's turned on for listing queries. Can be switched to use Processlist by pressing key "1" (or using parameter) since P_S can truncate query length for explaining queries
 - 3 options for finding replica lag in this order of precedence:
