@@ -3,7 +3,7 @@ from decimal import Decimal
 import charset_normalizer
 
 
-def format_bytes(bytes_value):
+def format_bytes(bytes_value, color=True):
     units = ["B", "KB", "MB", "GB", "TB"]
     unit_index = 0
 
@@ -11,7 +11,22 @@ def format_bytes(bytes_value):
         bytes_value /= 1024
         unit_index += 1
 
-    return f"{bytes_value:.2f}[steel_blue1]{units[unit_index]}"
+    formatted_value = f"{bytes_value:.2f}"
+
+    if formatted_value.endswith(".00"):
+        formatted_value = formatted_value[:-3]  # Remove ".00" from the end
+
+    if color:
+        return f"{formatted_value}[#91abec]{units[unit_index]}[/#91abec]"
+    else:
+        return f"{formatted_value}{units[unit_index]}"
+
+
+def format_time(seconds):
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    seconds = int(seconds % 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 def detect_encoding(text):
@@ -35,7 +50,10 @@ def round_num(n, decimal=2):
 
 
 # This is from https://pypi.org/project/numerize
-def format_number(n, decimal=2):
+def format_number(n, decimal=2, color=True):
+    if not n:
+        return "0"
+
     # fmt: off
     sufixes = ["", "K", "M", "B", "T", "Qa", "Qu", "S", "Oc", "No",
                "D", "Ud", "Dd", "Td", "Qt", "Qi", "Se", "Od", "Nd", "V",
@@ -52,23 +70,13 @@ def format_number(n, decimal=2):
                 1e150, 1e153, 1e156, 1e159, 1e162, 1e165, 1e168, 1e171, 1e174, 1e177]
     # fmt: on
 
-    # Some things we send to this function shouldn't be 0
-    if n is None:
-        return "0"
-    elif n == "":
-        return ""
-
     # Convert string to a number format if needed
     if isinstance(n, str):
-        if "." in n:
+        try:
             n = float(n)
-        elif n.isnumeric():
-            n = int(n)
-        else:
-            # If it isn't float/int, return back the original string
+        except ValueError:
             return n
 
-    minus_buff = n
     n = abs(n)
     for x in range(len(sci_expr)):
         if n >= sci_expr[x] and n < sci_expr[x + 1]:
@@ -76,10 +84,11 @@ def format_number(n, decimal=2):
             if n >= 1e3:
                 num = str(round_num(n / sci_expr[x], decimal))
             else:
-                num = str(n)
-            return num + "[steel_blue1]" + sufix if minus_buff > 0 else "-" + num + "[steel_blue1]" + sufix
-
-    return str(0)
+                num = str(round_num(n, 0))
+            if color:
+                return f"{num}[#91abec]{sufix}[/#91abec]" if sufix else num
+            else:
+                return f"{num}{sufix}" if sufix else num
 
 
 def format_sys_table_memory(data):
@@ -94,6 +103,6 @@ def format_sys_table_memory(data):
         elif suffix == "b":
             suffix = "B"
 
-        return f"{value}[steel_blue1]{suffix}"
+        return f"{value}[#91abec]{suffix}"
 
     return data

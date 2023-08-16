@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dolphie"
-version = "2.0.18"
+version = "3.0"
 description = "An intuitive feature-rich top tool for monitoring MySQL in real time"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]
 readme = "README.md"
@@ -9,11 +9,14 @@ readme = "README.md"
 python = "^3.8"
 rich = "^13.4.2"
 pymysql = "^1.1.0"
-charset-normalizer = "^3.1.0"
 myloginpath = "^0.0.4"
 packaging = "^23.1"
 requests = "^2.31.0"
 sqlparse = "^0.4.4"
+textual = "^0.33.0"
+textual-autocomplete = "^2.1.0b0"
+charset-normalizer = "^3.2.0"
+plotext = "^5.2.8"
 
 
 [build-system]

@@ -1,6 +1,9 @@
-# MySQL queries used
-Queries = {
-    "pl_query": """
+from dataclasses import dataclass
+
+
+@dataclass
+class MySQLQueries:
+    pl_query: str = """
         SELECT
             id,
             IFNULL(User, "")                    AS user,
@@ -20,8 +23,9 @@ Queries = {
             information_schema.PROCESSLIST pl
             LEFT JOIN information_schema.innodb_trx ON trx_mysql_thread_id = pl.Id
         WHERE 1 $placeholder
-    """,
-    "ps_query": """
+    """
+
+    ps_query: str = """
         SELECT
             processlist_id                      AS id,
             IFNULL(processlist_user, "")        AS user,
@@ -45,8 +49,8 @@ Queries = {
             processlist_time IS NOT NULL AND
             processlist_command != 'Daemon'
             $placeholder
-    """,
-    "locks_query-5": """
+    """
+    locks_query_5: str = """
         SELECT
             IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
             IFNULL(r.trx_query, "")                                      AS waiting_query,
@@ -67,8 +71,8 @@ Queries = {
             JOIN INFORMATION_SCHEMA.INNODB_LOCKS l ON l.lock_id = w.requested_lock_id
         ORDER BY
             TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
-    """,
-    "locks_query-8": """
+    """
+    locks_query_8: str = """
         SELECT
             IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
             IFNULL(r.trx_query, "")                                      AS waiting_query,
@@ -89,25 +93,25 @@ Queries = {
             JOIN performance_schema.data_locks l ON l.engine_lock_id = w.requesting_engine_lock_id
         ORDER BY
             TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
-    """,
-    "ps_replica_lag": """
+    """
+    ps_replica_lag: str = """
         SELECT
             IFNULL(TIMESTAMPDIFF(
                 SECOND,
                 MIN(APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP),
-            NOW()), "0") AS secs_behind
+            NOW()), "0") AS Seconds_Behind_Master
         FROM
             performance_schema.replication_applier_status_by_worker
         WHERE
             APPLYING_TRANSACTION != ''
-    """,
-    "heartbeat_replica_lag": """
+    """
+    heartbeat_replica_lag: str = """
         SELECT
-            TIMESTAMPDIFF(SECOND, MAX(ts), NOW()) AS secs_behind
+            TIMESTAMPDIFF(SECOND, MAX(ts), NOW()) AS Seconds_Behind_Master
         FROM
             $placeholder
-    """,
-    "ps_find_replicas": """
+    """
+    ps_find_replicas: str = """
         SELECT
             processlist_id   AS id,
             processlist_user AS user,
@@ -116,8 +120,8 @@ Queries = {
             performance_schema.threads
         WHERE
             processlist_command LIKE 'Binlog Dump%'
-    """,
-    "pl_find_replicas": """
+    """
+    pl_find_replicas: str = """
         SELECT
             Id   AS id,
             User AS user,
@@ -126,8 +130,8 @@ Queries = {
             information_schema.PROCESSLIST
         WHERE
             Command Like 'Binlog Dump%'
-    """,
-    "ps_user_statisitics": """
+    """
+    ps_user_statisitics: str = """
         SELECT
             u.user AS user,
             total_connections,
@@ -144,8 +148,8 @@ Queries = {
             current_connections != 0
         ORDER BY
             current_connections DESC
-    """,
-    "userstat_user_statisitics": """
+    """
+    userstat_user_statisitics: str = """
         SELECT
             user,
             total_connections,
@@ -167,8 +171,8 @@ Queries = {
             concurrent_connections != 0
         ORDER BY
             concurrent_connections DESC
-    """,
-    "error_log": """
+    """
+    error_log: str = """
         SELECT
             logged AS timestamp,
             prio AS level,
@@ -180,8 +184,8 @@ Queries = {
             data != 'Could not open log file.'
             $placeholder
         ORDER BY timestamp
-    """,
-    "memory_by_user": """
+    """
+    memory_by_user: str = """
         SELECT
             user,
             current_allocated,
@@ -190,9 +194,8 @@ Queries = {
             sys.memory_by_user_by_current_bytes
         WHERE
             user != "background"
-        LIMIT 30
-    """,
-    "memory_by_code_area": """
+    """
+    memory_by_code_area: str = """
         SELECT
             SUBSTRING_INDEX( event_name, '/', 2 ) AS code_area,
             sys.format_bytes (
@@ -203,9 +206,8 @@ Queries = {
             SUBSTRING_INDEX( event_name, '/', 2 )
         ORDER BY
             SUM( current_alloc ) DESC
-        LIMIT 30
-    """,
-    "memory_by_host": """
+    """
+    memory_by_host: str = """
         SELECT
             host,
             current_allocated,
@@ -214,19 +216,39 @@ Queries = {
             sys.memory_by_host_by_current_bytes
         WHERE
             host != "background"
-        LIMIT 30
-    """,
-    "databases": """
+    """
+    databases: str = """
         SELECT
             SCHEMA_NAME
         FROM
             information_schema.SCHEMATA
         ORDER BY
             SCHEMA_NAME
-    """,
-    "status": "SHOW GLOBAL STATUS",
-    "variables": "SHOW GLOBAL VARIABLES",
-    "primary_status": "SHOW MASTER STATUS",
-    "replica_status": "SHOW SLAVE STATUS",
-    "innodb_status": "SHOW ENGINE INNODB STATUS",
-}
+    """
+    innodb_metrics: str = """
+        SELECT
+            NAME,
+            COUNT
+        FROM
+            information_schema.INNODB_METRICS
+    """
+    checkpoint_age: str = """
+        SELECT
+            STORAGE_ENGINES ->> '$."InnoDB"."LSN"' - STORAGE_ENGINES ->> '$."InnoDB"."LSN_checkpoint"' AS checkpoint_age
+        FROM
+            performance_schema.log_status
+    """
+    active_redo_logs: str = """
+        SELECT
+            COUNT(*) AS count
+        FROM
+            performance_schema.file_instances
+        WHERE
+            file_name LIKE '%innodb_redo/%' AND
+            file_name NOT LIKE '%_tmp'
+    """
+    status: str = "SHOW GLOBAL STATUS"
+    variables: str = "SHOW GLOBAL VARIABLES"
+    binlog_status: str = "SHOW MASTER STATUS"
+    replication_status: str = "SHOW SLAVE STATUS"
+    innodb_status: str = "SHOW ENGINE INNODB STATUS"

@@ -1,125 +1,118 @@
 import re
-import string
 from datetime import timedelta
 
 from dolphie import Dolphie
-from dolphie.Functions import format_number
-from dolphie.Queries import Queries
-from rich import box
-from rich.table import Table
+from dolphie.Modules.Functions import format_number, format_time
+from dolphie.Modules.Queries import MySQLQueries
+from rich.text import Text
+from textual.widgets import DataTable
 
 
-def create_panel(dolphie: Dolphie) -> Table:
-    table = Table(header_style="bold white", box=box.SIMPLE_HEAVY, style="steel_blue1")
-
-    columns = {}
-    columns["Thread ID"] = {"field": "id", "width": 11, "format_number": False}
-    columns["Username"] = {"field": "user", "width": 13, "format_number": False}
+def create_panel(dolphie: Dolphie) -> DataTable:
+    columns = [
+        {"name": "Thread ID", "field": "id", "width": 11, "format_number": False},
+        {"name": "Username", "field": "user", "width": 13, "format_number": False},
+    ]
 
     if dolphie.show_additional_query_columns:
-        columns["Hostname/IP"] = {"field": "host", "width": 16, "format_number": False}
-        columns["Database"] = {"field": "db", "width": 13, "format_number": False}
+        columns.extend(
+            [
+                {"name": "Hostname/IP", "field": "host", "width": 16, "format_number": False},
+                {"name": "Database", "field": "db", "width": 13, "format_number": False},
+            ]
+        )
 
-    columns["Command"] = {"field": "command", "width": 8, "format_number": False}
-    columns["State"] = {"field": "state", "width": 16, "format_number": False}
-    columns["TRX State"] = {"field": "trx_state", "width": 9, "format_number": False}
-    columns["Rows Lock"] = {"field": "trx_rows_locked", "width": 9, "format_number": True}
-    columns["Rows Mod"] = {"field": "trx_rows_modified", "width": 8, "format_number": True}
+    columns.extend(
+        [
+            {"name": "Command", "field": "command", "width": 8, "format_number": False},
+            {"name": "State", "field": "state", "width": 16, "format_number": False},
+            {"name": "TRX State", "field": "trx_state", "width": 9, "format_number": False},
+            {"name": "Rows Lock", "field": "trx_rows_locked", "width": 9, "format_number": True},
+            {"name": "Rows Mod", "field": "trx_rows_modified", "width": 8, "format_number": True},
+        ]
+    )
 
     if (
         dolphie.show_additional_query_columns
-        and "innodb_thread_concurrency" in dolphie.variables
-        and dolphie.variables["innodb_thread_concurrency"]
+        and "innodb_thread_concurrency" in dolphie.global_variables
+        and dolphie.global_variables["innodb_thread_concurrency"]
     ):
-        columns["Tickets"] = {"field": "trx_concurrency_tickets", "width": 8, "format_number": True}
+        columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": True})
 
-    columns["Time"] = {"field": "formatted_time", "width": 9, "format_number": False}
-    columns["Query"] = {"field": "shortened_query", "width": None, "format_number": False}
+    columns.extend(
+        [
+            {"name": "Time", "field": "formatted_time", "width": 9, "format_number": False},
+            {"name": "Query", "field": "query", "width": None, "format_number": False},
+        ]
+    )
 
-    total_width = 0
-    for column, data in columns.items():
-        if column == "Query":
-            overflow = "crop"
-        else:
-            overflow = "ellipsis"
+    processlist_datatable = dolphie.app.query_one("#panel_processlist_data", DataTable)
 
-        if data["width"]:
-            table.add_column(column, width=data["width"], no_wrap=True, overflow=overflow)
-            total_width += data["width"]
-        else:
-            table.add_column(column, no_wrap=True, overflow=overflow)
+    # Clear table if columns change
+    if len(processlist_datatable.columns) != len(columns):
+        processlist_datatable.clear(columns=True)
 
-    # This variable is to cut off query so it's the perfect width for the auto-sized column that matches terminal width
-    query_characters = dolphie.console.size.width - total_width - ((len(columns) * 3) + 1)
+    # Add columns to the datatable if it is empty
+    if not processlist_datatable.columns:
+        for column_data in columns:
+            column_name = column_data["name"]
+            column_key = column_data["field"]
+            column_width = column_data["width"]
+            processlist_datatable.add_column(column_name, key=column_key, width=column_width)
 
-    thread_counter = 0
-    for id, thread in dolphie.processlist_threads.items():
-        query = re.sub(r"\s+", " ", thread["query"])
-
-        # Replace strings with [NONPRINTABLE] if they contain non-printable characters
-        for m in re.findall(r"(\"(?:(?!(?<!\\)\").)*\"|'(?:(?!(?<!\\)').)*')", query):
-            test_pattern = re.search(f"[^{re.escape(string.printable)}]", m)
-            if test_pattern:
-                query = query.replace(m, "[NONPRINTABLE]")
-
-        # If no query, pad the query column with spaces so it's sized correctly
-        if not query:
-            query = query.ljust(query_characters)
-
-        # Pad queries with spaces that are not the full size of query column
-        elif len(query) < query_characters:
-            query = query.ljust(dolphie.console.size.width)
-
-        # Change values to what we want
+    # Iterate through dolphie.processlist_threads
+    for thread_id, thread in dolphie.processlist_threads.items():
+        # Add or modify the "command" field based on the condition
         if thread["command"] == "Killed":
-            thread["command"] = "[bright_red]%s" % thread["command"]
+            thread["command"] = "[#fc7979]Killed"
+
+        # Check if the thread_id exists in the datatable
+        if thread_id in processlist_datatable.rows:
+            datatable_row = processlist_datatable.get_row(thread_id)
+
+            # Update the datatable if values differ
+            for column_id, column_data in enumerate(columns):
+                column_name = column_data["field"]
+                column_format_number = column_data["format_number"]
+
+                update_width = False
+                if column_name == "query":
+                    value = re.sub(r"\s+", " ", thread[column_name])
+                    update_width = True
+                else:
+                    value = format_number(thread[column_name]) if column_format_number else thread[column_name]
+
+                if value != datatable_row[column_id] or column_name == "formatted_time":
+                    processlist_datatable.update_cell(thread_id, column_name, value, update_width=update_width)
         else:
-            thread["command"] = thread["command"]
+            # Add a new row to the datatable if thread_id does not exist
+            row_values = []
+            for column_data in columns:
+                column_name = column_data["field"]
+                column_format_number = column_data["format_number"]
 
-        thread["shortened_query"] = query[0:query_characters]
+                if column_name == "query":
+                    value = re.sub(r"\s+", " ", thread[column_name])
+                else:
+                    value = format_number(thread[column_name]) if column_format_number else thread[column_name]
 
-        # Add rows for each thread
-        row_values = []
-        for column, data in columns.items():
-            if data["format_number"]:
-                row_values.append(format_number(thread[data["field"]]))
-            else:
-                row_values.append(thread[data["field"]])
+                row_values.append(value)
 
-        table.add_row(*row_values, style="grey93")
+            processlist_datatable.add_row(*row_values, key=thread_id)
 
-        thread_counter += 1
+    # Remove rows from processlist_datatable that no longer exist in dolphie.processlist_threads
+    rows_to_remove = set(processlist_datatable.rows.keys()) - set(dolphie.processlist_threads.keys())
+    for id in rows_to_remove:
+        processlist_datatable.remove_row(id)
 
-    # Add an invisible row to keep query column sized correctly
-    if thread_counter == 0:
-        empty_values = []
-        for column, data in columns.items():
-            if data["width"]:
-                empty_values.append("")
-            else:
-                empty_values.append("".ljust(query_characters))
-
-        table.add_row(*empty_values)
-
-    return table
+    processlist_datatable.sort("formatted_time", reverse=dolphie.sort_by_time_descending)
 
 
-def get_data(dolphie: Dolphie):
+def fetch_data(dolphie: Dolphie):
     if dolphie.use_performance_schema:
-        processlist_query = Queries["ps_query"]
+        processlist_query = MySQLQueries.ps_query
     else:
-        processlist_query = Queries["pl_query"]
-
-    if dolphie.sort_by_time_descending:
-        if dolphie.use_performance_schema:
-            processlist_query = processlist_query + " ORDER BY processlist_time DESC"
-        else:
-            processlist_query = processlist_query + " ORDER BY LENGTH(Time) DESC, Time DESC"
-    else:
-        if dolphie.use_performance_schema:
-            processlist_query = processlist_query + " ORDER BY processlist_time"
-        else:
-            processlist_query = processlist_query + " ORDER BY LENGTH(Time), Time"
+        processlist_query = MySQLQueries.pl_query
 
     ########################
     # WHERE clause filters #
@@ -166,11 +159,11 @@ def get_data(dolphie: Dolphie):
             where_clause.append("Host LIKE '%s%%'" % dolphie.host_filter)
 
     # Filter time
-    if dolphie.time_filter:
+    if dolphie.query_time_filter:
         if dolphie.use_performance_schema:
-            where_clause.append("processlist_time >= '%s'" % dolphie.time_filter)
+            where_clause.append("processlist_time >= '%s'" % dolphie.query_time_filter)
         else:
-            where_clause.append("Time >= '%s'" % dolphie.time_filter)
+            where_clause.append("Time >= '%s'" % dolphie.query_time_filter)
 
     # Filter query
     if dolphie.query_filter:
@@ -188,61 +181,50 @@ def get_data(dolphie: Dolphie):
     else:
         processlist_query = processlist_query.replace("$placeholder", "")
 
-    # Limit the SELECT query to only retrieve how many lines the terminal has
-    processlist_query = processlist_query + " LIMIT %s" % (dolphie.console.size.height)
-
     processlist_threads = {}
     # Run the processlist query
-    dolphie.db.execute(processlist_query)
-    threads = dolphie.db.fetchall()
+    dolphie.main_db_connection.execute(processlist_query)
+    threads = dolphie.main_db_connection.fetchall()
 
     for thread in threads:
-        # Don't include Dolphie's thread
-        if dolphie.connection_id == thread["id"]:
+        # Don't include Dolphie's threads
+        if dolphie.main_db_connection_id == thread["id"] or dolphie.secondary_db_connection_id == thread["id"]:
             continue
 
         command = thread["command"]
-        if dolphie.use_performance_schema and dolphie.show_last_executed_query is False and command == "Sleep":
-            query = ""
+        # Use trx_query over Performance Schema query since it's more accurate
+        if dolphie.use_performance_schema and thread["trx_query"]:
+            query = thread["trx_query"]
         else:
-            # Use trx_query over Performance Schema query since it's more accurate
-            if dolphie.use_performance_schema and thread["trx_query"]:
-                query = thread["trx_query"]
-            else:
-                query = thread["query"]
+            query = thread["query"]
 
         # Determine time color
         time = int(thread["time"])
-        thread_color = "grey93"
+        thread_color = ""
         if "SELECT /*!40001 SQL_NO_CACHE */ *" in query:
             thread_color = "magenta"
-        elif query and command != "Sleep" and "Binlog Dump" not in command:
-            if time >= 4:
-                thread_color = "bright_red"
-            elif time >= 2:
-                thread_color = "bright_yellow"
-            elif time <= 1:
-                thread_color = "bright_green"
+        elif query:
+            if time >= 5:
+                thread_color = "#fc7979"
+            elif time >= 3:
+                thread_color = "#f1fb82"
+            elif time <= 2:
+                thread_color = "#54efae"
 
-        formatted_time = "[%s]%ss" % (thread_color, time)
+        formatted_time = TextPlus(format_time(time), style=thread_color)
+        formatted_time_with_days = TextPlus("{:0>8}".format(str(timedelta(seconds=time))), style=thread_color)
 
-        # If after the first loop there's nothing in cache, don't try to resolve anymore.
-        # This is an optimization
         host = thread["host"].split(":")[0]
-        if dolphie.first_loop is False:
-            if dolphie.host_cache:
-                host = dolphie.get_hostname(host)
-        else:
-            host = dolphie.get_hostname(host)
+        host = dolphie.get_hostname(host)
 
         processlist_threads[str(thread["id"])] = {
             "id": str(thread["id"]),
             "user": thread["user"],
             "host": host,
             "db": thread["db"],
-            "formatted_time": formatted_time,
             "time": time,
-            "hhmmss_time": "[{}]{:0>8}".format(thread_color, str(timedelta(seconds=time))),
+            "formatted_time_with_days": formatted_time_with_days,
+            "formatted_time": formatted_time,
             "command": command,
             "state": thread["state"],
             "trx_state": thread["trx_state"],
@@ -254,3 +236,28 @@ def get_data(dolphie: Dolphie):
         }
 
     return processlist_threads
+
+
+class TextPlus(Text):
+    """Custom patch for a Rich `Text` object to allow Textual `DataTable`
+    sorting when a Text object is included in a row."""
+
+    def __lt__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain < other.plain
+
+    def __le__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain <= other.plain
+
+    def __gt__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain > other.plain
+
+    def __ge__(self, other: object) -> bool:
+        if not isinstance(other, Text):
+            return NotImplemented
+        return self.plain >= other.plain

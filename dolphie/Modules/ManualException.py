@@ -13,9 +13,8 @@ class ManualException(Exception):
     def output(self):
         table_exception = Table(
             box=box.SIMPLE_HEAVY,
-            style="grey70",
-            title="  Dolphie :dolphin:",
-            title_style=Style(color="grey93", bold=True),
+            title="  Dolphie:dolphin:",
+            title_style=Style(bold=True),
             title_justify="left",
             header_style=Style(color="indian_red", bold=True),
             show_header=True,
@@ -38,6 +37,6 @@ class ManualException(Exception):
         table_exception.add_row("")
 
         if self.reason:
-            table_exception.add_row("[indian_red]%s" % self.reason)
+            table_exception.add_row(self.reason, style="indian_red")
 
         return table_exception
