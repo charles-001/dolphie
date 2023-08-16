@@ -8,8 +8,8 @@ from textual.widgets import Button, Label
 class NewVersionModal(ModalScreen):
     CSS = """
         NewVersionModal > Vertical {
-            background: #181e2e;
-            border: thick #212941;
+            background: #121626;
+            border: thick #20263d;
             height: auto;
             width: auto;
         }

@@ -538,6 +538,9 @@ class DolphieApp(App):
 
     @on(TabbedContent.TabActivated)
     def tab_changed(self, event: TabbedContent.TabActivated):
+        if len(self.screen_stack) > 1:
+            return
+
         metric_instance_name = event.tab.id.split("tab_")[1]
         self.update_graphs(metric_instance_name)
 
