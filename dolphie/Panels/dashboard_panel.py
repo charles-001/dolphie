@@ -189,6 +189,8 @@ def create_panel(dolphie: Dolphie) -> Table:
         binlog_compression = global_variables.get("binlog_transaction_compression", None)
         if binlog_compression:
             table_primary.add_row("[#c5c7d2]Compression", binlog_compression)
+        else:
+            table_primary.add_row()
         table_primary.add_row()
 
         tables_to_add.append(table_primary)
