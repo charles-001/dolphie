@@ -21,7 +21,7 @@ An intuitive feature-rich top tool for monitoring MySQL in real time
 <p></p>
 <img width="1383" alt="Screenshot 2023-08-15 at 5 27 36 PM" src="https://github.com/charles-001/dolphie/assets/13244625/d5c2b748-68c9-4823-a092-64f26e32adfd">
 <p></p>
-<img width="1383"src="https://github.com/charles-001/dolphie/assets/13244625/9409c4c6-3e16-4366-a92a-dc0b5fc31526">
+<img width="1636" alt="Screenshot 2023-08-17 at 6 38 00 AM" src="https://github.com/charles-001/dolphie/assets/13244625/657cd4b0-0ff7-49df-a176-e23bf6fa7f9b">
 <p></p>
 <img width="1382" alt="Screenshot 2023-08-15 at 5 19 44 PM" src="https://github.com/charles-001/dolphie/assets/13244625/6e08d431-98a0-49d7-aecb-2ad8d837fd07">
 <p></p>
