@@ -58,6 +58,9 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_information.add_column()
     table_information.add_column(width=25)
     table_information.add_row("[#c5c7d2]Version", f"{dolphie.host_distro} {dolphie.mysql_version}")
+    table_information.add_row(
+        "[#c5c7d2]", "%s - %s" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
+    )
     table_information.add_row("[#c5c7d2]Uptime", uptime)
     table_information.add_row("[#c5c7d2]Runtime", f"{runtime} [#c5c7d2]latency:[/#c5c7d2] {refresh_latency}s")
     table_information.add_row("[#c5c7d2]Read Only", global_variables["read_only"])
@@ -123,6 +126,14 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb.add_row("[#c5c7d2]Read Hit", innodb_efficiency)
     table_innodb.add_row("[#c5c7d2]Chkpt Age", dolphie.metric_manager.get_metric_checkpoint_age(format=True))
     table_innodb.add_row("[#c5c7d2]AHI Hit", dolphie.metric_manager.get_metric_adaptive_hash_index())
+
+    bp_instances = global_variables.get("innodb_buffer_pool_instances", "N/A")
+    if bp_instances != "N/A":
+        plural = "s" if bp_instances > 1 else ""
+        table_innodb.add_row("[#c5c7d2]BP Instance" + plural, format_number(bp_instances))
+    else:
+        table_innodb.add_row("[#c5c7d2]BP Instance", bp_instances)
+
     table_innodb.add_row("[#c5c7d2]BP Size", format_bytes(global_variables["innodb_buffer_pool_size"]))
     table_innodb.add_row(
         "[#c5c7d2]BP Available",
@@ -132,6 +143,9 @@ def create_panel(dolphie: Dolphie) -> Table:
     )
     table_innodb.add_row("[#c5c7d2]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
     table_innodb.add_row("[#c5c7d2]History List", format_number(history_list_length))
+
+    if not bp_instances:
+        tables_to_add.append(table_innodb)
 
     tables_to_add.append(table_innodb)
 
@@ -179,12 +193,18 @@ def create_panel(dolphie: Dolphie) -> Table:
         table_primary.add_row("[#c5c7d2]Diff", str(diff_binlog_position))
         table_primary.add_row("[#c5c7d2]Cache Hit", f"{binlog_cache}%")
 
-        gtid_mode = global_variables.get("gtid_mode", None)
-        if gtid_mode:
-            table_primary.add_row("[#c5c7d2]GTID", gtid_mode)
+        binlog_format = global_variables.get("binlog_format", "N/A")
+        if binlog_format == "ROW":
+            binlog_row_image = global_variables.get("binlog_row_image", "N/A")
+            table_primary.add_row("[#c5c7d2]Format", "{} ({})".format(binlog_format, binlog_row_image))
         else:
-            table_primary.add_row()
-        table_primary.add_row()
+            table_primary.add_row("[#c5c7d2]Format", binlog_format, binlog_row_image)
+
+        gtid_mode = global_variables.get("gtid_mode", "N/A")
+        table_primary.add_row("[#c5c7d2]GTID", gtid_mode)
+
+        binlog_compression = global_variables.get("binlog_transaction_compression", "N/A")
+        table_primary.add_row("[#c5c7d2]Compression", binlog_compression)
 
         tables_to_add.append(table_primary)
 
@@ -218,6 +238,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_stats.add_row("[#c5c7d2]UPDATE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_update"))
     table_stats.add_row("[#c5c7d2]DELETE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_delete"))
     table_stats.add_row("[#c5c7d2]REPLACE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_replace"))
+    table_stats.add_row("[#c5c7d2]COMMIT", dolphie.metric_manager.get_metric_calculate_per_sec("Com_commit"))
     table_stats.add_row("[#c5c7d2]ROLLBACK", dolphie.metric_manager.get_metric_calculate_per_sec("Com_rollback"))
 
     tables_to_add.append(table_stats)

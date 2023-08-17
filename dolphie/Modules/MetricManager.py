@@ -208,6 +208,7 @@ class DMLMetrics:
     Com_update: MetricData
     Com_delete: MetricData
     Com_replace: MetricData
+    Com_commit: MetricData
     Com_rollback: MetricData
     graphs: List[str]
     tab_name: str = "dml"
@@ -340,6 +341,9 @@ class MetricManager:
                 Com_delete=MetricData(label="DELETE", color=MetricColor.red),
                 Com_replace=MetricData(
                     label="REPLACE", color=MetricColor.red, visible=False, save_history=False, graphable=False
+                ),
+                Com_commit=MetricData(
+                    label="COMMIT", color=MetricColor.green, visible=False, save_history=False, graphable=False
                 ),
                 Com_rollback=MetricData(
                     label="ROLLBACK", color=MetricColor.red, visible=False, save_history=False, graphable=False
