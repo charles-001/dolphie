@@ -144,9 +144,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb.add_row("[#c5c7d2]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
     table_innodb.add_row("[#c5c7d2]History List", format_number(history_list_length))
 
-    if not bp_instances:
-        tables_to_add.append(table_innodb)
-
     tables_to_add.append(table_innodb)
 
     ##############
