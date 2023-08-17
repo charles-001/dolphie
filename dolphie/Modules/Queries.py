@@ -28,6 +28,7 @@ class MySQLQueries:
     ps_query: str = """
         SELECT
             processlist_id                      AS id,
+            IFNULL(thread_id, "0")              AS mysql_thread_id,
             IFNULL(processlist_user, "")        AS user,
             IFNULL(processlist_host, "")        AS host,
             IFNULL(processlist_db, "")          AS db,
@@ -49,50 +50,6 @@ class MySQLQueries:
             processlist_time IS NOT NULL AND
             processlist_command != 'Daemon'
             $placeholder
-    """
-    locks_query_5: str = """
-        SELECT
-            IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
-            IFNULL(r.trx_query, "")                                      AS waiting_query,
-            IFNULL(r.trx_rows_modified, "")                              AS waiting_rows_modified,
-            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_started, NOW()), "")      AS waiting_age,
-            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()), "") AS waiting_wait_secs,
-            IFNULL(b.trx_mysql_thread_id, "")                            AS blocking_thread,
-            IFNULL(b.trx_query, "")                                      AS blocking_query,
-            IFNULL(b.trx_rows_modified, "")                              AS blocking_rows_modified,
-            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_started, NOW()), "")      AS blocking_age,
-            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_wait_started, NOW()), "") AS blocking_wait_secs,
-            IFNULL(lock_mode, "")                                        AS lock_mode,
-            IFNULL(lock_type, "")                                        AS lock_type
-        FROM
-            INFORMATION_SCHEMA.INNODB_LOCK_WAITS w
-            JOIN INFORMATION_SCHEMA.INNODB_TRX b   ON b.trx_id  = w.blocking_trx_id
-            JOIN INFORMATION_SCHEMA.INNODB_TRX r   ON r.trx_id  = w.requesting_trx_id
-            JOIN INFORMATION_SCHEMA.INNODB_LOCKS l ON l.lock_id = w.requested_lock_id
-        ORDER BY
-            TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
-    """
-    locks_query_8: str = """
-        SELECT
-            IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
-            IFNULL(r.trx_query, "")                                      AS waiting_query,
-            IFNULL(r.trx_rows_modified, "")                              AS waiting_rows_modified,
-            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_started, NOW()), "")      AS waiting_age,
-            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()), "") AS waiting_wait_secs,
-            IFNULL(b.trx_mysql_thread_id, "")                            AS blocking_thread,
-            IFNULL(b.trx_query, "")                                      AS blocking_query,
-            IFNULL(b.trx_rows_modified, "")                              AS blocking_rows_modified,
-            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_started, NOW()), "")      AS blocking_age,
-            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_wait_started, NOW()), "") AS blocking_wait_secs,
-            IFNULL(lock_mode, "")                                        AS lock_mode,
-            IFNULL(lock_type, "")                                        AS lock_type
-        FROM
-            performance_schema.data_lock_waits w
-            JOIN INFORMATION_SCHEMA.INNODB_TRX b ON b.trx_id         = w.blocking_engine_transaction_id
-            JOIN INFORMATION_SCHEMA.INNODB_TRX r ON r.trx_id         = w.requesting_engine_transaction_id
-            JOIN performance_schema.data_locks l ON l.engine_lock_id = w.requesting_engine_lock_id
-        ORDER BY
-            TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
     """
     ps_replica_lag: str = """
         SELECT
@@ -140,37 +97,24 @@ class MySQLQueries:
             sum_rows_sent,
             sum_rows_examined,
             sum_created_tmp_disk_tables,
-            sum_created_tmp_tables
+            sum_created_tmp_tables,
+            plugin,
+            CASE
+                WHEN (password_lifetime IS NULL OR password_lifetime = 0) AND @@default_password_lifetime = 0 THEN "N/A"
+                ELSE CONCAT(
+                    CAST(IFNULL(password_lifetime, @@default_password_lifetime) as signed) +
+                    CAST(DATEDIFF(password_last_changed, NOW()) as signed),
+                    " days"
+                )
+            END AS password_expires_in
         FROM
             performance_schema.users u
             JOIN performance_schema.events_statements_summary_by_user_by_event_name ess ON u.user = ess.user
+            JOIN mysql.user mysql_user ON mysql_user.user = u.user
         WHERE
             current_connections != 0
         ORDER BY
             current_connections DESC
-    """
-    userstat_user_statisitics: str = """
-        SELECT
-            user,
-            total_connections,
-            concurrent_connections,
-            denied_connections,
-            binlog_bytes_written,
-            rows_fetched,
-            rows_updated,
-            table_rows_read,
-            select_commands,
-            update_commands,
-            other_commands,
-            commit_transactions,
-            rollback_transactions,
-            access_denied
-        FROM
-            information_schema.user_statistics
-        WHERE
-            concurrent_connections != 0
-        ORDER BY
-            concurrent_connections DESC
     """
     error_log: str = """
         SELECT
@@ -246,6 +190,28 @@ class MySQLQueries:
         WHERE
             file_name LIKE '%innodb_redo/%' AND
             file_name NOT LIKE '%_tmp'
+    """
+    thread_query_history: str = """
+        SELECT
+            DATE_SUB(
+                NOW(),
+                INTERVAL (
+                    SELECT variable_value
+                    FROM performance_schema.global_status
+                    WHERE variable_name = 'UPTIME'
+                ) - TIMER_START * 10e-13 SECOND
+            ) AS start_time,
+            sql_text
+        FROM
+            performance_schema.events_statements_history
+        WHERE
+            nesting_event_id = (
+                SELECT EVENT_ID
+                FROM performance_schema.events_transactions_current t
+                WHERE t.thread_id = $placeholder
+            )
+        ORDER BY
+            event_id;
     """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"

@@ -112,7 +112,6 @@ class Dolphie:
         self.secondary_db_connection_id: int = None
         self.use_performance_schema: bool = False
         self.performance_schema_enabled: bool = False
-        self.innodb_locks_sql: bool = False
         self.host_is_rds: bool = False
         self.server_uuid: str = None
         self.mysql_version: str = None
@@ -224,16 +223,9 @@ class Dolphie:
         else:
             self.host_distro = "MySQL"
 
-        # Determine if InnoDB locks panel is available for a version and which query to use
-        self.innodb_locks_sql = None
         server_uuid_query = "SELECT @@server_uuid"
         if "MariaDB" in self.host_distro and major_version >= 10:
             server_uuid_query = "SELECT @@server_id AS @@server_uuid"
-            self.innodb_locks_sql = MySQLQueries.locks_query_5
-        elif major_version == 5:
-            self.innodb_locks_sql = MySQLQueries.locks_query_5
-        elif major_version == 8 and self.use_performance_schema:
-            self.innodb_locks_sql = MySQLQueries.locks_query_8
 
         self.server_uuid = self.main_db_connection.fetch_value_from_field(server_uuid_query, "@@server_uuid")
 
@@ -682,6 +674,7 @@ class Dolphie:
                         table.add_column("")
                         table.add_column("")
 
+                        table.add_row("[#c5c7d2]Thread ID", str(thread_data["mysql_thread_id"]))
                         table.add_row("[#c5c7d2]Thread ID", str(thread_id))
                         table.add_row("[#c5c7d2]User", thread_data["user"])
                         table.add_row("[#c5c7d2]Host", thread_data["host"])
@@ -691,6 +684,37 @@ class Dolphie:
                         table.add_row("[#c5c7d2]Time", thread_data["formatted_time_with_days"])
                         table.add_row("[#c5c7d2]Rows Locked", thread_data["trx_rows_locked"])
                         table.add_row("[#c5c7d2]Rows Modified", thread_data["trx_rows_modified"])
+
+                        # Transaction history
+                        query_history_title = ""
+                        query_history_table = Table(box=box.ROUNDED, style="#52608d")
+                        if self.is_mysql_version_at_least("5.7") and self.use_performance_schema:
+                            query = MySQLQueries.thread_query_history.replace(
+                                "$placeholder", str(thread_data["mysql_thread_id"])
+                            )
+                            self.secondary_db_connection.cursor.execute(query)
+                            query_history = self.secondary_db_connection.fetchall()
+
+                            if query_history:
+                                query_history_title = "[b]Transaction History[/b]"
+                                query_history_table.add_column("Start Time")
+                                query_history_table.add_column("Query")
+
+                                for query in query_history:
+                                    formatted_query = ""
+                                    if query["sql_text"]:
+                                        formatted_query = Syntax(
+                                            query["sql_text"],
+                                            "sql",
+                                            line_numbers=False,
+                                            word_wrap=True,
+                                            theme="monokai",
+                                            background_color="#000718",
+                                        )
+
+                                    query_history_table.add_row(
+                                        query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), formatted_query
+                                    )
 
                         if (
                             "innodb_thread_concurrency" in self.global_variables
@@ -761,6 +785,9 @@ class Dolphie:
                                     Align.center(formatted_query),
                                     "",
                                     Align.center(explain_table),
+                                    "",
+                                    Align.center(query_history_title),
+                                    Align.center(query_history_table),
                                 )
                             else:
                                 screen_data = Group(
@@ -769,9 +796,17 @@ class Dolphie:
                                     Align.center(formatted_query),
                                     "",
                                     Align.center(explain_failure),
+                                    "",
+                                    Align.center(query_history_title),
+                                    Align.center(query_history_table),
                                 )
                         else:
-                            screen_data = Align.center(table)
+                            screen_data = Group(
+                                Align.center(table),
+                                "",
+                                Align.center(query_history_title),
+                                Align.center(query_history_table),
+                            )
 
                         self.app.push_screen(CommandScreen(self.app_version, self.host, screen_data))
                     else:
@@ -799,8 +834,7 @@ class Dolphie:
                 screen_data = Align.center(user_stat_data)
             else:
                 self.update_footer(
-                    "[b indian_red]Cannot use this command![/b indian_red] It requires Userstat variable or Performance"
-                    " Schema to be enabled"
+                    "[b indian_red]Cannot use this command![/b indian_red] It requires Performance Schema to be enabled"
                 )
 
         elif key == "v":
@@ -986,34 +1020,8 @@ class Dolphie:
 
         columns = {}
         user_stats = {}
-        userstat_enabled = 0
 
-        if self.secondary_db_connection.execute("SELECT @@userstat", ignore_error=True) == 1:
-            userstat_enabled = self.secondary_db_connection.cursor.fetchone()["@@userstat"]
-
-        if userstat_enabled:
-            self.secondary_db_connection.execute(MySQLQueries.userstat_user_statisitics)
-
-            columns.update(
-                {
-                    "User": {"field": "user", "format_number": False},
-                    "Active": {"field": "concurrent_connections", "format_number": True},
-                    "Total": {"field": "total_connections", "format_number": True},
-                    "Binlog Data": {"field": "binlog_bytes_written", "format_number": False},
-                    "Rows Read": {"field": "table_rows_read", "format_number": True},
-                    "Rows Sent": {"field": "rows_fetched", "format_number": True},
-                    "Rows Updated": {"field": "rows_updated", "format_number": True},
-                    "Selects": {"field": "select_commands", "format_number": True},
-                    "Updates": {"field": "update_commands", "format_number": True},
-                    "Other": {"field": "other_commands", "format_number": True},
-                    "Commit": {"field": "commit_transactions", "format_number": True},
-                    "Rollback": {"field": "rollback_transactions", "format_number": True},
-                    "Access Denied": {"field": "access_denied", "format_number": True},
-                    "Conn Denied": {"field": "denied_connections", "format_number": True},
-                }
-            )
-
-        elif self.performance_schema_enabled:
+        if self.performance_schema_enabled:
             self.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
 
             columns.update(
@@ -1021,6 +1029,8 @@ class Dolphie:
                     "User": {"field": "user", "format_number": False},
                     "Active": {"field": "current_connections", "format_number": True},
                     "Total": {"field": "total_connections", "format_number": True},
+                    "Plugin": {"field": "plugin", "format_number": False},
+                    "Password Expire": {"field": "password_expires_in", "format_number": False},
                     "Rows Read": {"field": "rows_read", "format_number": True},
                     "Rows Sent": {"field": "rows_sent", "format_number": True},
                     "Rows Updated": {"field": "rows_affected", "format_number": True},
@@ -1034,49 +1044,27 @@ class Dolphie:
         users = self.secondary_db_connection.fetchall()
         for user in users:
             username = user["user"]
-            if userstat_enabled:
-                user_stats.setdefault(username, {}).update(
-                    user=username,
-                    total_connections=user["total_connections"],
-                    concurrent_connections=user.get("concurrent_connections"),
-                    denied_connections=user.get("denied_connections"),
-                    binlog_bytes_written=user.get("binlog_bytes_written"),
-                    rows_fetched=user.get("rows_fetched"),
-                    rows_updated=user.get("rows_updated"),
-                    table_rows_read=user.get("table_rows_read"),
-                    select_commands=user.get("select_commands"),
-                    update_commands=user.get("update_commands"),
-                    other_commands=user.get("other_commands"),
-                    commit_transactions=user.get("commit_transactions"),
-                    rollback_transactions=user.get("rollback_transactions"),
-                    access_denied=user.get("access_denied"),
-                    current_connections=user.get("current_connections"),
-                    rows_affected=user.get("sum_rows_affected"),
-                    rows_sent=user.get("sum_rows_sent"),
-                    rows_read=user.get("sum_rows_examined"),
-                    created_tmp_disk_tables=user.get("sum_created_tmp_disk_tables"),
-                    created_tmp_tables=user.get("sum_created_tmp_tables"),
-                )
+            if username not in user_stats:
+                user_stats[username] = {
+                    "user": username,
+                    "total_connections": user["total_connections"],
+                    "current_connections": user["current_connections"],
+                    "password_expires_in": user["password_expires_in"],
+                    "plugin": user["plugin"],
+                    "rows_affected": user["sum_rows_affected"],
+                    "rows_sent": user["sum_rows_sent"],
+                    "rows_read": user["sum_rows_examined"],
+                    "created_tmp_disk_tables": user["sum_created_tmp_disk_tables"],
+                    "created_tmp_tables": user["sum_created_tmp_tables"],
+                }
             else:
-                if username not in user_stats:
-                    user_stats[username] = {
-                        "user": username,
-                        "total_connections": user["total_connections"],
-                        "current_connections": user["current_connections"],
-                        "rows_affected": user["sum_rows_affected"],
-                        "rows_sent": user["sum_rows_sent"],
-                        "rows_read": user["sum_rows_examined"],
-                        "created_tmp_disk_tables": user["sum_created_tmp_disk_tables"],
-                        "created_tmp_tables": user["sum_created_tmp_tables"],
-                    }
-                else:
-                    # I would use SUM() in the query instead of this, but pymysql doesn't play well with it since I
-                    # use use_unicode = 0 in the connection
-                    user_stats[username]["rows_affected"] += user["sum_rows_affected"]
-                    user_stats[username]["rows_sent"] += user["sum_rows_sent"]
-                    user_stats[username]["rows_read"] += user["sum_rows_examined"]
-                    user_stats[username]["created_tmp_disk_tables"] += user["sum_created_tmp_disk_tables"]
-                    user_stats[username]["created_tmp_tables"] += user["sum_created_tmp_tables"]
+                # I would use SUM() in the query instead of this, but pymysql doesn't play well with it since I
+                # use use_unicode = 0 in the connection
+                user_stats[username]["rows_affected"] += user["sum_rows_affected"]
+                user_stats[username]["rows_sent"] += user["sum_rows_sent"]
+                user_stats[username]["rows_read"] += user["sum_rows_examined"]
+                user_stats[username]["created_tmp_disk_tables"] += user["sum_created_tmp_disk_tables"]
+                user_stats[username]["created_tmp_tables"] += user["sum_created_tmp_tables"]
 
         for column, data in columns.items():
             table.add_column(column, no_wrap=True)
@@ -1085,6 +1073,7 @@ class Dolphie:
             row_values = []
             for column, data in columns.items():
                 value = user_data.get(data["field"])
+
                 if column == "Binlog Data":
                     row_values.append(format_bytes(value) if value else "")
                 elif data["format_number"]:

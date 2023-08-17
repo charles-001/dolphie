@@ -10,6 +10,7 @@ import re
 from argparse import ArgumentParser, RawTextHelpFormatter
 from configparser import ConfigParser
 from datetime import datetime
+from urllib.parse import urlparse
 
 import dolphie.Modules.MetricManager as MetricManager
 import myloginpath
@@ -109,12 +110,21 @@ Environment variables support these options:
         help="Socket file for MySQL",
     )
     parser.add_argument(
+        "--uri",
+        dest="uri",
+        type=str,
+        help=(
+            "Use a URI string for credentials - format: mysql://user:password@host:port (port is operational with"
+            " default 3306)"
+        ),
+    )
+    parser.add_argument(
         "-c",
         "--config-file",
         dest="config_file",
         type=str,
         help=(
-            "Absolute config file path to use. This should use [client] section. "
+            "Config file path to use. This should use [client] section. "
             "See below for options support [default: ~/.my.cnf]"
         ),
     )
@@ -285,10 +295,21 @@ Environment variables support these options:
         if environment_var in os.environ and os.environ[environment_var]:
             setattr(dolphie, option, os.environ[environment_var])
 
-    # Lastly, use parameter options if specified
+    # Use parameter options if specified
     for option in basic_options:
         if parameter_options[option]:
             setattr(dolphie, option, parameter_options[option])
+
+    # Lastly, parse URI if specified
+    if parameter_options["uri"]:
+        parsed = urlparse(parameter_options["uri"])
+        if parsed.scheme != "mysql":
+            raise ManualException("Invalid scheme in the URL. It should be 'mysql'")
+
+        dolphie.user = parsed.username
+        dolphie.password = parsed.password
+        dolphie.host = parsed.hostname
+        dolphie.port = parsed.port or 3306
 
     if parameter_options["ask_password"]:
         dolphie.password = Prompt.ask("[b #91abec]Password", password=True)
@@ -487,6 +508,9 @@ class DolphieApp(App):
             self.set_timer(self.dolphie.refresh_interval, self.worker_fetch_data)
 
     def on_key(self, event: events.Key):
+        if len(self.screen_stack) > 1:
+            return
+
         self.dolphie.capture_key(event.key)
 
     def on_mount(self):
@@ -603,7 +627,7 @@ class DolphieApp(App):
         self.query_one("#graph_adaptive_hash_index_hit_ratio").styles.width = "50%"
 
     def compose(self) -> ComposeResult:
-        yield TopBar(host=self.dolphie.host, app_version=self.dolphie.app_version, help="press ? for help")
+        yield TopBar(host=self.dolphie.host, app_version=self.dolphie.app_version, help="press [b]?[/b] for help")
 
         yield LoadingIndicator()
         with VerticalScroll(id="main_container"):
@@ -668,6 +692,7 @@ class DolphieApp(App):
 
             with Container(id="panel_processlist"):
                 yield DataTable(id="panel_processlist_data", classes="panel_data", show_cursor=False)
+
             yield Static(id="footer")
 
 

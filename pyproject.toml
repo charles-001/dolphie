@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dolphie"
-version = "3.0.1"
+version = "3.0.2"
 description = "An intuitive feature-rich top tool for monitoring MySQL in real time"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]
 readme = "README.md"

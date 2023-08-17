@@ -217,8 +217,11 @@ def fetch_data(dolphie: Dolphie):
         host = thread["host"].split(":")[0]
         host = dolphie.get_hostname(host)
 
+        mysql_thread_id = thread.get("mysql_thread_id")
+
         processlist_threads[str(thread["id"])] = {
             "id": str(thread["id"]),
+            "mysql_thread_id": mysql_thread_id,
             "user": thread["user"],
             "host": host,
             "db": thread["db"],
