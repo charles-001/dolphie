@@ -125,6 +125,12 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_innodb.add_row("[#c5c7d2]Chkpt Age", dolphie.metric_manager.get_metric_checkpoint_age(format=True))
     table_innodb.add_row("[#c5c7d2]AHI Hit", dolphie.metric_manager.get_metric_adaptive_hash_index())
     table_innodb.add_row("[#c5c7d2]BP Size", format_bytes(global_variables["innodb_buffer_pool_size"]))
+    bp_instances = global_variables.get("innodb_buffer_pool_instances", None)
+    if bp_instances:
+        inst = ""
+        if bp_instances > 1:
+            inst = "s"
+        table_innodb.add_row("[#c5c7d2]BP Instance{}".format(inst), format_number(bp_instances))
     table_innodb.add_row(
         "[#c5c7d2]BP Available",
         format_bytes(
@@ -133,7 +139,9 @@ def create_panel(dolphie: Dolphie) -> Table:
     )
     table_innodb.add_row("[#c5c7d2]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
     table_innodb.add_row("[#c5c7d2]History List", format_number(history_list_length))
-    table_innodb.add_row()
+
+    if not bp_instances:
+        tables_to_add.append(table_innodb)
 
     tables_to_add.append(table_innodb)
 
@@ -191,7 +199,14 @@ def create_panel(dolphie: Dolphie) -> Table:
             table_primary.add_row("[#c5c7d2]Compression", binlog_compression)
         else:
             table_primary.add_row()
-        table_primary.add_row()
+
+        binlog_format = global_variables.get("binlog_format", None)
+        if binlog_format == "ROW":
+            binlog_row_image = global_variables.get("binlog_row_image", None)
+            table_primary.add_row("[#c5c7d2]Format", "{} ({})".format(binlog_format, binlog_row_image))
+        else:
+            table_primary.add_row("[#c5c7d2]Format", binlog_format, binlog_row_image)
+
 
         tables_to_add.append(table_primary)
 
