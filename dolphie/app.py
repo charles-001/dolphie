@@ -114,7 +114,7 @@ Environment variables support these options:
         dest="uri",
         type=str,
         help=(
-            "Use a URI string for credentials - format: mysql://user:password@host:port (port is operational with"
+            "Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with"
             " default 3306)"
         ),
     )

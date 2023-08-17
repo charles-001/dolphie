@@ -64,7 +64,7 @@ options:
   -P PORT, --port PORT  Port for MySQL (Socket has precendence)
   -S SOCKET, --socket SOCKET
                         Socket file for MySQL
-  --uri URI             Use a URI string for credentials - format: mysql://user:password@host:port (port is operational with default 3306)
+  --uri URI             Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with default 3306)
   -c CONFIG_FILE, --config-file CONFIG_FILE
                         Config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
   -f HOST_CACHE_FILE, --host-cache-file HOST_CACHE_FILE
