@@ -58,6 +58,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_information.add_column()
     table_information.add_column(width=25)
     table_information.add_row("[#c5c7d2]Version", f"{dolphie.host_distro} {dolphie.mysql_version}")
+    table_information.add_row("[#c5c7d2]",f"%s - %s" % (global_variables['version_compile_os'], global_variables['version_compile_machine'])) 
     table_information.add_row("[#c5c7d2]Uptime", uptime)
     table_information.add_row("[#c5c7d2]Runtime", f"{runtime} [#c5c7d2]latency:[/#c5c7d2] {refresh_latency}s")
     table_information.add_row("[#c5c7d2]Read Only", global_variables["read_only"])
@@ -132,6 +133,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     )
     table_innodb.add_row("[#c5c7d2]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
     table_innodb.add_row("[#c5c7d2]History List", format_number(history_list_length))
+    table_innodb.add_row()
 
     tables_to_add.append(table_innodb)
 
@@ -184,6 +186,9 @@ def create_panel(dolphie: Dolphie) -> Table:
             table_primary.add_row("[#c5c7d2]GTID", gtid_mode)
         else:
             table_primary.add_row()
+        binlog_compression = global_variables.get("binlog_transaction_compression", None)
+        if binlog_compression:
+            table_primary.add_row("[#c5c7d2]Compression", binlog_compression)
         table_primary.add_row()
 
         tables_to_add.append(table_primary)
@@ -219,6 +224,8 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_stats.add_row("[#c5c7d2]DELETE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_delete"))
     table_stats.add_row("[#c5c7d2]REPLACE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_replace"))
     table_stats.add_row("[#c5c7d2]ROLLBACK", dolphie.metric_manager.get_metric_calculate_per_sec("Com_rollback"))
+
+    table_stats.add_row()
 
     tables_to_add.append(table_stats)
 
