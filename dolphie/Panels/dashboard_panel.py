@@ -59,7 +59,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_information.add_column(width=25)
     table_information.add_row("[#c5c7d2]Version", f"{dolphie.host_distro} {dolphie.mysql_version}")
     table_information.add_row(
-        "[#c5c7d2]", "%s - %s" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
+        "[#c5c7d2]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
     )
     table_information.add_row("[#c5c7d2]Uptime", uptime)
     table_information.add_row("[#c5c7d2]Runtime", f"{runtime} [#c5c7d2]latency:[/#c5c7d2] {refresh_latency}s")
