@@ -127,7 +127,7 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
 
     table.add_column()
     if dashboard_table is True:
-        table.add_column(max_width=21)
+        table.add_column(max_width=25, no_wrap=True)
     elif list_replica_thread_id is not None:
         if data["mysql_gtid_enabled"] or data["mariadb_gtid_enabled"]:
             table.add_column(max_width=60)
@@ -158,6 +158,8 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         table.add_row("[#c5c7d2]Binlog SQL", "%s" % (data["Relay_Master_Log_File"]))
         table.add_row("[#c5c7d2]Relay Log ", "%s" % (data["Relay_Log_File"]))
         table.add_row("[#c5c7d2]GTID", "%s" % data["gtid"])
+        table.add_row("[#c5c7d2]State", "%s" % data["Slave_SQL_Running_State"])
+
     else:
         table.add_row(
             "[#c5c7d2]Binlog IO",
@@ -205,12 +207,15 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
         elif data["mariadb_gtid_enabled"]:
             table.add_row("[#c5c7d2]GTID IO Pos ", "%s" % data["Gtid_IO_Pos"])
 
-        if data["Last_Error"]:
-            table.add_row("[#c5c7d2]Error ", "%s" % data["Last_Error"])
-        elif data["Last_IO_Error"]:
-            table.add_row("[#c5c7d2]Error ", "%s" % data["Last_IO_Error"])
-        elif data["Last_SQL_Error"]:
-            table.add_row("[#c5c7d2]Error ", "%s" % data["Last_SQL_Error"])
+        error_types = ["Last_Error", "Last_IO_Error", "Last_SQL_Error"]
+        errors = [(error_type, data[error_type]) for error_type in error_types if data[error_type]]
+
+        if errors:
+            for error_type, error_message in errors:
+                table.add_row("[#c5c7d2]%s" % error_type.replace("_", " "), "%s" % error_message)
+        else:
+            table.add_row("[#c5c7d2]IO State", "%s" % data["Slave_IO_State"])
+            table.add_row("[#c5c7d2]SQL State", "%s" % data["Slave_SQL_Running_State"])
 
     return table
 

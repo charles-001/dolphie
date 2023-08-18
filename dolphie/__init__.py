@@ -674,7 +674,6 @@ class Dolphie:
                         table.add_column("")
                         table.add_column("")
 
-                        table.add_row("[#c5c7d2]Thread ID", str(thread_data["mysql_thread_id"]))
                         table.add_row("[#c5c7d2]Thread ID", str(thread_id))
                         table.add_row("[#c5c7d2]User", thread_data["user"])
                         table.add_row("[#c5c7d2]Host", thread_data["host"])
