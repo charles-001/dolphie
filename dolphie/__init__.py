@@ -192,7 +192,7 @@ class Dolphie:
         query = "SHOW GLOBAL VARIABLES LIKE 'aurora_version'"
         aurora_version_data = self.main_db_connection.fetch_value_from_field(query, "Value")
         if aurora_version_data:
-            aurora_version = aurora_version_data["Value"]
+            aurora_version = aurora_version_data
 
         query = "SELECT @@version"
         version = self.main_db_connection.fetch_value_from_field(query, "@@version").lower()

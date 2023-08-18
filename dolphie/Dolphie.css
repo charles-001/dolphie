@@ -160,12 +160,12 @@ Sparkline > .sparkline--min-color {
 
 Button.-primary {
     background: #1b2c5a;
-    border-top: tall #40558c;
+    border-top: tall #5e72a7;
     border-bottom: tall #0d152b;
 }
 Button.-primary:hover {
     background: #263a70;
-    border-top: tall #4f69ac;
+    border-top: tall #718ac7;
     border-bottom: tall #162244;
 }
 
