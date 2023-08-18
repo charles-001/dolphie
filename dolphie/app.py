@@ -74,6 +74,17 @@ Environment variables support these options:
     )
 
     parser.add_argument(
+        "uri2", 
+        metavar='uri', 
+        type=str, 
+        nargs='?',
+        help=(
+                "Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with"
+                " default 3306)"
+            )
+    )
+
+    parser.add_argument(
         "-u",
         "--user",
         dest="user",
@@ -301,6 +312,8 @@ Environment variables support these options:
             setattr(dolphie, option, parameter_options[option])
 
     # Lastly, parse URI if specified
+    if parameter_options["uri2"]:
+        parameter_options["uri"] = parameter_options["uri2"]
     if parameter_options["uri"]:
         parsed = urlparse(parameter_options["uri"])
         if parsed.scheme != "mysql":
