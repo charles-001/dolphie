@@ -165,37 +165,34 @@ class Dolphie:
         self.main_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
         self.secondary_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
 
-        # Update the host label in the topbar once connected
-        self.app.query_one("#topbar_host").update(self.host)
+        hostname = self.main_db_connection.fetch_value_from_field("SELECT @@hostname")
+        port = self.main_db_connection.fetch_value_from_field("SELECT @@port")
+
+        # Update our TopBar with host information
+        self.app.query_one("#topbar_host").update(f"{hostname}:{port}")
+
+        self.main_db_connection_id = self.main_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
 
         query = "SELECT CONNECTION_ID() AS connection_id"
-        self.main_db_connection_id = self.main_db_connection.fetch_value_from_field(query, "connection_id")
+        self.secondary_db_connection_id = self.secondary_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
 
-        query = "SELECT CONNECTION_ID() AS connection_id"
-        self.secondary_db_connection_id = self.secondary_db_connection.fetch_value_from_field(query, "connection_id")
-
-        query = "SELECT @@performance_schema"
-        performance_schema = self.main_db_connection.fetch_value_from_field(query, "@@performance_schema")
+        performance_schema = self.main_db_connection.fetch_value_from_field("SELECT @@performance_schema")
         if performance_schema == 1:
             self.performance_schema_enabled = True
 
             if not self.use_processlist:
                 self.use_performance_schema = True
 
-        query = "SELECT @@version_comment"
-        version_comment = self.main_db_connection.fetch_value_from_field(query, "@@version_comment").lower()
-
-        query = "SELECT @@basedir"
-        basedir = self.main_db_connection.fetch_value_from_field(query, "@@basedir")
+        version_comment = self.main_db_connection.fetch_value_from_field("SELECT @@version_comment").lower()
+        basedir = self.main_db_connection.fetch_value_from_field("SELECT @@basedir")
 
         aurora_version = None
         query = "SHOW GLOBAL VARIABLES LIKE 'aurora_version'"
-        aurora_version_data = self.main_db_connection.fetch_value_from_field(query, "Value")
+        aurora_version_data = self.main_db_connection.fetch_value_from_field(query)
         if aurora_version_data:
             aurora_version = aurora_version_data
 
-        query = "SELECT @@version"
-        version = self.main_db_connection.fetch_value_from_field(query, "@@version").lower()
+        version = self.main_db_connection.fetch_value_from_field("SELECT @@version").lower()
         version_split = version.split(".")
 
         self.mysql_version = "%s.%s.%s" % (
@@ -226,12 +223,11 @@ class Dolphie:
         server_uuid_query = "SELECT @@server_uuid"
         if "MariaDB" in self.host_distro and major_version >= 10:
             server_uuid_query = "SELECT @@server_id AS @@server_uuid"
-
-        self.server_uuid = self.main_db_connection.fetch_value_from_field(server_uuid_query, "@@server_uuid")
+        self.server_uuid = self.main_db_connection.fetch_value_from_field(server_uuid_query)
 
         # Add host to quick switch hosts file if it doesn't exist
         with open(self.quick_switch_hosts_file, "a+") as file:
-            file.seek(0)  # Move the cursor to the beginning of the file so it knows what already exists
+            file.seek(0)
             lines = file.readlines()
             if self.host + "\n" not in lines:
                 file.write(self.host + "\n")

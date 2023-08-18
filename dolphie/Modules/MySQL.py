@@ -72,14 +72,17 @@ class Database:
 
         return self.process_row(row)
 
-    def fetch_value_from_field(self, query, field, values=None):
+    def fetch_value_from_field(self, query, field=None, values=None):
         self.execute(query, values)
         data = self.cursor.fetchone()
 
         if not data:
             return None
 
+        field = field or next(iter(data))  # Use field if provided, otherwise get first field
+
         value = data.get(field)
+
         if isinstance(value, (bytes, bytearray)):
             if field == "Status":
                 return value.decode(detect_encoding(value))

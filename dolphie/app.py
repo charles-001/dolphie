@@ -627,7 +627,7 @@ class DolphieApp(App):
         self.query_one("#graph_adaptive_hash_index_hit_ratio").styles.width = "50%"
 
     def compose(self) -> ComposeResult:
-        yield TopBar(host=self.dolphie.host, app_version=self.dolphie.app_version, help="press [b]?[/b] for help")
+        yield TopBar(host="Connecting to MySQL", app_version=self.dolphie.app_version, help="press [b]?[/b] for help")
 
         yield LoadingIndicator()
         with VerticalScroll(id="main_container"):
