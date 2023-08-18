@@ -119,8 +119,8 @@ def fetch_data(dolphie: Dolphie):
     ########################
     where_clause = []
 
-    # Only show running queries
-    if not dolphie.show_idle_queries:
+    # Filter out idle threads if specified
+    if not dolphie.show_idle_threads:
         if dolphie.use_performance_schema:
             where_clause.append(
                 "(processlist_command != 'Sleep' AND processlist_command NOT LIKE 'Binlog Dump%') AND "

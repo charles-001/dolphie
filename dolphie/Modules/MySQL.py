@@ -80,7 +80,6 @@ class Database:
             return None
 
         field = field or next(iter(data))  # Use field if provided, otherwise get first field
-
         value = data.get(field)
 
         if isinstance(value, (bytes, bytearray)):

@@ -219,14 +219,14 @@ Environment variables support these options:
         dest="show_trxs_only",
         action="store_true",
         default=False,
-        help="Start with only showing queries that are running a transaction",
+        help="Start with only showing queries that have a running transaction",
     )
     parser.add_argument(
         "--additional-columns",
         dest="show_additional_query_columns",
         action="store_true",
         default=False,
-        help="Start with additional columns in processlist panel",
+        help="Start with additional columns in Processlist panel",
     )
     parser.add_argument(
         "--use-processlist",

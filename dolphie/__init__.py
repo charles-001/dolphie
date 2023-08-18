@@ -58,7 +58,7 @@ class Dolphie:
         self.debug: bool = False
         self.refresh_interval: int = 1
         self.use_processlist: bool = False
-        self.show_idle_queries: bool = False
+        self.show_idle_threads: bool = False
         self.show_trxs_only: bool = False
         self.show_additional_query_columns: bool = False
         self.sort_by_time_descending: bool = True
@@ -422,16 +422,16 @@ class Dolphie:
             )
 
         elif key == "i":
-            if self.show_idle_queries:
-                self.show_idle_queries = False
+            if self.show_idle_threads:
+                self.show_idle_threads = False
                 self.sort_by_time_descending = True
 
-                self.update_footer("Processlist will now hide idle queries")
+                self.update_footer("Processlist will now hide idle threads")
             else:
-                self.show_idle_queries = True
+                self.show_idle_threads = True
                 self.sort_by_time_descending = False
 
-                self.update_footer("Processlist will now show idle queries")
+                self.update_footer("Processlist will now show idle threads")
 
         elif key == "k":
 
@@ -922,7 +922,7 @@ class Dolphie:
                 "d": "Display all databases",
                 "e": "Display error log from Performance Schema",
                 "f": "Filter processlist by a supported field",
-                "i": "Show/hide idle queries",
+                "i": "Show/hide idle threads",
                 "k": "Kill a query by thread ID",
                 "K": "Kill a query by either user/host/time range",
                 "l": "Show latest deadlock detected",
