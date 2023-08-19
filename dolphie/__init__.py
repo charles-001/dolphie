@@ -818,10 +818,10 @@ class Dolphie:
         elif key == "T":
             if self.show_trxs_only:
                 self.show_trxs_only = False
-                self.update_footer("Processlist will now no longer only show threads that have an active thransaction")
+                self.update_footer("Processlist will now no longer only show threads that have an active transaction")
             else:
                 self.show_trxs_only = True
-                self.update_footer("Processlist will now only show threads that have an active thransaction")
+                self.update_footer("Processlist will now only show threads that have an active transaction")
 
         elif key == "u":
             user_stat_data = self.create_user_stats_table()
