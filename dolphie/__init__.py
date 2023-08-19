@@ -818,10 +818,10 @@ class Dolphie:
         elif key == "T":
             if self.show_trxs_only:
                 self.show_trxs_only = False
-                self.update_footer("Processlist will no longer only show queries with a running transaction")
+                self.update_footer("Processlist will now no longer only show threads that have an active thransaction")
             else:
                 self.show_trxs_only = True
-                self.update_footer("Processlist will now show only queries with a running transaction")
+                self.update_footer("Processlist will now only show threads that have an active thransaction")
 
         elif key == "u":
             user_stat_data = self.create_user_stats_table()
@@ -929,12 +929,12 @@ class Dolphie:
                 "o": "Display output from SHOW ENGINE INNODB STATUS",
                 "m": "Display memory usage",
                 "p": "Pause refreshing",
-                "P": "Switch between using Processlist/Performance Schema for listing queries",
+                "P": "Switch between using SHOW PROCESSLIST/Performance Schema for Processlist panel",
                 "q": "Quit",
                 "r": "Set the refresh interval",
                 "R": "Reset all metrics",
                 "t": "Show details of a thread along with an EXPLAIN of its query",
-                "T": "Show/hide running transactions only",
+                "T": "Show/hide threads that only have an active transaction",
                 "s": "Sort query list by time in descending/ascending order",
                 "u": "List users (results vary depending on if userstat variable is enabled)",
                 "v": "Variable wildcard search via SHOW global_variables",
