@@ -237,6 +237,7 @@ class Dolphie:
 
             if host not in lines:
                 file.write(host)
+                self.quick_switch_hosts.append(host[:-1])  # remove the \n
 
     def command_input_to_variable(self, return_data):
         variable = return_data[0]
@@ -937,7 +938,7 @@ class Dolphie:
                 "i": "Toggle displaying idle threads",
                 "k": "Kill a thread by its ID",
                 "K": "Kill a thread by a supported option",
-                "l": "Show the most recent deadlock",
+                "l": "Display the most recent deadlock",
                 "o": "Display output from SHOW ENGINE INNODB STATUS",
                 "m": "Display memory usage",
                 "p": "Pause refreshing",
@@ -945,12 +946,12 @@ class Dolphie:
                 "q": "Quit",
                 "r": "Set the refresh interval",
                 "R": "Reset all metrics",
-                "t": "Show details of a thread along with an EXPLAIN of its query",
+                "t": "Display details of a thread along with an EXPLAIN of its query",
                 "T": "Toggle displaying threads that only have an active transaction",
                 "s": "Sort processlist by time in descending/ascending order",
                 "u": "List active connected users and their statistics",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
-                "z": "Show all entries in the host cache",
+                "z": "Display all entries in the host cache",
             }
 
             table_keys = Table(box=box.HORIZONTALS, style=table_line_color, title="Commands", title_style="bold")

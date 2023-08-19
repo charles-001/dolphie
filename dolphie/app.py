@@ -223,7 +223,7 @@ Environment variables support these options:
         dest="show_trxs_only",
         action="store_true",
         default=False,
-        help="Start with only showing queries that have a running transaction",
+        help="Start with only showing threads that have an active transaction",
     )
     parser.add_argument(
         "--additional-columns",
