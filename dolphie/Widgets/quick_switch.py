@@ -1,3 +1,4 @@
+from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -71,3 +72,7 @@ class QuickSwitchHostModal(ModalScreen):
                 self.dismiss({"host": host.value, "password": password.value})
         else:
             self.app.pop_screen()
+
+    @on(Input.Submitted, "#password")
+    def on_input_submitted(self):
+        self.query_one("#submit", Button).press()

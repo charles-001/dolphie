@@ -26,7 +26,7 @@ class Database:
             )
             self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
         except pymysql.Error as e:
-            raise ManualException("Failed to connect to database host %s" % self.host, reason=e.args[1])
+            raise ManualException(f"Failed to connect to database host {self.host}:{self.port}", reason=e.args[1])
         except FileNotFoundError:  # Catch SSL file path errors
             raise ManualException("SSL certificate file path isn't valid!")
 

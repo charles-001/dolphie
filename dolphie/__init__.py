@@ -91,6 +91,7 @@ class Dolphie:
         self.replica_lag_source: str = None
         self.replica_lag: int = None
         self.active_redo_logs: int = None
+        self.mysql_host: str = None
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -165,11 +166,10 @@ class Dolphie:
         self.main_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
         self.secondary_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
 
-        hostname = self.main_db_connection.fetch_value_from_field("SELECT @@hostname")
-        port = self.main_db_connection.fetch_value_from_field("SELECT @@port")
+        self.mysql_host = self.main_db_connection.fetch_value_from_field("SELECT @@hostname")
 
         # Update our TopBar with host information
-        self.app.query_one("#topbar_host").update(f"{hostname}:{port}")
+        self.app.query_one("#topbar_host").update(f"{self.mysql_host}:{self.port}")
 
         self.main_db_connection_id = self.main_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
 
@@ -229,8 +229,14 @@ class Dolphie:
         with open(self.quick_switch_hosts_file, "a+") as file:
             file.seek(0)
             lines = file.readlines()
-            if self.host + "\n" not in lines:
-                file.write(self.host + "\n")
+
+            if self.port != 3306:
+                host = f"{self.host}:{self.port}\n"
+            else:
+                host = f"{self.host}\n"
+
+            if host not in lines:
+                file.write(host)
 
     def command_input_to_variable(self, return_data):
         variable = return_data[0]
@@ -278,21 +284,23 @@ class Dolphie:
         elif key == "grave_accent":
 
             def command_get_input(data):
-                if self.host != data["host"]:
-                    self.host = data["host"]
+                host_port = data["host"].split(":")
+                self.host = host_port[0]
+                self.port = int(host_port[1]) if len(host_port) > 1 else 3306
 
-                    if data["password"]:
-                        self.password = data["password"]
+                password = data.get("password")
+                if password:
+                    self.password = password
 
-                    self.metric_manager = MetricManager()
-                    self.main_db_connection.close()
-                    self.secondary_db_connection.close()
+                self.metric_manager = MetricManager()
+                self.main_db_connection.close()
+                self.secondary_db_connection.close()
 
-                    self.dolphie_start_time = datetime.now()
+                self.dolphie_start_time = datetime.now()
 
-                    self.app.query_one("#main_container").display = False
-                    self.app.query_one("LoadingIndicator").display = True
-                    self.app.query_one("#panel_dashboard_queries_qps").display = False
+                self.app.query_one("#main_container").display = False
+                self.app.query_one("LoadingIndicator").display = True
+                self.app.query_one("#panel_dashboard_queries_qps").display = False
 
             self.app.push_screen(QuickSwitchHostModal(quick_switch_hosts=self.quick_switch_hosts), command_get_input)
 
@@ -356,7 +364,9 @@ class Dolphie:
 
         elif key == "e":
             if self.is_mysql_version_at_least("8.0"):
-                self.app.push_screen(EventLog(self.app_version, self.host, self.secondary_db_connection))
+                self.app.push_screen(
+                    EventLog(self.app_version, f"{self.mysql_host}:{self.port}", self.secondary_db_connection)
+                )
             else:
                 self.update_footer("Error log command requires MySQL 8")
 
@@ -803,7 +813,9 @@ class Dolphie:
                                 Align.center(query_history_table),
                             )
 
-                        self.app.push_screen(CommandScreen(self.app_version, self.host, screen_data))
+                        self.app.push_screen(
+                            CommandScreen(self.app_version, f"{self.mysql_host}:{self.port}", screen_data)
+                        )
                     else:
                         self.update_footer("Thread ID [b #91abec]%s[/b #91abec] does not exist" % thread_id)
 
@@ -884,7 +896,7 @@ class Dolphie:
                     table_grid.add_row(*all_tables)
                     screen_data = Align.center(table_grid)
 
-                    self.app.push_screen(CommandScreen(self.app_version, self.host, screen_data))
+                    self.app.push_screen(CommandScreen(self.app_version, f"{self.mysql_host}:{self.port}", screen_data))
                 else:
                     if input_variable:
                         self.update_footer("No variable(s) found that match [b #91abec]%s[/b #91abec]" % input_variable)
@@ -917,12 +929,12 @@ class Dolphie:
 
             keys = {
                 "`": "Quickly connect to another host",
-                "a": "Show/hide additional processlist columns",
+                "a": "Toggle additional processlist columns",
                 "c": "Clear all filters set",
                 "d": "Display all databases",
                 "e": "Display error log from Performance Schema",
                 "f": "Filter processlist by a supported option",
-                "i": "Show/hide idle threads",
+                "i": "Toggle displaying idle threads",
                 "k": "Kill a thread by its ID",
                 "K": "Kill a thread by a supported option",
                 "l": "Show the most recent deadlock",
@@ -934,7 +946,7 @@ class Dolphie:
                 "r": "Set the refresh interval",
                 "R": "Reset all metrics",
                 "t": "Show details of a thread along with an EXPLAIN of its query",
-                "T": "Show/hide threads that only have an active transaction",
+                "T": "Toggle displaying threads that only have an active transaction",
                 "s": "Sort processlist by time in descending/ascending order",
                 "u": "List active connected users and their statistics",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
@@ -979,7 +991,7 @@ class Dolphie:
                 "Diff": "This is the size difference of the binary log between each refresh interval",
                 "Cache Hit": "The percentage of how many binary log lookups are from cache instead of from disk",
                 "History List": "History list length (number of un-purged row changes in InnoDB's undo logs)",
-                "QPS": "Queries per second",
+                "QPS": "Queries per second from Com_queries in SHOW GLOBAL STATUS",
                 "Latency": "How much time it takes to receive data from the host for each refresh interval",
                 "Threads": "Con = Connected, Run = Running, Cac = Cached from SHOW GLOBAL STATUS",
                 "Speed": "How many seconds were taken off of replication lag from the last refresh interval",
@@ -1008,7 +1020,7 @@ class Dolphie:
             )
 
         if screen_data:
-            self.app.push_screen(CommandScreen(self.app_version, self.host, screen_data))
+            self.app.push_screen(CommandScreen(self.app_version, f"{self.mysql_host}:{self.port}", screen_data))
 
     def create_user_stats_table(self):
         table = Table(header_style="bold white", box=box.ROUNDED, style="#52608d")
