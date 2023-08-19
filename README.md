@@ -54,17 +54,8 @@ docker exec -it dolphie dolphie -h host.docker.internal -u root --ask-pass
 
 ## Usage
 ```
-usage: dolphie [--help] [-u USER] [-p PASSWORD] [--ask-pass] [-h HOST] [-P PORT] [-S SOCKET] [--uri URI] [-c CONFIG_FILE]
-               [-f HOST_CACHE_FILE] [-q QUICK_SWITCH_HOSTS_FILE] [-l LOGIN_PATH] [-r REFRESH_INTERVAL] [-H HEARTBEAT_TABLE]
-               [--ssl-mode SSL_MODE] [--ssl-ca SSL_CA] [--ssl-cert SSL_CERT] [--ssl-key SSL_KEY] [--hide-dashboard]
-               [--show-trxs-only] [--additional-columns] [--use-processlist] [-V]
-               [uri]
-
-Dolphie, an intuitive feature-rich top tool for monitoring MySQL in real time
-
 positional arguments:
-  uri                   Use a URI string for credentials - format: mysql://user:password@host:port 
-                        (port is optional with default 3306)
+  uri                   Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with default 3306)
 
 options:
   --help                show this help message and exit
@@ -76,7 +67,6 @@ options:
   -P PORT, --port PORT  Port for MySQL (Socket has precendence)
   -S SOCKET, --socket SOCKET
                         Socket file for MySQL
-  --uri URI             Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with default 3306)
   -c CONFIG_FILE, --config-file CONFIG_FILE
                         Config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
   -f HOST_CACHE_FILE, --host-cache-file HOST_CACHE_FILE
@@ -123,7 +113,6 @@ Environment variables support these options:
     DOLPHIE_HOST
     DOLPHIE_PORT
     DOLPHIE_SOCKET
-
 ```
 
 ## Supported MySQL versions

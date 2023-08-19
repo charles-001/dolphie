@@ -7,6 +7,7 @@
 
 import os
 import re
+import sys
 from argparse import ArgumentParser, RawTextHelpFormatter
 from configparser import ConfigParser
 from datetime import datetime
@@ -19,6 +20,7 @@ from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Panels import dashboard_panel, processlist_panel, replication_panel
 from dolphie.Widgets.topbar import TopBar
+from rich.console import Console
 from rich.prompt import Prompt
 from rich.traceback import Traceback
 from textual import events, on, work
@@ -74,14 +76,14 @@ Environment variables support these options:
     )
 
     parser.add_argument(
-        "uri2", 
-        metavar='uri', 
-        type=str, 
-        nargs='?',
+        "uri",
+        metavar="uri",
+        type=str,
+        nargs="?",
         help=(
-                "Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with"
-                " default 3306)"
-            )
+            "Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with"
+            " default 3306)"
+        ),
     )
 
     parser.add_argument(
@@ -119,15 +121,6 @@ Environment variables support these options:
         dest="socket",
         type=str,
         help="Socket file for MySQL",
-    )
-    parser.add_argument(
-        "--uri",
-        dest="uri",
-        type=str,
-        help=(
-            "Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with"
-            " default 3306)"
-        ),
     )
     parser.add_argument(
         "-c",
@@ -250,6 +243,8 @@ Environment variables support these options:
         "-V", "--version", action="version", version=dolphie.app_version, help="Display version and exit"
     )
 
+    console = Console(style="indian_red", highlight=False)
+
     home_dir = os.path.expanduser("~")
 
     parameter_options = vars(parser.parse_args())  # Convert object to dict
@@ -278,7 +273,7 @@ Environment variables support these options:
             elif ssl_mode == "VERIFY_IDENTITY":
                 dolphie.ssl["check_hostname"] = True
             else:
-                raise ManualException("Unsupported SSL mode [b]%s" % ssl_mode)
+                sys.exit(console.print(f"Unsupported SSL mode [b]{ssl_mode}[/b]"))
 
         if cfg.has_option("client", "ssl_ca"):
             dolphie.ssl["ca"] = cfg.get("client", "ssl_ca")
@@ -298,7 +293,7 @@ Environment variables support these options:
         except Exception as e:
             # Don't error out for default login path
             if parameter_options["login_path"] != "client":
-                raise ManualException("Problem reading login path file", reason=e)
+                sys.exit(console.print(f"Problem reading login path file: {e}"))
 
     # Use environment variables for basic options if specified
     for option in basic_options:
@@ -312,20 +307,24 @@ Environment variables support these options:
             setattr(dolphie, option, parameter_options[option])
 
     # Lastly, parse URI if specified
-    if parameter_options["uri2"]:
-        parameter_options["uri"] = parameter_options["uri2"]
     if parameter_options["uri"]:
-        parsed = urlparse(parameter_options["uri"])
-        if parsed.scheme != "mysql":
-            raise ManualException("Invalid scheme in the URL. It should be 'mysql'")
+        try:
+            parsed = urlparse(parameter_options["uri"])
 
-        dolphie.user = parsed.username
-        dolphie.password = parsed.password
-        dolphie.host = parsed.hostname
-        dolphie.port = parsed.port or 3306
+            if parsed.scheme != "mysql":
+                sys.exit(
+                    console.print("Invalid URI scheme: Only 'mysql' is supported (see --help for more information)")
+                )
+
+            dolphie.user = parsed.username
+            dolphie.password = parsed.password
+            dolphie.host = parsed.hostname
+            dolphie.port = parsed.port or 3306
+        except Exception as e:
+            sys.exit(console.print(f"Invalid URI: {e} (see --help for more information)"))
 
     if parameter_options["ask_password"]:
-        dolphie.password = Prompt.ask("[b #91abec]Password", password=True)
+        dolphie.password = Prompt.ask("[b #bbc8e8]Password", password=True)
 
     if not dolphie.host:
         dolphie.host = "localhost"
@@ -341,7 +340,7 @@ Environment variables support these options:
                 "$placeholder", dolphie.heartbeat_table
             )
         else:
-            raise ManualException("Your heartbeat table did not conform to the proper format: db.table")
+            sys.exit(console.print("Your heartbeat table did not conform to the proper format: db.table"))
 
     if parameter_options["ssl_mode"]:
         ssl_mode = parameter_options["ssl_mode"].upper()
@@ -353,7 +352,7 @@ Environment variables support these options:
         elif ssl_mode == "VERIFY_IDENTITY":
             dolphie.ssl["check_hostame"] = True
         else:
-            raise ManualException(f"Unsupported SSL mode {ssl_mode}")
+            sys.exit(console.print(f"Unsupported SSL mode [b]{ssl_mode}[/b]"))
 
     if parameter_options["ssl_ca"]:
         dolphie.ssl["ca"] = parameter_options["ssl_ca"]
@@ -528,6 +527,7 @@ class DolphieApp(App):
 
     def on_mount(self):
         dolphie = self.dolphie
+
         dolphie.load_host_cache_file()
 
         # Set these components by default to not show
