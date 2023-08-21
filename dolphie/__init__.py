@@ -69,7 +69,6 @@ class Dolphie:
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
-        self.worker_job_count: int = 0
         self.worker_job_time: int = 0
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
@@ -1033,13 +1032,13 @@ class Dolphie:
                     "User": {"field": "user", "format_number": False},
                     "Active": {"field": "current_connections", "format_number": True},
                     "Total": {"field": "total_connections", "format_number": True},
-                    "Plugin": {"field": "plugin", "format_number": False},
-                    "Password Expire": {"field": "password_expires_in", "format_number": False},
                     "Rows Read": {"field": "rows_read", "format_number": True},
                     "Rows Sent": {"field": "rows_sent", "format_number": True},
                     "Rows Updated": {"field": "rows_affected", "format_number": True},
                     "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
                     "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
+                    "Plugin": {"field": "plugin", "format_number": False},
+                    "Password Expire": {"field": "password_expires_in", "format_number": False},
                 }
             )
         else:

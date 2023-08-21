@@ -34,61 +34,74 @@ def create_panel(dolphie: Dolphie):
 
     replica_panel = ""
     if num_replicas:
+        title = "Replica" if num_replicas == 1 else "Replicas"
         replica_panel = Panel(
             Align.center(table_grid),
-            title=f"[b #e9e9e9]{num_replicas} Replica(s)",
-            box=box.HEAVY,
-            border_style="#3c486b",
+            title=f"[b #e9e9e9]{num_replicas} {title}",
+            box=box.HORIZONTALS,
+            border_style="#6171a6",
         )
 
     if dolphie.replication_status:
-        replication_settings = ""
-        available_replication_settings = {
+        replication_variables = ""
+        available_replication_variables = {
             "binlog_transaction_dependency_tracking": "dependency_tracking",
             "slave_parallel_type": "parallel_type",
             "slave_parallel_workers": "parallel_workers",
             "slave_preserve_commit_order": "preserve_commit_order",
         }
 
-        for setting_variable, setting_display_name in available_replication_settings.items():
+        for setting_variable, setting_display_name in available_replication_variables.items():
             value = dolphie.global_variables.get(setting_variable, "N/A")
-            replication_settings += f"[b #bbc8e8]{setting_display_name}[/b #bbc8e8] {value}  "
+            replication_variables += f"[b #bbc8e8]{setting_display_name}[/b #bbc8e8] {value}  "
 
-        replication_settings = replication_settings.strip()
+        replication_variables = replication_variables.strip()
 
         table_thread_applier_status = Table()
         if dolphie.replication_applier_status:
-            table_thread_applier_status = Table(
-                title="Thread Applier Status", title_style=Style(bold=True), style="#6171a6", box=box.ROUNDED
-            )
-            table_thread_applier_status.add_column("#")
-            table_thread_applier_status.add_column("% Used")
+            table_thread_applier_status = Table(title_style=Style(bold=True), style="#6171a6", box=box.ROUNDED)
+            table_thread_applier_status.add_column("Worker", justify="center")
+            table_thread_applier_status.add_column("Usage")
             table_thread_applier_status.add_column("Apply Time")
             table_thread_applier_status.add_column("Last Applied Transaction")
 
             for row in dolphie.replication_applier_status:
                 # We use ROLLUP in the query, so the first row is the total for thread_events
-                if not row["channel"]:
+                if not row["worker_id"]:
                     total_thread_events = row["total_thread_events"]
                     continue
 
                 last_applied_transaction = ""
                 if row["last_applied_transaction"]:
-                    last_applied_transaction = f"…[#969aad]{row['last_applied_transaction'].split('-')[4]}[/#969aad]"
+                    source_id_split = row["last_applied_transaction"].split("-")[4].split(":")[0]
+                    transaction_id = row["last_applied_transaction"].split(":")[1]
+                    last_applied_transaction = f"…[#969aad]{source_id_split}[/#969aad]:{transaction_id}"
 
                 table_thread_applier_status.add_row(
-                    str(row["channel"]),
-                    str(round(100 * (row["total_thread_events"] / total_thread_events), 2)),
+                    str(row["worker_id"]),
+                    str(round(100 * (row["total_thread_events"] / total_thread_events), 2)) + "%",
                     row["apply_time"],
                     last_applied_transaction,
                 )
 
-        table_grid_replication_settings = Table.grid()
-        table_grid_replication_settings.add_row(table_replication, table_thread_applier_status)
+        table_grid_replication = Table.grid()
+        table_grid_replication.add_row(table_replication, table_thread_applier_status)
 
-        panel_data = Group(
-            Align.center(replication_settings), "", Align.center(table_grid_replication_settings), replica_panel
+        replication_panel = Panel(
+            Group(Align.center(replication_variables), "", Align.center(table_grid_replication)),
+            title="[b #e9e9e9]Replication",
+            box=box.HORIZONTALS,
+            border_style="#6171a6",
         )
+
+        if replica_panel:
+            panel_data = Group(
+                replication_panel,
+                replica_panel,
+            )
+        else:
+            panel_data = replication_panel
+
     else:
         panel_data = replica_panel
 
@@ -129,7 +142,6 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, replica_thread_i
         data["Seconds_Behind_Master"] = dolphie.replica_lag
 
     speed = 0
-    # Colorize seconds behind
     if data["Seconds_Behind_Master"] is not None:
         replica_sbm = data["Seconds_Behind_Master"]
 
@@ -160,14 +172,9 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, replica_thread_i
         mariadb_gtid_enabled = True
         gtid_status = data["Using_Gtid"]
 
-    table_title = ""
-    if not replica_thread_id:
-        table_title = "Replication"
-
     table = Table(
         show_header=False,
         box=table_box,
-        title=table_title,
         title_style=table_title_style,
         style=table_line_color,
     )

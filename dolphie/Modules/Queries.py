@@ -217,7 +217,7 @@ class MySQLQueries:
     """
     replication_applier_status: str = """
         SELECT
-            worker_id AS channel,
+            worker_id,
             FORMAT_PICO_TIME(
                 (applier_status.LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP -
                 applier_status.LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP) * 1000000000000
@@ -233,9 +233,9 @@ class MySQLQueries:
             applier_status.THREAD_ID IN (
                 SELECT THREAD_ID FROM `performance_schema`.replication_applier_status_by_worker
             )
-        GROUP BY channel
+        GROUP BY worker_id
         WITH ROLLUP
-        ORDER BY channel
+        ORDER BY worker_id
     """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"

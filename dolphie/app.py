@@ -398,7 +398,7 @@ class DolphieApp(App):
         if dolphie.quick_switched_connection:
             self.quick_host_switch()
 
-        if dolphie.worker_job_count > 0:
+        if dolphie.metric_manager.worker_start_time:
             dolphie.metric_manager.update_metrics_with_last_value()
 
         try:
@@ -444,8 +444,6 @@ class DolphieApp(App):
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
-
-            dolphie.worker_job_count += 1
         except ManualException as e:
             self.exit(message=e.output())
 
@@ -643,7 +641,6 @@ class DolphieApp(App):
 
         dolphie.metric_manager.reset()
         dolphie.dolphie_start_time = datetime.now()
-        dolphie.worker_job_count = 0
 
         # Set the graph switches to what they're currently selected to since we reset metric_manager
         switches = self.query(".switch_container Switch")
