@@ -7,11 +7,7 @@ from importlib import metadata
 
 import pymysql
 import requests
-from dolphie.Modules.Functions import (
-    format_bytes,
-    format_number,
-    format_sys_table_memory,
-)
+from dolphie.Modules.Functions import format_number, format_sys_table_memory
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MetricManager import MetricManager
 from dolphie.Modules.MySQL import Database
@@ -88,10 +84,12 @@ class Dolphie:
         self.global_status: dict = {}
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
+        self.replication_applier_status: dict = {}
         self.replica_lag_source: str = None
         self.replica_lag: int = None
         self.active_redo_logs: int = None
         self.mysql_host: str = None
+        self.quick_switched_connection: bool = False
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -166,10 +164,11 @@ class Dolphie:
         self.main_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
         self.secondary_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
 
-        self.mysql_host = self.main_db_connection.fetch_value_from_field("SELECT @@hostname")
+        # Reduce any issues with the queries Dolphie runs (mostly targetting only_full_group_by)
+        self.main_db_connection.execute("SET SESSION sql_mode = ''")
+        self.secondary_db_connection.execute("SET SESSION sql_mode = ''")
 
-        # Update our TopBar with host information
-        self.app.query_one("#topbar_host").update(f"{self.mysql_host}:{self.port}")
+        self.mysql_host = self.main_db_connection.fetch_value_from_field("SELECT @@hostname")
 
         self.main_db_connection_id = self.main_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
 
@@ -260,7 +259,7 @@ class Dolphie:
                 self.app.query_one(f"#{panel.id}_data").update("")
 
         if panel_name == "processlist":
-            self.app.query_one("#panel_processlist_data").clear(columns=True)
+            self.app.query_one("#panel_processlist").clear(columns=True)
 
         return new_display
 
@@ -293,11 +292,8 @@ class Dolphie:
                 if password:
                     self.password = password
 
-                self.metric_manager = MetricManager()
-                self.main_db_connection.close()
-                self.secondary_db_connection.close()
-
-                self.dolphie_start_time = datetime.now()
+                # Trigger a quick switch connection for the worker thread
+                self.quick_switched_connection = True
 
                 self.app.query_one("#main_container").display = False
                 self.app.query_one("LoadingIndicator").display = True
@@ -975,10 +971,10 @@ class Dolphie:
 
             datapoints = {
                 "Read Only": "If the host is in read-only mode",
-                "Use PS": "If Dolphie is using Performance Schema for listing queries",
+                "Use PS": "If Dolphie is using Performance Schema for listing threads",
                 "Read Hit": "The percentage of how many reads are from InnoDB buffer pool compared to from disk",
                 "Lag": (
-                    "Retrieves metric from: Replica -> SHOW SLAVE STATUS, HB -> Heartbeat table, PS -> Performance"
+                    "Retrieves metric from: Default -> SHOW SLAVE STATUS, HB -> Heartbeat table, PS -> Performance"
                     " Schema"
                 ),
                 "Chkpt Age": (
@@ -1052,27 +1048,18 @@ class Dolphie:
         users = self.secondary_db_connection.fetchall()
         for user in users:
             username = user["user"]
-            if username not in user_stats:
-                user_stats[username] = {
-                    "user": username,
-                    "total_connections": user["total_connections"],
-                    "current_connections": user["current_connections"],
-                    "password_expires_in": user["password_expires_in"],
-                    "plugin": user["plugin"],
-                    "rows_affected": user["sum_rows_affected"],
-                    "rows_sent": user["sum_rows_sent"],
-                    "rows_read": user["sum_rows_examined"],
-                    "created_tmp_disk_tables": user["sum_created_tmp_disk_tables"],
-                    "created_tmp_tables": user["sum_created_tmp_tables"],
-                }
-            else:
-                # I would use SUM() in the query instead of this, but pymysql doesn't play well with it since I
-                # use use_unicode = 0 in the connection
-                user_stats[username]["rows_affected"] += user["sum_rows_affected"]
-                user_stats[username]["rows_sent"] += user["sum_rows_sent"]
-                user_stats[username]["rows_read"] += user["sum_rows_examined"]
-                user_stats[username]["created_tmp_disk_tables"] += user["sum_created_tmp_disk_tables"]
-                user_stats[username]["created_tmp_tables"] += user["sum_created_tmp_tables"]
+            user_stats[username] = {
+                "user": username,
+                "total_connections": user["total_connections"],
+                "current_connections": user["current_connections"],
+                "password_expires_in": user["password_expires_in"],
+                "plugin": user["plugin"],
+                "rows_affected": user["sum_rows_affected"],
+                "rows_sent": user["sum_rows_sent"],
+                "rows_read": user["sum_rows_examined"],
+                "created_tmp_disk_tables": user["sum_created_tmp_disk_tables"],
+                "created_tmp_tables": user["sum_created_tmp_tables"],
+            }
 
         for column, data in columns.items():
             table.add_column(column, no_wrap=True)
@@ -1082,9 +1069,7 @@ class Dolphie:
             for column, data in columns.items():
                 value = user_data.get(data["field"])
 
-                if column == "Binlog Data":
-                    row_values.append(format_bytes(value) if value else "")
-                elif data["format_number"]:
+                if data["format_number"]:
                     row_values.append(format_number(value) if value else "")
                 else:
                     row_values.append(value or "")
@@ -1159,7 +1144,7 @@ class Dolphie:
             replica_lag_source = "PS"
         else:
             query = MySQLQueries.replication_status
-            replica_lag_source = "Replica"
+            replica_lag_source = None
 
         if replica_cursor:
             replica_cursor.execute(query)
@@ -1175,6 +1160,11 @@ class Dolphie:
                 if replica_lag_source != "Replica":
                     self.main_db_connection.execute(query)
                     replica_lag_data = self.main_db_connection.fetchone()
+
+                self.replication_applier_status = None
+                if self.is_mysql_version_at_least("8.0") and self.display_replication_panel:
+                    self.main_db_connection.execute(MySQLQueries.replication_applier_status)
+                    self.replication_applier_status = self.main_db_connection.fetchall()
 
         if replica_lag_data:
             replica_lag = int(replica_lag_data["Seconds_Behind_Master"])

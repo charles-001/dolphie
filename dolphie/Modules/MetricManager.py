@@ -191,7 +191,7 @@ class MetricColor:
 @dataclass
 class MetricData:
     label: str
-    color: tuple[int, int, int]
+    color: tuple
     visible: bool = True
     save_history: bool = True
     per_second_calculation: bool = True
@@ -324,6 +324,9 @@ class MetricInstances:
 
 class MetricManager:
     def __init__(self):
+        self.reset()
+
+    def reset(self):
         self.worker_start_time: datetime = None
         self.worker_job_time: float = None
         self.global_variables: Dict[str, Union[int, str]] = None

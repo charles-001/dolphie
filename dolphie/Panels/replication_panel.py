@@ -7,6 +7,7 @@ from dolphie.Modules.Queries import MySQLQueries
 from rich import box
 from rich.align import Align
 from rich.console import Group
+from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
 
@@ -17,53 +18,99 @@ def create_panel(dolphie: Dolphie):
 
     table_grid = Table.grid()
     table_replication = Table()
+    table_thread_applier_status = Table()
 
     if dolphie.replication_status:
         table_replication = create_table(dolphie, dolphie.replication_status)
 
-    # Stack tables in groups of 3
-    tables = sorted(dolphie.replica_tables.items())
-    num_tables = len(tables)
-    for i in range(0, num_tables - (num_tables % 2), 2):
-        table_grid.add_row(*[table for _, table in tables[i : i + 2]])
+    # Stack tables in groups of 2
+    replicas = sorted(dolphie.replica_tables.items())
+    num_replicas = len(replicas)
+    for i in range(0, num_replicas - (num_replicas % 2), 2):
+        table_grid.add_row(*[table for _, table in replicas[i : i + 2]])
 
-    if num_tables % 2 != 0:
-        table_grid.add_row(*[table for _, table in tables[num_tables - (num_tables % 2) :]])
+    if num_replicas % 2 != 0:
+        table_grid.add_row(*[table for _, table in replicas[num_replicas - (num_replicas % 2) :]])
+
+    replica_panel = ""
+    if num_replicas:
+        replica_panel = Panel(
+            Align.center(table_grid),
+            title=f"[b #e9e9e9]{num_replicas} Replica(s)",
+            box=box.HEAVY,
+            border_style="#3c486b",
+        )
 
     if dolphie.replication_status:
-        # GTID Sets can be very long, so we don't center align replication table or else table
-        # will increase/decrease in size a lot
-        if ("Executed_Gtid_Set" in dolphie.replication_status and dolphie.replication_status["Executed_Gtid_Set"]) or (
-            "Using_Gtid" in dolphie.replication_status and dolphie.replication_status["Using_Gtid"] != "No"
-        ):
-            panel_data = Group(
-                Align.left(table_replication),
-                Align.center(table_grid),
+        replication_settings = ""
+        available_replication_settings = {
+            "binlog_transaction_dependency_tracking": "dependency_tracking",
+            "slave_parallel_type": "parallel_type",
+            "slave_parallel_workers": "parallel_workers",
+            "slave_preserve_commit_order": "preserve_commit_order",
+        }
+
+        for setting_variable, setting_display_name in available_replication_settings.items():
+            value = dolphie.global_variables.get(setting_variable, "N/A")
+            replication_settings += f"[b #bbc8e8]{setting_display_name}[/b #bbc8e8] {value}  "
+
+        replication_settings = replication_settings.strip()
+
+        table_thread_applier_status = Table()
+        if dolphie.replication_applier_status:
+            table_thread_applier_status = Table(
+                title="Thread Applier Status", title_style=Style(bold=True), style="#6171a6", box=box.ROUNDED
             )
-        else:
-            panel_data = Group(
-                Align.center(table_replication),
-                Align.center(table_grid),
-            )
+            table_thread_applier_status.add_column("#")
+            table_thread_applier_status.add_column("% Used")
+            table_thread_applier_status.add_column("Apply Time")
+            table_thread_applier_status.add_column("Last Applied Transaction")
+
+            for row in dolphie.replication_applier_status:
+                # We use ROLLUP in the query, so the first row is the total for thread_events
+                if not row["channel"]:
+                    total_thread_events = row["total_thread_events"]
+                    continue
+
+                last_applied_transaction = ""
+                if row["last_applied_transaction"]:
+                    last_applied_transaction = f"…[#969aad]{row['last_applied_transaction'].split('-')[4]}[/#969aad]"
+
+                table_thread_applier_status.add_row(
+                    str(row["channel"]),
+                    str(round(100 * (row["total_thread_events"] / total_thread_events), 2)),
+                    row["apply_time"],
+                    last_applied_transaction,
+                )
+
+        table_grid_replication_settings = Table.grid()
+        table_grid_replication_settings.add_row(table_replication, table_thread_applier_status)
+
+        panel_data = Group(
+            Align.center(replication_settings), "", Align.center(table_grid_replication_settings), replica_panel
+        )
     else:
-        panel_data = Align.center(table_grid)
+        panel_data = replica_panel
 
     return panel_data
 
 
-def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thread_id=None):
+def create_table(dolphie: Dolphie, data, dashboard_table=False, replica_thread_id=None):
     table_title_style = Style(bold=True)
-    table_box = box.ROUNDED
-    table_line_color = "#52608d"
+    table_line_color = "#6171a6"
 
     # This is for the view of replicas
-    if list_replica_thread_id:
-        if dolphie.replica_connections[list_replica_thread_id]["previous_sbm"] is not None:
-            replica_previous_replica_sbm = dolphie.replica_connections[list_replica_thread_id]["previous_sbm"]
+    if replica_thread_id:
+        if dolphie.replica_connections[replica_thread_id]["previous_sbm"] is not None:
+            replica_previous_replica_sbm = dolphie.replica_connections[replica_thread_id]["previous_sbm"]
 
-        db_cursor = dolphie.replica_connections[list_replica_thread_id]["cursor"]
+        db_cursor = dolphie.replica_connections[replica_thread_id]["cursor"]
+
+        table_box = box.ROUNDED
     else:
         replica_previous_replica_sbm = dolphie.previous_replica_sbm
+
+        table_box = box.ROUNDED
 
     if data["Slave_IO_Running"].lower() == "no":
         data["Slave_IO_Running"] = "[#fc7979]NO[/#fc7979]"
@@ -75,46 +122,46 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     else:
         data["Slave_SQL_Running"] = "[#54efae]Yes[/#54efae]"
 
-    if list_replica_thread_id:
-        data["SBM_Source"], data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica_cursor=db_cursor)
+    if replica_thread_id:
+        sbm_source, data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica_cursor=db_cursor)
     else:
-        data["SBM_Source"] = dolphie.replica_lag_source
+        sbm_source = dolphie.replica_lag_source
         data["Seconds_Behind_Master"] = dolphie.replica_lag
 
-    data["Speed"] = 0
+    speed = 0
     # Colorize seconds behind
     if data["Seconds_Behind_Master"] is not None:
         replica_sbm = data["Seconds_Behind_Master"]
 
-        if list_replica_thread_id:
-            dolphie.replica_connections[list_replica_thread_id]["previous_sbm"] = replica_sbm
+        if replica_thread_id:
+            dolphie.replica_connections[replica_thread_id]["previous_sbm"] = replica_sbm
 
         if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
-            data["Speed"] = round((replica_previous_replica_sbm - replica_sbm) / dolphie.worker_job_time)
+            speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.worker_job_time)
 
         if replica_sbm != 0:
             if replica_sbm > 20:
-                data["Lag"] = "[#fc7979]%s" % "{:0>8}[/#fc7979]".format(str(timedelta(seconds=replica_sbm)))
+                lag = "[#fc7979]%s" % "{:0>8}[/#fc7979]".format(str(timedelta(seconds=replica_sbm)))
             elif replica_sbm > 10:
-                data["Lag"] = "[#f1fb82]%s[/#f1fb82]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                lag = "[#f1fb82]%s[/#f1fb82]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
             else:
-                data["Lag"] = "[#54efae]%s[/#54efae]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+                lag = "[#54efae]%s[/#54efae]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
         elif replica_sbm == 0:
-            data["Lag"] = "[#54efae]00:00:00[/#54efae]"
+            lag = "[#54efae]00:00:00[/#54efae]"
 
     data["Master_Host"] = dolphie.get_hostname(data["Master_Host"])
-    data["mysql_gtid_enabled"] = False
-    data["mariadb_gtid_enabled"] = False
-    data["gtid"] = "OFF"
+    mysql_gtid_enabled = False
+    mariadb_gtid_enabled = False
+    gtid_status = "OFF"
     if "Executed_Gtid_Set" in data and data["Executed_Gtid_Set"]:
-        data["mysql_gtid_enabled"] = True
-        data["gtid"] = "ON"
+        mysql_gtid_enabled = True
+        gtid_status = "ON"
     if "Using_Gtid" in data and data["Using_Gtid"] != "No":
-        data["mariadb_gtid_enabled"] = True
-        data["gtid"] = data["Using_Gtid"]
+        mariadb_gtid_enabled = True
+        gtid_status = data["Using_Gtid"]
 
     table_title = ""
-    if dashboard_table is True or list_replica_thread_id is None:
+    if not replica_thread_id:
         table_title = "Replication"
 
     table = Table(
@@ -126,16 +173,13 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     )
 
     table.add_column()
-    if dashboard_table is True:
+    if dashboard_table:
         table.add_column(max_width=25, no_wrap=True)
-    elif list_replica_thread_id is not None:
-        if data["mysql_gtid_enabled"] or data["mariadb_gtid_enabled"]:
-            table.add_column(max_width=60)
     else:
-        table.add_column(overflow="fold")
+        table.add_column(min_width=60, overflow="fold")
 
-    if list_replica_thread_id is not None:
-        table.add_row("[#c5c7d2]Host", "%s" % dolphie.replica_connections[list_replica_thread_id]["host"])
+    if replica_thread_id:
+        table.add_row("[#c5c7d2]Host", "%s" % dolphie.replica_connections[replica_thread_id]["host"])
     else:
         table.add_row("[#c5c7d2]Primary", "%s" % data["Master_Host"])
 
@@ -149,15 +193,34 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
     if data["Seconds_Behind_Master"] is None:
         table.add_row("[#c5c7d2]Lag", "")
     else:
+        lag_source = "Lag"
+        if sbm_source:
+            lag_source = f"Lag ({sbm_source})"
+
         table.add_row(
-            "[#c5c7d2]%s Lag" % data["SBM_Source"],
-            "%s [#c5c7d2]Speed[/#c5c7d2] %s" % (data["Lag"], data["Speed"]),
+            "[#c5c7d2]%s" % lag_source,
+            "%s [#c5c7d2]Speed[/#c5c7d2] %s" % (lag, speed),
         )
+
+    replication_status_filtering = [
+        "Replicate_Do_DB",
+        "Replicate_Ignore_Table",
+        "Replicate_Do_Table",
+        "Replicate_Wild_Do_Table",
+        "Replicate_Wild_Ignore_Table",
+    ]
+
+    if not replica_thread_id:
+        for status_filter in replication_status_filtering:
+            value = dolphie.replication_status.get(status_filter)
+            if value:
+                table.add_row(f"[#c5c7d2]{filter}", str(value))
+
     if dashboard_table:
         table.add_row("[#c5c7d2]Binlog IO", "%s" % (data["Master_Log_File"]))
         table.add_row("[#c5c7d2]Binlog SQL", "%s" % (data["Relay_Master_Log_File"]))
         table.add_row("[#c5c7d2]Relay Log ", "%s" % (data["Relay_Log_File"]))
-        table.add_row("[#c5c7d2]GTID", "%s" % data["gtid"])
+        table.add_row("[#c5c7d2]GTID", "%s" % gtid_status)
         table.add_row("[#c5c7d2]State", "%s" % data["Slave_SQL_Running_State"])
 
     else:
@@ -178,34 +241,61 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, list_replica_thr
             "%s ([#969aad]%s[/#969aad])" % (data["Relay_Log_File"], data["Relay_Log_Pos"]),
         )
 
-        if data["mysql_gtid_enabled"]:
+        if mysql_gtid_enabled:
+            primary_uuid = data["Master_UUID"]
             executed_gtid_set = data["Executed_Gtid_Set"]
             retrieved_gtid_set = data["Retrieved_Gtid_Set"]
 
-            # Compile the regular expression patterns outside the loops for efficiency
-            pattern = re.compile(r"\b(\w+-\w+-\w+-\w+-)(\w+:\d+-\d+)\b")
-
-            def replace_gtid(match):
-                gtid_prefix = match.group(1)
-                last_part = match.group(2).split(":")[0]  # Get the last part before the colon
-                gtid_suffix = ":" + match.group(2).split(":")[1]  # Get the part after the colon
-
-                if gtid_prefix + last_part == dolphie.server_uuid:
-                    return f"… [#54efae]{last_part}[/#54efae]{gtid_suffix}"
-                else:
-                    return f"… [#91abec]{last_part}[/#91abec]{gtid_suffix}"
-
-            # Process retrieved_gtid_set
-            retrieved_gtid_set = pattern.sub(replace_gtid, retrieved_gtid_set)
-
-            # Process executed_gtid_set
-            executed_gtid_set = pattern.sub(replace_gtid, executed_gtid_set)
-
             table.add_row("[#c5c7d2]Auto Position", "%s" % data["Auto_Position"])
-            table.add_row("[#c5c7d2]Retrieved GTID Set", "%s" % retrieved_gtid_set)
-            table.add_row("[#c5c7d2]Executed GTID Set", "%s" % executed_gtid_set)
-        elif data["mariadb_gtid_enabled"]:
-            table.add_row("[#c5c7d2]GTID IO Pos ", "%s" % data["Gtid_IO_Pos"])
+
+            # We find errant transactions for replicas here
+            if replica_thread_id:
+                # We ignore the GTID set that relates to the replica's primary UUID
+                def remove_primary_uuid_gtid_set(gtid_set):
+                    lines = gtid_set.splitlines()
+                    filtered_lines = [line for line in lines if dolphie.server_uuid not in line]
+
+                    # If the last line ends with a comma, remove comma since that query would fail
+                    last_line = filtered_lines[-1]
+                    if filtered_lines and last_line.endswith(","):
+                        last_line = last_line[:-1]
+
+                    return "\n".join(filtered_lines)
+
+                replica_gtid_set = remove_primary_uuid_gtid_set(executed_gtid_set)
+                primary_gtid_set = remove_primary_uuid_gtid_set(dolphie.global_variables["gtid_executed"])
+
+                db_cursor.execute(f"SELECT GTID_SUBTRACT('{replica_gtid_set}', '{primary_gtid_set}') AS errant_trxs")
+                gtid_data = db_cursor.fetchone()
+                if gtid_data:
+                    if gtid_data["errant_trxs"]:
+                        errant_trx = f"[#fc7979]{gtid_data['errant_trxs']}[/#fc7979]"
+                    else:
+                        errant_trx = "[#54efae]None[/#54efae]"
+
+                    table.add_row("[#c5c7d2]Errant TRX", "%s" % errant_trx)
+
+                # Since this is for the replica view, we use the host's UUID since its the primary
+                primary_uuid = dolphie.server_uuid
+
+            def color_gtid_set(match):
+                source_id = match.group(1)
+                transaction_id = match.group(2)
+
+                if source_id == primary_uuid:
+                    return f"[#91abec]{source_id}[/#91abec]:{transaction_id}"
+                else:
+                    return f"[#969aad]{source_id}:{transaction_id}[/#969aad]"
+
+            # Example GTID: 3beacd96-6fe3-18ec-9d95-b4592zec4b45:1-26
+            pattern = re.compile(r"\b(\w+(?:-\w+){4}):(\d+(?:-\d*)?)\b")
+            retrieved_gtid_set = pattern.sub(color_gtid_set, retrieved_gtid_set.replace(",", ""))
+            executed_gtid_set = pattern.sub(color_gtid_set, executed_gtid_set.replace(",", ""))
+
+            table.add_row("[#c5c7d2]Retrieved GTID", "%s" % retrieved_gtid_set)
+            table.add_row("[#c5c7d2]Executed GTID", "%s" % executed_gtid_set)
+        elif mariadb_gtid_enabled:
+            table.add_row("[#c5c7d2]GTID IO Pos", "%s" % data["Gtid_IO_Pos"])
 
         error_types = ["Last_Error", "Last_IO_Error", "Last_SQL_Error"]
         errors = [(error_type, data[error_type]) for error_type in error_types if data[error_type]]
@@ -250,7 +340,7 @@ def fetch_replica_table_data(dolphie: Dolphie):
             replica_data = replica_connection["cursor"].fetchone()
 
             if replica_data:
-                replica_tables[host] = create_table(dolphie, replica_data, list_replica_thread_id=thread_id)
+                replica_tables[host] = create_table(dolphie, replica_data, replica_thread_id=thread_id)
         except pymysql.Error as e:
             table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
 

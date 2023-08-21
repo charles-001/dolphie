@@ -393,12 +393,15 @@ class DolphieApp(App):
 
     @work(exclusive=True, thread=True)
     def worker_fetch_data(self):
-        if len(self.screen_stack) > 1 or self.dolphie.pause_refresh:
-            return
+        dolphie = self.dolphie
+
+        if dolphie.quick_switched_connection:
+            self.quick_host_switch()
+
+        if dolphie.worker_job_count > 0:
+            dolphie.metric_manager.update_metrics_with_last_value()
 
         try:
-            dolphie = self.dolphie
-
             if not dolphie.main_db_connection or not dolphie.main_db_connection.connection.open:
                 dolphie.db_connect()
 
@@ -432,22 +435,6 @@ class DolphieApp(App):
 
                 dolphie.replica_connections = {}
 
-            dolphie.worker_job_count += 1
-        except ManualException as e:
-            self.exit(message=e.output())
-
-    def on_worker_state_changed(self, event: Worker.StateChanged):
-        if event.state == WorkerState.SUCCESS:
-            dolphie = self.dolphie
-
-            if (
-                len(self.screen_stack) > 1
-                or dolphie.pause_refresh
-                or not self.dolphie.main_db_connection.connection.open
-            ):
-                self.set_timer(0.5, self.worker_fetch_data)
-                return
-
             dolphie.metric_manager.refresh_data(
                 worker_start_time=dolphie.worker_start_time,
                 worker_job_time=dolphie.worker_job_time,
@@ -458,6 +445,24 @@ class DolphieApp(App):
                 replication_lag=dolphie.replica_lag,
             )
 
+            dolphie.worker_job_count += 1
+        except ManualException as e:
+            self.exit(message=e.output())
+
+    def on_worker_state_changed(self, event: Worker.StateChanged):
+        if event.state == WorkerState.SUCCESS:
+            dolphie = self.dolphie
+
+            # Skip this if the conditions are right
+            if (
+                len(self.screen_stack) > 1
+                or dolphie.pause_refresh
+                or not self.dolphie.main_db_connection.connection.open
+                or dolphie.quick_switched_connection
+            ):
+                self.set_timer(0.5, self.worker_fetch_data)
+                return
+
             try:
                 loading_indicator = self.app.query_one("LoadingIndicator")
                 if loading_indicator.display:
@@ -465,8 +470,21 @@ class DolphieApp(App):
                     self.app.query_one("#main_container").display = True
                     self.layout_graphs()
 
+                    # Update our header with host information
+                    self.app.query_one("#topbar_host").update(f"{dolphie.mysql_host}:{dolphie.port}")
+
                 if dolphie.display_dashboard_panel:
                     self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(dolphie))
+
+                    # Update the sparkline for queries per second
+                    sparkline = self.app.query_one("#panel_dashboard_queries_qps")
+                    sparkline_data = dolphie.metric_manager.metrics.dml.Queries.values
+                    if not sparkline.display:
+                        sparkline_data = [0]
+                        sparkline.display = True
+
+                    sparkline.data = sparkline_data
+                    sparkline.refresh()
 
                 if dolphie.display_processlist_panel:
                     processlist_panel.create_panel(dolphie)
@@ -496,26 +514,13 @@ class DolphieApp(App):
                     metric_instance_name = active_graph.split("tab_")[1]
                     self.update_graphs(metric_instance_name)
 
+                # We take a snapshot of the processlist to be used for commands
+                # since the data can change after a key is pressed
+                dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
                 # with worker thread/state change due to asynchronous nature of the worker thread
                 pass
-
-            dolphie.metric_manager.update_metrics_with_last_value()
-
-            # Update the sparkline for queries per second
-            sparkline = self.app.query_one("#panel_dashboard_queries_qps")
-            sparkline_data = dolphie.metric_manager.metrics.dml.Queries.values
-            if not sparkline.display:
-                sparkline_data = [0]
-                sparkline.display = True
-
-            sparkline.data = sparkline_data
-            sparkline.refresh()
-
-            # We take a snapshot of the processlist to be used for commands
-            # since the data can change after a key is pressed
-            dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
             self.set_timer(self.dolphie.refresh_interval, self.worker_fetch_data)
 
@@ -624,6 +629,35 @@ class DolphieApp(App):
         formatted_stat_data = "  ".join(f"[b #bbc8e8]{label}[/b #bbc8e8] {value}" for label, value in stat_data.items())
         self.query_one(f"#stats_{tab_metric_instance_name}").update(formatted_stat_data)
 
+    def quick_host_switch(self):
+        dolphie = self.dolphie
+
+        dolphie.main_db_connection.connection.close()
+        dolphie.secondary_db_connection.connection.close()
+
+        if dolphie.replica_connections:
+            for connection in dolphie.replica_connections.values():
+                connection["connection"].close()
+
+            dolphie.replica_connections = {}
+
+        dolphie.metric_manager.reset()
+        dolphie.dolphie_start_time = datetime.now()
+        dolphie.worker_job_count = 0
+
+        # Set the graph switches to what they're currently selected to since we reset metric_manager
+        switches = self.query(".switch_container Switch")
+        for switch in switches:
+            switch: Switch
+            metric_instance_name = switch.name
+            metric = switch.id
+
+            metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
+            metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+            metric_data.visible = switch.value
+
+        dolphie.quick_switched_connection = False
+
     def layout_graphs(self):
         if self.dolphie.is_mysql_version_at_least("8.0.30"):
             self.query_one("#graph_redo_log").styles.width = "55%"
@@ -700,11 +734,7 @@ class DolphieApp(App):
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")
 
-            with Container(id="panel", classes="panel_container"):
-                yield Static(id="panel_data", classes="panel_data")
-
-            with Container(id="panel_processlist"):
-                yield DataTable(id="panel_processlist_data", classes="panel_data", show_cursor=False)
+            yield DataTable(id="panel_processlist", classes="panel_data", show_cursor=False)
 
             yield Static(id="footer")
 

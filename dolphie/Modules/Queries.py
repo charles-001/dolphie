@@ -93,11 +93,11 @@ class MySQLQueries:
             u.user AS user,
             total_connections,
             current_connections,
-            sum_rows_affected,
-            sum_rows_sent,
-            sum_rows_examined,
-            sum_created_tmp_disk_tables,
-            sum_created_tmp_tables,
+            CONVERT(SUM(sum_rows_affected), UNSIGNED) AS sum_rows_affected,
+            CONVERT(SUM(sum_rows_sent), UNSIGNED) AS sum_rows_sent,
+            CONVERT(SUM(sum_rows_examined), UNSIGNED) AS sum_rows_examined,
+            CONVERT(SUM(sum_created_tmp_disk_tables), UNSIGNED) AS sum_created_tmp_disk_tables,
+            CONVERT(SUM(sum_created_tmp_tables), UNSIGNED) AS sum_created_tmp_tables,
             plugin,
             CASE
                 WHEN (password_lifetime IS NULL OR password_lifetime = 0) AND @@default_password_lifetime = 0 THEN "N/A"
@@ -113,6 +113,8 @@ class MySQLQueries:
             JOIN mysql.user mysql_user ON mysql_user.user = u.user
         WHERE
             current_connections != 0
+        GROUP BY
+            user
         ORDER BY
             current_connections DESC
     """
@@ -212,6 +214,28 @@ class MySQLQueries:
             )
         ORDER BY
             event_id;
+    """
+    replication_applier_status: str = """
+        SELECT
+            worker_id AS channel,
+            FORMAT_PICO_TIME(
+                (applier_status.LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP -
+                applier_status.LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP) * 1000000000000
+            ) AS apply_time,
+            applier_status.LAST_APPLIED_TRANSACTION AS last_applied_transaction,
+            CONVERT(SUM(thread_events.COUNT_STAR), UNSIGNED) AS total_thread_events
+        FROM
+            `performance_schema`.replication_applier_status_by_worker applier_status
+        JOIN
+            `performance_schema`.events_transactions_summary_by_thread_by_event_name thread_events ON
+            applier_status.THREAD_ID = thread_events.THREAD_ID
+        WHERE
+            applier_status.THREAD_ID IN (
+                SELECT THREAD_ID FROM `performance_schema`.replication_applier_status_by_worker
+            )
+        GROUP BY channel
+        WITH ROLLUP
+        ORDER BY channel
     """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"

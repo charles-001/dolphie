@@ -31,7 +31,10 @@ class Database:
             raise ManualException("SSL certificate file path isn't valid!")
 
     def execute(self, query, values=None, ignore_error=False):
-        # Prefix all queries with dolphie so they can be identified in the processlist
+        if not self.connection.open:
+            return
+
+        # Prefix all queries with dolphie so they can be identified in the processlist from other people
         query = "/* dolphie */ " + query
 
         try:
@@ -124,7 +127,3 @@ class Database:
             command_data = self.fetchone()
 
         return command_data
-
-    def close(self):
-        if self.connection:
-            self.connection.close()

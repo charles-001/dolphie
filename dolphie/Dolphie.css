@@ -148,9 +148,6 @@ Sparkline > .sparkline--min-color {
     color: #384c7a;
 }
 
-#panel_replication {
-    max-height: 20;
-}
 #panel_graphs {
     padding-top: 0;
 }
