@@ -172,9 +172,14 @@ def create_table(dolphie: Dolphie, data, dashboard_table=False, replica_thread_i
         mariadb_gtid_enabled = True
         gtid_status = data["Using_Gtid"]
 
+    table_title = ""
+    if dashboard_table:
+        table_title = "Replication"
+
     table = Table(
         show_header=False,
         box=table_box,
+        title=table_title,
         title_style=table_title_style,
         style=table_line_color,
     )
