@@ -220,7 +220,7 @@ class Dolphie:
 
         server_uuid_query = "SELECT @@server_uuid"
         if "MariaDB" in self.host_distro and major_version >= 10:
-            server_uuid_query = "SELECT @@server_id AS @@server_uuid"
+            server_uuid_query = "SELECT @@server_id"
         self.server_uuid = self.main_db_connection.fetch_value_from_field(server_uuid_query)
 
         # Add host to quick switch hosts file if it doesn't exist
@@ -243,24 +243,14 @@ class Dolphie:
         if value:
             setattr(self, variable, value)
 
-    def toggle_panel(self, panel_name, show_loading=True):
+    def toggle_panel(self, panel_name):
         panel = self.app.query_one(f"#panel_{panel_name}")
 
         new_display = not panel.display
         panel.display = new_display
         setattr(self, f"display_{panel_name}_panel", new_display)
-        if panel_name not in ["processlist", "graphs"]:
-            if show_loading:
-                self.app.query_one(f"#{panel.id}_data").update(
-                    f"[b #91abec]Loading {panel.id.split('panel_')[1].capitalize()} Panel[/b #91abec]"
-                )
-            else:
-                self.app.query_one(f"#{panel.id}_data").update("")
-
-        if panel_name == "processlist":
-            self.app.query_one("#panel_processlist").clear(columns=True)
-
-        return new_display
+        if panel_name not in ["graphs"]:
+            self.app.refresh_panel(panel_name, manual=True)
 
     def capture_key(self, key):
         screen_data = None
@@ -271,10 +261,10 @@ class Dolphie:
             return
 
         if key == "1":
-            new_display = self.toggle_panel("dashboard")
-            self.app.query_one("#panel_dashboard_queries_qps").display = not new_display
+            self.toggle_panel("dashboard")
         elif key == "2":
             self.toggle_panel("processlist")
+            self.app.query_one("#panel_processlist").clear()
         elif key == "3":
             self.toggle_panel("replication")
         elif key == "4":
@@ -1134,7 +1124,7 @@ class Dolphie:
         if not self.global_status.get("Innodb_lsn_current"):
             self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
 
-    def fetch_replication_data(self, connection=None, replica_cursor=None):
+    def fetch_replication_data(self, replica_cursor=None):
         if self.heartbeat_table:
             query = MySQLQueries.heartbeat_replica_lag
             replica_lag_source = "HB"
@@ -1148,7 +1138,7 @@ class Dolphie:
         if replica_cursor:
             replica_cursor.execute(query)
             replica_lag_data = replica_cursor.fetchone()
-        elif connection:
+        else:
             # Determine if this server is a replica or not
             self.main_db_connection.execute(MySQLQueries.replication_status)
             replica_lag_data = self.main_db_connection.fetchone()
@@ -1156,10 +1146,11 @@ class Dolphie:
 
             if self.replication_status:
                 # Use a better way to detect replication lag if available
-                if replica_lag_source != "Replica":
+                if replica_lag_source:
                     self.main_db_connection.execute(query)
                     replica_lag_data = self.main_db_connection.fetchone()
 
+                # If we're using MySQL 8, fetch the replication applier status data
                 self.replication_applier_status = None
                 if self.is_mysql_version_at_least("8.0") and self.display_replication_panel:
                     self.main_db_connection.execute(MySQLQueries.replication_applier_status)
@@ -1171,7 +1162,6 @@ class Dolphie:
             if replica_lag < 0:
                 replica_lag = 0
         else:
-            replica_lag_source = None
             replica_lag = 0
 
         if replica_cursor:

@@ -213,7 +213,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     # Replication #
     ###############
     if dolphie.replication_status and not dolphie.display_replication_panel:
-        tables_to_add.append(replication_panel.create_table(dolphie, dolphie.replication_status, dashboard_table=True))
+        tables_to_add.append(replication_panel.create_table(dolphie, dashboard_table=True))
 
     ###############
     # Statisitics #

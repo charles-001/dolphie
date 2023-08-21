@@ -17,11 +17,6 @@ def create_panel(dolphie: Dolphie):
         return "[#f1fb82]No data to display![/#f1fb82] This host is not a replica and has no replicas connected"
 
     table_grid = Table.grid()
-    table_replication = Table()
-    table_thread_applier_status = Table()
-
-    if dolphie.replication_status:
-        table_replication = create_table(dolphie, dolphie.replication_status)
 
     # Stack tables in groups of 2
     replicas = sorted(dolphie.replica_tables.items())
@@ -41,8 +36,18 @@ def create_panel(dolphie: Dolphie):
             box=box.HORIZONTALS,
             border_style="#6171a6",
         )
+    elif dolphie.replica_data:
+        title = "Replica" if len(dolphie.replica_data) == 1 else "Replicas"
+        replica_panel = Panel(
+            Align.center("\nLoading...\n"),
+            title=f"[b #e9e9e9]{len(dolphie.replica_data)} {title}",
+            box=box.HORIZONTALS,
+            border_style="#6171a6",
+        )
 
     if dolphie.replication_status:
+        table_replication = create_table(dolphie)
+
         replication_variables = ""
         available_replication_variables = {
             "binlog_transaction_dependency_tracking": "dependency_tracking",
@@ -61,7 +66,7 @@ def create_panel(dolphie: Dolphie):
         if dolphie.replication_applier_status:
             table_thread_applier_status = Table(title_style=Style(bold=True), style="#6171a6", box=box.ROUNDED)
             table_thread_applier_status.add_column("Worker", justify="center")
-            table_thread_applier_status.add_column("Usage")
+            table_thread_applier_status.add_column("Usage", min_width=6)
             table_thread_applier_status.add_column("Apply Time")
             table_thread_applier_status.add_column("Last Applied Transaction")
 
@@ -88,7 +93,7 @@ def create_panel(dolphie: Dolphie):
         table_grid_replication.add_row(table_replication, table_thread_applier_status)
 
         replication_panel = Panel(
-            Group(Align.center(replication_variables), "", Align.center(table_grid_replication)),
+            Group(Align.center(replication_variables), Align.center(table_grid_replication)),
             title="[b #e9e9e9]Replication",
             box=box.HORIZONTALS,
             border_style="#6171a6",
@@ -101,29 +106,26 @@ def create_panel(dolphie: Dolphie):
             )
         else:
             panel_data = replication_panel
-
     else:
         panel_data = replica_panel
 
     return panel_data
 
 
-def create_table(dolphie: Dolphie, data, dashboard_table=False, replica_thread_id=None):
+def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thread_id=None):
     table_title_style = Style(bold=True)
     table_line_color = "#6171a6"
+    table_box = box.ROUNDED
 
-    # This is for the view of replicas
+    # When replica_thread_id is specified, that means we're creating a table for a replica and not replication
     if replica_thread_id:
         if dolphie.replica_connections[replica_thread_id]["previous_sbm"] is not None:
             replica_previous_replica_sbm = dolphie.replica_connections[replica_thread_id]["previous_sbm"]
 
         db_cursor = dolphie.replica_connections[replica_thread_id]["cursor"]
-
-        table_box = box.ROUNDED
     else:
+        data = dolphie.replication_status
         replica_previous_replica_sbm = dolphie.previous_replica_sbm
-
-        table_box = box.ROUNDED
 
     if data["Slave_IO_Running"].lower() == "no":
         data["Slave_IO_Running"] = "[#fc7979]NO[/#fc7979]"
@@ -352,7 +354,7 @@ def fetch_replica_table_data(dolphie: Dolphie):
             replica_data = replica_connection["cursor"].fetchone()
 
             if replica_data:
-                replica_tables[host] = create_table(dolphie, replica_data, replica_thread_id=thread_id)
+                replica_tables[host] = create_table(dolphie, data=replica_data, replica_thread_id=thread_id)
         except pymysql.Error as e:
             table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
 

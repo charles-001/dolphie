@@ -412,17 +412,16 @@ class DolphieApp(App):
             dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
             dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
             dolphie.innodb_metrics = dolphie.main_db_connection.fetch_data("innodb_metrics")
-            dolphie.fetch_replication_data(connection=dolphie.main_db_connection)
+            dolphie.replica_data = dolphie.main_db_connection.fetch_data(
+                "find_replicas", dolphie.use_performance_schema
+            )
+            dolphie.fetch_replication_data()
             dolphie.massage_metrics_data()
 
             if dolphie.display_dashboard_panel:
                 dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
 
             if dolphie.display_replication_panel:
-                dolphie.replica_data = dolphie.main_db_connection.fetch_data(
-                    "find_replicas", dolphie.use_performance_schema
-                )
-
                 dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
 
             if dolphie.display_processlist_panel:
@@ -434,6 +433,8 @@ class DolphieApp(App):
                     connection["connection"].close()
 
                 dolphie.replica_connections = {}
+                dolphie.replica_data = {}
+                dolphie.replica_tables = {}
 
             dolphie.metric_manager.refresh_data(
                 worker_start_time=dolphie.worker_start_time,
@@ -472,7 +473,7 @@ class DolphieApp(App):
                     self.app.query_one("#topbar_host").update(f"{dolphie.mysql_host}:{dolphie.port}")
 
                 if dolphie.display_dashboard_panel:
-                    self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(dolphie))
+                    self.refresh_panel("dashboard")
 
                     # Update the sparkline for queries per second
                     sparkline = self.app.query_one("#panel_dashboard_queries_qps")
@@ -485,10 +486,10 @@ class DolphieApp(App):
                     sparkline.refresh()
 
                 if dolphie.display_processlist_panel:
-                    processlist_panel.create_panel(dolphie)
+                    self.refresh_panel("processlist")
 
                 if dolphie.display_replication_panel:
-                    self.query_one("#panel_replication_data", Static).update(replication_panel.create_panel(dolphie))
+                    self.refresh_panel("replication")
 
                 if dolphie.display_graphs_panel:
                     # Add/remove replication tab based on replication status
@@ -627,11 +628,33 @@ class DolphieApp(App):
         formatted_stat_data = "  ".join(f"[b #bbc8e8]{label}[/b #bbc8e8] {value}" for label, value in stat_data.items())
         self.query_one(f"#stats_{tab_metric_instance_name}").update(formatted_stat_data)
 
+    def refresh_panel(self, panel_name, manual=False):
+        # If loading indicator is displaying, don't refresh
+        if self.app.query_one("LoadingIndicator").display:
+            return
+
+        if panel_name == "replication":
+            # When replication panel status is changed, we need to refresh the dashboard panel as well since
+            # it adds/removes it from there
+            self.query_one("#panel_replication_data", Static).update(replication_panel.create_panel(self.dolphie))
+
+            if manual:
+                self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(self.dolphie))
+
+        elif panel_name == "dashboard":
+            self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(self.dolphie))
+        elif panel_name == "processlist":
+            processlist_panel.create_panel(self.dolphie)
+
     def quick_host_switch(self):
         dolphie = self.dolphie
 
         dolphie.main_db_connection.connection.close()
         dolphie.secondary_db_connection.connection.close()
+
+        dolphie.replication_status = {}
+        dolphie.replica_data = {}
+        dolphie.replica_tables = {}
 
         if dolphie.replica_connections:
             for connection in dolphie.replica_connections.values():
