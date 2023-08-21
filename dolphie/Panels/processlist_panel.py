@@ -204,11 +204,11 @@ def fetch_data(dolphie: Dolphie):
         if "SELECT /*!40001 SQL_NO_CACHE */ *" in query:
             thread_color = "magenta"
         elif query:
-            if time >= 5:
+            if time >= 10:
                 thread_color = "#fc7979"
-            elif time >= 3:
+            elif time >= 5:
                 thread_color = "#f1fb82"
-            elif time <= 2:
+            elif time <= 4:
                 thread_color = "#54efae"
 
         formatted_time = TextPlus(format_time(time), style=thread_color)

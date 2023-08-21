@@ -154,9 +154,9 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.worker_job_time)
 
         if replica_sbm != 0:
-            if replica_sbm > 20:
+            if replica_sbm >= 20:
                 lag = "[#fc7979]%s" % "{:0>8}[/#fc7979]".format(str(timedelta(seconds=replica_sbm)))
-            elif replica_sbm > 10:
+            elif replica_sbm >= 10:
                 lag = "[#f1fb82]%s[/#f1fb82]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
             else:
                 lag = "[#54efae]%s[/#54efae]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))

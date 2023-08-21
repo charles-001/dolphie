@@ -41,10 +41,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     else:
         refresh_latency = round(dolphie.worker_job_time - dolphie.refresh_interval, 2)
 
-    use_performance_schema_status = "NO"
-    if dolphie.use_performance_schema:
-        use_performance_schema_status = "YES"
-
     if global_variables["read_only"] == "ON":
         if not dolphie.replication_status:
             global_variables["read_only"] = "YES ([indian_red]SHOULD BE NO?[/indian_red])"
@@ -64,7 +60,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_information.add_row("[#c5c7d2]Uptime", uptime)
     table_information.add_row("[#c5c7d2]Runtime", f"{runtime} [#c5c7d2]latency:[/#c5c7d2] {refresh_latency}s")
     table_information.add_row("[#c5c7d2]Read Only", global_variables["read_only"])
-    table_information.add_row("[#c5c7d2]Use PS", use_performance_schema_status)
+    table_information.add_row("[#c5c7d2]Replicas", "%s" % len(dolphie.replica_data))
     table_information.add_row(
         "[#c5c7d2]Threads",
         "[#c5c7d2]con[/#c5c7d2] %s[#91abec]/[/#91abec][#c5c7d2]run[/#c5c7d2]"

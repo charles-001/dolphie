@@ -628,7 +628,7 @@ class DolphieApp(App):
         formatted_stat_data = "  ".join(f"[b #bbc8e8]{label}[/b #bbc8e8] {value}" for label, value in stat_data.items())
         self.query_one(f"#stats_{tab_metric_instance_name}").update(formatted_stat_data)
 
-    def refresh_panel(self, panel_name, manual=False):
+    def refresh_panel(self, panel_name, toggled=False):
         # If loading indicator is displaying, don't refresh
         if self.app.query_one("LoadingIndicator").display:
             return
@@ -638,7 +638,7 @@ class DolphieApp(App):
             # it adds/removes it from there
             self.query_one("#panel_replication_data", Static).update(replication_panel.create_panel(self.dolphie))
 
-            if manual:
+            if toggled and self.dolphie.replication_status:
                 self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(self.dolphie))
 
         elif panel_name == "dashboard":

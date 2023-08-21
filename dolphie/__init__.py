@@ -250,7 +250,7 @@ class Dolphie:
         panel.display = new_display
         setattr(self, f"display_{panel_name}_panel", new_display)
         if panel_name not in ["graphs"]:
-            self.app.refresh_panel(panel_name, manual=True)
+            self.app.refresh_panel(panel_name, toggled=True)
 
     def capture_key(self, key):
         screen_data = None
@@ -960,7 +960,6 @@ class Dolphie:
 
             datapoints = {
                 "Read Only": "If the host is in read-only mode",
-                "Use PS": "If Dolphie is using Performance Schema for listing threads",
                 "Read Hit": "The percentage of how many reads are from InnoDB buffer pool compared to from disk",
                 "Lag": (
                     "Retrieves metric from: Default -> SHOW SLAVE STATUS, HB -> Heartbeat table, PS -> Performance"
