@@ -492,25 +492,15 @@ class DolphieApp(App):
                     self.refresh_panel("replication")
 
                 if dolphie.display_graphs_panel:
-                    # Add/remove replication tab based on replication status
+                    # Hide/show replication tab based on replication status
                     replication_tab = self.app.query_one("#tabbed_content", TabbedContent)
                     if dolphie.replication_status:
-                        if not self.app.query("#tab_replication_lag"):
-                            replication_tab.add_pane(
-                                pane=TabPane(
-                                    "Replication",
-                                    Label(id="stats_replication_lag", classes="stats_data"),
-                                    MetricManager.Graph(id="graph_replication_lag", classes="panel_data"),
-                                    id="tab_replication_lag",
-                                )
-                            )
+                        replication_tab.show_tab("tab_replication_lag")
                     else:
-                        if self.app.query("#tab_replication_lag"):
-                            replication_tab.remove_pane("tab_replication_lag")
+                        replication_tab.hide_tab("tab_replication_lag")
 
                     # Refresh the graph(s) for the selected tab
-                    active_graph = self.query_one("#tabbed_content", TabbedContent).active
-                    metric_instance_name = active_graph.split("tab_")[1]
+                    metric_instance_name = replication_tab.active.split("tab_")[1]
                     self.update_graphs(metric_instance_name)
 
                 # We take a snapshot of the processlist to be used for commands
@@ -750,6 +740,10 @@ class DolphieApp(App):
 
                         with Horizontal(classes="switch_container"):
                             yield from self.generate_switches("adaptive_hash_index")
+
+                    with TabPane("Replication", id="tab_replication_lag"):
+                        yield Label(id="stats_replication_lag", classes="stats_data")
+                        yield MetricManager.Graph(id="graph_replication_lag", classes="panel_data")
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")
