@@ -680,25 +680,25 @@ class Dolphie:
                         table.add_row("[#c5c7d2]Rows Modified", thread_data["trx_rows_modified"])
 
                         # Transaction history
-                        query_history_title = ""
-                        query_history_table = Table(box=box.ROUNDED, style="#52608d")
+                        transaction_history_title = ""
+                        transaction_history_table = Table(box=box.ROUNDED, style="#52608d")
                         if self.is_mysql_version_at_least("5.7") and self.use_performance_schema:
-                            query = MySQLQueries.thread_query_history.replace(
+                            query = MySQLQueries.thread_transaction_history.replace(
                                 "$placeholder", str(thread_data["mysql_thread_id"])
                             )
                             self.secondary_db_connection.cursor.execute(query)
-                            query_history = self.secondary_db_connection.fetchall()
+                            transaction_history = self.secondary_db_connection.fetchall()
 
-                            if query_history:
-                                query_history_title = "[b]Transaction History[/b]"
-                                query_history_table.add_column("Start Time")
-                                query_history_table.add_column("Query")
+                            if transaction_history:
+                                transaction_history_title = "[b]Transaction History[/b]"
+                                transaction_history_table.add_column("Start Time")
+                                transaction_history_table.add_column("Query")
 
-                                for query in query_history:
+                                for query in transaction_history:
                                     formatted_query = ""
                                     if query["sql_text"]:
                                         formatted_query = Syntax(
-                                            query["sql_text"],
+                                            re.sub(r"\s+", " ", query["sql_text"]),
                                             "sql",
                                             line_numbers=False,
                                             word_wrap=True,
@@ -706,7 +706,7 @@ class Dolphie:
                                             background_color="#000718",
                                         )
 
-                                    query_history_table.add_row(
+                                    transaction_history_table.add_row(
                                         query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), formatted_query
                                     )
 
@@ -780,8 +780,8 @@ class Dolphie:
                                     "",
                                     Align.center(explain_table),
                                     "",
-                                    Align.center(query_history_title),
-                                    Align.center(query_history_table),
+                                    Align.center(transaction_history_title),
+                                    Align.center(transaction_history_table),
                                 )
                             else:
                                 screen_data = Group(
@@ -791,15 +791,15 @@ class Dolphie:
                                     "",
                                     Align.center(explain_failure),
                                     "",
-                                    Align.center(query_history_title),
-                                    Align.center(query_history_table),
+                                    Align.center(transaction_history_title),
+                                    Align.center(transaction_history_table),
                                 )
                         else:
                             screen_data = Group(
                                 Align.center(table),
                                 "",
-                                Align.center(query_history_title),
-                                Align.center(query_history_table),
+                                Align.center(transaction_history_title),
+                                Align.center(transaction_history_table),
                             )
 
                         self.app.push_screen(

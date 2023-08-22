@@ -193,7 +193,7 @@ class MySQLQueries:
             file_name LIKE '%innodb_redo/%' AND
             file_name NOT LIKE '%_tmp'
     """
-    thread_query_history: str = """
+    thread_transaction_history: str = """
         SELECT
             DATE_SUB(
                 NOW(),
