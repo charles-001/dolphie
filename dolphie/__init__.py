@@ -111,6 +111,7 @@ class Dolphie:
         self.use_performance_schema: bool = False
         self.performance_schema_enabled: bool = False
         self.host_is_rds: bool = False
+        self.host_is_cluster: bool = False
         self.server_uuid: str = None
         self.mysql_version: str = None
         self.host_distro: str = None
@@ -203,10 +204,12 @@ class Dolphie:
         # Get proper host version and fork
         if "percona xtradb cluster" in version_comment:
             self.host_distro = "Percona XtraDB Cluster"
+            self.host_is_cluster = True
         elif "percona server" in version_comment:
             self.host_distro = "Percona Server"
         elif "mariadb cluster" in version_comment:
             self.host_distro = "MariaDB Cluster"
+            self.host_is_cluster = True
         elif "mariadb" in version_comment or "mariadb" in version:
             self.host_distro = "MariaDB"
         elif aurora_version:
@@ -1151,7 +1154,11 @@ class Dolphie:
 
                 # If we're using MySQL 8, fetch the replication applier status data
                 self.replication_applier_status = None
-                if self.is_mysql_version_at_least("8.0") and self.display_replication_panel:
+                if (
+                    self.is_mysql_version_at_least("8.0")
+                    and self.display_replication_panel
+                    and self.global_variables.get("slave_parallel_workers", 0) > 1
+                ):
                     self.main_db_connection.execute(MySQLQueries.replication_applier_status)
                     self.replication_applier_status = self.main_db_connection.fetchall()
 

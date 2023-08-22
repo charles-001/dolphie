@@ -117,7 +117,6 @@ Environment variables support these options:
 
 ## Supported MySQL versions
 - MySQL/Percona Server 5.6/5.7/8.0
-- MariaDB 10+ (maybe, let me know :smiley:)
 - RDS/Aurora
 
 ## Grants required

@@ -208,7 +208,7 @@ def fetch_data(dolphie: Dolphie):
                 thread_color = "#fc7979"
             elif time >= 5:
                 thread_color = "#f1fb82"
-            elif time <= 4:
+            else:
                 thread_color = "#54efae"
 
         formatted_time = TextPlus(format_time(time), style=thread_color)

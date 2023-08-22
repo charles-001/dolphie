@@ -12,41 +12,55 @@ from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie):
-    if dolphie.display_replication_panel and not dolphie.replica_data and not dolphie.replication_status:
+def create_panel(dolphie: Dolphie) -> Panel:
+    if (
+        dolphie.display_replication_panel
+        and not dolphie.replica_data
+        and not dolphie.replication_status
+        and not dolphie.host_is_cluster
+    ):
         return "[#f1fb82]No data to display![/#f1fb82] This host is not a replica and has no replicas connected"
 
-    table_grid = Table.grid()
+    def create_replica_panel():
+        if not dolphie.replica_tables and not dolphie.replica_data:
+            return None
 
-    # Stack tables in groups of 2
-    replicas = sorted(dolphie.replica_tables.items())
-    num_replicas = len(replicas)
-    for i in range(0, num_replicas - (num_replicas % 2), 2):
-        table_grid.add_row(*[table for _, table in replicas[i : i + 2]])
+        if dolphie.replica_tables:
+            table_grid = Table.grid()
 
-    if num_replicas % 2 != 0:
-        table_grid.add_row(*[table for _, table in replicas[num_replicas - (num_replicas % 2) :]])
+            num_replicas = len(dolphie.replica_tables)
+            for i in range(0, num_replicas, 2):
+                table_grid.add_row(*[table for _, table in sorted(list(dolphie.replica_tables.items()))[i : i + 2]])
 
-    replica_panel = ""
-    if num_replicas:
+            content = table_grid
+        elif dolphie.replica_data:
+            num_replicas = len(dolphie.replica_data)
+            content = "\nLoading...\n"
+
         title = "Replica" if num_replicas == 1 else "Replicas"
-        replica_panel = Panel(
-            Align.center(table_grid),
+        return Panel(
+            Align.center(content),
             title=f"[b #e9e9e9]{num_replicas} {title}",
             box=box.HORIZONTALS,
             border_style="#6171a6",
         )
-    elif dolphie.replica_data:
-        title = "Replica" if len(dolphie.replica_data) == 1 else "Replicas"
-        replica_panel = Panel(
-            Align.center("\nLoading...\n"),
-            title=f"[b #e9e9e9]{len(dolphie.replica_data)} {title}",
+
+    def create_cluster_panel():
+        if not dolphie.host_is_cluster:
+            return None
+
+        return Panel(
+            Align.center(
+                f"\n[b #bbc8e8]State[/b #bbc8e8]  {dolphie.global_status.get('wsrep_local_state_comment', 'N/A')}\n"
+            ),
+            title="[b #e9e9e9]Cluster",
             box=box.HORIZONTALS,
             border_style="#6171a6",
         )
 
-    if dolphie.replication_status:
-        table_replication = create_table(dolphie)
+    def create_replication_panel():
+        if not dolphie.replication_status:
+            return None
 
         replication_variables = ""
         available_replication_variables = {
@@ -59,7 +73,6 @@ def create_panel(dolphie: Dolphie):
         for setting_variable, setting_display_name in available_replication_variables.items():
             value = dolphie.global_variables.get(setting_variable, "N/A")
             replication_variables += f"[b #bbc8e8]{setting_display_name}[/b #bbc8e8] {value}  "
-
         replication_variables = replication_variables.strip()
 
         table_thread_applier_status = Table()
@@ -90,29 +103,25 @@ def create_panel(dolphie: Dolphie):
                 )
 
         table_grid_replication = Table.grid()
-        table_grid_replication.add_row(table_replication, table_thread_applier_status)
+        table_grid_replication.add_row(create_table(dolphie), table_thread_applier_status)
 
-        replication_panel = Panel(
+        return Panel(
             Group(Align.center(replication_variables), Align.center(table_grid_replication)),
             title="[b #e9e9e9]Replication",
             box=box.HORIZONTALS,
             border_style="#6171a6",
         )
 
-        if replica_panel:
-            panel_data = Group(
-                replication_panel,
-                replica_panel,
-            )
-        else:
-            panel_data = replication_panel
-    else:
-        panel_data = replica_panel
+    group_panels = [
+        create_cluster_panel(),
+        create_replication_panel(),
+        create_replica_panel(),
+    ]
 
-    return panel_data
+    return Group(*[panel for panel in group_panels if panel])
 
 
-def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thread_id=None):
+def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thread_id=None) -> Table:
     table_title_style = Style(bold=True)
     table_line_color = "#6171a6"
     table_box = box.ROUNDED
@@ -123,9 +132,13 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             replica_previous_replica_sbm = dolphie.replica_connections[replica_thread_id]["previous_sbm"]
 
         db_cursor = dolphie.replica_connections[replica_thread_id]["cursor"]
+        sbm_source, data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica_cursor=db_cursor)
     else:
         data = dolphie.replication_status
         replica_previous_replica_sbm = dolphie.previous_replica_sbm
+
+        sbm_source = dolphie.replica_lag_source
+        data["Seconds_Behind_Master"] = dolphie.replica_lag
 
     if data["Slave_IO_Running"].lower() == "no":
         data["Slave_IO_Running"] = "[#fc7979]NO[/#fc7979]"
@@ -137,12 +150,6 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
     else:
         data["Slave_SQL_Running"] = "[#54efae]Yes[/#54efae]"
 
-    if replica_thread_id:
-        sbm_source, data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica_cursor=db_cursor)
-    else:
-        sbm_source = dolphie.replica_lag_source
-        data["Seconds_Behind_Master"] = dolphie.replica_lag
-
     speed = 0
     if data["Seconds_Behind_Master"] is not None:
         replica_sbm = data["Seconds_Behind_Master"]
@@ -153,15 +160,12 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
         if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
             speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.worker_job_time)
 
-        if replica_sbm != 0:
-            if replica_sbm >= 20:
-                lag = "[#fc7979]%s" % "{:0>8}[/#fc7979]".format(str(timedelta(seconds=replica_sbm)))
-            elif replica_sbm >= 10:
-                lag = "[#f1fb82]%s[/#f1fb82]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
-            else:
-                lag = "[#54efae]%s[/#54efae]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
-        elif replica_sbm == 0:
-            lag = "[#54efae]00:00:00[/#54efae]"
+        if replica_sbm >= 20:
+            lag = "[#fc7979]%s" % "{:0>8}[/#fc7979]".format(str(timedelta(seconds=replica_sbm)))
+        elif replica_sbm >= 10:
+            lag = "[#f1fb82]%s[/#f1fb82]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+        else:
+            lag = "[#54efae]%s[/#54efae]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
 
     data["Master_Host"] = dolphie.get_hostname(data["Master_Host"])
     mysql_gtid_enabled = False
@@ -236,7 +240,6 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
         table.add_row("[#c5c7d2]Relay Log ", "%s" % (data["Relay_Log_File"]))
         table.add_row("[#c5c7d2]GTID", "%s" % gtid_status)
         table.add_row("[#c5c7d2]State", "%s" % data["Slave_SQL_Running_State"])
-
     else:
         table.add_row(
             "[#c5c7d2]Binlog IO",
