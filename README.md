@@ -1,7 +1,7 @@
 # Dolphie
 <p align="center">
 <img src="https://user-images.githubusercontent.com/13244625/187600748-19d2ad15-42e8-4f9c-ada5-a153cdcf4070.png" width="120"><br>
-An intuitive feature-rich top tool for monitoring MySQL in real time
+An intuitive feature-rich terminal tool for monitoring MySQL in real-time
 </p>
 <img width="1429" alt="Screenshot 2023-08-22 at 12 11 04 AM" src="https://github.com/charles-001/dolphie/assets/13244625/3030f08d-2b85-449a-8438-12a54101c58a">
 <p></p>
@@ -110,7 +110,7 @@ Environment variables support these options:
 ```
 
 ## Supported MySQL versions
-- MySQL/Percona Server 5.6/5.7/8.0
+- MySQL/Percona Server 5.6/5.7/8.0+
 - RDS/Aurora
 
 ## Grants required

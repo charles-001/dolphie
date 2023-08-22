@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "dolphie"
-version = "3.0.7"
+version = "3.0.8"
 license = "GPL-3.0-or-later"
-description = "An intuitive feature-rich top tool for monitoring MySQL in real time"
+description = "An intuitive feature-rich terminal tool for monitoring MySQL in real-time"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]
 readme = "README.md"
 
