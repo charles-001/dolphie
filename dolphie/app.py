@@ -715,7 +715,7 @@ class DolphieApp(App):
                         with Horizontal(classes="switch_container"):
                             yield from self.generate_switches("threads")
 
-                    with TabPane("Buffer Pool Requests", id="tab_buffer_pool_requests"):
+                    with TabPane("BP Requests", id="tab_buffer_pool_requests"):
                         yield Label(id="stats_buffer_pool_requests", classes="stats_data")
                         yield MetricManager.Graph(id="graph_buffer_pool_requests", classes="panel_data")
 
@@ -732,7 +732,7 @@ class DolphieApp(App):
                             yield MetricManager.Graph(id="graph_redo_log_active_count", classes="panel_data")
                             yield MetricManager.Graph(bar=True, id="graph_redo_log_bar", classes="panel_data")
 
-                    with TabPane("Adaptive Hash Index", id="tab_adaptive_hash_index"):
+                    with TabPane("AHI", id="tab_adaptive_hash_index"):
                         yield Label(id="stats_adaptive_hash_index", classes="stats_data")
                         with Horizontal():
                             yield MetricManager.Graph(id="graph_adaptive_hash_index", classes="panel_data")
@@ -740,6 +740,18 @@ class DolphieApp(App):
 
                         with Horizontal(classes="switch_container"):
                             yield from self.generate_switches("adaptive_hash_index")
+
+                    with TabPane("Temp Objects", id="tab_temporary_objects"):
+                        yield Label(id="stats_temporary_objects", classes="stats_data")
+                        yield MetricManager.Graph(id="graph_temporary_objects", classes="panel_data")
+                        with Horizontal(classes="switch_container"):
+                            yield from self.generate_switches("temporary_objects")
+
+                    with TabPane("Aborted Connections", id="tab_aborted_connections"):
+                        yield Label(id="stats_aborted_connections", classes="stats_data")
+                        yield MetricManager.Graph(id="graph_aborted_connections", classes="panel_data")
+                        with Horizontal(classes="switch_container"):
+                            yield from self.generate_switches("aborted_connections")
 
                     with TabPane("Replication", id="tab_replication_lag"):
                         yield Label(id="stats_replication_lag", classes="stats_data")

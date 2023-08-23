@@ -269,15 +269,25 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             if replica_thread_id:
                 # We ignore the GTID set that relates to the replica's primary UUID
                 def remove_primary_uuid_gtid_set(gtid_set):
-                    lines = gtid_set.splitlines()
-                    filtered_lines = [line for line in lines if dolphie.server_uuid not in line]
+                    gtid_sets = gtid_set.splitlines()
+                    remaining_gtid_sets = [line for line in gtid_sets if dolphie.server_uuid not in line]
+
+                    # If there are no GTID sets left, return empty string since we don't need to do anything else
+                    if not remaining_gtid_sets:
+                        return ""
+
+                    # Also filter out the primary server uuid if a host is a replica with replicas
+                    if dolphie.replication_primary_server_uuid:
+                        remaining_gtid_sets = [
+                            line for line in remaining_gtid_sets if dolphie.replication_primary_server_uuid not in line
+                        ]
 
                     # If the last line ends with a comma, remove comma since that query would fail
-                    last_line = filtered_lines[-1]
-                    if filtered_lines and last_line.endswith(","):
+                    last_line = remaining_gtid_sets[-1]
+                    if remaining_gtid_sets and last_line.endswith(","):
                         last_line = last_line[:-1]
 
-                    return "\n".join(filtered_lines)
+                    return "\n".join(remaining_gtid_sets)
 
                 replica_gtid_set = remove_primary_uuid_gtid_set(executed_gtid_set)
                 primary_gtid_set = remove_primary_uuid_gtid_set(dolphie.global_variables["gtid_executed"])
@@ -314,12 +324,12 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
         elif mariadb_gtid_enabled:
             table.add_row("[#c5c7d2]GTID IO Pos", "%s" % data["Gtid_IO_Pos"])
 
-        error_types = ["Last_Error", "Last_IO_Error", "Last_SQL_Error"]
+        error_types = ["Last_IO_Error", "Last_SQL_Error"]
         errors = [(error_type, data[error_type]) for error_type in error_types if data[error_type]]
 
         if errors:
             for error_type, error_message in errors:
-                table.add_row("[#c5c7d2]%s" % error_type.replace("_", " "), "%s" % error_message)
+                table.add_row("[#c5c7d2]%s" % error_type.replace("_", " "), "[#fc7979]%s[/#fc7979]" % error_message)
         else:
             table.add_row("[#c5c7d2]IO State", "%s" % data["Slave_IO_State"])
             table.add_row("[#c5c7d2]SQL State", "%s" % data["Slave_SQL_Running_State"])
@@ -366,7 +376,7 @@ def fetch_replica_table_data(dolphie: Dolphie):
 
             table.add_row("[#c5c7d2]Host", host)
             table.add_row("[#c5c7d2]User", row["user"])
-            table.add_row("[#fc7979]Error", e.args[1])
+            table.add_row("[#c5c7d2]Error", "[#fc7979]%s[#fc7979]" % e.args[1])
 
             replica_tables[host] = table
 

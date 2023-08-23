@@ -309,6 +309,27 @@ class ThreadMetrics:
 
 
 @dataclass
+class TemporaryObjectMetrics:
+    Created_tmp_tables: MetricData
+    Created_tmp_disk_tables: MetricData
+    Created_tmp_files: MetricData
+    graphs: List[str]
+    tab_name: str = "temporary_objects"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+
+
+@dataclass
+class AbortedConnectionsMetrics:
+    Aborted_clients: MetricData
+    Aborted_connects: MetricData
+    graphs: List[str]
+    tab_name: str = "aborted_connections"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+
+
+@dataclass
 class MetricInstances:
     dml: DMLMetrics
     replication_lag: ReplicationLagMetrics
@@ -320,6 +341,8 @@ class MetricInstances:
     redo_log_active_count: RedoLogActiveCountMetrics
     table_cache: TableCacheMetrics
     threads: ThreadMetrics
+    temporary_objects: TemporaryObjectMetrics
+    aborted_connections: AbortedConnectionsMetrics
 
 
 class MetricManager:
@@ -399,6 +422,17 @@ class MetricManager:
                     label="Connected", color=MetricColor.green, visible=False, per_second_calculation=False
                 ),
                 Threads_running=MetricData(label="Running", color=MetricColor.blue, per_second_calculation=False),
+            ),
+            temporary_objects=TemporaryObjectMetrics(
+                graphs=["graph_temporary_objects"],
+                Created_tmp_tables=MetricData(label="Tables", color=MetricColor.blue),
+                Created_tmp_disk_tables=MetricData(label="Disk", color=MetricColor.red),
+                Created_tmp_files=MetricData(label="Files", color=MetricColor.yellow),
+            ),
+            aborted_connections=AbortedConnectionsMetrics(
+                graphs=["graph_aborted_connections"],
+                Aborted_clients=MetricData(label="Client (timeout)", color=MetricColor.blue),
+                Aborted_connects=MetricData(label="Connects (attempt)", color=MetricColor.red),
             ),
         )
 
