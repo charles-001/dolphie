@@ -268,26 +268,28 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             # We find errant transactions for replicas here
             if replica_thread_id:
                 # We ignore the GTID set that relates to the replica's primary UUID
-                def remove_primary_uuid_gtid_set(gtid_set):
-                    gtid_sets = gtid_set.splitlines()
-                    remaining_gtid_sets = [line for line in gtid_sets if dolphie.server_uuid not in line]
+                def remove_primary_uuid_gtid_set(gtid_sets):
+                    lines = gtid_sets.splitlines()
+                    server_uuid = dolphie.server_uuid
+                    replication_primary_uuid = dolphie.replication_primary_server_uuid
 
-                    # If there are no GTID sets left, return empty string since we don't need to do anything else
-                    if not remaining_gtid_sets:
-                        return ""
+                    # Use sets for efficient membership checks
+                    if replication_primary_uuid:
+                        server_uuid_set = {server_uuid, replication_primary_uuid}
+                    else:
+                        server_uuid_set = {server_uuid}
 
-                    # Also filter out the primary server uuid if a host is a replica with replicas
-                    if dolphie.replication_primary_server_uuid:
-                        remaining_gtid_sets = [
-                            line for line in remaining_gtid_sets if dolphie.replication_primary_server_uuid not in line
-                        ]
+                    # Filter lines based on server_uuid_set
+                    remaining_lines = [line for line in lines if not any(uuid in line for uuid in server_uuid_set)]
 
-                    # If the last line ends with a comma, remove comma since that query would fail
-                    last_line = remaining_gtid_sets[-1]
-                    if remaining_gtid_sets and last_line.endswith(","):
-                        last_line = last_line[:-1]
+                    # Join the modified lines with newlines
+                    result = "\n".join(remaining_lines)
 
-                    return "\n".join(remaining_gtid_sets)
+                    # Remove trailing comma if it exists
+                    if result.endswith(","):
+                        result = result[:-1]
+
+                    return result
 
                 replica_gtid_set = remove_primary_uuid_gtid_set(executed_gtid_set)
                 primary_gtid_set = remove_primary_uuid_gtid_set(dolphie.global_variables["gtid_executed"])
