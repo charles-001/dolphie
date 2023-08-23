@@ -267,17 +267,15 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
 
             # We find errant transactions for replicas here
             if replica_thread_id:
-                # We ignore the GTID set that relates to the replica's primary UUID
+
                 def remove_primary_uuid_gtid_set(gtid_sets):
                     lines = gtid_sets.splitlines()
-                    server_uuid = dolphie.server_uuid
-                    replication_primary_uuid = dolphie.replication_primary_server_uuid
 
-                    # Use sets for efficient membership checks
-                    if replication_primary_uuid:
-                        server_uuid_set = {server_uuid, replication_primary_uuid}
-                    else:
-                        server_uuid_set = {server_uuid}
+                    # We ignore the GTID set that relates to the replica's primary UUID/host's UUID since
+                    # we would always have errant transactions if not
+                    server_uuid_set = {dolphie.server_uuid}
+                    if dolphie.replication_primary_server_uuid:
+                        server_uuid_set.add(dolphie.replication_primary_server_uuid)
 
                     # Filter lines based on server_uuid_set
                     remaining_lines = [line for line in lines if not any(uuid in line for uuid in server_uuid_set)]
