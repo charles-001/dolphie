@@ -52,15 +52,23 @@ class MySQLQueries:
             $placeholder
     """
     ps_replica_lag: str = """
-        SELECT
-            IFNULL(TIMESTAMPDIFF(
-                SECOND,
-                MIN(APPLYING_TRANSACTION_ORIGINAL_COMMIT_TIMESTAMP),
-            NOW()), "0") AS Seconds_Behind_Master
-        FROM
-            performance_schema.replication_applier_status_by_worker
-        WHERE
-            APPLYING_TRANSACTION != ''
+        SELECT MAX(`lag`) AS Seconds_Behind_Master
+            FROM (
+                SELECT MAX(TIMESTAMPDIFF(SECOND, APPLYING_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP, NOW())) AS `lag`
+                FROM performance_schema.replication_applier_status_by_worker
+
+                UNION
+
+                SELECT MIN(
+                    IF(
+                        GTID_SUBTRACT(LAST_QUEUED_TRANSACTION, LAST_APPLIED_TRANSACTION) = '',
+                        0,
+                        TIMESTAMPDIFF(SECOND, LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP, NOW())
+                    )
+                ) AS `lag`
+                FROM performance_schema.replication_applier_status_by_worker w
+                JOIN performance_schema.replication_connection_status s ON s.channel_name = w.channel_name
+            ) required
     """
     heartbeat_replica_lag: str = """
         SELECT
