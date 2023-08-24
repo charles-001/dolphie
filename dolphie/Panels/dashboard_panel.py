@@ -187,6 +187,7 @@ def create_panel(dolphie: Dolphie) -> Table:
         table_primary.add_row("[#c5c7d2]Cache Hit", f"{binlog_cache}%")
 
         binlog_format = global_variables.get("binlog_format", "N/A")
+        binlog_row_image = None
         if binlog_format == "ROW":
             binlog_row_image = global_variables.get("binlog_row_image", "N/A")
             table_primary.add_row("[#c5c7d2]Format", "{} ({})".format(binlog_format, binlog_row_image))
@@ -212,12 +213,12 @@ def create_panel(dolphie: Dolphie) -> Table:
         tables_to_add.append(replication_panel.create_table(dolphie, dashboard_table=True))
 
     ###############
-    # Statisitics #
+    # Statistics #
     ###############
     table_stats = Table(
         show_header=False,
         box=table_box,
-        title="Statisitics/s",
+        title="Statistics/s",
         title_style=table_title_style,
         style=table_line_color,
     )
