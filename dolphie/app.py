@@ -237,7 +237,7 @@ Environment variables support these options:
         dest="use_processlist",
         action="store_true",
         default=False,
-        help="Start with using Processlist instead of Performance Schema for listing queries",
+        help="Start with using SHOW PROCESSLIST instead of Performance Schema for processlist panel",
     )
     parser.add_argument(
         "-V", "--version", action="version", version=dolphie.app_version, help="Display version and exit"
@@ -371,7 +371,10 @@ Environment variables support these options:
 
     dolphie.show_trxs_only = parameter_options["show_trxs_only"]
     dolphie.show_additional_query_columns = parameter_options["show_additional_query_columns"]
-    dolphie.use_processlist = parameter_options["use_processlist"]
+
+    if parameter_options["use_processlist"]:
+        dolphie.use_performance_schema = False
+
     dolphie.hide_dashboard = parameter_options["hide_dashboard"]
 
     if os.path.exists(dolphie.quick_switch_hosts_file):

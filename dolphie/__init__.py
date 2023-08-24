@@ -53,7 +53,6 @@ class Dolphie:
         self.quick_switch_hosts_file: str = None
         self.debug: bool = False
         self.refresh_interval: int = 1
-        self.use_processlist: bool = False
         self.show_idle_threads: bool = False
         self.show_trxs_only: bool = False
         self.show_additional_query_columns: bool = False
@@ -109,8 +108,8 @@ class Dolphie:
         self.secondary_db_connection: Database = None
         self.main_db_connection_id: int = None
         self.secondary_db_connection_id: int = None
-        self.use_performance_schema: bool = False
         self.performance_schema_enabled: bool = False
+        self.use_performance_schema: bool = True
         self.host_is_rds: bool = False
         self.host_is_mariadb: bool = False
         self.host_is_cluster: bool = False
@@ -180,9 +179,6 @@ class Dolphie:
         performance_schema = self.main_db_connection.fetch_value_from_field("SELECT @@performance_schema")
         if performance_schema == 1:
             self.performance_schema_enabled = True
-
-            if not self.use_processlist:
-                self.use_performance_schema = True
 
         version_comment = self.main_db_connection.fetch_value_from_field("SELECT @@version_comment").lower()
         basedir = self.main_db_connection.fetch_value_from_field("SELECT @@basedir")
@@ -356,12 +352,14 @@ class Dolphie:
             )
 
         elif key == "e":
-            if self.is_mysql_version_at_least("8.0"):
+            if self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled:
                 self.app.push_screen(
                     EventLog(self.app_version, f"{self.mysql_host}:{self.port}", self.secondary_db_connection)
                 )
             else:
-                self.update_footer("Error log command requires MySQL 8")
+                self.update_footer(
+                    "[indian_red]Error log command requires MySQL 8+ with Performance Schema enabled[/indian_red]"
+                )
 
         elif key == "f":
 
@@ -553,10 +551,14 @@ class Dolphie:
             screen_data = self.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
 
         elif key == "m":
+            if not self.is_mysql_version_at_least("5.7") or not self.performance_schema_enabled:
+                self.update_footer(
+                    "[indian_red]Memory usage command requires MySQL 5.7+ with Performance Schema enabled"
+                )
+                return
+
             table_line_color = "#52608d"
-
             table_grid = Table.grid()
-
             table1 = Table(
                 box=box.ROUNDED,
                 style=table_line_color,
@@ -686,7 +688,7 @@ class Dolphie:
                         # Transaction history
                         transaction_history_title = ""
                         transaction_history_table = Table(box=box.ROUNDED, style="#52608d")
-                        if self.is_mysql_version_at_least("5.7") and self.use_performance_schema:
+                        if self.is_mysql_version_at_least("5.7") and self.performance_schema_enabled:
                             query = MySQLQueries.thread_transaction_history.replace(
                                 "$placeholder", str(thread_data["mysql_thread_id"])
                             )
@@ -834,7 +836,7 @@ class Dolphie:
                 screen_data = Align.center(user_stat_data)
             else:
                 self.update_footer(
-                    "[b indian_red]Cannot use this command![/b indian_red] It requires Performance Schema to be enabled"
+                    "[b indian_red]User statistics command requires Performance Schema to be enabled[/b indian_red]"
                 )
 
         elif key == "v":
