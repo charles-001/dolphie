@@ -141,14 +141,14 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
         data["Seconds_Behind_Master"] = dolphie.replica_lag
 
     if data["Slave_IO_Running"].lower() == "no":
-        data["Slave_IO_Running"] = "[#fc7979]NO[/#fc7979]"
+        io_thread_running = "[#fc7979]NO[/#fc7979]"
     else:
-        data["Slave_IO_Running"] = "[#54efae]Yes[/#54efae]"
+        io_thread_running = "[#54efae]Yes[/#54efae]"
 
     if data["Slave_SQL_Running"].lower() == "no":
-        data["Slave_SQL_Running"] = "[#fc7979]NO[/#fc7979]"
+        sql_thread_running = "[#fc7979]NO[/#fc7979]"
     else:
-        data["Slave_SQL_Running"] = "[#54efae]Yes[/#54efae]"
+        sql_thread_running = "[#54efae]Yes[/#54efae]"
 
     speed = 0
     if data["Seconds_Behind_Master"] is not None:
@@ -206,15 +206,16 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
 
     table.add_row(
         "[#c5c7d2]Thread",
-        "[#c5c7d2]IO %s [#c5c7d2]SQL %s" % (data["Slave_IO_Running"], data["Slave_SQL_Running"]),
+        "[#c5c7d2]IO %s [#c5c7d2]SQL %s" % (io_thread_running, sql_thread_running),
     )
-    if data["Seconds_Behind_Master"] is None:
-        table.add_row("[#c5c7d2]Lag", "")
-    else:
-        lag_source = "Lag"
-        if sbm_source:
-            lag_source = f"Lag ({sbm_source})"
 
+    lag_source = "Lag"
+    if sbm_source:
+        lag_source = f"Lag ({sbm_source})"
+
+    if data["Seconds_Behind_Master"] is None or data["Slave_SQL_Running"].lower() == "no":
+        table.add_row(f"[#c5c7d2]{lag_source}", "")
+    else:
         table.add_row(
             "[#c5c7d2]%s" % lag_source,
             "%s [#c5c7d2]Speed[/#c5c7d2] %s" % (lag, speed),

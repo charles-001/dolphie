@@ -1169,13 +1169,9 @@ class Dolphie:
                 # Save this for the errant TRX check
                 self.replication_primary_server_uuid = self.replication_status.get("Master_UUID")
 
-        if replica_lag_data:
+        replica_lag = None
+        if replica_lag_data and replica_lag_data["Seconds_Behind_Master"] is not None:
             replica_lag = int(replica_lag_data["Seconds_Behind_Master"])
-
-            if replica_lag < 0:
-                replica_lag = 0
-        else:
-            replica_lag = 0
 
         if replica_cursor:
             return replica_lag_source, replica_lag
