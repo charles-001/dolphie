@@ -39,6 +39,11 @@ def create_panel(dolphie: Dolphie) -> DataTable:
     ):
         columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": True})
 
+    if dolphie.show_trxs_only:
+        columns.append(
+            {"name": "TRX Time", "field": "trx_total_time", "width": 9, "format_number": False},
+        )
+
     columns.extend(
         [
             {"name": "Time", "field": "formatted_time", "width": 9, "format_number": False},
@@ -214,14 +219,16 @@ def fetch_data(dolphie: Dolphie):
         formatted_time = TextPlus(format_time(time), style=thread_color)
         formatted_time_with_days = TextPlus("{:0>8}".format(str(timedelta(seconds=time))), style=thread_color)
 
+        formatted_trx_time = ""
+        if thread["trx_total_time"] != "":
+            formatted_trx_time = TextPlus(format_time(int(thread["trx_total_time"])))
+
         host = thread["host"].split(":")[0]
         host = dolphie.get_hostname(host)
 
-        mysql_thread_id = thread.get("mysql_thread_id")
-
         processlist_threads[str(thread["id"])] = {
             "id": str(thread["id"]),
-            "mysql_thread_id": mysql_thread_id,
+            "mysql_thread_id": thread.get("mysql_thread_id"),
             "user": thread["user"],
             "host": host,
             "db": thread["db"],
@@ -235,6 +242,7 @@ def fetch_data(dolphie: Dolphie):
             "trx_rows_locked": thread["trx_rows_locked"],
             "trx_rows_modified": thread["trx_rows_modified"],
             "trx_concurrency_tickets": thread["trx_concurrency_tickets"],
+            "trx_total_time": formatted_trx_time,
             "query": query,
         }
 

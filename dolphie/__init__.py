@@ -825,9 +825,11 @@ class Dolphie:
         elif key == "T":
             if self.show_trxs_only:
                 self.show_trxs_only = False
+                self.show_idle_threads = False
                 self.update_footer("Processlist will now no longer only show threads that have an active transaction")
             else:
                 self.show_trxs_only = True
+                self.show_idle_threads = True
                 self.update_footer("Processlist will now only show threads that have an active transaction")
 
         elif key == "u":
