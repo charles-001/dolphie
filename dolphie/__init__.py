@@ -112,6 +112,7 @@ class Dolphie:
         self.use_performance_schema: bool = False
         self.performance_schema_enabled: bool = False
         self.host_is_rds: bool = False
+        self.host_is_mariadb: bool = False
         self.host_is_cluster: bool = False
         self.server_uuid: str = None
         self.mysql_version: str = None
@@ -211,8 +212,10 @@ class Dolphie:
         elif "mariadb cluster" in version_comment:
             self.host_distro = "MariaDB Cluster"
             self.host_is_cluster = True
+            self.host_is_mariadb = True
         elif "mariadb" in version_comment or "mariadb" in version:
             self.host_distro = "MariaDB"
+            self.host_is_mariadb = True
         elif aurora_version:
             self.host_distro = "Amazon Aurora"
             self.host_is_rds = True
@@ -1131,7 +1134,7 @@ class Dolphie:
         if self.heartbeat_table:
             query = MySQLQueries.heartbeat_replica_lag
             replica_lag_source = "HB"
-        elif self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled and not self.host_distro.startswith("MariaDB"):
+        elif self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled and not self.host_is_mariadb:
             query = MySQLQueries.ps_replica_lag
             replica_lag_source = "PS"
         else:
