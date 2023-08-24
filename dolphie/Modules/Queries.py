@@ -19,7 +19,7 @@ class MySQLQueries:
             IFNULL(trx_rows_locked, "0")        AS trx_rows_locked,
             IFNULL(trx_rows_modified, "0")      AS trx_rows_modified,
             IFNULL(trx_concurrency_tickets, "") AS trx_concurrency_tickets,
-            IFNULL(TIMESTAMPDIFF(SECOND, trx_started, NOW()), "") AS trx_total_time
+            IFNULL(TIMESTAMPDIFF(SECOND, trx_started, NOW()), "") AS trx_time
         FROM
             information_schema.PROCESSLIST pl
             LEFT JOIN information_schema.innodb_trx ON trx_mysql_thread_id = pl.Id
@@ -43,7 +43,7 @@ class MySQLQueries:
             IFNULL(trx_rows_locked, "0")        AS trx_rows_locked,
             IFNULL(trx_rows_modified, "0")      AS trx_rows_modified,
             IFNULL(trx_concurrency_tickets, "") AS trx_concurrency_tickets,
-            IFNULL(TIMESTAMPDIFF(SECOND, trx_started, NOW()), "") AS trx_total_time
+            IFNULL(TIMESTAMPDIFF(SECOND, trx_started, NOW()), "") AS trx_time
         FROM
             performance_schema.threads t
             LEFT JOIN information_schema.innodb_trx tx ON trx_mysql_thread_id = t.processlist_id

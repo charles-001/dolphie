@@ -41,7 +41,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
 
     if dolphie.show_trxs_only:
         columns.append(
-            {"name": "TRX Time", "field": "trx_total_time", "width": 9, "format_number": False},
+            {"name": "TRX Time", "field": "trx_time", "width": 9, "format_number": False},
         )
 
     columns.extend(
@@ -220,8 +220,8 @@ def fetch_data(dolphie: Dolphie):
         formatted_time_with_days = TextPlus("{:0>8}".format(str(timedelta(seconds=time))), style=thread_color)
 
         formatted_trx_time = ""
-        if thread["trx_total_time"] != "":
-            formatted_trx_time = TextPlus(format_time(int(thread["trx_total_time"])))
+        if thread["trx_time"] != "":
+            formatted_trx_time = TextPlus(format_time(int(thread["trx_time"])))
 
         host = thread["host"].split(":")[0]
         host = dolphie.get_hostname(host)
@@ -242,7 +242,7 @@ def fetch_data(dolphie: Dolphie):
             "trx_rows_locked": thread["trx_rows_locked"],
             "trx_rows_modified": thread["trx_rows_modified"],
             "trx_concurrency_tickets": thread["trx_concurrency_tickets"],
-            "trx_total_time": formatted_trx_time,
+            "trx_time": formatted_trx_time,
             "query": query,
         }
 

@@ -723,6 +723,7 @@ class Dolphie:
                             table.add_row("[#c5c7d2]Tickets", thread_data["trx_concurrency_tickets"])
 
                         table.add_row("", "")
+                        table.add_row("[#c5c7d2]TRX Time", thread_data["trx_time"])
                         table.add_row("[#c5c7d2]TRX State", thread_data["trx_state"])
                         table.add_row("[#c5c7d2]TRX Operation", thread_data["trx_operation_state"])
 
