@@ -1131,7 +1131,7 @@ class Dolphie:
         if self.heartbeat_table:
             query = MySQLQueries.heartbeat_replica_lag
             replica_lag_source = "HB"
-        elif self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled:
+        elif self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled and not self.host_distro.startswith("MariaDB"):
             query = MySQLQueries.ps_replica_lag
             replica_lag_source = "PS"
         else:
