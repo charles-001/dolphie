@@ -167,6 +167,7 @@ def get_number_format_function(data, color=False):
         CheckpointMetrics: lambda val: format_bytes(val, color=color),
         RedoLogMetrics: lambda val: format_bytes(val, color=color),
         AdaptiveHashIndexHitRatioMetrics: lambda val: f"{round(val)}%",
+        DiskIOMetrics: lambda val: format_bytes(val, color=color),
     }
 
     return data_formatters.get(type(data), lambda val: format_number(val, color=color))
@@ -176,6 +177,7 @@ def get_number_format_function(data, color=False):
 class MetricSource:
     global_status: str = "global_status"
     innodb_metrics: str = "innodb_metrics"
+    disk_io_metrics: str = "disk_io_metrics"
     none: str = "none"
 
 
@@ -330,6 +332,16 @@ class AbortedConnectionsMetrics:
 
 
 @dataclass
+class DiskIOMetrics:
+    io_read: MetricData
+    io_write: MetricData
+    graphs: List[str]
+    tab_name: str = "disk_io"
+    metric_source: MetricSource = MetricSource.disk_io_metrics
+    datetimes: List[str] = field(default_factory=list)
+
+
+@dataclass
 class MetricInstances:
     dml: DMLMetrics
     replication_lag: ReplicationLagMetrics
@@ -343,6 +355,7 @@ class MetricInstances:
     threads: ThreadMetrics
     temporary_objects: TemporaryObjectMetrics
     aborted_connections: AbortedConnectionsMetrics
+    disk_io: DiskIOMetrics
 
 
 class MetricManager:
@@ -434,6 +447,11 @@ class MetricManager:
                 Aborted_clients=MetricData(label="Client (timeout)", color=MetricColor.blue),
                 Aborted_connects=MetricData(label="Connects (attempt)", color=MetricColor.red),
             ),
+            disk_io=DiskIOMetrics(
+                graphs=["graph_disk_io"],
+                io_read=MetricData(label="Read", color=MetricColor.blue),
+                io_write=MetricData(label="Write", color=MetricColor.green),
+            ),
         )
 
     def refresh_data(
@@ -443,6 +461,7 @@ class MetricManager:
         global_variables: Dict[str, Union[int, str]],
         global_status: Dict[str, int],
         innodb_metrics: Dict[str, int],
+        disk_io_metrics: Dict[str, int],
         replication_status: Dict[str, Union[int, str]],
         replication_lag: int,  # this can be from SHOW SLAVE STatus/Performance Schema/heartbeat table
     ):
@@ -451,6 +470,7 @@ class MetricManager:
         self.global_variables = global_variables
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
+        self.disk_io_metrics = disk_io_metrics
         self.replication_status = replication_status
         self.replication_lag = replication_lag
 
@@ -483,6 +503,8 @@ class MetricManager:
                 metric_source = self.global_status
             elif metric_instance.metric_source == MetricSource.innodb_metrics:
                 metric_source = self.innodb_metrics
+            elif metric_instance.metric_source == MetricSource.disk_io_metrics:
+                metric_source = self.disk_io_metrics
 
             if metric_source is None:
                 continue  # Skip if there's no metric source
@@ -612,6 +634,8 @@ class MetricManager:
                 metrics_data = self.global_status
             elif metric_instance.metric_source == MetricSource.innodb_metrics:
                 metrics_data = self.innodb_metrics
+            elif metric_instance.metric_source == MetricSource.disk_io_metrics:
+                metrics_data = self.disk_io_metrics
 
             for metric_name, metric_data in metric_instance.__dict__.items():
                 if isinstance(metric_data, MetricData) and metric_data.per_second_calculation:

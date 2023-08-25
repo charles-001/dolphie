@@ -72,6 +72,16 @@ class MySQLQueries:
                 JOIN performance_schema.replication_connection_status s ON s.channel_name = w.channel_name
             ) required
     """
+    ps_disk_io: str = """
+        SELECT
+            CONVERT(SUM(SUM_NUMBER_OF_BYTES_READ), UNSIGNED) AS io_read,
+            CONVERT(SUM(SUM_NUMBER_OF_BYTES_WRITE), UNSIGNED) AS io_write
+        FROM
+            `performance_schema`.`file_summary_by_event_name`
+        WHERE
+            `performance_schema`.`file_summary_by_event_name`.`EVENT_NAME` LIKE 'wait/io/file/%' AND
+            `performance_schema`.`file_summary_by_event_name`.`COUNT_STAR` > 0
+    """
     heartbeat_replica_lag: str = """
         SELECT
             TIMESTAMPDIFF(SECOND, MAX(ts), NOW()) AS Seconds_Behind_Master

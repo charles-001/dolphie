@@ -415,6 +415,7 @@ class DolphieApp(App):
             dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
             dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
             dolphie.innodb_metrics = dolphie.main_db_connection.fetch_data("innodb_metrics")
+            dolphie.disk_io_metrics = dolphie.main_db_connection.fetch_data("ps_disk_io")
             dolphie.replica_data = dolphie.main_db_connection.fetch_data(
                 "find_replicas", dolphie.use_performance_schema
             )
@@ -445,6 +446,7 @@ class DolphieApp(App):
                 global_variables=dolphie.global_variables,
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
+                disk_io_metrics=dolphie.disk_io_metrics,
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
@@ -530,7 +532,6 @@ class DolphieApp(App):
         # Set these components by default to not show
         components_to_disable = [
             ".panel_container",
-            "#panel_processlist",
             "Sparkline",
             "#footer",
         ]
@@ -755,6 +756,13 @@ class DolphieApp(App):
                         yield MetricManager.Graph(id="graph_aborted_connections", classes="panel_data")
                         with Horizontal(classes="switch_container"):
                             yield from self.generate_switches("aborted_connections")
+
+                    with TabPane("Disk I/O", id="tab_disk_io"):
+                        yield Label(id="stats_disk_io", classes="stats_data")
+                        yield MetricManager.Graph(id="graph_disk_io", classes="panel_data")
+
+                        with Horizontal(classes="switch_container"):
+                            yield from self.generate_switches("disk_io")
 
                     with TabPane("Replication", id="tab_replication_lag"):
                         yield Label(id="stats_replication_lag", classes="stats_data")

@@ -197,8 +197,8 @@ def fetch_data(dolphie: Dolphie):
             continue
 
         command = thread["command"]
-        # Use TRX query if it's populated since it's possible query might not be
-        if thread["trx_query"]:
+        # Use trx_query over Performance Schema query since it's more accurate
+        if dolphie.use_performance_schema and thread["trx_query"]:
             query = thread["trx_query"]
         else:
             query = thread["query"]
