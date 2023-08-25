@@ -81,6 +81,7 @@ class Dolphie:
         self.global_variables: dict = {}
         self.global_status: dict = {}
         self.binlog_status: dict = {}
+        self.query_digest_metrics: dict = {}
         self.replication_status: dict = {}
         self.replication_applier_status: dict = {}
         self.replication_primary_server_uuid: str = None
@@ -688,7 +689,11 @@ class Dolphie:
                         # Transaction history
                         transaction_history_title = ""
                         transaction_history_table = Table(box=box.ROUNDED, style="#52608d")
-                        if self.is_mysql_version_at_least("5.7") and self.performance_schema_enabled:
+                        if (
+                            self.is_mysql_version_at_least("5.7")
+                            and self.performance_schema_enabled
+                            and thread_data["mysql_thread_id"]
+                        ):
                             query = MySQLQueries.thread_transaction_history.replace(
                                 "$placeholder", str(thread_data["mysql_thread_id"])
                             )

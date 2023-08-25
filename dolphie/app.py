@@ -18,7 +18,12 @@ import myloginpath
 from dolphie import Dolphie
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
-from dolphie.Panels import dashboard_panel, processlist_panel, replication_panel
+from dolphie.Panels import (
+    dashboard_panel,
+    processlist_panel,
+    replication_panel,
+    top_queries_panel,
+)
 from dolphie.Widgets.topbar import TopBar
 from rich.console import Console
 from rich.prompt import Prompt
@@ -415,6 +420,7 @@ class DolphieApp(App):
             dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
             dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
             dolphie.innodb_metrics = dolphie.main_db_connection.fetch_data("innodb_metrics")
+            dolphie.query_digest_metrics = dolphie.main_db_connection.fetch_data("ps_query_digest")
             dolphie.replica_data = dolphie.main_db_connection.fetch_data(
                 "find_replicas", dolphie.use_performance_schema
             )
@@ -445,6 +451,7 @@ class DolphieApp(App):
                 global_variables=dolphie.global_variables,
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
+                query_digest_metrics=dolphie.query_digest_metrics,
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
@@ -494,6 +501,8 @@ class DolphieApp(App):
                 if dolphie.display_replication_panel:
                     self.refresh_panel("replication")
 
+                self.refresh_panel("top_queries")
+
                 if dolphie.display_graphs_panel:
                     # Hide/show replication tab based on replication status
                     replication_tab = self.app.query_one("#tabbed_content", TabbedContent)
@@ -530,7 +539,6 @@ class DolphieApp(App):
         # Set these components by default to not show
         components_to_disable = [
             ".panel_container",
-            "#panel_processlist",
             "Sparkline",
             "#footer",
         ]
@@ -638,6 +646,8 @@ class DolphieApp(App):
             self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(self.dolphie))
         elif panel_name == "processlist":
             processlist_panel.create_panel(self.dolphie)
+        elif panel_name == "top_queries":
+            top_queries_panel.create_panel(self.dolphie)
 
     def quick_host_switch(self):
         dolphie = self.dolphie
@@ -762,6 +772,8 @@ class DolphieApp(App):
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data", classes="panel_data")
+
+            yield DataTable(id="panel_top_queries", classes="panel_data", show_cursor=False)
 
             yield DataTable(id="panel_processlist", classes="panel_data", show_cursor=False)
 

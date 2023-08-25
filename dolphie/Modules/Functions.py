@@ -29,6 +29,28 @@ def format_time(seconds):
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
+def format_picoseconds(picoseconds):
+    if picoseconds is None:
+        return None
+
+    time_units = [
+        (604800000000000000, "w"),
+        (86400000000000000, "d"),
+        (3600000000000000, "h"),
+        (60000000000000, "m"),
+        (1000000000000, "s"),
+        (1000000000, "ms"),
+        (1000000, "us"),
+        (1000, "ns"),
+    ]
+
+    for unit, label in time_units:
+        if picoseconds >= unit:
+            return f"{round(picoseconds / unit, 2)} {label}"
+
+    return "0"
+
+
 def detect_encoding(text):
     # Since BLOB/BINARY data can be involved, we need to auto-detect what the encoding is
     # for queries since it can be anything. If I let pymsql use unicode by default I got
@@ -50,7 +72,7 @@ def round_num(n, decimal=2):
 
 
 # This is from https://pypi.org/project/numerize
-def format_number(n, decimal=2, color=True):
+def format_number(n, decimal=2, color=True, small_number=False):
     if not n:
         return "0"
 
@@ -77,14 +99,19 @@ def format_number(n, decimal=2, color=True):
         except ValueError:
             return n
 
+    # If the number is small, don't use scientific notation
+    if small_number and n <= 1e3:
+        return round(n, decimal)
+
     n = abs(n)
     for x in range(len(sci_expr)):
         if n >= sci_expr[x] and n < sci_expr[x + 1]:
             sufix = sufixes[x]
             if n >= 1e3:
-                num = str(round_num(n / sci_expr[x], decimal))
+                num = str(round(n / sci_expr[x], decimal))
             else:
-                num = str(round_num(n, 0))
+                num = str(round(n, 0))
+
             if color:
                 return f"{num}[#91abec]{sufix}[/#91abec]" if sufix else num
             else:

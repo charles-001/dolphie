@@ -176,7 +176,24 @@ def get_number_format_function(data, color=False):
 class MetricSource:
     global_status: str = "global_status"
     innodb_metrics: str = "innodb_metrics"
+    query_digest_metrics: str = "query_digest_metrics"
     none: str = "none"
+
+
+@dataclass
+class QueryDigestData:
+    query_digest: str
+    total_count: int = None
+    average_time: int = None
+    last_value_count: int = None
+
+
+@dataclass
+class QueryDigestMetrics:
+    digests: dict = field(default_factory=dict)
+    graphs: List[str] = None
+    tab_name: str = None
+    metric_source: MetricSource = MetricSource.query_digest_metrics
 
 
 @dataclass
@@ -343,6 +360,7 @@ class MetricInstances:
     threads: ThreadMetrics
     temporary_objects: TemporaryObjectMetrics
     aborted_connections: AbortedConnectionsMetrics
+    query_digests: QueryDigestMetrics
 
 
 class MetricManager:
@@ -434,6 +452,7 @@ class MetricManager:
                 Aborted_clients=MetricData(label="Client (timeout)", color=MetricColor.blue),
                 Aborted_connects=MetricData(label="Connects (attempt)", color=MetricColor.red),
             ),
+            query_digests=QueryDigestMetrics(),
         )
 
     def refresh_data(
@@ -443,6 +462,7 @@ class MetricManager:
         global_variables: Dict[str, Union[int, str]],
         global_status: Dict[str, int],
         innodb_metrics: Dict[str, int],
+        query_digest_metrics: Dict[str, Union[int, str]],
         replication_status: Dict[str, Union[int, str]],
         replication_lag: int,  # this can be from SHOW SLAVE STatus/Performance Schema/heartbeat table
     ):
@@ -451,6 +471,7 @@ class MetricManager:
         self.global_variables = global_variables
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
+        self.query_digest_metrics = query_digest_metrics
         self.replication_status = replication_status
         self.replication_lag = replication_lag
 
@@ -466,6 +487,7 @@ class MetricManager:
         self.update_metrics_replication_lag()
         self.update_metrics_checkpoint()
         self.update_metrics_adaptive_hash_index_hit_ratio()
+        self.update_metrics_query_digests()
 
         self.metrics.redo_log.redo_log_size = self.redo_log_size
 
@@ -525,6 +547,32 @@ class MetricManager:
         metric_instance = self.metrics.checkpoint
         metric_instance.checkpoint_age_max = max_checkpoint_age_bytes
         metric_instance.checkpoint_age_sync_flush = checkpoint_age_sync_flush_bytes
+
+    def update_metrics_query_digests(self):
+        metric_instance = self.metrics.query_digests
+
+        for row in self.query_digest_metrics:
+            digest_key = row.get("digest")
+
+            if digest_key is not None:
+                if digest_key not in metric_instance.digests:
+                    new_digest = QueryDigestData(
+                        query_digest=row.get("digest_text", ""),
+                        total_count=0,
+                        average_time=0,
+                        last_value_count=row.get("digest_count", 0),
+                    )
+                    metric_instance.digests[digest_key] = new_digest
+                else:
+                    digest_data: QueryDigestData = metric_instance.digests[digest_key]
+
+                    digest_count = int(row.get("digest_count", 0))
+
+                    if digest_count > digest_data.last_value_count:
+                        digest_data.total_count += digest_count - digest_data.last_value_count
+                        digest_data.average_time = row.get("digest_avg_time")
+
+                    digest_data.last_value_count = digest_count
 
     def get_metric_calculate_per_sec(self, metric_name, metric_source=None, format=True):
         if not metric_source:

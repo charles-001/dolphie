@@ -121,6 +121,9 @@ class Database:
                 value = int(row["COUNT"])
 
                 command_data[metric] = value
+        elif command == "ps_query_digest":
+            self.execute(MySQLQueries.ps_query_digest)
+            command_data = self.fetchall()
 
         else:
             self.execute(getattr(MySQLQueries, command))

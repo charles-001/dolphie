@@ -53,6 +53,51 @@ class MySQLQueries:
             processlist_command != 'Daemon'
             $placeholder
     """
+    ps_query_digest: str = """
+        SELECT
+            digest,
+            digest_text,
+            digest_count,
+            digest_avg_time
+        FROM (
+            SELECT
+                d.DIGEST AS digest,
+                d.DIGEST_TEXT AS digest_text,
+                CONVERT(SUM(d.COUNT_STAR), UNSIGNED) AS digest_count,
+                h.AVERAGE_TIME AS digest_avg_time
+            FROM
+                performance_schema.events_statements_summary_by_digest d
+            JOIN (
+                SELECT
+                    digest,
+                    CONVERT(AVG(TIMER_WAIT), UNSIGNED) AS AVERAGE_TIME
+                FROM
+                    performance_schema.events_statements_history
+                WHERE
+                    digest IS NOT NULL
+                GROUP BY
+                    digest
+            ) h ON d.digest = h.digest
+            GROUP BY
+                d.digest
+            HAVING
+                digest_count >= 5
+
+            UNION
+
+            SELECT
+                SHA2(TRIM(SQL_TEXT), 224) AS digest,
+                SQL_TEXT AS digest_text,
+                CONVERT(SUM(COUNT_EXECUTE), UNSIGNED) AS digest_count,
+                AVG_TIMER_EXECUTE AS digest_avg_time
+            FROM
+                `performance_schema`.prepared_statements_instances
+            GROUP BY
+                digest
+            HAVING
+                digest_count >= 5
+        ) AS combined_result
+    """
     ps_replica_lag: str = """
         SELECT MAX(`lag`) AS Seconds_Behind_Master
             FROM (
