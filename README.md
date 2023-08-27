@@ -29,21 +29,30 @@ Requires Python 3.8+
 
 #### Using PyPi
 ```shell
-pip install dolphie
+$ pip install dolphie
 ```
 
 #### Using Poetry
 ```shell
-curl -sSL https://install.python-poetry.org | python3 -
+$ curl -sSL https://install.python-poetry.org | python3 -
 
-poetry install
+$ poetry install
+```
+
+### Using Homebrew
+
+If you are a [Homebrew](https://brew.sh/) user, can you install [dolphie](https://formulae.brew.sh/formula/dolphie) via
+
+```sh
+$ brew install dolphie
 ```
 
 #### Using Docker
-```
-docker pull ghcr.io/charles-001/dolphie:latest
-docker run -dit --name dolphie ghcr.io/charles-001/dolphie:latest
-docker exec -it dolphie dolphie -h host.docker.internal -u root --ask-pass
+
+```sh
+$ docker pull ghcr.io/charles-001/dolphie:latest
+$ docker run -dit --name dolphie ghcr.io/charles-001/dolphie:latest
+$ docker exec -it dolphie dolphie -h host.docker.internal -u root --ask-pass
 ```
 
 ## Usage
