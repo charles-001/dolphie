@@ -415,7 +415,7 @@ class MetricManager:
             ),
             redo_log=RedoLogMetrics(
                 graphs=["graph_redo_log", "graph_redo_log_bar"],
-                Innodb_lsn_current=MetricData(label="Data Written/sec", color=MetricColor.blue),
+                Innodb_lsn_current=MetricData(label="Data Written", color=MetricColor.blue),
             ),
             redo_log_active_count=RedoLogActiveCountMetrics(
                 graphs=["graph_redo_log_active_count"],

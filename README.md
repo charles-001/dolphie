@@ -39,9 +39,9 @@ $ curl -sSL https://install.python-poetry.org | python3 -
 $ poetry install
 ```
 
-### Using Homebrew
+#### Using Homebrew
 
-If you are a [Homebrew](https://brew.sh/) user, can you install [dolphie](https://formulae.brew.sh/formula/dolphie) via
+If you are a [Homebrew](https://brew.sh/) user, you can install [dolphie](https://formulae.brew.sh/formula/dolphie) via
 
 ```sh
 $ brew install dolphie

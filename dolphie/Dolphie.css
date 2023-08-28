@@ -62,13 +62,6 @@ TopBar {
     color: #8f9fc1;
 }
 
-#footer {
-    dock: bottom;
-    height: 1;
-    background: #192036;
-    content-align: center middle;
-}
-
 TabPane {
     padding: 0;
 }
@@ -247,4 +240,22 @@ ToggleButton:focus > .toggle--label {
 ToggleButton.-on > .toggle--button {
     color: #62c39a;
     text-style: bold;
+}
+
+Toast {
+    width: auto;
+    max-width: 40%;
+    background: #192036;
+}
+Toast.-information {
+    border-left: wide #788bc9;
+}
+Toast.-success {
+    border-left: wide #5bd088;
+}
+Toast.-error {
+    border-left: wide #f05757;
+}
+Toast.-error .toast--title {
+    color: #ed6363;
 }

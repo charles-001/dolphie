@@ -1,10 +1,8 @@
 import re
-from datetime import timedelta
 
 from dolphie import Dolphie
 from dolphie.Modules.Functions import format_number, format_time
 from dolphie.Modules.Queries import MySQLQueries
-from rich.text import Text
 from textual.widgets import DataTable
 
 
@@ -27,16 +25,12 @@ def create_panel(dolphie: Dolphie) -> DataTable:
             {"name": "Command", "field": "command", "width": 8, "format_number": False},
             {"name": "State", "field": "state", "width": 16, "format_number": False},
             {"name": "TRX State", "field": "trx_state", "width": 9, "format_number": False},
-            {"name": "Rows Lock", "field": "trx_rows_locked", "width": 9, "format_number": True},
-            {"name": "Rows Mod", "field": "trx_rows_modified", "width": 8, "format_number": True},
+            {"name": "R-Lock", "field": "trx_rows_locked", "width": 7, "format_number": True},
+            {"name": "R-Mod", "field": "trx_rows_modified", "width": 7, "format_number": True},
         ]
     )
 
-    if (
-        dolphie.show_additional_query_columns
-        and "innodb_thread_concurrency" in dolphie.global_variables
-        and dolphie.global_variables["innodb_thread_concurrency"]
-    ):
+    if dolphie.show_additional_query_columns and dolphie.global_variables.get("innodb_thread_concurrency"):
         columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": True})
 
     if dolphie.show_trxs_only:
@@ -48,6 +42,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
         [
             {"name": "Time", "field": "formatted_time", "width": 9, "format_number": False},
             {"name": "Query", "field": "query", "width": None, "format_number": False},
+            {"name": "time_seconds", "field": "time", "width": 0, "format_number": False},
         ]
     )
 
@@ -61,15 +56,14 @@ def create_panel(dolphie: Dolphie) -> DataTable:
     if not processlist_datatable.columns:
         for column_data in columns:
             column_name = column_data["name"]
-            column_key = column_data["field"]
             column_width = column_data["width"]
-            processlist_datatable.add_column(column_name, key=column_key, width=column_width)
+            processlist_datatable.add_column(column_name, key=column_name, width=column_width)
 
     # Iterate through dolphie.processlist_threads
     for thread_id, thread in dolphie.processlist_threads.items():
         # Add or modify the "command" field based on the condition
         if thread["command"] == "Killed":
-            thread["command"] = "[#fc7979]Killed"
+            thread["command"] = "[#fc7979]Killed[/#fc7979]"
 
         # Check if the thread_id exists in the datatable
         if thread_id in processlist_datatable.rows:
@@ -77,29 +71,30 @@ def create_panel(dolphie: Dolphie) -> DataTable:
 
             # Update the datatable if values differ
             for column_id, column_data in enumerate(columns):
-                column_name = column_data["field"]
+                column_name = column_data["name"]
+                column_field = column_data["field"]
                 column_format_number = column_data["format_number"]
 
                 update_width = False
-                if column_name == "query":
-                    value = re.sub(r"\s+", " ", thread[column_name])
+                if column_field == "query":
+                    value = re.sub(r"\s+", " ", thread[column_field])
                     update_width = True
                 else:
-                    value = format_number(thread[column_name]) if column_format_number else thread[column_name]
+                    value = format_number(thread[column_field]) if column_format_number else thread[column_field]
 
-                if value != datatable_row[column_id] or column_name == "formatted_time":
+                if value != datatable_row[column_id] or column_field == "formatted_time":
                     processlist_datatable.update_cell(thread_id, column_name, value, update_width=update_width)
         else:
             # Add a new row to the datatable if thread_id does not exist
             row_values = []
             for column_data in columns:
-                column_name = column_data["field"]
+                column_field = column_data["field"]
                 column_format_number = column_data["format_number"]
 
-                if column_name == "query":
-                    value = re.sub(r"\s+", " ", thread[column_name])
+                if column_field == "query":
+                    value = re.sub(r"\s+", " ", thread[column_field])
                 else:
-                    value = format_number(thread[column_name]) if column_format_number else thread[column_name]
+                    value = format_number(thread[column_field]) if column_format_number else thread[column_field]
 
                 row_values.append(value)
 
@@ -110,7 +105,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
     for id in rows_to_remove:
         processlist_datatable.remove_row(id)
 
-    processlist_datatable.sort("formatted_time", reverse=dolphie.sort_by_time_descending)
+    processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 
 
 def fetch_data(dolphie: Dolphie):
@@ -207,7 +202,7 @@ def fetch_data(dolphie: Dolphie):
         time = int(thread["time"])
         thread_color = ""
         if "SELECT /*!40001 SQL_NO_CACHE */ *" in query:
-            thread_color = "magenta"
+            thread_color = "#B565F3"
         elif query:
             if time >= 10:
                 thread_color = "#fc7979"
@@ -216,12 +211,8 @@ def fetch_data(dolphie: Dolphie):
             else:
                 thread_color = "#54efae"
 
-        formatted_time = TextPlus(format_time(time), style=thread_color)
-        formatted_time_with_days = TextPlus("{:0>8}".format(str(timedelta(seconds=time))), style=thread_color)
-
-        formatted_trx_time = ""
-        if thread["trx_time"] != "":
-            formatted_trx_time = TextPlus(format_time(int(thread["trx_time"])))
+        formatted_time = f"[{thread_color}]{format_time(time)}[/{thread_color}]" if thread_color else format_time(time)
+        formatted_trx_time = format_time(int(thread["trx_time"])) if thread["trx_time"] else ""
 
         host = thread["host"].split(":")[0]
         host = dolphie.get_hostname(host)
@@ -233,7 +224,6 @@ def fetch_data(dolphie: Dolphie):
             "host": host,
             "db": thread["db"],
             "time": time,
-            "formatted_time_with_days": formatted_time_with_days,
             "formatted_time": formatted_time,
             "command": command,
             "state": thread["state"],
@@ -247,28 +237,3 @@ def fetch_data(dolphie: Dolphie):
         }
 
     return processlist_threads
-
-
-class TextPlus(Text):
-    """Custom patch for a Rich `Text` object to allow Textual `DataTable`
-    sorting when a Text object is included in a row."""
-
-    def __lt__(self, other: object) -> bool:
-        if not isinstance(other, Text):
-            return NotImplemented
-        return self.plain < other.plain
-
-    def __le__(self, other: object) -> bool:
-        if not isinstance(other, Text):
-            return NotImplemented
-        return self.plain <= other.plain
-
-    def __gt__(self, other: object) -> bool:
-        if not isinstance(other, Text):
-            return NotImplemented
-        return self.plain > other.plain
-
-    def __ge__(self, other: object) -> bool:
-        if not isinstance(other, Text):
-            return NotImplemented
-        return self.plain >= other.plain

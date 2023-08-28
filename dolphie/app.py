@@ -530,11 +530,7 @@ class DolphieApp(App):
         dolphie.load_host_cache_file()
 
         # Set these components by default to not show
-        components_to_disable = [
-            ".panel_container",
-            "Sparkline",
-            "#footer",
-        ]
+        components_to_disable = [".panel_container", "Sparkline"]
         exempt_components = {"panel_dashboard", "panel_processlist"}
 
         for component in components_to_disable:
@@ -772,8 +768,6 @@ class DolphieApp(App):
                 yield Static(id="panel_replication_data", classes="panel_data")
 
             yield DataTable(id="panel_processlist", classes="panel_data", show_cursor=False)
-
-            yield Static(id="footer")
 
 
 def main():
