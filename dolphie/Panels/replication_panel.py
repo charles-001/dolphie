@@ -221,19 +221,19 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             "%s [#c5c7d2]Speed[/#c5c7d2] %s" % (lag, speed),
         )
 
-    replication_status_filtering = [
-        "Replicate_Do_DB",
-        "Replicate_Ignore_Table",
-        "Replicate_Do_Table",
-        "Replicate_Wild_Do_Table",
-        "Replicate_Wild_Ignore_Table",
-    ]
+    if not dashboard_table:
+        replication_status_filtering = [
+            "Replicate_Do_DB",
+            "Replicate_Ignore_Table",
+            "Replicate_Do_Table",
+            "Replicate_Wild_Do_Table",
+            "Replicate_Wild_Ignore_Table",
+        ]
 
-    if not replica_thread_id:
         for status_filter in replication_status_filtering:
             value = dolphie.replication_status.get(status_filter)
             if value:
-                table.add_row(f"[#c5c7d2]{filter}", str(value))
+                table.add_row(f"[#c5c7d2]{status_filter}", str(value))
 
     if dashboard_table:
         table.add_row("[#c5c7d2]Binlog IO", "%s" % (data["Master_Log_File"]))
