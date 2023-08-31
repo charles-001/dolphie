@@ -221,20 +221,6 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             "%s [#c5c7d2]Speed[/#c5c7d2] %s" % (lag, speed),
         )
 
-    if not dashboard_table:
-        replication_status_filtering = [
-            "Replicate_Do_DB",
-            "Replicate_Ignore_Table",
-            "Replicate_Do_Table",
-            "Replicate_Wild_Do_Table",
-            "Replicate_Wild_Ignore_Table",
-        ]
-
-        for status_filter in replication_status_filtering:
-            value = dolphie.replication_status.get(status_filter)
-            if value:
-                table.add_row(f"[#c5c7d2]{status_filter}", str(value))
-
     if dashboard_table:
         table.add_row("[#c5c7d2]Binlog IO", "%s" % (data["Master_Log_File"]))
         table.add_row("[#c5c7d2]Binlog SQL", "%s" % (data["Relay_Master_Log_File"]))
@@ -323,6 +309,22 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             table.add_row("[#c5c7d2]Executed GTID", "%s" % executed_gtid_set)
         elif mariadb_gtid_enabled:
             table.add_row("[#c5c7d2]GTID IO Pos", "%s" % data["Gtid_IO_Pos"])
+
+        replication_status_filtering = [
+            "Replicate_Do_DB",
+            "Replicate_Ignore_Table",
+            "Replicate_Ignore_DB",
+            "Replicate_Do_Table",
+            "Replicate_Wild_Do_Table",
+            "Replicate_Wild_Ignore_Table",
+            "Replicate_Rewrite_DB",
+        ]
+
+        for status_filter in replication_status_filtering:
+            value = dolphie.replication_status.get(status_filter)
+            status_filter_formatted = f"Filter: {status_filter.split('Replicate_')[1]}"
+            if value:
+                table.add_row(f"[#c5c7d2]{status_filter_formatted}", str(value))
 
         error_types = ["Last_IO_Error", "Last_SQL_Error"]
         errors = [(error_type, data[error_type]) for error_type in error_types if data[error_type]]
