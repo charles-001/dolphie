@@ -71,7 +71,7 @@ class Database:
         row = self.cursor.fetchone()
 
         if not row:
-            return []
+            return {}
 
         return self.process_row(row)
 

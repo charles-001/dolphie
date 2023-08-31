@@ -41,13 +41,19 @@ def create_panel(dolphie: Dolphie) -> Table:
     else:
         refresh_latency = round(dolphie.worker_job_time - dolphie.refresh_interval, 2)
 
+    read_only = global_variables["read_only"]
     if global_variables["read_only"] == "ON":
-        if not dolphie.replication_status:
-            global_variables["read_only"] = "YES ([indian_red]SHOULD BE NO?[/indian_red])"
+        if not dolphie.replication_status and not dolphie.group_replication:
+            read_only = "YES ([red]SHOULD BE NO?[/red])"
+        elif dolphie.group_replication:
+            if dolphie.is_group_replication_primary:
+                read_only = "YES ([red]SHOULD BE NO?[/red])"
+            else:
+                read_only = "YES"
         else:
-            global_variables["read_only"] = "YES"
+            read_only = "YES"
     elif global_variables["read_only"] == "OFF":
-        global_variables["read_only"] = "NO"
+        read_only = "NO"
 
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
@@ -59,7 +65,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     )
     table_information.add_row("[#c5c7d2]Uptime", uptime)
     table_information.add_row("[#c5c7d2]Runtime", f"{runtime} [#c5c7d2]latency:[/#c5c7d2] {refresh_latency}s")
-    table_information.add_row("[#c5c7d2]Read Only", global_variables["read_only"])
+    table_information.add_row("[#c5c7d2]Read Only", read_only)
     table_information.add_row("[#c5c7d2]Replicas", "%s" % len(dolphie.replica_data))
     table_information.add_row(
         "[#c5c7d2]Threads",

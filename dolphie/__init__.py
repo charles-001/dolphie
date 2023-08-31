@@ -90,6 +90,8 @@ class Dolphie:
         self.active_redo_logs: int = None
         self.mysql_host: str = None
         self.quick_switched_connection: bool = False
+        self.group_replication: bool = False
+        self.is_group_replication_primary: bool = False
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -146,39 +148,28 @@ class Dolphie:
         self.main_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
         self.secondary_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
 
+        # Get connection IDs so we can exclude them from processlist
+        self.main_db_connection_id = self.main_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
+        self.secondary_db_connection_id = self.secondary_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
+
         # Reduce any issues with the queries Dolphie runs (mostly targetting only_full_group_by)
         self.main_db_connection.execute("SET SESSION sql_mode = ''")
         self.secondary_db_connection.execute("SET SESSION sql_mode = ''")
 
-        self.mysql_host = self.main_db_connection.fetch_value_from_field("SELECT @@hostname")
+        global_variables = self.main_db_connection.fetch_data("variables")
 
-        self.main_db_connection_id = self.main_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
+        self.mysql_host = global_variables.get("hostname")
 
-        query = "SELECT CONNECTION_ID() AS connection_id"
-        self.secondary_db_connection_id = self.secondary_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
-
-        performance_schema = self.main_db_connection.fetch_value_from_field("SELECT @@performance_schema")
-        if performance_schema == 1:
-            self.performance_schema_enabled = True
-
-        version_comment = self.main_db_connection.fetch_value_from_field("SELECT @@version_comment").lower()
-        basedir = self.main_db_connection.fetch_value_from_field("SELECT @@basedir")
-
-        aurora_version = None
-        query = "SHOW GLOBAL VARIABLES LIKE 'aurora_version'"
-        aurora_version_data = self.main_db_connection.fetch_value_from_field(query)
-        if aurora_version_data:
-            aurora_version = aurora_version_data
-
-        version = self.main_db_connection.fetch_value_from_field("SELECT @@version").lower()
+        basedir = global_variables.get("basedir")
+        aurora_version = global_variables.get("aurora_version")
+        version = global_variables.get("version").lower()
+        version_comment = global_variables.get("version_comment").lower()
         version_split = version.split(".")
-
         self.mysql_version = "%s.%s.%s" % (
             version_split[0],
             version_split[1],
             version_split[2].split("-")[0],
         )
-        major_version = int(version_split[0])
 
         # Get proper host version and fork
         if "percona xtradb cluster" in version_comment:
@@ -202,10 +193,17 @@ class Dolphie:
         else:
             self.host_distro = "MySQL"
 
-        server_uuid_query = "SELECT @@server_uuid"
+        major_version = int(version_split[0])
+        self.server_uuid = global_variables.get("server_uuid")
         if "MariaDB" in self.host_distro and major_version >= 10:
-            server_uuid_query = "SELECT @@server_id"
-        self.server_uuid = self.main_db_connection.fetch_value_from_field(server_uuid_query)
+            self.server_uuid = global_variables.get("server_id")
+
+        if global_variables.get("performance_schema") == "ON":
+            self.performance_schema_enabled = True
+
+        # Simple check to see if the host has group replication
+        if global_variables.get("group_replication_group_name"):
+            self.group_replication = True
 
         # Add host to quick switch hosts file if it doesn't exist
         with open(self.quick_switch_hosts_file, "a+") as file:
@@ -609,9 +607,7 @@ class Dolphie:
                     and self.performance_schema_enabled
                     and thread_data["mysql_thread_id"]
                 ):
-                    query = MySQLQueries.thread_transaction_history.replace(
-                        "$placeholder", str(thread_data["mysql_thread_id"])
-                    )
+                    query = MySQLQueries.thread_transaction_history.replace("$1", str(thread_data["mysql_thread_id"]))
                     self.secondary_db_connection.cursor.execute(query)
                     transaction_history = self.secondary_db_connection.fetchall()
 
@@ -856,7 +852,7 @@ class Dolphie:
                 "o": "Display output from SHOW ENGINE INNODB STATUS",
                 "m": "Display memory usage",
                 "p": "Pause refreshing",
-                "P": "Switch between using SHOW PROCESSLIST/Performance Schema for processlist panel",
+                "P": "Switch between using Information Schema/Performance Schema for processlist panel",
                 "q": "Quit",
                 "r": "Set the refresh interval",
                 "R": "Reset all metrics",

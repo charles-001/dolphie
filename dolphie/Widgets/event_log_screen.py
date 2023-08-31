@@ -112,7 +112,7 @@ class EventLog(Screen):
         table.add_column("Level")
 
         if where_clause:
-            query = MySQLQueries.error_log.replace("$placeholder", f"AND ({where_clause})")
+            query = MySQLQueries.error_log.replace("$1", f"AND ({where_clause})")
             event_count = self.db.execute(query)
             data = self.db.fetchall()
 

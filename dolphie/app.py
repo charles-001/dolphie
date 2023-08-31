@@ -237,7 +237,7 @@ Environment variables support these options:
         dest="use_processlist",
         action="store_true",
         default=False,
-        help="Start with using SHOW PROCESSLIST instead of Performance Schema for processlist panel",
+        help="Start with using Information Schema instead of Performance Schema for processlist panel",
     )
     parser.add_argument(
         "-V", "--version", action="version", version=dolphie.app_version, help="Display version and exit"
@@ -337,7 +337,7 @@ Environment variables support these options:
         if pattern_match:
             dolphie.heartbeat_table = parameter_options["heartbeat_table"]
             MySQLQueries.heartbeat_replica_lag = MySQLQueries.heartbeat_replica_lag.replace(
-                "$placeholder", dolphie.heartbeat_table
+                "$1", dolphie.heartbeat_table
             )
         else:
             sys.exit(console.print("Your heartbeat table did not conform to the proper format: db.table"))
@@ -450,6 +450,15 @@ class DolphieApp(App):
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
+
+            if dolphie.group_replication:
+                dolphie.main_db_connection.execute(
+                    MySQLQueries.group_replication_member_status.replace("$1", dolphie.server_uuid)
+                )
+                member_role_data = dolphie.main_db_connection.fetchone()
+                if member_role_data.get("member_role") == "PRIMARY":
+                    dolphie.is_group_replication_primary = True
+
         except ManualException as e:
             self.exit(message=e.output())
 

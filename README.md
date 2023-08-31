@@ -89,7 +89,7 @@ options:
   --hide-dashboard      Start without showing dashboard. This is good to use if you want to reclaim terminal space and not execute the additional queries for it
   --show-trxs-only      Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
-  --use-processlist     Start with using SHOW PROCESSLIST instead of Performance Schema for processlist panel
+  --use-processlist     Start with using Information Schema instead of Performance Schema for processlist panel
   -V, --version         Display version and exit
 
 Config file with [client] section supports these options:

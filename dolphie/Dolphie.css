@@ -244,7 +244,7 @@ ToggleButton.-on > .toggle--button {
 
 Toast {
     width: auto;
-    max-width: 40%;
+    max-width: 50%;
     background: #192036;
 }
 Toast.-information {

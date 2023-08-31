@@ -7,6 +7,10 @@ from textual.widgets import DataTable
 
 
 def create_panel(dolphie: Dolphie) -> DataTable:
+    if not dolphie.performance_schema_enabled and dolphie.use_performance_schema:
+        dolphie.notify("Performance Schema is not enabled on this host, using Information Schema instead")
+        dolphie.use_performance_schema = False
+
     columns = [
         {"name": "Thread ID", "field": "id", "width": 11, "format_number": False},
         {"name": "Username", "field": "user", "width": 13, "format_number": False},
@@ -177,9 +181,9 @@ def fetch_data(dolphie: Dolphie):
 
     # Add in our dynamic WHERE clause for filtering
     if where_clause:
-        processlist_query = processlist_query.replace("$placeholder", "AND " + " AND ".join(where_clause))
+        processlist_query = processlist_query.replace("$1", "AND " + " AND ".join(where_clause))
     else:
-        processlist_query = processlist_query.replace("$placeholder", "")
+        processlist_query = processlist_query.replace("$1", "")
 
     processlist_threads = {}
     # Run the processlist query

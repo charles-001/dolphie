@@ -23,7 +23,7 @@ class MySQLQueries:
         FROM
             information_schema.PROCESSLIST pl
             LEFT JOIN information_schema.innodb_trx ON trx_mysql_thread_id = pl.Id
-        WHERE 1 $placeholder
+        WHERE 1 $1
     """
 
     ps_query: str = """
@@ -51,7 +51,7 @@ class MySQLQueries:
             processlist_id IS NOT NULL AND
             processlist_time IS NOT NULL AND
             processlist_command != 'Daemon'
-            $placeholder
+            $1
     """
     ps_replica_lag: str = """
         SELECT MAX(`lag`) AS Seconds_Behind_Master
@@ -86,7 +86,7 @@ class MySQLQueries:
         SELECT
             TIMESTAMPDIFF(SECOND, MAX(ts), NOW()) AS Seconds_Behind_Master
         FROM
-            $placeholder
+            $1
     """
     ps_find_replicas: str = """
         SELECT
@@ -148,7 +148,7 @@ class MySQLQueries:
             performance_schema.error_log
         WHERE
             data != 'Could not open log file.'
-            $placeholder
+            $1
         ORDER BY timestamp
     """
     memory_by_user: str = """
@@ -230,7 +230,7 @@ class MySQLQueries:
             nesting_event_id = (
                 SELECT EVENT_ID
                 FROM performance_schema.events_transactions_current t
-                WHERE t.thread_id = $placeholder
+                WHERE t.thread_id = $1
             )
         ORDER BY
             event_id;
@@ -256,6 +256,14 @@ class MySQLQueries:
         GROUP BY worker_id
         WITH ROLLUP
         ORDER BY worker_id
+    """
+    group_replication_member_status: str = """
+        SELECT
+            member_role
+        FROM
+            performance_schema.replication_group_members
+        WHERE
+            member_id = '$1'
     """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"

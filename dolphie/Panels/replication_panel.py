@@ -295,13 +295,12 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
 
                 db_cursor.execute(f"SELECT GTID_SUBTRACT('{replica_gtid_set}', '{primary_gtid_set}') AS errant_trxs")
                 gtid_data = db_cursor.fetchone()
-                if gtid_data:
-                    if gtid_data["errant_trxs"]:
-                        errant_trx = f"[#fc7979]{gtid_data['errant_trxs']}[/#fc7979]"
-                    else:
-                        errant_trx = "[#54efae]None[/#54efae]"
+                if gtid_data.get("errant_trxs"):
+                    errant_trx = f"[#fc7979]{gtid_data['errant_trxs']}[/#fc7979]"
+                else:
+                    errant_trx = "[#54efae]None[/#54efae]"
 
-                    table.add_row("[#c5c7d2]Errant TRX", "%s" % errant_trx)
+                table.add_row("[#c5c7d2]Errant TRX", "%s" % errant_trx)
 
                 # Since this is for the replica view, we use the host's UUID since its the primary
                 primary_uuid = dolphie.server_uuid
