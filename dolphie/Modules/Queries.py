@@ -23,7 +23,9 @@ class MySQLQueries:
         FROM
             information_schema.PROCESSLIST pl
             LEFT JOIN information_schema.innodb_trx ON trx_mysql_thread_id = pl.Id
-        WHERE 1 $1
+        WHERE
+            command != 'Daemon'
+            $1
     """
 
     ps_query: str = """

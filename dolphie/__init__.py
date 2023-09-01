@@ -159,8 +159,6 @@ class Dolphie:
 
         global_variables = self.main_db_connection.fetch_data("variables")
 
-        self.mysql_host = global_variables.get("hostname")
-
         basedir = global_variables.get("basedir")
         aurora_version = global_variables.get("aurora_version")
         version = global_variables.get("version").lower()
@@ -193,6 +191,12 @@ class Dolphie:
             self.host_is_rds = True
         else:
             self.host_distro = "MySQL"
+
+        # For RDS, we will use the host specified to connect with since hostname isn't related to the endpoint
+        if self.host_is_rds:
+            self.mysql_host = self.host
+        else:
+            self.mysql_host = global_variables.get("hostname")
 
         major_version = int(version_split[0])
         self.server_uuid = global_variables.get("server_uuid")
@@ -289,7 +293,7 @@ class Dolphie:
             self.query_time_filter = ""
             self.query_filter = ""
 
-            self.notify("Cleared all filters")
+            self.notify("Cleared all filters", severity="success")
 
         elif key == "d":
             tables = {}
