@@ -338,6 +338,7 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
 
 def fetch_replica_table_data(dolphie: Dolphie):
     replica_tables = {}
+
     for row in dolphie.replica_data:
         thread_id = row["id"]
 

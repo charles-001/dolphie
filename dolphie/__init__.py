@@ -194,7 +194,7 @@ class Dolphie:
 
         # For RDS, we will use the host specified to connect with since hostname isn't related to the endpoint
         if self.host_is_rds:
-            self.mysql_host = self.host
+            self.mysql_host = self.host.split(".rds.amazonaws.com")[0]
         else:
             self.mysql_host = global_variables.get("hostname")
 
