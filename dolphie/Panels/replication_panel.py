@@ -338,7 +338,6 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
 
 def fetch_replica_table_data(dolphie: Dolphie):
     replica_tables = {}
-    all_ports_tried = False
 
     # Only run this query if we don't have replica ports or if the number of replicas has changed
     if not dolphie.replica_ports or len(dolphie.replica_connections) != len(dolphie.replica_data):
@@ -362,13 +361,10 @@ def fetch_replica_table_data(dolphie: Dolphie):
         host = dolphie.get_hostname(row["host"].split(":")[0])
 
         if thread_id not in dolphie.replica_connections:
-            for index, (port, hosts) in enumerate(dolphie.replica_ports.items()):
+            for port, hosts_used_for_port in dolphie.replica_ports.items():
                 host_and_port = "%s:%s" % (host, port)
 
-                if index + 1 == len(dolphie.replica_ports):
-                    all_ports_tried = True
-
-                if not hosts or all_ports_tried:
+                if host not in hosts_used_for_port:
                     try:
                         dolphie.replica_connections[thread_id] = {
                             "host": host_and_port,
@@ -387,17 +383,15 @@ def fetch_replica_table_data(dolphie: Dolphie):
                         dolphie.replica_ports[port].append(host)
                         break
                     except pymysql.Error as e:
-                        if all_ports_tried:
-                            table = Table(box=box.ROUNDED, show_header=False, style="table_border")
-                            table.add_column()
-                            table.add_column()
+                        table = Table(box=box.ROUNDED, show_header=False, style="table_border")
+                        table.add_column()
+                        table.add_column()
 
-                            table.add_row("[label]Host", host_and_port)
-                            table.add_row("[label]User", row["user"])
-                            table.add_row("[label]Error", "[red]%s[red]" % e.args[1])
+                        table.add_row("[label]Host", host_and_port)
+                        table.add_row("[label]User", row["user"])
+                        table.add_row("[label]Error", "[red]%s[red]" % e.args[1])
 
-                            replica_tables[host_and_port] = table
-                            break
+                        replica_tables[host_and_port] = table
 
         replica_connection = dolphie.replica_connections.get(thread_id)
         if replica_connection:
