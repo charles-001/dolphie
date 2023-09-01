@@ -338,46 +338,88 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
 
 def fetch_replica_table_data(dolphie: Dolphie):
     replica_tables = {}
+    all_ports_tried = False
+
+    # Only run this query if we don't have replica ports or if the number of replicas has changed
+    if not dolphie.replica_ports or len(dolphie.replica_connections) != len(dolphie.replica_data):
+        dolphie.replica_ports = {}
+
+        dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
+        replica_data = dolphie.main_db_connection.fetchall()
+        for row in replica_data:
+            dolphie.replica_ports[row["Port"]] = []
+
+    # Remove replica connections that no longer exist
+    unique_ids = set(row["id"] for row in dolphie.replica_data)
+    for thread in list(dolphie.replica_connections.keys()):
+        if thread not in unique_ids:
+            del dolphie.replica_connections[thread]
 
     for row in dolphie.replica_data:
         thread_id = row["id"]
 
-        # Resolve IPs to addresses and add to cache for fast lookup
+        # Resolve IPs to addresses
         host = dolphie.get_hostname(row["host"].split(":")[0])
 
-        try:
-            if thread_id not in dolphie.replica_connections:
-                dolphie.replica_connections[thread_id] = {
-                    "host": host,
-                    "connection": pymysql.connect(
-                        host=host,
-                        user=dolphie.user,
-                        passwd=dolphie.password,
-                        port=dolphie.port,
-                        ssl=dolphie.ssl,
-                        autocommit=True,
-                    ),
-                    "cursor": None,
-                    "previous_sbm": 0,
-                }
+        if thread_id not in dolphie.replica_connections:
+            for index, (port, hosts) in enumerate(dolphie.replica_ports.items()):
+                host_and_port = "%s:%s" % (host, port)
 
-            replica_connection = dolphie.replica_connections[thread_id]
-            replica_connection["cursor"] = replica_connection["connection"].cursor(pymysql.cursors.DictCursor)
-            replica_connection["cursor"].execute(MySQLQueries.replication_status)
-            replica_data = replica_connection["cursor"].fetchone()
+                if index + 1 == len(dolphie.replica_ports):
+                    all_ports_tried = True
 
-            if replica_data:
-                replica_tables[host] = create_table(dolphie, data=replica_data, replica_thread_id=thread_id)
-        except pymysql.Error as e:
-            table = Table(box=box.ROUNDED, show_header=False, style="table_border")
+                if not hosts or all_ports_tried:
+                    try:
+                        dolphie.replica_connections[thread_id] = {
+                            "host": host_and_port,
+                            "connection": pymysql.connect(
+                                host=host,
+                                user=dolphie.user,
+                                passwd=dolphie.password,
+                                port=port,
+                                ssl=dolphie.ssl,
+                                autocommit=True,
+                            ),
+                            "cursor": None,
+                            "previous_sbm": 0,
+                        }
 
-            table.add_column()
-            table.add_column()
+                        dolphie.replica_ports[port].append(host)
+                        break
+                    except pymysql.Error as e:
+                        if all_ports_tried:
+                            table = Table(box=box.ROUNDED, show_header=False, style="table_border")
+                            table.add_column()
+                            table.add_column()
 
-            table.add_row("[label]Host", host)
-            table.add_row("[label]User", row["user"])
-            table.add_row("[label]Error", "[red]%s[red]" % e.args[1])
+                            table.add_row("[label]Host", host_and_port)
+                            table.add_row("[label]User", row["user"])
+                            table.add_row("[label]Error", "[red]%s[red]" % e.args[1])
 
-            replica_tables[host] = table
+                            replica_tables[host_and_port] = table
+                            break
+
+        replica_connection = dolphie.replica_connections.get(thread_id)
+        if replica_connection:
+            host_and_port = replica_connection["host"]
+            try:
+                replica_connection["cursor"] = replica_connection["connection"].cursor(pymysql.cursors.DictCursor)
+                replica_connection["cursor"].execute(MySQLQueries.replication_status)
+                replica_data = replica_connection["cursor"].fetchone()
+
+                if replica_data:
+                    replica_tables[host_and_port] = create_table(
+                        dolphie, data=replica_data, replica_thread_id=thread_id
+                    )
+            except pymysql.Error as e:
+                table = Table(box=box.ROUNDED, show_header=False, style="table_border")
+                table.add_column()
+                table.add_column()
+
+                table.add_row("[label]Host", host_and_port)
+                table.add_row("[label]User", row["user"])
+                table.add_row("[label]Error", "[red]%s[red]" % e.args[1])
+
+                replica_tables[host_and_port] = table
 
     return replica_tables

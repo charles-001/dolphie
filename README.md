@@ -126,13 +126,13 @@ Environment variables support these options:
 #### Least privilege
 1. PROCESS (if you don't use `performance_schema`)
 2. SELECT to `performance_schema` (if used) + `pt-heartbeat table` (if used)
-3. REPLICATION CLIENT
+3. REPLICATION CLIENT/REPLICATION SLAVE
 4. BACKUP_ADMIN (MySQL 8 only)
 
 #### Recommended
 1. PROCESS (if you don't use `performance_schema`)
 2. Global SELECT access (good for explaining queries, listing all databases, etc)
-4. REPLICATION CLIENT
+4. REPLICATION CLIENT/REPLICATION SLAVE
 5. SUPER (required if you want to kill queries)
 6. BACKUP_ADMIN (MySQL 8 only)
 

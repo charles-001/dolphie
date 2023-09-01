@@ -272,3 +272,4 @@ class MySQLQueries:
     binlog_status: str = "SHOW MASTER STATUS"
     replication_status: str = "SHOW SLAVE STATUS"
     innodb_status: str = "SHOW ENGINE INNODB STATUS"
+    get_replicas: str = "SHOW SLAVE HOSTS"

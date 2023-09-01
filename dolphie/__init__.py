@@ -98,6 +98,7 @@ class Dolphie:
         self.replica_data: dict = {}
         self.replica_connections: dict = {}
         self.replica_tables: dict = {}
+        self.replica_ports: dict = {}
 
         # Panel display states
         self.display_dashboard_panel: bool = False
