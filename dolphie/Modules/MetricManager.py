@@ -577,11 +577,11 @@ class MetricManager:
 
         if format:
             if checkpoint_age_ratio >= 80:
-                color_code = "#fc7979"
+                color_code = "red"
             elif checkpoint_age_ratio >= 60:
-                color_code = "#f1fb82"
+                color_code = "yellow"
             else:
-                color_code = "#54efae"
+                color_code = "green"
 
             return f"[{color_code}]{checkpoint_age_ratio}%"
         else:
@@ -607,11 +607,11 @@ class MetricManager:
 
         if format:
             color_code = (
-                "#54efae"
+                "green"
                 if self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio > 70
-                else "#f1fb82"
+                else "yellow"
                 if self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio > 50
-                else "#fc7979"
+                else "red"
             )
 
             return f"[{color_code}]{self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio:.2f}%[/{color_code}]"

@@ -17,7 +17,7 @@ def format_bytes(bytes_value, color=True):
         formatted_value = formatted_value[:-3]  # Remove ".00" from the end
 
     if color:
-        return f"{formatted_value}[#91abec]{units[unit_index]}[/#91abec]"
+        return f"{formatted_value}[highlight]{units[unit_index]}[/highlight]"
     else:
         return f"{formatted_value}{units[unit_index]}"
 
@@ -86,7 +86,7 @@ def format_number(n, decimal=2, color=True):
             else:
                 num = str(round_num(n, 0))
             if color:
-                return f"{num}[#91abec]{sufix}[/#91abec]" if sufix else num
+                return f"{num}[highlight]{sufix}[/highlight]" if sufix else num
             else:
                 return f"{num}{sufix}" if sufix else num
 
@@ -103,6 +103,6 @@ def format_sys_table_memory(data):
         elif suffix == "b":
             suffix = "B"
 
-        return f"{value}[#91abec]{suffix}"
+        return f"{value}[highlight]{suffix}"
 
     return data

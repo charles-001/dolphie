@@ -43,11 +43,11 @@ class NewVersionModal(ModalScreen):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Label("[#54efae]New version available!", id="title")
-            yield Label(f"Current version: [#91abec]{self.current_version}")
-            yield Label(f"Latest version:  [#91abec]{self.latest_version}")
+            yield Label("[green]New version available!", id="title")
+            yield Label(f"Current version: [highlight]{self.current_version}")
+            yield Label(f"Latest version:  [highlight]{self.latest_version}")
             yield Label("Please update to the latest version at your convenience")
-            yield Label("Find more details at [#bbc8e8]https://github.com/charles-001/dolphie")
+            yield Label("Find more details at [light_blue]https://github.com/charles-001/dolphie")
             with Horizontal():
                 yield Button("OK", variant="primary")
 

@@ -67,7 +67,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
     for thread_id, thread in dolphie.processlist_threads.items():
         # Add or modify the "command" field based on the condition
         if thread["command"] == "Killed":
-            thread["command"] = "[#fc7979]Killed[/#fc7979]"
+            thread["command"] = "[red]Killed[/red]"
 
         # Check if the thread_id exists in the datatable
         if thread_id in processlist_datatable.rows:
@@ -206,14 +206,14 @@ def fetch_data(dolphie: Dolphie):
         time = int(thread["time"])
         thread_color = ""
         if "SELECT /*!40001 SQL_NO_CACHE */ *" in query:
-            thread_color = "#B565F3"
+            thread_color = "purple"
         elif query:
             if time >= 10:
-                thread_color = "#fc7979"
+                thread_color = "red"
             elif time >= 5:
-                thread_color = "#f1fb82"
+                thread_color = "yellow"
             else:
-                thread_color = "#54efae"
+                thread_color = "green"
 
         formatted_time = f"[{thread_color}]{format_time(time)}[/{thread_color}]" if thread_color else format_time(time)
         formatted_trx_time = format_time(int(thread["trx_time"])) if thread["trx_time"] else ""

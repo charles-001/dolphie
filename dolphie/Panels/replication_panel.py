@@ -19,7 +19,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
         and not dolphie.replication_status
         and not dolphie.host_is_cluster
     ):
-        return "[#f1fb82]No data to display![/#f1fb82] This host is not a replica and has no replicas connected"
+        return "[yellow]No data to display![/yellow] This host is not a replica and has no replicas connected"
 
     def create_replica_panel():
         if not dolphie.replica_tables and not dolphie.replica_data:
@@ -40,9 +40,9 @@ def create_panel(dolphie: Dolphie) -> Panel:
         title = "Replica" if num_replicas == 1 else "Replicas"
         return Panel(
             Align.center(content),
-            title=f"[b #e9e9e9]{num_replicas} {title}",
+            title=f"[b white]{num_replicas} {title}",
             box=box.HORIZONTALS,
-            border_style="#6171a6",
+            border_style="panel_border",
         )
 
     def create_cluster_panel():
@@ -51,11 +51,12 @@ def create_panel(dolphie: Dolphie) -> Panel:
 
         return Panel(
             Align.center(
-                f"\n[b #bbc8e8]State[/b #bbc8e8]  {dolphie.global_status.get('wsrep_local_state_comment', 'N/A')}\n"
+                "\n[b light_blue]State[/b light_blue] "
+                f" {dolphie.global_status.get('wsrep_local_state_comment', 'N/A')}\n"
             ),
-            title="[b #e9e9e9]Cluster",
+            title="[b white]Cluster",
             box=box.HORIZONTALS,
-            border_style="#6171a6",
+            border_style="panel_border",
         )
 
     def create_replication_panel():
@@ -72,12 +73,12 @@ def create_panel(dolphie: Dolphie) -> Panel:
 
         for setting_variable, setting_display_name in available_replication_variables.items():
             value = dolphie.global_variables.get(setting_variable, "N/A")
-            replication_variables += f"[b #bbc8e8]{setting_display_name}[/b #bbc8e8] {value}  "
+            replication_variables += f"[b light_blue]{setting_display_name}[/b light_blue] {value}  "
         replication_variables = replication_variables.strip()
 
         table_thread_applier_status = Table()
         if dolphie.replication_applier_status:
-            table_thread_applier_status = Table(title_style=Style(bold=True), style="#6171a6", box=box.ROUNDED)
+            table_thread_applier_status = Table(title_style=Style(bold=True), style="panel_border", box=box.ROUNDED)
             table_thread_applier_status.add_column("Worker", justify="center")
             table_thread_applier_status.add_column("Usage", min_width=6)
             table_thread_applier_status.add_column("Apply Time")
@@ -93,7 +94,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
                 if row["last_applied_transaction"]:
                     source_id_split = row["last_applied_transaction"].split("-")[4].split(":")[0]
                     transaction_id = row["last_applied_transaction"].split(":")[1]
-                    last_applied_transaction = f"…[#969aad]{source_id_split}[/#969aad]:{transaction_id}"
+                    last_applied_transaction = f"…[dark_gray]{source_id_split}[/dark_gray]:{transaction_id}"
 
                 table_thread_applier_status.add_row(
                     str(row["worker_id"]),
@@ -107,9 +108,9 @@ def create_panel(dolphie: Dolphie) -> Panel:
 
         return Panel(
             Group(Align.center(replication_variables), Align.center(table_grid_replication)),
-            title="[b #e9e9e9]Replication",
+            title="[b white]Replication",
             box=box.HORIZONTALS,
-            border_style="#6171a6",
+            border_style="panel_border",
         )
 
     group_panels = [
@@ -122,10 +123,6 @@ def create_panel(dolphie: Dolphie) -> Panel:
 
 
 def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thread_id=None) -> Table:
-    table_title_style = Style(bold=True)
-    table_line_color = "#6171a6"
-    table_box = box.ROUNDED
-
     # When replica_thread_id is specified, that means we're creating a table for a replica and not replication
     if replica_thread_id:
         if dolphie.replica_connections[replica_thread_id]["previous_sbm"] is not None:
@@ -141,14 +138,14 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
         data["Seconds_Behind_Master"] = dolphie.replica_lag
 
     if data["Slave_IO_Running"].lower() == "no":
-        io_thread_running = "[#fc7979]NO[/#fc7979]"
+        io_thread_running = "[red]NO[/red]"
     else:
-        io_thread_running = "[#54efae]Yes[/#54efae]"
+        io_thread_running = "[green]Yes[/green]"
 
     if data["Slave_SQL_Running"].lower() == "no":
-        sql_thread_running = "[#fc7979]NO[/#fc7979]"
+        sql_thread_running = "[red]NO[/red]"
     else:
-        sql_thread_running = "[#54efae]Yes[/#54efae]"
+        sql_thread_running = "[green]Yes[/green]"
 
     speed = 0
     if data["Seconds_Behind_Master"] is not None:
@@ -161,11 +158,11 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.worker_job_time)
 
         if replica_sbm >= 20:
-            lag = "[#fc7979]%s" % "{:0>8}[/#fc7979]".format(str(timedelta(seconds=replica_sbm)))
+            lag = "[red]%s" % "{:0>8}[/red]".format(str(timedelta(seconds=replica_sbm)))
         elif replica_sbm >= 10:
-            lag = "[#f1fb82]%s[/#f1fb82]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+            lag = "[yellow]%s[/yellow]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
         else:
-            lag = "[#54efae]%s[/#54efae]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+            lag = "[green]%s[/green]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
 
     data["Master_Host"] = dolphie.get_hostname(data["Master_Host"])
     mysql_gtid_enabled = False
@@ -184,10 +181,10 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
 
     table = Table(
         show_header=False,
-        box=table_box,
+        box=box.ROUNDED,
         title=table_title,
-        title_style=table_title_style,
-        style=table_line_color,
+        title_style=Style(bold=True),
+        style="table_border",
     )
 
     table.add_column()
@@ -197,16 +194,16 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
         table.add_column(min_width=60, overflow="fold")
 
     if replica_thread_id:
-        table.add_row("[#c5c7d2]Host", "%s" % dolphie.replica_connections[replica_thread_id]["host"])
+        table.add_row("[label]Host", "%s" % dolphie.replica_connections[replica_thread_id]["host"])
     else:
-        table.add_row("[#c5c7d2]Primary", "%s" % data["Master_Host"])
+        table.add_row("[label]Primary", "%s" % data["Master_Host"])
 
     if not dashboard_table:
-        table.add_row("[#c5c7d2]User", "%s" % data["Master_User"])
+        table.add_row("[label]User", "%s" % data["Master_User"])
 
     table.add_row(
-        "[#c5c7d2]Thread",
-        "[#c5c7d2]IO %s [#c5c7d2]SQL %s" % (io_thread_running, sql_thread_running),
+        "[label]Thread",
+        "[label]IO %s [label]SQL %s" % (io_thread_running, sql_thread_running),
     )
 
     lag_source = "Lag"
@@ -214,35 +211,35 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
         lag_source = f"Lag ({sbm_source})"
 
     if data["Seconds_Behind_Master"] is None or data["Slave_SQL_Running"].lower() == "no":
-        table.add_row(f"[#c5c7d2]{lag_source}", "")
+        table.add_row(f"[label]{lag_source}", "")
     else:
         table.add_row(
-            "[#c5c7d2]%s" % lag_source,
-            "%s [#c5c7d2]Speed[/#c5c7d2] %s" % (lag, speed),
+            "[label]%s" % lag_source,
+            "%s [label]Speed[/label] %s" % (lag, speed),
         )
 
     if dashboard_table:
-        table.add_row("[#c5c7d2]Binlog IO", "%s" % (data["Master_Log_File"]))
-        table.add_row("[#c5c7d2]Binlog SQL", "%s" % (data["Relay_Master_Log_File"]))
-        table.add_row("[#c5c7d2]Relay Log ", "%s" % (data["Relay_Log_File"]))
-        table.add_row("[#c5c7d2]GTID", "%s" % gtid_status)
-        table.add_row("[#c5c7d2]State", "%s" % data["Slave_SQL_Running_State"])
+        table.add_row("[label]Binlog IO", "%s" % (data["Master_Log_File"]))
+        table.add_row("[label]Binlog SQL", "%s" % (data["Relay_Master_Log_File"]))
+        table.add_row("[label]Relay Log ", "%s" % (data["Relay_Log_File"]))
+        table.add_row("[label]GTID", "%s" % gtid_status)
+        table.add_row("[label]State", "%s" % data["Slave_SQL_Running_State"])
     else:
         table.add_row(
-            "[#c5c7d2]Binlog IO",
-            "%s ([#969aad]%s[/#969aad])" % (data["Master_Log_File"], data["Read_Master_Log_Pos"]),
+            "[label]Binlog IO",
+            "%s ([dark_gray]%s[/dark_gray])" % (data["Master_Log_File"], data["Read_Master_Log_Pos"]),
         )
         table.add_row(
-            "[#c5c7d2]Binlog SQL",
-            "%s ([#969aad]%s[/#969aad])"
+            "[label]Binlog SQL",
+            "%s ([dark_gray]%s[/dark_gray])"
             % (
                 data["Relay_Master_Log_File"],
                 data["Exec_Master_Log_Pos"],
             ),
         )
         table.add_row(
-            "[#c5c7d2]Relay Log",
-            "%s ([#969aad]%s[/#969aad])" % (data["Relay_Log_File"], data["Relay_Log_Pos"]),
+            "[label]Relay Log",
+            "%s ([dark_gray]%s[/dark_gray])" % (data["Relay_Log_File"], data["Relay_Log_Pos"]),
         )
 
         if mysql_gtid_enabled:
@@ -250,7 +247,7 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             executed_gtid_set = data["Executed_Gtid_Set"]
             retrieved_gtid_set = data["Retrieved_Gtid_Set"]
 
-            table.add_row("[#c5c7d2]Auto Position", "%s" % data["Auto_Position"])
+            table.add_row("[label]Auto Position", "%s" % data["Auto_Position"])
 
             # We find errant transactions for replicas here
             if replica_thread_id:
@@ -282,11 +279,11 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
                 db_cursor.execute(f"SELECT GTID_SUBTRACT('{replica_gtid_set}', '{primary_gtid_set}') AS errant_trxs")
                 gtid_data = db_cursor.fetchone()
                 if gtid_data.get("errant_trxs"):
-                    errant_trx = f"[#fc7979]{gtid_data['errant_trxs']}[/#fc7979]"
+                    errant_trx = f"[red]{gtid_data['errant_trxs']}[/red]"
                 else:
-                    errant_trx = "[#54efae]None[/#54efae]"
+                    errant_trx = "[green]None[/green]"
 
-                table.add_row("[#c5c7d2]Errant TRX", "%s" % errant_trx)
+                table.add_row("[label]Errant TRX", "%s" % errant_trx)
 
                 # Since this is for the replica view, we use the host's UUID since its the primary
                 primary_uuid = dolphie.server_uuid
@@ -296,19 +293,19 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
                 transaction_id = match.group(2)
 
                 if source_id == primary_uuid:
-                    return f"[#91abec]{source_id}[/#91abec]:{transaction_id}"
+                    return f"[highlight]{source_id}[/highlight]:{transaction_id}"
                 else:
-                    return f"[#969aad]{source_id}:{transaction_id}[/#969aad]"
+                    return f"[dark_gray]{source_id}:{transaction_id}[/dark_gray]"
 
             # Example GTID: 3beacd96-6fe3-18ec-9d95-b4592zec4b45:1-26
             pattern = re.compile(r"\b(\w+(?:-\w+){4}):(\d+(?:-\d*)?)\b")
             retrieved_gtid_set = pattern.sub(color_gtid_set, retrieved_gtid_set.replace(",", ""))
             executed_gtid_set = pattern.sub(color_gtid_set, executed_gtid_set.replace(",", ""))
 
-            table.add_row("[#c5c7d2]Retrieved GTID", "%s" % retrieved_gtid_set)
-            table.add_row("[#c5c7d2]Executed GTID", "%s" % executed_gtid_set)
+            table.add_row("[label]Retrieved GTID", "%s" % retrieved_gtid_set)
+            table.add_row("[label]Executed GTID", "%s" % executed_gtid_set)
         elif mariadb_gtid_enabled:
-            table.add_row("[#c5c7d2]GTID IO Pos", "%s" % data["Gtid_IO_Pos"])
+            table.add_row("[label]GTID IO Pos", "%s" % data["Gtid_IO_Pos"])
 
         replication_status_filtering = [
             "Replicate_Do_DB",
@@ -324,17 +321,17 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             value = dolphie.replication_status.get(status_filter)
             status_filter_formatted = f"Filter: {status_filter.split('Replicate_')[1]}"
             if value:
-                table.add_row(f"[#c5c7d2]{status_filter_formatted}", str(value))
+                table.add_row(f"[label]{status_filter_formatted}", str(value))
 
         error_types = ["Last_IO_Error", "Last_SQL_Error"]
         errors = [(error_type, data[error_type]) for error_type in error_types if data[error_type]]
 
         if errors:
             for error_type, error_message in errors:
-                table.add_row("[#c5c7d2]%s" % error_type.replace("_", " "), "[#fc7979]%s[/#fc7979]" % error_message)
+                table.add_row("[label]%s" % error_type.replace("_", " "), "[red]%s[/red]" % error_message)
         else:
-            table.add_row("[#c5c7d2]IO State", "%s" % data["Slave_IO_State"])
-            table.add_row("[#c5c7d2]SQL State", "%s" % data["Slave_SQL_Running_State"])
+            table.add_row("[label]IO State", "%s" % data["Slave_IO_State"])
+            table.add_row("[label]SQL State", "%s" % data["Slave_SQL_Running_State"])
 
     return table
 
@@ -371,14 +368,14 @@ def fetch_replica_table_data(dolphie: Dolphie):
             if replica_data:
                 replica_tables[host] = create_table(dolphie, data=replica_data, replica_thread_id=thread_id)
         except pymysql.Error as e:
-            table = Table(box=box.ROUNDED, show_header=False, style="#b0bad7")
+            table = Table(box=box.ROUNDED, show_header=False, style="table_border")
 
             table.add_column()
             table.add_column()
 
-            table.add_row("[#c5c7d2]Host", host)
-            table.add_row("[#c5c7d2]User", row["user"])
-            table.add_row("[#c5c7d2]Error", "[#fc7979]%s[#fc7979]" % e.args[1])
+            table.add_row("[label]Host", host)
+            table.add_row("[label]User", row["user"])
+            table.add_row("[label]Error", "[red]%s[red]" % e.args[1])
 
             replica_tables[host] = table
 

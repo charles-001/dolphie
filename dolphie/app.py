@@ -22,6 +22,7 @@ from dolphie.Panels import dashboard_panel, processlist_panel, replication_panel
 from dolphie.Widgets.topbar import TopBar
 from rich.console import Console
 from rich.prompt import Prompt
+from rich.theme import Theme
 from rich.traceback import Traceback
 from textual import events, on, work
 from textual.app import App, ComposeResult
@@ -324,7 +325,7 @@ Environment variables support these options:
             sys.exit(console.print(f"Invalid URI: {e} (see --help for more information)"))
 
     if parameter_options["ask_password"]:
-        dolphie.password = Prompt.ask("[b #bbc8e8]Password", password=True)
+        dolphie.password = Prompt.ask("[b #91abec]Password", password=True)
 
     if not dolphie.host:
         dolphie.host = "localhost"
@@ -392,6 +393,26 @@ class DolphieApp(App):
         self.dolphie = dolphie
         dolphie.app = self
 
+        theme = Theme(
+            {
+                "white": "#e9e9e9",
+                "green": "#54efae",
+                "yellow": "#f6ff8f",
+                "red": "#fd8383",
+                "purple": "#b565f3",
+                "dark_gray": "#969aad",
+                "highlight": "#91abec",
+                "label": "#c5c7d2",
+                "light_blue": "#bbc8e8",
+                "b white": "b #e9e9e9",
+                "b highlight": "b #91abec",
+                "b red": "b #fd8383",
+                "b light_blue": "b #bbc8e8",
+                "panel_border": "#6171a6",
+                "table_border": "#52608d",
+            }
+        )
+        self.console.push_theme(theme)
         self.console.set_window_title(self.TITLE)
 
     @work(exclusive=True, thread=True)
@@ -624,7 +645,9 @@ class DolphieApp(App):
                     if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
                         stat_data[metric_data.label] = number_format_func(metric_data.values[-1])
 
-        formatted_stat_data = "  ".join(f"[b #bbc8e8]{label}[/b #bbc8e8] {value}" for label, value in stat_data.items())
+        formatted_stat_data = "  ".join(
+            f"[b light_blue]{label}[/b light_blue] {value}" for label, value in stat_data.items()
+        )
         self.query_one(f"#stats_{tab_metric_instance_name}").update(formatted_stat_data)
 
     def refresh_panel(self, panel_name, toggled=False):

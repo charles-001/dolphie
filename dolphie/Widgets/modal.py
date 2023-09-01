@@ -71,7 +71,7 @@ class CommandModal(ModalScreen):
                     yield RadioButton("Host/IP", id="host")
                     yield RadioButton("Database", id="db")
                     yield RadioButton("Query Text", id="query_text")
-                    yield RadioButton("Minimum Query Time", id="query_time")
+                    yield RadioButton("Query Time", id="query_time")
                 with Vertical(id="kill_container"):
                     with RadioSet(id="kill_radio_buttons"):
                         yield RadioButton("Username", id="username")
@@ -172,7 +172,7 @@ class CommandModal(ModalScreen):
                 "user": "User",
                 "db": "Database",
                 "host": "Host",
-                "query_time": "Minimum query time",
+                "query_time": "Query time",
                 "query_text": "Query text",
             }
 
@@ -205,9 +205,7 @@ class CommandModal(ModalScreen):
                         )
 
                     if not value:
-                        self.update_error_response(
-                            f"{filter_label} [b #f89696]{modal_input}[/b #f89696] does not exist"
-                        )
+                        self.update_error_response(f"{filter_label} [b red]{modal_input}[/b red] does not exist")
                     else:
                         self.dismiss([filter_label, modal_input])
             else:
@@ -244,7 +242,7 @@ class CommandModal(ModalScreen):
             value = next((thread_id for thread_id in self.processlist_data.keys() if modal_input == thread_id), None)
 
             if not value:
-                self.update_error_response(f"Thread ID [b #f89696]{modal_input}[/b #f89696] does not exist")
+                self.update_error_response(f"Thread ID [b red]{modal_input}[/b red] does not exist")
             else:
                 self.dismiss(modal_input)
         elif self.command == "refresh_interval":

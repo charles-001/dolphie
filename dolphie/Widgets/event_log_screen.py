@@ -128,7 +128,7 @@ class EventLog(Screen):
                     if row["level"] == "Error":
                         level_color = "white on red"
                     elif row["level"] == "Warning":
-                        level_color = "#f1fb82"
+                        level_color = "yellow"
 
                     level = row["level"]
                     if level_color:

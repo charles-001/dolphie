@@ -21,6 +21,7 @@ from packaging.version import parse as parse_version
 from rich import box
 from rich.align import Align
 from rich.console import Group
+from rich.panel import Panel
 from rich.style import Style
 from rich.syntax import Syntax
 from rich.table import Table
@@ -305,7 +306,7 @@ class Dolphie:
 
             # Create dictionary of tables
             for table_counter in range(1, max_num_tables + 1):
-                tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="#52608d")
+                tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="table_border")
                 tables[table_counter].add_column("")
 
             # Loop over databases
@@ -330,7 +331,7 @@ class Dolphie:
             screen_data = Group(
                 Align.center("[b]Databases[/b]"),
                 Align.center(table_grid),
-                Align.center("Total: [b #91abec]%s[/b #91abec]" % db_count),
+                Align.center("Total: [b highlight]%s[/b highlight]" % db_count),
             )
 
         elif key == "e":
@@ -349,7 +350,7 @@ class Dolphie:
                     "User": "user_filter",
                     "Database": "db_filter",
                     "Host": "host_filter",
-                    "Minimum query time": "query_time_filter",
+                    "Query time": "query_time_filter",
                     "Query text": "query_filter",
                 }
 
@@ -357,7 +358,7 @@ class Dolphie:
                 if attribute:
                     setattr(self, attribute, int(filter_value) if attribute == "query_time_filter" else filter_value)
                     self.notify(
-                        f"Filtering [b]{filter_name.capitalize()}[/b] by [b #91abec]{filter_value}[/b #91abec]",
+                        f"Filtering [b]{filter_name.capitalize()}[/b] by [b highlight]{filter_value}[/b highlight]",
                         severity="success",
                     )
                 else:
@@ -394,7 +395,7 @@ class Dolphie:
                     else:
                         self.secondary_db_connection.cursor.execute("KILL %s" % thread_id)
 
-                    self.notify("Killed Thread ID [b #91abec]%s[/b #91abec]" % thread_id, severity="success")
+                    self.notify("Killed Thread ID [b highlight]%s[/b highlight]" % thread_id, severity="success")
                 except Exception as e:
                     self.notify(e.args[1], title="Error killing Thread ID", severity="error")
 
@@ -438,7 +439,7 @@ class Dolphie:
                         return
 
                 if threads_killed:
-                    self.notify(f"Killed [#91abec]{threads_killed}[/#91abec] threads")
+                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] threads")
                 else:
                     self.notify("No threads were killed")
 
@@ -462,7 +463,7 @@ class Dolphie:
             if output:
                 deadlock = output.group(1)
 
-                deadlock = deadlock.replace("***", "[#f1fb82]*****[/#f1fb82]")
+                deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
                 screen_data = deadlock
             else:
                 screen_data = Align.center("No deadlock detected")
@@ -475,12 +476,8 @@ class Dolphie:
                 self.notify("Memory usage command requires MySQL 5.7+ with Performance Schema enabled")
                 return
 
-            table_line_color = "#52608d"
             table_grid = Table.grid()
-            table1 = Table(
-                box=box.ROUNDED,
-                style=table_line_color,
-            )
+            table1 = Table(box=box.ROUNDED, style="table_border")
 
             header_style = Style(bold=True)
             table1.add_column("User", header_style=header_style)
@@ -496,10 +493,7 @@ class Dolphie:
                     format_sys_table_memory(row["total_allocated"]),
                 )
 
-            table2 = Table(
-                box=box.ROUNDED,
-                style=table_line_color,
-            )
+            table2 = Table(box=box.ROUNDED, style="table_border")
             table2.add_column("Code Area", header_style=header_style)
             table2.add_column("Current", header_style=header_style)
 
@@ -508,10 +502,7 @@ class Dolphie:
             for row in data:
                 table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
 
-            table3 = Table(
-                box=box.ROUNDED,
-                style=table_line_color,
-            )
+            table3 = Table(box=box.ROUNDED, style="table_border")
             table3.add_column("Host", header_style=header_style)
             table3.add_column("Current", header_style=header_style)
             table3.add_column("Total", header_style=header_style)
@@ -533,7 +524,7 @@ class Dolphie:
         elif key == "p":
             if not self.pause_refresh:
                 self.pause_refresh = True
-                self.notify(f"Refresh is paused! Press [b #91abec]{key}[/b #91abec] again to resume")
+                self.notify(f"Refresh is paused! Press [b highlight]{key}[/b highlight] again to resume")
             else:
                 self.pause_refresh = False
                 self.notify("Refreshing has resumed", severity="success")
@@ -541,11 +532,11 @@ class Dolphie:
         if key == "P":
             if self.use_performance_schema:
                 self.use_performance_schema = False
-                self.notify("Switched to using [b #91abec]Processlist")
+                self.notify("Switched to using [b highlight]Processlist")
             else:
                 if self.performance_schema_enabled:
                     self.use_performance_schema = True
-                    self.notify("Switched to using [b #91abec]Performance Schema")
+                    self.notify("Switched to using [b highlight]Performance Schema")
                 else:
                     self.notify("You can't switch to Performance Schema because it isn't enabled")
 
@@ -558,7 +549,8 @@ class Dolphie:
                 self.refresh_interval = refresh_interval
 
                 self.notify(
-                    f"Refresh interval set to [b #91abec]{refresh_interval}[/b #91abec] second(s)", severity="success"
+                    f"Refresh interval set to [b highlight]{refresh_interval}[/b highlight] second(s)",
+                    severity="success",
                 )
 
             self.app.push_screen(
@@ -583,65 +575,38 @@ class Dolphie:
         elif key == "t":
 
             def command_get_input(thread_id):
-                thread_data = self.processlist_threads_snapshot[thread_id]
+                elements = []
 
-                table = Table(box=box.ROUNDED, show_header=False, style="#52608d")
+                thread_data = self.processlist_threads_snapshot.get(thread_id)
+                if not thread_data:
+                    self.notify("Thread ID was not found in processlist")
+                    return
+
+                table = Table(box=box.ROUNDED, show_header=False, style="table_border")
                 table.add_column("")
                 table.add_column("")
 
-                table.add_row("[#c5c7d2]Thread ID", str(thread_id))
-                table.add_row("[#c5c7d2]User", thread_data["user"])
-                table.add_row("[#c5c7d2]Host", thread_data["host"])
-                table.add_row("[#c5c7d2]Database", thread_data["db"])
-                table.add_row("[#c5c7d2]Command", thread_data["command"])
-                table.add_row("[#c5c7d2]State", thread_data["state"])
-                table.add_row("[#c5c7d2]Time", str(timedelta(seconds=thread_data["time"])).zfill(8))
-                table.add_row("[#c5c7d2]Rows Locked", thread_data["trx_rows_locked"])
-                table.add_row("[#c5c7d2]Rows Modified", thread_data["trx_rows_modified"])
-
-                # Transaction history
-                transaction_history_title = ""
-                transaction_history_table = Table(box=box.ROUNDED, style="#52608d")
-                if (
-                    self.is_mysql_version_at_least("5.7")
-                    and self.performance_schema_enabled
-                    and thread_data["mysql_thread_id"]
-                ):
-                    query = MySQLQueries.thread_transaction_history.replace("$1", str(thread_data["mysql_thread_id"]))
-                    self.secondary_db_connection.cursor.execute(query)
-                    transaction_history = self.secondary_db_connection.fetchall()
-
-                    if transaction_history:
-                        transaction_history_title = "[b]Transaction History[/b]"
-                        transaction_history_table.add_column("Start Time")
-                        transaction_history_table.add_column("Query")
-
-                        for query in transaction_history:
-                            formatted_query = ""
-                            if query["sql_text"]:
-                                formatted_query = Syntax(
-                                    re.sub(r"\s+", " ", query["sql_text"]),
-                                    "sql",
-                                    line_numbers=False,
-                                    word_wrap=True,
-                                    theme="monokai",
-                                    background_color="#000718",
-                                )
-
-                            transaction_history_table.add_row(
-                                query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), formatted_query
-                            )
+                table.add_row("[label]Thread ID", str(thread_id))
+                table.add_row("[label]User", thread_data["user"])
+                table.add_row("[label]Host", thread_data["host"])
+                table.add_row("[label]Database", thread_data["db"])
+                table.add_row("[label]Command", thread_data["command"])
+                table.add_row("[label]State", thread_data["state"])
+                table.add_row("[label]Time", str(timedelta(seconds=thread_data["time"])).zfill(8))
+                table.add_row("[label]Rows Locked", thread_data["trx_rows_locked"])
+                table.add_row("[label]Rows Modified", thread_data["trx_rows_modified"])
 
                 if (
                     "innodb_thread_concurrency" in self.global_variables
                     and self.global_variables["innodb_thread_concurrency"]
                 ):
-                    table.add_row("[#c5c7d2]Tickets", thread_data["trx_concurrency_tickets"])
+                    table.add_row("[label]Tickets", thread_data["trx_concurrency_tickets"])
 
                 table.add_row("", "")
-                table.add_row("[#c5c7d2]TRX Time", thread_data["trx_time"])
-                table.add_row("[#c5c7d2]TRX State", thread_data["trx_state"])
-                table.add_row("[#c5c7d2]TRX Operation", thread_data["trx_operation_state"])
+                table.add_row("[label]TRX Time", thread_data["trx_time"])
+                table.add_row("[label]TRX State", thread_data["trx_state"])
+                table.add_row("[label]TRX Operation", thread_data["trx_operation_state"])
+                elements.append(Group(Align.center("[b white]Thread Details[/b white]"), Align.center(table)))
 
                 query = sqlformat(thread_data["query"], reindent_aligned=True)
                 query_db = thread_data["db"]
@@ -656,7 +621,7 @@ class Dolphie:
                         line_numbers=False,
                         word_wrap=True,
                         theme="monokai",
-                        background_color="#000718",
+                        background_color="#030918",
                     )
 
                     if query_db:
@@ -669,7 +634,7 @@ class Dolphie:
                             explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
 
                     if explain_data:
-                        explain_table = Table(box=box.ROUNDED, style="#52608d")
+                        explain_table = Table(box=box.HEAVY_EDGE, style="table_border")
 
                         columns = []
                         for row in explain_data:
@@ -694,34 +659,62 @@ class Dolphie:
 
                             explain_table.add_row(*values)
 
-                        screen_data = Group(
-                            Align.center(table),
-                            "",
-                            Align.center(formatted_query),
-                            "",
-                            Align.center(explain_table),
-                            "",
-                            Align.center(transaction_history_title),
-                            Align.center(transaction_history_table),
-                        )
+                        query_panel_title = "[b white]Query & Explain[/b white]"
+                        query_panel_elements = Group(Align.center(formatted_query), "", Align.center(explain_table))
+                    elif explain_failure:
+                        query_panel_title = "[b white]Query & Explain[/b white]"
+                        query_panel_elements = Group(Align.center(formatted_query), "", Align.center(explain_failure))
                     else:
-                        screen_data = Group(
-                            Align.center(table),
-                            "",
-                            Align.center(formatted_query),
-                            "",
-                            Align.center(explain_failure),
-                            "",
-                            Align.center(transaction_history_title),
-                            Align.center(transaction_history_table),
+                        query_panel_title = "[b white]Query[/b white]"
+                        query_panel_elements = Align.center(formatted_query)
+
+                    elements.append(
+                        Panel(
+                            query_panel_elements,
+                            title=query_panel_title,
+                            box=box.HORIZONTALS,
+                            border_style="panel_border",
                         )
-                else:
-                    screen_data = Group(
-                        Align.center(table),
-                        "",
-                        Align.center(transaction_history_title),
-                        Align.center(transaction_history_table),
                     )
+
+                # Transaction history
+                transaction_history_title = ""
+                transaction_history_table = Table(box=box.ROUNDED, style="table_border")
+                if (
+                    self.is_mysql_version_at_least("5.7")
+                    and self.performance_schema_enabled
+                    and thread_data["mysql_thread_id"]
+                ):
+                    query = MySQLQueries.thread_transaction_history.replace("$1", str(thread_data["mysql_thread_id"]))
+                    self.secondary_db_connection.cursor.execute(query)
+                    transaction_history = self.secondary_db_connection.fetchall()
+
+                    if transaction_history:
+                        transaction_history_title = "[b]Transaction History[/b]"
+                        transaction_history_table.add_column("Start Time")
+                        transaction_history_table.add_column("Query")
+
+                        for query in transaction_history:
+                            formatted_query = ""
+                            if query["sql_text"]:
+                                formatted_query = Syntax(
+                                    re.sub(r"\s+", " ", query["sql_text"]),
+                                    "sql",
+                                    line_numbers=False,
+                                    word_wrap=True,
+                                    theme="monokai",
+                                    background_color="#030918",
+                                )
+
+                            transaction_history_table.add_row(
+                                query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), formatted_query
+                            )
+
+                        elements.append(
+                            Group(Align.center(transaction_history_title), Align.center(transaction_history_table))
+                        )
+
+                screen_data = Group(*[element for element in elements if element])
 
                 self.app.push_screen(CommandScreen(self.app_version, f"{self.mysql_host}:{self.port}", screen_data))
 
@@ -776,7 +769,7 @@ class Dolphie:
 
                 # Create the number of tables we want
                 while table_counter <= max_num_tables:
-                    tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="#52608d")
+                    tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="table_border")
                     tables[table_counter].add_column("")
                     tables[table_counter].add_column("")
 
@@ -787,7 +780,7 @@ class Dolphie:
 
                 # Loop global_variables
                 for variable, value in display_global_variables.items():
-                    tables[variable_num].add_row("[#c5c7d2]%s" % variable, str(value))
+                    tables[variable_num].add_row("[label]%s" % variable, str(value))
 
                     if variable_counter == row_per_count and row_counter != max_num_tables:
                         row_counter += 1
@@ -807,7 +800,7 @@ class Dolphie:
                     self.app.push_screen(CommandScreen(self.app_version, f"{self.mysql_host}:{self.port}", screen_data))
                 else:
                     if input_variable:
-                        self.notify("No variable(s) found that match [b #91abec]%s[/b #91abec]" % input_variable)
+                        self.notify("No variable(s) found that match [b highlight]%s[/b highlight]" % input_variable)
 
             self.app.push_screen(
                 CommandModal(
@@ -819,7 +812,7 @@ class Dolphie:
 
         elif key == "z":
             if self.host_cache:
-                table = Table(box=box.ROUNDED, style="#52608d")
+                table = Table(box=box.ROUNDED, style="table_border")
                 table.add_column("Host/IP")
                 table.add_column("Hostname (if resolved)")
 
@@ -830,14 +823,12 @@ class Dolphie:
                 screen_data = Group(
                     Align.center("[b]Host Cache[/b]"),
                     Align.center(table),
-                    Align.center("Total: [b #91abec]%s" % len(self.host_cache)),
+                    Align.center("Total: [b highlight]%s" % len(self.host_cache)),
                 )
             else:
                 screen_data = Align.center("\nThere are currently no hosts resolved")
 
         elif key == "question_mark":
-            table_line_color = "#52608d"
-
             keys = {
                 "`": "Quickly connect to another host",
                 "a": "Toggle additional processlist columns",
@@ -864,8 +855,8 @@ class Dolphie:
                 "z": "Display all entries in the host cache",
             }
 
-            table_keys = Table(box=box.HORIZONTALS, style=table_line_color, title="Commands", title_style="bold")
-            table_keys.add_column("Key", justify="center", style="b #91abec")
+            table_keys = Table(box=box.HORIZONTALS, style="table_border", title="Commands", title_style="bold")
+            table_keys.add_column("Key", justify="center", style="b highlight")
             table_keys.add_column("Description")
 
             for key, description in keys.items():
@@ -877,8 +868,8 @@ class Dolphie:
                 "3": "Show/hide Replication/Replicas",
                 "4": "Show/hide Graph Metrics",
             }
-            table_panels = Table(box=box.HORIZONTALS, style=table_line_color, title="Panels", title_style="bold")
-            table_panels.add_column("Key", justify="center", style="b #91abec")
+            table_panels = Table(box=box.HORIZONTALS, style="table_border", title="Panels", title_style="bold")
+            table_panels.add_column("Key", justify="center", style="b highlight")
             table_panels.add_column("Description")
             for key, description in sorted(panels.items()):
                 table_panels.add_row(key, description)
@@ -910,9 +901,9 @@ class Dolphie:
             }
 
             table_terminology = Table(
-                box=box.HORIZONTALS, style=table_line_color, title="Terminology", title_style="bold"
+                box=box.HORIZONTALS, style="table_border", title="Terminology", title_style="bold"
             )
-            table_terminology.add_column("Datapoint", style="#91abec")
+            table_terminology.add_column("Datapoint", style="highlight")
             table_terminology.add_column("Description")
             for datapoint, description in sorted(datapoints.items()):
                 table_terminology.add_row(datapoint, description)
@@ -925,7 +916,7 @@ class Dolphie:
                 Align.center(table_terminology),
                 "",
                 Align.center(
-                    "[#bbc8e8][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
+                    "[light_blue][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
                     " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-select-text"
                 ),
             )
@@ -934,7 +925,7 @@ class Dolphie:
             self.app.push_screen(CommandScreen(self.app_version, f"{self.mysql_host}:{self.port}", screen_data))
 
     def create_user_stats_table(self):
-        table = Table(header_style="bold white", box=box.ROUNDED, style="#52608d")
+        table = Table(header_style="bold white", box=box.ROUNDED, style="table_border")
 
         columns = {}
         user_stats = {}
