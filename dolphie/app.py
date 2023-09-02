@@ -440,7 +440,7 @@ class DolphieApp(App):
             dolphie.replica_data = dolphie.main_db_connection.fetch_data(
                 "find_replicas", dolphie.use_performance_schema
             )
-            dolphie.fetch_replication_data()
+            dolphie.fetch_replication_data()            
             dolphie.massage_metrics_data()
 
             if dolphie.display_dashboard_panel:
@@ -448,6 +448,9 @@ class DolphieApp(App):
 
             if dolphie.display_replication_panel:
                 dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
+                #if not dolphie.replication_group_table:
+                dolphie.replication_group_table = replication_panel.fetch_group_replication_data(dolphie)
+                dolphie.group_replica_tables = replication_panel.fetch_group_replica_table_data(dolphie)
 
             if dolphie.display_processlist_panel:
                 dolphie.processlist_threads = processlist_panel.fetch_data(dolphie)

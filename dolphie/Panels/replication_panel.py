@@ -18,8 +18,46 @@ def create_panel(dolphie: Dolphie) -> Panel:
         and not dolphie.replica_data
         and not dolphie.replication_status
         and not dolphie.host_is_cluster
+        and not dolphie.replication_group_name
     ):
         return "[yellow]No data to display![/yellow] This host is not a replica and has no replicas connected"
+    
+    def create_group_replication_panel():
+        if not dolphie.group_replication:
+            return None
+        
+        if dolphie.replication_group_table:
+            table_group_grid = Table.grid()
+            table_group_grid.add_row(dolphie.replication_group_table)
+            content = table_group_grid
+        else:    
+            content = "\nLoading...\n"        
+        title = "Group Replication"
+        return Panel(
+            Align.center(content),
+            title=f"[b white]{title}",
+            box=box.HORIZONTALS,
+            border_style="panel_border",
+        )
+
+    def create_group_members_panel():
+        if not dolphie.group_replication:
+            return None
+        if dolphie.replication_group_table:
+            table_group_members_grid = Table.grid()
+            num_members = len(dolphie.group_replica_tables)
+            for i in range(0, num_members, 3):
+                table_group_members_grid.add_row(*[table for _, table in sorted(list(dolphie.group_replica_tables.items()))[i : i + 3]])
+            content = table_group_members_grid
+        else:    
+            content = "\nLoading...\n"        
+        title = "Group Members"
+        return Panel(
+            Align.center(content),
+            title=f"[b white]{title}",
+            box=box.HORIZONTALS,
+            border_style="panel_border",
+        )
 
     def create_replica_panel():
         if not dolphie.replica_tables and not dolphie.replica_data:
@@ -114,6 +152,8 @@ def create_panel(dolphie: Dolphie) -> Panel:
         )
 
     group_panels = [
+        create_group_replication_panel(),
+        create_group_members_panel(),
         create_cluster_panel(),
         create_replication_panel(),
         create_replica_panel(),
@@ -334,6 +374,58 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             table.add_row("[label]SQL State", "%s" % data["Slave_SQL_Running_State"])
 
     return table
+
+def fetch_group_replication_data(dolphie: Dolphie):
+    table = {}
+    dolphie.replication_group_name = dolphie.global_variables.get("group_replication_group_name", "N/A")
+    dolphie.replication_group_view_uuid = dolphie.global_variables.get("group_replication_view_change_uuid", "N/A")
+    dolphie.replication_group_comm_stack = dolphie.global_variables.get("group_replication_communication_stack", "N/A")
+    dolphie.replication_group_concistency = dolphie.global_variables.get("group_replication_consistency", "N/A")
+    dolphie.replication_group_single_leader = dolphie.global_variables.get("group_replication_paxos_single_leader", "N/A")
+    dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
+    replication_group_data = dolphie.main_db_connection.fetchone()
+    dolphie.replication_group_write_concurrency = replication_group_data.get("eh")
+    dolphie.replication_group_protocol = replication_group_data.get("protocol")
+    table = Table(box=box.ROUNDED, show_header=False, style="table_border")
+    table.add_column()
+    table.add_column()
+    table.add_row("[label]Group Name", dolphie.replication_group_name)
+    table.add_row("[label]View Uuid", dolphie.replication_group_view_uuid)
+    table.add_row("[label]Communication Stack", dolphie.replication_group_comm_stack)
+    table.add_row("[label]Global Consistency", dolphie.replication_group_concistency)
+    table.add_row("[label]Protocol Version", dolphie.replication_group_protocol)
+    table.add_row("[label]Paxos Single Leader", dolphie.replication_group_single_leader)
+    table.add_row("[label]Write Concurrenty", str(dolphie.replication_group_write_concurrency))
+
+    return table    
+
+def fetch_group_replica_table_data(dolphie: Dolphie):
+    group_replica_tables = {}
+    dolphie.main_db_connection.execute(MySQLQueries.get_group_members)
+    group_replica_data = dolphie.main_db_connection.fetchall()
+    for row in group_replica_data:
+        table = Table(box=box.ROUNDED, show_header=False, style="table_border")
+        table.add_column()
+        table.add_column()
+        if row["MEMBER_ID"] == dolphie.global_variables["server_uuid"]:
+            if row["MEMBER_ROLE"] == "PRIMARY":
+                color1 = "[green]"
+                color2 = "[/green]"
+            else:
+                color1 = "[light_blue]"
+                color2 = "[/light_blue]"
+        else:
+            color1 = color2 = ""
+        table.add_row("[label]Member", "{}{}:{}{}".format(color1, row["MEMBER_HOST"], row["MEMBER_PORT"], color2))
+        table.add_row("[label]Id", "{}{}{}".format(color1, row["MEMBER_ID"], color2))
+        table.add_row("[label]State", row["MEMBER_STATE"])
+        table.add_row("[label]Role", "{}{}{}".format(color1, row["MEMBER_ROLE"], color2))
+        table.add_row("[label]Version", row["MEMBER_VERSION"])
+
+        group_replica_tables[row["MEMBER_ID"]] = table
+    
+    return group_replica_tables
+
 
 
 def fetch_replica_table_data(dolphie: Dolphie):
