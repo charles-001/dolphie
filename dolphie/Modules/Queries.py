@@ -267,6 +267,15 @@ class MySQLQueries:
         WHERE
             member_id = '$1'
     """
+    
+    # Group Replication Event Horizon and Protocol
+    group_replication_get_write_concurrency: str = """
+        SELECT group_replication_get_write_concurrency() eh,
+               group_replication_get_communication_protocol() protocol 
+    """
+
+    get_group_members: str = "SELECT * FROM performance_schema.replication_group_members"
+
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"
     binlog_status: str = "SHOW MASTER STATUS"
