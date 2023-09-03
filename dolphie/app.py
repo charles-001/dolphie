@@ -440,17 +440,30 @@ class DolphieApp(App):
             dolphie.replica_data = dolphie.main_db_connection.fetch_data(
                 "find_replicas", dolphie.use_performance_schema
             )
-            dolphie.fetch_replication_data()            
+            dolphie.fetch_replication_data()
             dolphie.massage_metrics_data()
+
+            if dolphie.group_replication:
+                dolphie.replication_group_data = dolphie.main_db_connection.fetch_data(
+                    "group_replication_get_write_concurrency"
+                )
+                dolphie.replication_group_members = dolphie.main_db_connection.fetch_data(
+                    "get_replication_group_members"
+                )
+
+                for member_role_data in dolphie.replication_group_members:
+                    if (
+                        member_role_data["MEMBER_ID"] == dolphie.server_uuid
+                        and member_role_data["MEMBER_ROLE"] == "PRIMARY"
+                    ):
+                        dolphie.is_group_replication_primary = True
+                        break
 
             if dolphie.display_dashboard_panel:
                 dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
 
             if dolphie.display_replication_panel:
                 dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
-                #if not dolphie.replication_group_table:
-                dolphie.replication_group_table = replication_panel.fetch_group_replication_data(dolphie)
-                dolphie.group_replica_tables = replication_panel.fetch_group_replica_table_data(dolphie)
 
             if dolphie.display_processlist_panel:
                 dolphie.processlist_threads = processlist_panel.fetch_data(dolphie)
@@ -474,14 +487,6 @@ class DolphieApp(App):
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
-
-            if dolphie.group_replication:
-                dolphie.main_db_connection.execute(
-                    MySQLQueries.group_replication_member_status.replace("$1", dolphie.server_uuid)
-                )
-                member_role_data = dolphie.main_db_connection.fetchone()
-                if member_role_data.get("member_role") == "PRIMARY":
-                    dolphie.is_group_replication_primary = True
 
         except ManualException as e:
             self.exit(message=e.output())

@@ -101,16 +101,16 @@ class Dolphie:
         self.replica_ports: dict = {}
 
         # These are for group replication in replication panel
+        self.replication_group_members: dict = {}
+        self.replication_group_data: dict = {}
         self.replication_group_name: str = None
         self.replication_group_role: str = None
         self.replication_group_view_uuid: str = None
         self.replication_group_comm_stack: str = None
-        self.replication_group_protocol: str = None
+        self.replication_group_protocol_version: str = None
         self.replication_group_concistency: str = None
         self.replication_group_single_leader: bool = True
         self.replication_group_write_concurrency: int = None
-        self.replication_group_table: dict = {}
-        self.group_replica_tables: dict = {}
 
         # Panel display states
         self.display_dashboard_panel: bool = False
@@ -667,7 +667,7 @@ class Dolphie:
                                     columns.append(column)
 
                                 if column == "key" and value is None:
-                                    value = "[b white on red]NO INDEX[/b white on red]"
+                                    value = "[b white on #B30000]NO INDEX[/b white on #B30000]"
 
                                 if column == "rows":
                                     value = format_number(value)

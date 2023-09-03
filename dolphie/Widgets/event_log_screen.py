@@ -126,7 +126,7 @@ class EventLog(Screen):
                 for row in data:
                     level_color = ""
                     if row["level"] == "Error":
-                        level_color = "white on red"
+                        level_color = "red"
                     elif row["level"] == "Warning":
                         level_color = "yellow"
 

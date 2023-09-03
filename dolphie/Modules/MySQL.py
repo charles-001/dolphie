@@ -112,6 +112,10 @@ class Database:
             self.execute(query)
             command_data = self.fetchall()
 
+        elif command == "get_replication_group_members":
+            self.execute(getattr(MySQLQueries, command))
+            command_data = self.fetchall()
+
         elif command == "innodb_metrics":
             self.execute(MySQLQueries.innodb_metrics)
             data = self.fetchall()

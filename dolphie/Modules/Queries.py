@@ -92,19 +92,25 @@ class MySQLQueries:
     """
     ps_find_replicas: str = """
         SELECT
-            processlist_id   AS id,
-            processlist_user AS user,
-            processlist_host AS host
+            t.THREAD_ID AS id,
+            t.PROCESSLIST_USER AS user,
+            t.PROCESSLIST_HOST AS host,
+            CONVERT (
+                CAST( CONVERT ( uvt.VARIABLE_VALUE USING latin1 ) AS BINARY ) USING utf8
+            ) AS replica_uuid
         FROM
-            performance_schema.threads
+            `performance_schema`.threads AS t JOIN
+            `performance_schema`.user_variables_by_thread AS uvt ON t.THREAD_ID = uvt.THREAD_ID
         WHERE
-            processlist_command LIKE 'Binlog Dump%'
+            t.PROCESSLIST_COMMAND LIKE 'Binlog Dump%'
+            AND uvt.VARIABLE_NAME = 'slave_uuid'
     """
     pl_find_replicas: str = """
         SELECT
             Id   AS id,
             User AS user,
-            Host AS host
+            Host AS host,
+            '' AS replica_uuid
         FROM
             information_schema.PROCESSLIST
         WHERE
@@ -259,22 +265,19 @@ class MySQLQueries:
         WITH ROLLUP
         ORDER BY worker_id
     """
-    group_replication_member_status: str = """
-        SELECT
-            member_role
-        FROM
-            performance_schema.replication_group_members
-        WHERE
-            member_id = '$1'
-    """
-    
+
     # Group Replication Event Horizon and Protocol
     group_replication_get_write_concurrency: str = """
-        SELECT group_replication_get_write_concurrency() eh,
-               group_replication_get_communication_protocol() protocol 
+        SELECT
+            group_replication_get_write_concurrency() write_concurrency,
+            group_replication_get_communication_protocol() protocol_version
     """
-
-    get_group_members: str = "SELECT * FROM performance_schema.replication_group_members"
+    get_replication_group_members: str = """
+        SELECT
+            *
+        FROM
+            performance_schema.replication_group_members
+    """
 
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"
