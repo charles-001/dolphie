@@ -112,7 +112,7 @@ class Database:
             self.execute(query)
             command_data = self.fetchall()
 
-        elif command == "get_replication_group_members":
+        elif command == "get_group_replication_members":
             self.execute(getattr(MySQLQueries, command))
             command_data = self.fetchall()
 

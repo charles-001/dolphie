@@ -253,10 +253,8 @@ class MySQLQueries:
             applier_status.LAST_APPLIED_TRANSACTION AS last_applied_transaction,
             CONVERT(SUM(thread_events.COUNT_STAR), UNSIGNED) AS total_thread_events
         FROM
-            `performance_schema`.replication_applier_status_by_worker applier_status
-        JOIN
-            `performance_schema`.events_transactions_summary_by_thread_by_event_name thread_events ON
-            applier_status.THREAD_ID = thread_events.THREAD_ID
+            `performance_schema`.replication_applier_status_by_worker applier_status JOIN
+            `performance_schema`.events_transactions_summary_by_thread_by_event_name thread_events USING (THREAD_ID)
         WHERE
             applier_status.THREAD_ID IN (
                 SELECT THREAD_ID FROM `performance_schema`.replication_applier_status_by_worker
@@ -272,11 +270,12 @@ class MySQLQueries:
             group_replication_get_write_concurrency() write_concurrency,
             group_replication_get_communication_protocol() protocol_version
     """
-    get_replication_group_members: str = """
+    get_group_replication_members: str = """
         SELECT
             *
         FROM
-            performance_schema.replication_group_members
+            performance_schema.replication_group_members JOIN
+            performance_schema.replication_group_member_stats USING(MEMBER_ID)
     """
 
     status: str = "SHOW GLOBAL STATUS"

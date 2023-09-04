@@ -127,13 +127,14 @@ def fetch_data(dolphie: Dolphie):
     if not dolphie.show_idle_threads:
         if dolphie.use_performance_schema:
             where_clause.append(
-                "(processlist_command != 'Sleep' AND processlist_command NOT LIKE 'Binlog Dump%') AND "
-                "(processlist_info IS NOT NULL OR trx_query IS NOT NULL)"
+                "(processlist_command != 'Sleep' AND processlist_command NOT LIKE 'Binlog Dump%' AND"
+                " processlist_info NOT LIKE 'Group replication%') AND (processlist_info IS NOT NULL OR trx_query IS"
+                " NOT NULL)"
             )
         else:
             where_clause.append(
-                "(Command != 'Sleep' AND Command NOT LIKE 'Binlog Dump%') AND "
-                "(Info IS NOT NULL OR trx_query IS NOT NULL)"
+                "(Command != 'Sleep' AND Command NOT LIKE 'Binlog Dump%' AND Info NOT LIKE 'Group replication%') AND"
+                " (Info IS NOT NULL OR trx_query IS NOT NULL)"
             )
 
     # Only show running transactions only
@@ -205,15 +206,16 @@ def fetch_data(dolphie: Dolphie):
         # Determine time color
         time = int(thread["time"])
         thread_color = ""
-        if "SELECT /*!40001 SQL_NO_CACHE */ *" in query:
-            thread_color = "purple"
-        elif query:
-            if time >= 10:
-                thread_color = "red"
-            elif time >= 5:
-                thread_color = "yellow"
-            else:
-                thread_color = "green"
+        if "Group replication" not in query:  # Don't color GR threads
+            if "SELECT /*!40001 SQL_NO_CACHE */ *" in query:
+                thread_color = "purple"
+            elif query:
+                if time >= 10:
+                    thread_color = "red"
+                elif time >= 5:
+                    thread_color = "yellow"
+                else:
+                    thread_color = "green"
 
         formatted_time = f"[{thread_color}]{format_time(time)}[/{thread_color}]" if thread_color else format_time(time)
         formatted_trx_time = format_time(int(thread["trx_time"])) if thread["trx_time"] else ""

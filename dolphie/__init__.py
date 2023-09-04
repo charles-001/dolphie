@@ -91,8 +91,6 @@ class Dolphie:
         self.active_redo_logs: int = None
         self.mysql_host: str = None
         self.quick_switched_connection: bool = False
-        self.group_replication: bool = False
-        self.is_group_replication_primary: bool = False
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -101,16 +99,10 @@ class Dolphie:
         self.replica_ports: dict = {}
 
         # These are for group replication in replication panel
-        self.replication_group_members: dict = {}
-        self.replication_group_data: dict = {}
-        self.replication_group_name: str = None
-        self.replication_group_role: str = None
-        self.replication_group_view_uuid: str = None
-        self.replication_group_comm_stack: str = None
-        self.replication_group_protocol_version: str = None
-        self.replication_group_concistency: str = None
-        self.replication_group_single_leader: bool = True
-        self.replication_group_write_concurrency: int = None
+        self.group_replication: bool = False
+        self.is_group_replication_primary: bool = False
+        self.group_replication_members: dict = {}
+        self.group_replication_data: dict = {}
 
         # Panel display states
         self.display_dashboard_panel: bool = False
@@ -915,6 +907,7 @@ class Dolphie:
                 "Speed": "How many seconds were taken off of replication lag from the last refresh interval",
                 "Tickets": "Relates to innodb_concurrency_tickets variable",
                 "R-Lock/Mod": "Relates to how many rows are locked/modified for the thread's transaction",
+                "GR": "Group Replication",
             }
 
             table_terminology = Table(

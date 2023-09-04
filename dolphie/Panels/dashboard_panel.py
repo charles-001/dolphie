@@ -57,6 +57,13 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
+    replicas = "0"
+    if dolphie.replica_data:
+        replicas = len(dolphie.replica_data)
+
+    if dolphie.group_replication:
+        replicas += " [label]GR members[/label]: %s" % len(dolphie.group_replication_members)
+
     table_information.add_column()
     table_information.add_column(width=25)
     table_information.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.mysql_version}")
@@ -66,7 +73,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_information.add_row("[label]Uptime", uptime)
     table_information.add_row("[label]Runtime", f"{runtime} [label]latency:[/label] {refresh_latency}s")
     table_information.add_row("[label]Read Only", read_only)
-    table_information.add_row("[label]Replicas", "%s" % len(dolphie.replica_data))
+    table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
         "[label]Threads",
         "[label]con[/label] %s[highlight]/[/highlight][label]run[/label]"
@@ -216,7 +223,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     # Replication #
     ###############
     if dolphie.replication_status and not dolphie.display_replication_panel:
-        tables_to_add.append(replication_panel.create_table(dolphie, dashboard_table=True))
+        tables_to_add.append(replication_panel.create_replication_table(dolphie, dashboard_table=True))
 
     ###############
     # Statistics #

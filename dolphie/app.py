@@ -444,14 +444,14 @@ class DolphieApp(App):
             dolphie.massage_metrics_data()
 
             if dolphie.group_replication:
-                dolphie.replication_group_data = dolphie.main_db_connection.fetch_data(
+                dolphie.group_replication_data = dolphie.main_db_connection.fetch_data(
                     "group_replication_get_write_concurrency"
                 )
-                dolphie.replication_group_members = dolphie.main_db_connection.fetch_data(
-                    "get_replication_group_members"
+                dolphie.group_replication_members = dolphie.main_db_connection.fetch_data(
+                    "get_group_replication_members"
                 )
 
-                for member_role_data in dolphie.replication_group_members:
+                for member_role_data in dolphie.group_replication_members:
                     if (
                         member_role_data["MEMBER_ID"] == dolphie.server_uuid
                         and member_role_data["MEMBER_ROLE"] == "PRIMARY"

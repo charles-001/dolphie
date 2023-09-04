@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import pymysql
 from dolphie import Dolphie
+from dolphie.Modules.Functions import format_number
 from dolphie.Modules.Queries import MySQLQueries
 from rich import box
 from rich.align import Align
@@ -22,23 +23,39 @@ def create_panel(dolphie: Dolphie) -> Panel:
     ):
         return "[yellow]No data to display![/yellow] This host is not a replica and has no replicas connected"
 
-    def create_replication_group_panel():
+    def create_group_replication_panel():
         if not dolphie.group_replication:
             return None
 
-        group_replication_table = fetch_group_replication_data(dolphie)
-        group_replica_tables = fetch_group_replica_table_data(dolphie)
+        available_group_replication_variables = {
+            "group_replication_view_change_uuid": [dolphie.global_variables, "View UUID"],
+            "group_replication_communication_stack": [dolphie.global_variables, "Communication Stack"],
+            "group_replication_consistency": [dolphie.global_variables, "Global Consistency"],
+            "group_replication_paxos_single_leader": [dolphie.global_variables, "Paxos Single Leader"],
+            "group_replication_write_concurrency": [dolphie.group_replication_data, "Write Concurrency"],
+            "group_replication_protocol_version": [dolphie.group_replication_data, "Protocol Version"],
+        }
+
+        group_replication_variables = ""
+        for variable, setting in available_group_replication_variables.items():
+            value = setting[0].get(variable, "N/A")
+            group_replication_variables += f"[b light_blue]{setting[1]}[/b light_blue] {value}  "
+
+        group_replication_member_tables = create_group_replication_member_table(dolphie)
 
         table_group_members_grid = Table.grid()
-        if group_replica_tables:
-            for i in range(0, len(group_replica_tables), 3):
+        if group_replication_member_tables:
+            for i in range(0, len(group_replication_member_tables), 3):
                 table_group_members_grid.add_row(
-                    *[table for _, table in sorted(list(group_replica_tables.items()))[i : i + 3]]
+                    *[table for _, table in sorted(list(group_replication_member_tables.items()))[i : i + 3]]
                 )
 
         return Panel(
-            Group(Align.center(group_replication_table), Align.center(table_group_members_grid)),
-            title="[b white]Group Replication",
+            Group(Align.center(group_replication_variables), Align.center(table_group_members_grid)),
+            title=(
+                "[b white]Group Replication"
+                f" ([highlight]{dolphie.global_variables.get('group_replication_group_name', 'N/A')}[/highlight])"
+            ),
             box=box.HORIZONTALS,
             border_style="panel_border",
         )
@@ -126,7 +143,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
                 )
 
         table_grid_replication = Table.grid()
-        table_grid_replication.add_row(create_table(dolphie), table_thread_applier_status)
+        table_grid_replication.add_row(create_replication_table(dolphie), table_thread_applier_status)
 
         return Panel(
             Group(Align.center(replication_variables), Align.center(table_grid_replication)),
@@ -136,7 +153,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
         )
 
     group_panels = [
-        create_replication_group_panel(),
+        create_group_replication_panel(),
         create_cluster_panel(),
         create_replication_panel(),
         create_replica_panel(),
@@ -145,7 +162,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
     return Group(*[panel for panel in group_panels if panel])
 
 
-def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thread_id=None) -> Table:
+def create_replication_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thread_id=None) -> Table:
     # When replica_thread_id is specified, that means we're creating a table for a replica and not replication
     if replica_thread_id:
         if dolphie.replica_connections[replica_thread_id]["previous_sbm"] is not None:
@@ -265,6 +282,32 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
             "%s ([dark_gray]%s[/dark_gray])" % (data["Relay_Log_File"], data["Relay_Log_Pos"]),
         )
 
+        replication_status_filtering = [
+            "Replicate_Do_DB",
+            "Replicate_Ignore_Table",
+            "Replicate_Ignore_DB",
+            "Replicate_Do_Table",
+            "Replicate_Wild_Do_Table",
+            "Replicate_Wild_Ignore_Table",
+            "Replicate_Rewrite_DB",
+        ]
+
+        for status_filter in replication_status_filtering:
+            value = dolphie.replication_status.get(status_filter)
+            status_filter_formatted = f"Filter: {status_filter.split('Replicate_')[1]}"
+            if value:
+                table.add_row(f"[label]{status_filter_formatted}", str(value))
+
+        error_types = ["Last_IO_Error", "Last_SQL_Error"]
+        errors = [(error_type, data[error_type]) for error_type in error_types if data[error_type]]
+
+        if errors:
+            for error_type, error_message in errors:
+                table.add_row("[label]%s" % error_type.replace("_", " "), "[red]%s[/red]" % error_message)
+        else:
+            table.add_row("[label]IO State", "%s" % data["Slave_IO_State"])
+            table.add_row("[label]SQL State", "%s" % data["Slave_SQL_Running_State"])
+
         if mysql_gtid_enabled:
             primary_uuid = data["Master_UUID"]
             executed_gtid_set = data["Executed_Gtid_Set"]
@@ -330,71 +373,25 @@ def create_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thr
         elif mariadb_gtid_enabled:
             table.add_row("[label]GTID IO Pos", "%s" % data["Gtid_IO_Pos"])
 
-        replication_status_filtering = [
-            "Replicate_Do_DB",
-            "Replicate_Ignore_Table",
-            "Replicate_Ignore_DB",
-            "Replicate_Do_Table",
-            "Replicate_Wild_Do_Table",
-            "Replicate_Wild_Ignore_Table",
-            "Replicate_Rewrite_DB",
-        ]
-
-        for status_filter in replication_status_filtering:
-            value = dolphie.replication_status.get(status_filter)
-            status_filter_formatted = f"Filter: {status_filter.split('Replicate_')[1]}"
-            if value:
-                table.add_row(f"[label]{status_filter_formatted}", str(value))
-
-        error_types = ["Last_IO_Error", "Last_SQL_Error"]
-        errors = [(error_type, data[error_type]) for error_type in error_types if data[error_type]]
-
-        if errors:
-            for error_type, error_message in errors:
-                table.add_row("[label]%s" % error_type.replace("_", " "), "[red]%s[/red]" % error_message)
-        else:
-            table.add_row("[label]IO State", "%s" % data["Slave_IO_State"])
-            table.add_row("[label]SQL State", "%s" % data["Slave_SQL_Running_State"])
-
     return table
 
 
-def fetch_group_replication_data(dolphie: Dolphie):
-    table = {}
-    if not dolphie.group_replication:
-        return table
-
-    dolphie.replication_group_name = dolphie.global_variables.get("group_replication_group_name", "N/A")
-    dolphie.replication_group_view_uuid = dolphie.global_variables.get("group_replication_view_change_uuid", "N/A")
-    dolphie.replication_group_comm_stack = dolphie.global_variables.get("group_replication_communication_stack", "N/A")
-    dolphie.replication_group_concistency = dolphie.global_variables.get("group_replication_consistency", "N/A")
-    dolphie.replication_group_single_leader = dolphie.global_variables.get(
-        "group_replication_paxos_single_leader", "N/A"
-    )
-    dolphie.replication_group_write_concurrency = dolphie.replication_group_data.get("write_concurrency")
-    dolphie.replication_group_protocol_version = dolphie.replication_group_data.get("protocol_version")
-
-    table = Table(box=box.ROUNDED, show_header=False, style="table_border")
-    table.add_column()
-    table.add_column()
-    table.add_row("[label]Group Name", dolphie.replication_group_name)
-    table.add_row("[label]View UUID", dolphie.replication_group_view_uuid)
-    table.add_row("[label]Communication Stack", dolphie.replication_group_comm_stack)
-    table.add_row("[label]Global Consistency", dolphie.replication_group_concistency)
-    table.add_row("[label]Protocol Version", dolphie.replication_group_protocol_version)
-    table.add_row("[label]Paxos Single Leader", dolphie.replication_group_single_leader)
-    table.add_row("[label]Write Concurrenty", str(dolphie.replication_group_write_concurrency))
-
-    return table
-
-
-def fetch_group_replica_table_data(dolphie: Dolphie):
+def create_group_replication_member_table(dolphie: Dolphie):
     group_replica_tables = {}
 
-    if not dolphie.replication_group_members:
+    if not dolphie.group_replication_members:
         return None
 
-    for row in dolphie.replication_group_members:
+    for row in dolphie.group_replication_members:
+        trx_queued = row.get("COUNT_TRANSACTIONS_IN_QUEUE")
+        trx_checked = row.get("COUNT_TRANSACTIONS_CHECKED")
+        trx_detected = row.get("COUNT_TRANSACTIONS_DETECTED")
+        trx_rows_validating = row.get("COUNT_TRANSACTIONS_ROWS_VALIDATING")
+        trx_applied_queue = row.get("COUNT_TRANSACTIONS_REMOTE_IN_APPLIER")
+        trx_applied = row.get("COUNT_TRANSACTIONS_REMOTE_APPLIED")
+        trx_local_proposed = row.get("COUNT_TRANSACTIONS_LOCAL_PROPOSED")
+        trx_local_rollback = row.get("COUNT_TRANSACTIONS_LOCAL_ROLLBACK")
+
         if row["MEMBER_ID"] == dolphie.server_uuid and row["MEMBER_ROLE"] == "PRIMARY":
             table_border = "highlight"
             member_role = f"[highlight]{row['MEMBER_ROLE']}[/highlight]"
@@ -416,6 +413,29 @@ def fetch_group_replica_table_data(dolphie: Dolphie):
         table.add_row("[label]Role", member_role)
         table.add_row("[label]State", member_state)
         table.add_row("[label]Version", row["MEMBER_VERSION"])
+
+        table.add_row(
+            "[label]Conflict",
+            (
+                f"[label]Queue[/label]: {format_number(trx_queued)} [label]Checked[/label]:"
+                f" {format_number(trx_checked)} [label]Detected[/label]: {format_number(trx_detected)}"
+            ),
+        )
+        table.add_row(
+            "[label]Applied",
+            f"{format_number(trx_applied)} [label]Queue[/label]: {format_number(trx_applied_queue)} ",
+        )
+        table.add_row(
+            "[label]Local",
+            (
+                f"[label]Proposed[/label]: {format_number(trx_local_proposed)} [label]Rollback[/label]:"
+                f" {format_number(trx_local_rollback)}"
+            ),
+        )
+        # table.add_row("[label]Local Rollback", format_number(trx_local_rollback))
+        table.add_row(
+            "[label]Rows", f"{format_number(trx_rows_validating)} [dark_gray](used for certification)[/dark_gray]"
+        )
 
         group_replica_tables[row["MEMBER_ID"]] = table
 
@@ -483,7 +503,7 @@ def fetch_replica_table_data(dolphie: Dolphie):
                 replica_data = replica_connection["cursor"].fetchone()
 
                 if replica_data:
-                    replica_tables[host_and_port] = create_table(
+                    replica_tables[host_and_port] = create_replication_table(
                         dolphie, data=replica_data, replica_thread_id=thread_id
                     )
             except pymysql.Error as e:
