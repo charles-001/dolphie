@@ -32,8 +32,8 @@ def create_panel(dolphie: Dolphie) -> Panel:
             "group_replication_communication_stack": [dolphie.global_variables, "Communication Stack"],
             "group_replication_consistency": [dolphie.global_variables, "Global Consistency"],
             "group_replication_paxos_single_leader": [dolphie.global_variables, "Paxos Single Leader"],
-            "group_replication_write_concurrency": [dolphie.group_replication_data, "Write Concurrency"],
-            "group_replication_protocol_version": [dolphie.group_replication_data, "Protocol Version"],
+            "write_concurrency": [dolphie.group_replication_data, "Write Concurrency"],
+            "protocol_version": [dolphie.group_replication_data, "Protocol Version"],
         }
 
         group_replication_variables = ""
