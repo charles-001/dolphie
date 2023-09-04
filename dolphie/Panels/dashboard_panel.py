@@ -61,9 +61,6 @@ def create_panel(dolphie: Dolphie) -> Table:
     if dolphie.replica_data:
         replicas = len(dolphie.replica_data)
 
-    if dolphie.group_replication:
-        replicas += " [label]GR members[/label]: %i" % len(dolphie.group_replication_members)
-
     table_information.add_column()
     table_information.add_column(width=25)
     table_information.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.mysql_version}")
