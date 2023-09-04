@@ -62,7 +62,7 @@ def create_panel(dolphie: Dolphie) -> Table:
         replicas = len(dolphie.replica_data)
 
     if dolphie.group_replication:
-        replicas += " [label]GR members[/label]: %s" % len(dolphie.group_replication_members)
+        replicas += " [label]GR members[/label]: %i" % len(dolphie.group_replication_members)
 
     table_information.add_column()
     table_information.add_column(width=25)
