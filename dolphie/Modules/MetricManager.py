@@ -158,7 +158,11 @@ class Graph(Static):
 
         plt.yticks(y_ticks, y_labels)
 
-        self.update(Text.from_ansi(plt.build()))
+        # Fix for Windows when graphs initially load
+        try:
+            self.update(Text.from_ansi(plt.build()))
+        except OSError:
+            pass
 
 
 def get_number_format_function(data, color=False):
