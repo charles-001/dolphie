@@ -69,7 +69,7 @@ class Dolphie:
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
-        self.worker_job_time: int = 0
+        self.polling_latency: float = 0
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
         self.pause_refresh: bool = False
@@ -162,7 +162,7 @@ class Dolphie:
         self.main_db_connection.execute("SET SESSION sql_mode = ''")
         self.secondary_db_connection.execute("SET SESSION sql_mode = ''")
 
-        global_variables = self.main_db_connection.fetch_data("variables")
+        global_variables = self.main_db_connection.fetch_status_and_variables("variables")
 
         basedir = global_variables.get("basedir")
         aurora_version = global_variables.get("aurora_version")
@@ -765,14 +765,13 @@ class Dolphie:
                 tables = {}
                 display_global_variables = {}
 
-                variable_data = self.secondary_db_connection.fetch_data("variables")
-                for variable, value in variable_data.items():
+                for variable, value in self.global_variables.items():
                     if input_variable == "all":
-                        display_global_variables[variable] = variable_data[variable]
+                        display_global_variables[variable] = self.global_variables[variable]
                     else:
                         if input_variable:
                             if input_variable in variable:
-                                display_global_variables[variable] = variable_data[variable]
+                                display_global_variables[variable] = self.global_variables[variable]
 
                 max_num_tables = 1 if len(display_global_variables) <= 50 else 2
 
@@ -1061,11 +1060,11 @@ class Dolphie:
             query = MySQLQueries.replication_status
             replica_lag_source = None
 
+        replica_lag_data = None
         if replica_cursor:
             replica_cursor.execute(query)
             replica_lag_data = replica_cursor.fetchone()
         else:
-            # Determine if this server is a replica or not
             self.main_db_connection.execute(MySQLQueries.replication_status)
             replica_lag_data = self.main_db_connection.fetchone()
             self.replication_status = replica_lag_data

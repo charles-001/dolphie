@@ -36,10 +36,10 @@ def create_panel(dolphie: Dolphie) -> Table:
         style=table_line_color,
     )
 
-    if dolphie.worker_job_time < 1:
+    if dolphie.polling_latency < 1:
         refresh_latency = 0
     else:
-        refresh_latency = round(dolphie.worker_job_time - dolphie.refresh_interval, 2)
+        refresh_latency = round(dolphie.polling_latency - dolphie.refresh_interval, 2)
 
     read_only = global_variables["read_only"]
     if global_variables["read_only"] == "ON":
@@ -57,7 +57,7 @@ def create_panel(dolphie: Dolphie) -> Table:
 
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
-    replicas = "0"
+    replicas = 0
     if dolphie.replica_data:
         replicas = len(dolphie.replica_data)
 

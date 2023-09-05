@@ -364,7 +364,7 @@ class MetricManager:
 
     def reset(self):
         self.worker_start_time: datetime = None
-        self.worker_job_time: float = None
+        self.polling_latency: float = None
         self.global_variables: Dict[str, Union[int, str]] = None
         self.global_status: Dict[str, int] = None
         self.replication_lag: int = None
@@ -457,7 +457,7 @@ class MetricManager:
     def refresh_data(
         self,
         worker_start_time: datetime,
-        worker_job_time: float,
+        polling_latency: float,
         global_variables: Dict[str, Union[int, str]],
         global_status: Dict[str, int],
         innodb_metrics: Dict[str, int],
@@ -466,7 +466,7 @@ class MetricManager:
         replication_lag: int,  # this can be from SHOW SLAVE STatus/Performance Schema/heartbeat table
     ):
         self.worker_start_time = worker_start_time
-        self.worker_job_time = worker_job_time
+        self.polling_latency = polling_latency
         self.global_variables = global_variables
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
@@ -558,7 +558,7 @@ class MetricManager:
 
                 last_value = metric_data.last_value
                 metric_diff = metric_source.get(metric_name, 0) - last_value
-                metric_per_sec = round(metric_diff / self.worker_job_time)
+                metric_per_sec = round(metric_diff / self.polling_latency)
 
                 if format:
                     return format_number(metric_per_sec)

@@ -430,26 +430,33 @@ class DolphieApp(App):
                 dolphie.db_connect()
 
             dolphie.worker_start_time = datetime.now()
-            dolphie.worker_job_time = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
+            dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
             dolphie.worker_previous_start_time = dolphie.worker_start_time
 
-            dolphie.global_variables = dolphie.main_db_connection.fetch_data("variables")
-            dolphie.global_status = dolphie.main_db_connection.fetch_data("status")
-            dolphie.innodb_metrics = dolphie.main_db_connection.fetch_data("innodb_metrics")
-            dolphie.disk_io_metrics = dolphie.main_db_connection.fetch_data("ps_disk_io")
-            dolphie.replica_data = dolphie.main_db_connection.fetch_data(
-                "find_replicas", dolphie.use_performance_schema
-            )
+            dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+            dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
+            dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
+
+            if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
+                find_replicas_query = MySQLQueries.ps_find_replicas
+            else:
+                find_replicas_query = MySQLQueries.pl_find_replicas
+
+            dolphie.main_db_connection.execute(find_replicas_query)
+            dolphie.replica_data = dolphie.main_db_connection.fetchall()
+
+            dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
+            dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
+
             dolphie.fetch_replication_data()
             dolphie.massage_metrics_data()
 
             if dolphie.group_replication:
-                dolphie.group_replication_data = dolphie.main_db_connection.fetch_data(
-                    "group_replication_get_write_concurrency"
-                )
-                dolphie.group_replication_members = dolphie.main_db_connection.fetch_data(
-                    "get_group_replication_members"
-                )
+                dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
+                dolphie.group_replication_data = dolphie.main_db_connection.fetchone()
+
+                dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
+                dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
 
                 for member_role_data in dolphie.group_replication_members:
                     if (
@@ -460,7 +467,8 @@ class DolphieApp(App):
                         break
 
             if dolphie.display_dashboard_panel:
-                dolphie.binlog_status = dolphie.main_db_connection.fetch_data("binlog_status")
+                dolphie.main_db_connection.execute(MySQLQueries.binlog_status)
+                dolphie.binlog_status = dolphie.main_db_connection.fetchone()
 
             if dolphie.display_replication_panel:
                 dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
@@ -479,7 +487,7 @@ class DolphieApp(App):
 
             dolphie.metric_manager.refresh_data(
                 worker_start_time=dolphie.worker_start_time,
-                worker_job_time=dolphie.worker_job_time,
+                polling_latency=dolphie.polling_latency,
                 global_variables=dolphie.global_variables,
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,

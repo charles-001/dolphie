@@ -195,7 +195,7 @@ def create_replication_table(dolphie: Dolphie, data=None, dashboard_table=False,
             dolphie.replica_connections[replica_thread_id]["previous_sbm"] = replica_sbm
 
         if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
-            speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.worker_job_time)
+            speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.polling_latency)
 
         if replica_sbm >= 20:
             lag = "[red]%s" % "{:0>8}[/red]".format(str(timedelta(seconds=replica_sbm)))

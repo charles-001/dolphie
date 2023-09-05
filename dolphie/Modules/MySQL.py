@@ -91,7 +91,7 @@ class Database:
             return value.decode()
         return value
 
-    def fetch_data(self, command, performance_schema=None):
+    def fetch_status_and_variables(self, command):
         command_data = {}
 
         if command in {"status", "variables"}:
@@ -105,17 +105,6 @@ class Database:
                 converted_value = int(value) if value.isnumeric() else value
 
                 command_data[variable] = converted_value
-
-        elif command == "find_replicas":
-            query = MySQLQueries.ps_find_replicas if performance_schema else MySQLQueries.pl_find_replicas
-
-            self.execute(query)
-            command_data = self.fetchall()
-
-        elif command == "get_group_replication_members":
-            self.execute(getattr(MySQLQueries, command))
-            command_data = self.fetchall()
-
         elif command == "innodb_metrics":
             self.execute(MySQLQueries.innodb_metrics)
             data = self.fetchall()
@@ -125,9 +114,5 @@ class Database:
                 value = int(row["COUNT"])
 
                 command_data[metric] = value
-
-        else:
-            self.execute(getattr(MySQLQueries, command))
-            command_data = self.fetchone()
 
         return command_data

@@ -205,6 +205,8 @@ class MySQLQueries:
             COUNT
         FROM
             information_schema.INNODB_METRICS
+        WHERE
+            name IN ('adaptive_hash_searches', 'adaptive_hash_searches_btree')
     """
     checkpoint_age: str = """
         SELECT
@@ -259,9 +261,11 @@ class MySQLQueries:
             applier_status.THREAD_ID IN (
                 SELECT THREAD_ID FROM `performance_schema`.replication_applier_status_by_worker
             )
-        GROUP BY worker_id
+        GROUP BY
+            worker_id
         WITH ROLLUP
-        ORDER BY worker_id
+        ORDER BY
+            worker_id
     """
 
     # Group Replication Event Horizon and Protocol
