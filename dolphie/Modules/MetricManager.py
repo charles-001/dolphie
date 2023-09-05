@@ -28,7 +28,7 @@ class Graph(Static):
             return
 
         plt.clf()
-        plt.date_form("H:M:S")
+        plt.date_form("d/m/y H:M:S")
         plt.canvas_color((3, 9, 24))
         plt.axes_color((3, 9, 24))
         plt.ticks_color((144, 169, 223))
@@ -525,13 +525,13 @@ class MetricManager:
                         added = True
 
             if added:
-                metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
+                metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def update_metrics_replication_lag(self):
         if self.replication_status:
             metric_instance = self.metrics.replication_lag
             self.add_metric(metric_instance.lag, self.replication_lag)
-            metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
+            metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def update_metrics_adaptive_hash_index_hit_ratio(self):
         hit_ratio = self.get_metric_adaptive_hash_index(format=False)
@@ -539,7 +539,7 @@ class MetricManager:
         if hit_ratio:
             metric_instance = self.metrics.adaptive_hash_index_hit_ratio
             self.add_metric(metric_instance.hit_ratio, hit_ratio)
-            metric_instance.datetimes.append(self.worker_start_time.strftime("%H:%M:%S"))
+            metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def update_metrics_checkpoint(self):
         (max_checkpoint_age_bytes, checkpoint_age_sync_flush_bytes, _) = self.get_metric_checkpoint_age(format=False)

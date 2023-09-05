@@ -206,7 +206,7 @@ class MySQLQueries:
         FROM
             information_schema.INNODB_METRICS
         WHERE
-            name IN ('adaptive_hash_searches', 'adaptive_hash_searches_btree')
+            name IN ('adaptive_hash_searches', 'adaptive_hash_searches_btree', 'trx_rseg_history_len')
     """
     checkpoint_age: str = """
         SELECT
