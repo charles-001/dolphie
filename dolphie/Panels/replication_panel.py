@@ -21,7 +21,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
         and not dolphie.host_is_cluster
         and not dolphie.group_replication
     ):
-        return "[yellow]No data to display![/yellow] This host is not a replica and has no replicas connected"
+        return "[yellow]This panel has no data to display[/yellow]"
 
     def create_group_replication_panel():
         if not dolphie.group_replication:
@@ -432,7 +432,6 @@ def create_group_replication_member_table(dolphie: Dolphie):
                 f" {format_number(trx_local_rollback)}"
             ),
         )
-        # table.add_row("[label]Local Rollback", format_number(trx_local_rollback))
         table.add_row(
             "[label]Rows", f"{format_number(trx_rows_validating)} [dark_gray](used for certification)[/dark_gray]"
         )
