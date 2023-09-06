@@ -298,6 +298,7 @@ class Dolphie:
                 self.app.query_one("#main_container").display = False
                 self.app.query_one("LoadingIndicator").display = True
                 self.app.query_one("#panel_dashboard_queries_qps").display = False
+                self.app.query_one("TopBar").host = "Connecting to MySQL"
 
             self.app.push_screen(QuickSwitchHostModal(quick_switch_hosts=self.quick_switch_hosts), command_get_input)
 

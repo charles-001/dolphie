@@ -716,10 +716,9 @@ class DolphieApp(App):
 
     def quick_host_switch(self):
         dolphie = self.dolphie
+
         dolphie.reset_runtime_variables()
         dolphie.quick_switched_connection = False
-
-        self.app.query_one("TopBar", TopBar).host = "Connecting to MySQL"
 
         # Set the graph switches to what they're currently selected to since we reset metric_manager
         switches = self.query(".switch_container Switch")
