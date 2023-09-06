@@ -218,15 +218,16 @@ class Dolphie:
         if global_variables.get("performance_schema") == "ON":
             self.performance_schema_enabled = True
 
-        # Simple check to see if the host has group replication
+        # Check to see if the host is in group replication
         if global_variables.get("group_replication_group_name"):
             self.group_replication = True
 
-        # Simple check to see if the host is a Galera cluster
+        # Check to see if the host is in a Galera cluster
         galera_matches = any(key.startswith("wsrep_") for key in global_variables.keys())
         if galera_matches:
             self.galera_cluster = True
 
+        # Check to see if this host is in a ReplicaSet
         rows_found = self.main_db_connection.execute(MySQLQueries.determine_if_replicaset, ignore_error=True)
         if rows_found:
             self.replicaset = True

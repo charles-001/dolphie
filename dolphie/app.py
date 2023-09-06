@@ -515,10 +515,12 @@ class DolphieApp(App):
 
             try:
                 freshly_connected = False
+
                 loading_indicator = self.app.query_one("LoadingIndicator")
                 if loading_indicator.display:
                     freshly_connected = True
                     loading_indicator.display = False
+
                     self.app.query_one("#main_container").display = True
                     self.layout_graphs()
 

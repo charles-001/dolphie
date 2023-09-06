@@ -377,11 +377,10 @@ def create_replication_table(dolphie: Dolphie, data=None, dashboard_table=False,
 
 
 def create_group_replication_member_table(dolphie: Dolphie):
-    group_replica_tables = {}
-
     if not dolphie.group_replication_members:
         return None
 
+    group_replica_tables = {}
     for row in dolphie.group_replication_members:
         trx_queued = row.get("COUNT_TRANSACTIONS_IN_QUEUE")
         trx_checked = row.get("COUNT_TRANSACTIONS_CHECKED")
@@ -392,7 +391,7 @@ def create_group_replication_member_table(dolphie: Dolphie):
         trx_local_proposed = row.get("COUNT_TRANSACTIONS_LOCAL_PROPOSED")
         trx_local_rollback = row.get("COUNT_TRANSACTIONS_LOCAL_ROLLBACK")
 
-        if row["MEMBER_ID"] == dolphie.server_uuid and row["MEMBER_ROLE"] == "PRIMARY":
+        if row["MEMBER_ROLE"] == "PRIMARY":
             table_border = "highlight"
             member_role = f"[highlight]{row['MEMBER_ROLE']}[/highlight]"
         else:
