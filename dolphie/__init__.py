@@ -40,7 +40,6 @@ class Dolphie:
     def __init__(self):
         self.app: App = None
         self.app_version = __version__
-        self.metric_manager = MetricManager()
 
         # Config options
         self.user: str = None
@@ -65,19 +64,32 @@ class Dolphie:
         self.host_filter: str = None
         self.query_time_filter: str = 0
         self.query_filter: str = None
+        self.quick_switch_hosts: list = []
+        self.host_cache: dict = {}
+        self.host_cache_from_file: dict = {}
+
+        # Panel display states
+        self.display_dashboard_panel: bool = False
+        self.display_processlist_panel: bool = False
+        self.display_replication_panel: bool = False
+        self.display_graphs_panel: bool = False
+
+        self.reset_runtime_variables()
+
+    def reset_runtime_variables(self):
+        self.metric_manager = MetricManager()
 
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
         self.polling_latency: float = 0
+        self.read_only_data: str = None
+        self.read_only: str = None
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
         self.pause_refresh: bool = False
         self.previous_binlog_position: int = 0
         self.previous_replica_sbm: int = 0
-        self.quick_switch_hosts: list = []
-        self.host_cache: dict = {}
-        self.host_cache_from_file: dict = {}
         self.innodb_metrics: dict = {}
         self.disk_io_metrics: dict = {}
         self.global_variables: dict = {}
@@ -98,17 +110,17 @@ class Dolphie:
         self.replica_tables: dict = {}
         self.replica_ports: dict = {}
 
-        # These are for group replication in replication panel
+        # Types of hosts
+        self.galera_cluster: bool = False
         self.group_replication: bool = False
+        self.replicaset: bool = False
+        self.aws_rds: bool = False
+        self.mariadb: bool = False
+
+        # These are for group replication in replication panel
         self.is_group_replication_primary: bool = False
         self.group_replication_members: dict = {}
         self.group_replication_data: dict = {}
-
-        # Panel display states
-        self.display_dashboard_panel: bool = False
-        self.display_processlist_panel: bool = False
-        self.display_replication_panel: bool = False
-        self.display_graphs_panel: bool = False
 
         # Database connection global_variables
         # Main connection is used for Textual's worker thread so it can run asynchronous
@@ -119,9 +131,6 @@ class Dolphie:
         self.secondary_db_connection_id: int = None
         self.performance_schema_enabled: bool = False
         self.use_performance_schema: bool = True
-        self.host_is_rds: bool = False
-        self.host_is_mariadb: bool = False
-        self.host_is_cluster: bool = False
         self.server_uuid: str = None
         self.mysql_version: str = None
         self.host_distro: str = None
@@ -178,30 +187,28 @@ class Dolphie:
         # Get proper host version and fork
         if "percona xtradb cluster" in version_comment:
             self.host_distro = "Percona XtraDB Cluster"
-            self.host_is_cluster = True
         elif "percona server" in version_comment:
             self.host_distro = "Percona Server"
         elif "mariadb cluster" in version_comment:
             self.host_distro = "MariaDB Cluster"
-            self.host_is_cluster = True
-            self.host_is_mariadb = True
+            self.mariadb = True
         elif "mariadb" in version_comment or "mariadb" in version:
             self.host_distro = "MariaDB"
-            self.host_is_mariadb = True
+            self.mariadb = True
         elif aurora_version:
             self.host_distro = "Amazon Aurora"
-            self.host_is_rds = True
+            self.aws_rds = True
         elif "rdsdb" in basedir:
             self.host_distro = "Amazon RDS"
-            self.host_is_rds = True
+            self.aws_rds = True
         else:
             self.host_distro = "MySQL"
 
         # For RDS, we will use the host specified to connect with since hostname isn't related to the endpoint
-        if self.host_is_rds:
-            self.mysql_host = self.host.split(".rds.amazonaws.com")[0]
+        if self.aws_rds:
+            self.mysql_host = f"{self.host.split('.rds.amazonaws.com')[0]}:{self.port}"
         else:
-            self.mysql_host = global_variables.get("hostname")
+            self.mysql_host = f"{global_variables.get('hostname')}:{self.port}"
 
         major_version = int(version_split[0])
         self.server_uuid = global_variables.get("server_uuid")
@@ -214,6 +221,15 @@ class Dolphie:
         # Simple check to see if the host has group replication
         if global_variables.get("group_replication_group_name"):
             self.group_replication = True
+
+        # Simple check to see if the host is a Galera cluster
+        galera_matches = any(key.startswith("wsrep_") for key in global_variables.keys())
+        if galera_matches:
+            self.galera_cluster = True
+
+        rows_found = self.main_db_connection.execute(MySQLQueries.determine_if_replicaset, ignore_error=True)
+        if rows_found:
+            self.replicaset = True
 
         # Add host to quick switch hosts file if it doesn't exist
         with open(self.quick_switch_hosts_file, "a+") as file:
@@ -346,7 +362,12 @@ class Dolphie:
         elif key == "e":
             if self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled:
                 self.app.push_screen(
-                    EventLog(self.app_version, f"{self.mysql_host}:{self.port}", self.secondary_db_connection)
+                    EventLog(
+                        self.read_only,
+                        self.app_version,
+                        self.mysql_host,
+                        self.secondary_db_connection,
+                    )
                 )
             else:
                 self.notify("Error log command requires MySQL 8+ with Performance Schema enabled")
@@ -399,7 +420,7 @@ class Dolphie:
 
             def command_get_input(thread_id):
                 try:
-                    if self.host_is_rds:
+                    if self.aws_rds:
                         self.secondary_db_connection.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
                     else:
                         self.secondary_db_connection.cursor.execute("KILL %s" % thread_id)
@@ -421,7 +442,7 @@ class Dolphie:
 
             def command_get_input(data):
                 def execute_kill(thread_id):
-                    query = "CALL mysql.rds_kill(%s)" if self.host_is_rds else "KILL %s"
+                    query = "CALL mysql.rds_kill(%s)" if self.aws_rds else "KILL %s"
                     self.secondary_db_connection.cursor.execute(query % thread_id)
 
                 kill_type, kill_value, include_sleeping_queries, lower_limit, upper_limit = data
@@ -725,7 +746,7 @@ class Dolphie:
 
                 screen_data = Group(*[element for element in elements if element])
 
-                self.app.push_screen(CommandScreen(self.app_version, f"{self.mysql_host}:{self.port}", screen_data))
+                self.app.push_screen(CommandScreen(self.read_only, self.app_version, self.mysql_host, screen_data))
 
             self.app.push_screen(
                 CommandModal(
@@ -805,7 +826,7 @@ class Dolphie:
                     table_grid.add_row(*all_tables)
                     screen_data = Align.center(table_grid)
 
-                    self.app.push_screen(CommandScreen(self.app_version, f"{self.mysql_host}:{self.port}", screen_data))
+                    self.app.push_screen(CommandScreen(self.read_only, self.app_version, self.mysql_host, screen_data))
                 else:
                     if input_variable:
                         self.notify("No variable(s) found that match [b highlight]%s[/b highlight]" % input_variable)
@@ -931,7 +952,7 @@ class Dolphie:
             )
 
         if screen_data:
-            self.app.push_screen(CommandScreen(self.app_version, f"{self.mysql_host}:{self.port}", screen_data))
+            self.app.push_screen(CommandScreen(self.read_only, self.app_version, self.mysql_host, screen_data))
 
     def create_user_stats_table(self):
         table = Table(header_style="bold white", box=box.ROUNDED, style="table_border")
@@ -1053,7 +1074,7 @@ class Dolphie:
         if self.heartbeat_table:
             query = MySQLQueries.heartbeat_replica_lag
             replica_lag_source = "HB"
-        elif self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled and not self.host_is_mariadb:
+        elif self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled and not self.mariadb:
             query = MySQLQueries.ps_replica_lag
             replica_lag_source = "PS"
         else:

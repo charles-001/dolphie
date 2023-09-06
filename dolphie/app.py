@@ -437,10 +437,13 @@ class DolphieApp(App):
             dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
             dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
-            if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
-                find_replicas_query = MySQLQueries.ps_find_replicas
+            if dolphie.replicaset:
+                find_replicas_query = MySQLQueries.get_replicaset_members
             else:
-                find_replicas_query = MySQLQueries.pl_find_replicas
+                if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
+                    find_replicas_query = MySQLQueries.ps_find_replicas
+                else:
+                    find_replicas_query = MySQLQueries.pl_find_replicas
 
             dolphie.main_db_connection.execute(find_replicas_query)
             dolphie.replica_data = dolphie.main_db_connection.fetchall()
@@ -514,14 +517,16 @@ class DolphieApp(App):
                 return
 
             try:
+                freshly_connected = False
                 loading_indicator = self.app.query_one("LoadingIndicator")
                 if loading_indicator.display:
+                    freshly_connected = True
                     loading_indicator.display = False
                     self.app.query_one("#main_container").display = True
                     self.layout_graphs()
 
-                    # Update our header with host information
-                    self.app.query_one("#topbar_host").update(f"{dolphie.mysql_host}:{dolphie.port}")
+                # Set read-only mode for header
+                self.update_header(freshly_connected)
 
                 if dolphie.display_dashboard_panel:
                     self.refresh_panel("dashboard")
@@ -557,6 +562,9 @@ class DolphieApp(App):
                 # We take a snapshot of the processlist to be used for commands
                 # since the data can change after a key is pressed
                 dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
+
+                # Save read_only value so we can reference it later
+                dolphie.read_only_data = dolphie.global_variables["read_only"]
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
                 # with worker thread/state change due to asynchronous nature of the worker thread
@@ -684,24 +692,37 @@ class DolphieApp(App):
         elif panel_name == "processlist":
             processlist_panel.create_panel(self.dolphie)
 
-    def quick_host_switch(self):
+    def update_header(self, freshly_connected):
         dolphie = self.dolphie
 
-        dolphie.main_db_connection.connection.close()
-        dolphie.secondary_db_connection.connection.close()
+        # If read_only mode changed, update the header
+        if dolphie.read_only_data != dolphie.global_variables["read_only"]:
+            if dolphie.global_variables["read_only"] == "ON":
+                read_only = "RO"
+                message = "This host is now [b highlight]read-only[/b highlight]"
 
-        dolphie.replication_status = {}
-        dolphie.replica_data = {}
-        dolphie.replica_tables = {}
+                if not dolphie.replication_status and not dolphie.group_replication:
+                    message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+                elif dolphie.group_replication:
+                    if dolphie.is_group_replication_primary:
+                        message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+            elif dolphie.global_variables["read_only"] == "OFF":
+                read_only = "R/W"
+                message = "This host is now [b highlight]read/write[/b highlight]"
 
-        if dolphie.replica_connections:
-            for connection in dolphie.replica_connections.values():
-                connection["connection"].close()
+            # This prevents the notification from showing when we first connect
+            if not freshly_connected:
+                dolphie.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
-            dolphie.replica_connections = {}
+            dolphie.read_only = read_only
+            self.app.query_one("TopBar", TopBar).host = f"[[white]{dolphie.read_only}[/white]] {dolphie.mysql_host}"
 
-        dolphie.metric_manager.reset()
-        dolphie.dolphie_start_time = datetime.now()
+    def quick_host_switch(self):
+        dolphie = self.dolphie
+        dolphie.reset_runtime_variables()
+        dolphie.quick_switched_connection = False
+
+        self.app.query_one("TopBar", TopBar).host = "Connecting to MySQL"
 
         # Set the graph switches to what they're currently selected to since we reset metric_manager
         switches = self.query(".switch_container Switch")
@@ -713,8 +734,6 @@ class DolphieApp(App):
             metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
             metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
             metric_data.visible = switch.value
-
-        dolphie.quick_switched_connection = False
 
     def layout_graphs(self):
         if self.dolphie.is_mysql_version_at_least("8.0.30"):

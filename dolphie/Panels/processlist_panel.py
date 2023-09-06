@@ -127,14 +127,14 @@ def fetch_data(dolphie: Dolphie):
     if not dolphie.show_idle_threads:
         if dolphie.use_performance_schema:
             where_clause.append(
-                "(processlist_command != 'Sleep' AND processlist_command NOT LIKE 'Binlog Dump%' AND"
-                " processlist_info NOT LIKE 'Group replication%') AND (processlist_info IS NOT NULL OR trx_query IS"
-                " NOT NULL)"
+                "(processlist_command != 'Sleep' AND processlist_command NOT LIKE 'Binlog Dump%') AND (processlist_info"
+                " IS NOT NULL OR trx_query IS NOT NULL) AND IFNULL(processlist_state, '') NOT LIKE 'Group Replication"
+                " Module%'"
             )
         else:
             where_clause.append(
-                "(Command != 'Sleep' AND Command NOT LIKE 'Binlog Dump%' AND Info NOT LIKE 'Group replication%') AND"
-                " (Info IS NOT NULL OR trx_query IS NOT NULL)"
+                "(Command != 'Sleep' AND Command NOT LIKE 'Binlog Dump%') AND (Info IS NOT NULL OR trx_query IS NOT"
+                " NULL) AND IFNULL(State, '') NOT LIKE 'Group Replication Module%'"
             )
 
     # Only show running transactions only

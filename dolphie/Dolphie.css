@@ -44,20 +44,19 @@ TopBar {
     background: #192036;
     height: 1;
     layout: horizontal;
-    content-align: center middle;
 }
 #topbar_title {
-    width: 1fr;
+    width: 15%;
     content-align: left middle;
 }
 #topbar_host {
     color: #bbc8e8;
-    width: 1fr;
+    width: 70%;
     content-align: center middle;
     text-style: bold;
 }
 #topbar_help {
-    width: 1fr;
+    width: 15%;
     content-align: right middle;
     color: #8f9fc1;
 }
@@ -249,6 +248,9 @@ Toast {
 }
 Toast.-information {
     border-left: wide #788bc9;
+}
+Toast.-warning {
+    border-left: wide #f0e357;
 }
 Toast.-success {
     border-left: wide #5bd088;

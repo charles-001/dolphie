@@ -11,7 +11,7 @@ class EventLog(Screen):
     CSS = """
         EventLog Horizontal {
             height: auto;
-            padding-top: 1;
+            # padding-top: 1;
             align: center top;
             background: #000718;
             width: 100%;
@@ -34,11 +34,17 @@ class EventLog(Screen):
             margin: 0;
             border: none;
         }
+        #help {
+            color: #8f9fc1;
+            width: 100%;
+            content-align: right middle;
+        }
     """
 
-    def __init__(self, app_version, host, db):
+    def __init__(self, read_only, app_version, host, db):
         super().__init__()
 
+        self.read_only = read_only
         self.app_version = app_version
         self.host = host
         self.db = db
@@ -70,11 +76,13 @@ class EventLog(Screen):
 
     def compose(self) -> ComposeResult:
         yield TopBar(
+            read_only=self.read_only,
             app_version=self.app_version,
             host=self.host,
-            help="Press [b]q[/b] to return, [b]1[/b]=top/[b]2[/b]=bottom of events",
+            help="Press [b]q[/b] to return",
         )
 
+        yield Label("[b white]1[/b white] = top of events/[b white]2[/b white] = bottom of events", id="help")
         with Horizontal():
             switch_options = [("System", "system"), ("Warning", "warning"), ("Error", "error")]
             for label, switch_id in switch_options:

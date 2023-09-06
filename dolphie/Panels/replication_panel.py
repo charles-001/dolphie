@@ -18,7 +18,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
         dolphie.display_replication_panel
         and not dolphie.replica_data
         and not dolphie.replication_status
-        and not dolphie.host_is_cluster
+        and not dolphie.galera_cluster
         and not dolphie.group_replication
     ):
         return "[yellow]This panel has no data to display[/yellow]"
@@ -64,6 +64,10 @@ def create_panel(dolphie: Dolphie) -> Panel:
         if not dolphie.replica_tables and not dolphie.replica_data:
             return None
 
+        # If the host is a replica in a ReplicaSet, don't show the replica panel
+        if dolphie.replicaset and dolphie.read_only_data == "ON":
+            return None
+
         if dolphie.replica_tables:
             table_grid = Table.grid()
 
@@ -85,7 +89,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
         )
 
     def create_cluster_panel():
-        if not dolphie.host_is_cluster:
+        if not dolphie.galera_cluster:
             return None
 
         return Panel(
@@ -444,29 +448,38 @@ def create_group_replication_member_table(dolphie: Dolphie):
 def fetch_replica_table_data(dolphie: Dolphie):
     replica_tables = {}
 
-    # Only run this query if we don't have replica ports or if the number of replicas has changed
-    if len(dolphie.replica_connections) != len(dolphie.replica_data):
-        # Remove replica connections that no longer exist
-        unique_ids = set(row["id"] for row in dolphie.replica_data)
-        for thread in list(dolphie.replica_connections.keys()):
-            if thread not in unique_ids:
-                del dolphie.replica_connections[thread]
+    # ReplicaSet query already has the port so we don't need this query
+    if not dolphie.replicaset:
+        # Only run this query if we don't have replica ports or if the number of replicas has changed
+        if len(dolphie.replica_connections) != len(dolphie.replica_data):
+            # Remove replica connections that no longer exist
+            unique_ids = set(row["id"] for row in dolphie.replica_data)
+            for thread in list(dolphie.replica_connections.keys()):
+                if thread not in unique_ids:
+                    del dolphie.replica_connections[thread]
 
-        dolphie.replica_ports = {}
-        dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
-        replica_data = dolphie.main_db_connection.fetchall()
-        for row in replica_data:
-            dolphie.replica_ports[row["Slave_UUID"]] = row["Port"]
+            dolphie.replica_ports = {}
+            dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
+            replica_data = dolphie.main_db_connection.fetchall()
+            for row in replica_data:
+                dolphie.replica_ports[row["Slave_UUID"]] = row["Port"]
 
     for row in dolphie.replica_data:
         thread_id = row["id"]
 
-        # Resolve IPs to addresses
-        host = dolphie.get_hostname(row["host"].split(":")[0])
-
-        if thread_id not in dolphie.replica_connections:
+        if dolphie.replicaset:
+            host_split = row["host"].split(":")
+            host = dolphie.get_hostname(host_split[0])
+            port = int(host_split[1])
+        else:
+            host = dolphie.get_hostname(row["host"].split(":")[0])
             port = dolphie.replica_ports.get(row["replica_uuid"], 3306)
 
+        # This lets us connect to replicas on the same host as the primary if we're connecting remotely
+        if host == "localhost" or host == "127.0.0.1":
+            host = dolphie.host
+
+        if thread_id not in dolphie.replica_connections:
             host_and_port = "%s:%s" % (host, port)
             try:
                 dolphie.replica_connections[thread_id] = {

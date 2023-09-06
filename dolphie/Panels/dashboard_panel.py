@@ -41,19 +41,13 @@ def create_panel(dolphie: Dolphie) -> Table:
     else:
         refresh_latency = round(dolphie.polling_latency - dolphie.refresh_interval, 2)
 
-    read_only = global_variables["read_only"]
-    if global_variables["read_only"] == "ON":
-        if not dolphie.replication_status and not dolphie.group_replication:
-            read_only = "YES ([red]SHOULD BE NO?[/red])"
-        elif dolphie.group_replication:
-            if dolphie.is_group_replication_primary:
-                read_only = "YES ([red]SHOULD BE NO?[/red])"
-            else:
-                read_only = "YES"
-        else:
-            read_only = "YES"
-    elif global_variables["read_only"] == "OFF":
-        read_only = "NO"
+    host_type = "MySQL"
+    if dolphie.replicaset:
+        host_type = "InnoDB ReplicaSet"
+    elif dolphie.galera_cluster:
+        host_type = "Galera Cluster"
+    elif dolphie.group_replication:
+        host_type = "Group Replication"
 
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
@@ -67,9 +61,9 @@ def create_panel(dolphie: Dolphie) -> Table:
     table_information.add_row(
         "[label]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
     )
+    table_information.add_row("[label]Type", host_type)
     table_information.add_row("[label]Uptime", uptime)
     table_information.add_row("[label]Runtime", f"{runtime} [label]latency:[/label] {refresh_latency}s")
-    table_information.add_row("[label]Read Only", read_only)
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
         "[label]Threads",

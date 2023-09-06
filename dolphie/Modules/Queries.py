@@ -281,7 +281,26 @@ class MySQLQueries:
             performance_schema.replication_group_members JOIN
             performance_schema.replication_group_member_stats USING(MEMBER_ID)
     """
-
+    get_replicaset_members: str = """
+        SELECT
+            instance_id as id,
+            address AS host,
+            attributes ->> '$."replicationAccountUser"' AS user
+        FROM
+            mysql_innodb_cluster_metadata.instances
+        WHERE
+            mysql_server_uuid != @@server_uuid
+    """
+    determine_if_replicaset: str = """
+        SELECT
+            cluster_type
+        FROM
+            mysql_innodb_cluster_metadata.clusters
+            JOIN mysql_innodb_cluster_metadata.instances USING ( cluster_id )
+        WHERE
+            mysql_server_uuid = @@server_uuid AND
+            cluster_type = 'ar'
+    """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"
     binlog_status: str = "SHOW MASTER STATUS"

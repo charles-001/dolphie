@@ -13,8 +13,9 @@ class CommandScreen(Screen):
         }
     """
 
-    def __init__(self, app_version, host, data):
+    def __init__(self, read_only, app_version, host, data):
         super().__init__()
+        self.read_only = read_only
         self.app_version = app_version
         self.host = host
         self.data = data
@@ -26,5 +27,5 @@ class CommandScreen(Screen):
                 self.app.pop_screen()
 
     def compose(self) -> ComposeResult:
-        yield TopBar(app_version=self.app_version, host=self.host)
+        yield TopBar(read_only=self.read_only, app_version=self.app_version, host=self.host)
         yield VerticalScroll(Static(self.data))
