@@ -291,15 +291,28 @@ class MySQLQueries:
         WHERE
             mysql_server_uuid != @@server_uuid
     """
-    determine_if_replicaset: str = """
+    determine_cluster_type_8: str = """
         SELECT
             cluster_type
         FROM
             mysql_innodb_cluster_metadata.clusters
             JOIN mysql_innodb_cluster_metadata.instances USING ( cluster_id )
         WHERE
-            mysql_server_uuid = @@server_uuid AND
-            cluster_type = 'ar'
+            mysql_server_uuid = @@server_uuid
+    """
+    determine_cluster_type_81: str = """
+        SELECT
+            instance_type,
+            cluster_type
+        FROM
+            mysql_innodb_cluster_metadata.clusters
+            JOIN mysql_innodb_cluster_metadata.instances USING ( cluster_id )
+            LEFT JOIN mysql_innodb_cluster_metadata.clusterset_members USING ( cluster_id )
+        WHERE
+            mysql_server_uuid = @@server_uuid
+        ORDER BY
+            view_id DESC
+            LIMIT 1;
     """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"

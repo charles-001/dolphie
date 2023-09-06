@@ -113,6 +113,8 @@ class Dolphie:
         # Types of hosts
         self.galera_cluster: bool = False
         self.group_replication: bool = False
+        self.innodb_cluster: bool = False
+        self.innodb_cluster_read_replica: bool = False
         self.replicaset: bool = False
         self.aws_rds: bool = False
         self.mariadb: bool = False
@@ -218,19 +220,33 @@ class Dolphie:
         if global_variables.get("performance_schema") == "ON":
             self.performance_schema_enabled = True
 
-        # Check to see if the host is in group replication
-        if global_variables.get("group_replication_group_name"):
-            self.group_replication = True
-
         # Check to see if the host is in a Galera cluster
         galera_matches = any(key.startswith("wsrep_") for key in global_variables.keys())
         if galera_matches:
             self.galera_cluster = True
 
-        # Check to see if this host is in a ReplicaSet
-        rows_found = self.main_db_connection.execute(MySQLQueries.determine_if_replicaset, ignore_error=True)
-        if rows_found:
+        # Check to get information on what cluster type it is
+        if self.is_mysql_version_at_least("8.1"):
+            query = MySQLQueries.determine_cluster_type_81
+        else:
+            query = MySQLQueries.determine_cluster_type_8
+
+        self.main_db_connection.execute(query, ignore_error=True)
+        data = self.main_db_connection.fetchone()
+
+        cluster_type = data.get("cluster_type")
+        instance_type = data.get("instance_type")
+
+        if cluster_type == "ar":
             self.replicaset = True
+        elif cluster_type == "gr":
+            self.innodb_cluster = True
+
+            if instance_type == "read-replica":
+                self.innodb_cluster_read_replica = True
+
+        if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
+            self.group_replication = True
 
         # Add host to quick switch hosts file if it doesn't exist
         with open(self.quick_switch_hosts_file, "a+") as file:

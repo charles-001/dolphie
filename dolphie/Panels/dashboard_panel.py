@@ -41,13 +41,18 @@ def create_panel(dolphie: Dolphie) -> Table:
     else:
         refresh_latency = round(dolphie.polling_latency - dolphie.refresh_interval, 2)
 
-    host_type = "MySQL"
     if dolphie.replicaset:
         host_type = "InnoDB ReplicaSet"
-    elif dolphie.galera_cluster:
-        host_type = "Galera Cluster"
+    elif dolphie.innodb_cluster_read_replica:
+        host_type = "InnoDB Cluster Read Replica"
+    elif dolphie.innodb_cluster:
+        host_type = "InnoDB Cluster"
     elif dolphie.group_replication:
         host_type = "Group Replication"
+    elif dolphie.galera_cluster:
+        host_type = "Galera Cluster"
+    else:
+        host_type = "MySQL"
 
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 

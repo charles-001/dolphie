@@ -20,11 +20,13 @@ def create_panel(dolphie: Dolphie) -> Panel:
         and not dolphie.replication_status
         and not dolphie.galera_cluster
         and not dolphie.group_replication
+        and not dolphie.innodb_cluster
+        and not dolphie.innodb_cluster_read_replica
     ):
         return "[yellow]This panel has no data to display[/yellow]"
 
     def create_group_replication_panel():
-        if not dolphie.group_replication:
+        if not dolphie.group_replication and not dolphie.innodb_cluster:
             return None
 
         available_group_replication_variables = {
@@ -50,10 +52,14 @@ def create_panel(dolphie: Dolphie) -> Panel:
                     *[table for _, table in sorted(list(group_replication_member_tables.items()))[i : i + 3]]
                 )
 
+        title = "Group Replication"
+        if dolphie.innodb_cluster:
+            title = "InnoDB Cluster"
+
         return Panel(
             Group(Align.center(group_replication_variables), Align.center(table_group_members_grid)),
             title=(
-                "[b white]Group Replication"
+                f"[b white]{title}"
                 f" ([highlight]{dolphie.global_variables.get('group_replication_group_name', 'N/A')}[/highlight])"
             ),
             box=box.HORIZONTALS,

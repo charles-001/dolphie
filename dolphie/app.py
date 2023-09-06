@@ -451,7 +451,7 @@ class DolphieApp(App):
             dolphie.fetch_replication_data()
             dolphie.massage_metrics_data()
 
-            if dolphie.group_replication:
+            if dolphie.group_replication or dolphie.innodb_cluster:
                 dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
                 dolphie.group_replication_data = dolphie.main_db_connection.fetchone()
 
