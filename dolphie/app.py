@@ -437,13 +437,10 @@ class DolphieApp(App):
             dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
             dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
-            if dolphie.replicaset:
-                find_replicas_query = MySQLQueries.get_replicaset_members
+            if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
+                find_replicas_query = MySQLQueries.ps_find_replicas
             else:
-                if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
-                    find_replicas_query = MySQLQueries.ps_find_replicas
-                else:
-                    find_replicas_query = MySQLQueries.pl_find_replicas
+                find_replicas_query = MySQLQueries.pl_find_replicas
 
             dolphie.main_db_connection.execute(find_replicas_query)
             dolphie.replica_data = dolphie.main_db_connection.fetchall()

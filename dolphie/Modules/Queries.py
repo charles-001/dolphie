@@ -281,7 +281,7 @@ class MySQLQueries:
             performance_schema.replication_group_members JOIN
             performance_schema.replication_group_member_stats USING(MEMBER_ID)
     """
-    get_replicaset_members: str = """
+    replicaset_find_replicas: str = """
         SELECT
             instance_id as id,
             address AS host,
