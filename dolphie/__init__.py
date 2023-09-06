@@ -243,7 +243,8 @@ class Dolphie:
             self.innodb_cluster = True
 
             if instance_type == "read-replica":
-                self.innodb_cluster_read_replica = True
+                self.innodb_cluster = False  # It doesn't work like an actual cluster so set it to False
+                self.group_replication_read_replica = True
 
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
