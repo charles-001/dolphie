@@ -57,7 +57,6 @@ class Dolphie:
         self.show_trxs_only: bool = False
         self.show_additional_query_columns: bool = False
         self.sort_by_time_descending: bool = True
-        self.hide_dashboard: bool = False
         self.heartbeat_table: str = None
         self.user_filter: str = None
         self.db_filter: str = None
@@ -67,6 +66,7 @@ class Dolphie:
         self.quick_switch_hosts: list = []
         self.host_cache: dict = {}
         self.host_cache_from_file: dict = {}
+        self.startup_panels: str = None
 
         # Panel display states
         self.display_dashboard_panel: bool = False

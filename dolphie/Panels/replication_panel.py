@@ -370,7 +370,7 @@ def create_replication_table(dolphie: Dolphie, data=None, dashboard_table=False,
                     return f"[dark_gray]{source_id}:{transaction_id}[/dark_gray]"
 
             # Example GTID: 3beacd96-6fe3-18ec-9d95-b4592zec4b45:1-26
-            pattern = re.compile(r"\b(\w+(?:-\w+){4}):(\d+(?:-\d*)?)\b")
+            pattern = re.compile(r"\b(\w+(?:-\w+){4}):(.+)\b")
             retrieved_gtid_set = pattern.sub(color_gtid_set, retrieved_gtid_set.replace(",", ""))
             executed_gtid_set = pattern.sub(color_gtid_set, executed_gtid_set.replace(",", ""))
 
@@ -485,6 +485,7 @@ def fetch_replica_table_data(dolphie: Dolphie):
                         port=port,
                         ssl=dolphie.ssl,
                         autocommit=True,
+                        connect_timeout=3,
                     ),
                     "cursor": None,
                     "previous_sbm": 0,

@@ -90,7 +90,8 @@ options:
   --ssl-ca SSL_CA       Path to the file that contains a PEM-formatted CA certificate
   --ssl-cert SSL_CERT   Path to the file that contains a PEM-formatted client certificate
   --ssl-key SSL_KEY     Path to the file that contains a PEM-formatted private key for the client certificate
-  --hide-dashboard      Start without showing dashboard. This is good to use if you want to reclaim terminal space and not execute the additional queries for it
+  --panels STARTUP_PANELS
+                        What panels to display on startup separated by a comma. Supports: dashboard/replication/processlist/graphs [default: dashboard,processlist]
   --show-trxs-only      Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
   --use-processlist     Start with using Information Schema instead of Performance Schema for processlist panel

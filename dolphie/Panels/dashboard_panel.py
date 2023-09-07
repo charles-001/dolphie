@@ -61,7 +61,7 @@ def create_panel(dolphie: Dolphie) -> Table:
         replicas = len(dolphie.replica_data)
 
     table_information.add_column()
-    table_information.add_column(width=25)
+    table_information.add_column(min_width=25, max_width=27)
     table_information.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.mysql_version}")
     table_information.add_row(
         "[label]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])

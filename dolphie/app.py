@@ -210,13 +210,13 @@ Environment variables support these options:
         help="Path to the file that contains a PEM-formatted private key for the client certificate",
     )
     parser.add_argument(
-        "--hide-dashboard",
-        dest="hide_dashboard",
-        action="store_true",
-        default=False,
+        "--panels",
+        dest="startup_panels",
+        default="dashboard,processlist",
+        type=str,
         help=(
-            "Start without showing dashboard. This is good to use if you want to reclaim terminal space and "
-            "not execute the additional queries for it"
+            "What panels to display on startup separated by a comma. Supports: dashboard/replication/processlist/graphs"
+            " [default: %(default)s]"
         ),
     )
     parser.add_argument(
@@ -376,7 +376,10 @@ Environment variables support these options:
     if parameter_options["use_processlist"]:
         dolphie.use_performance_schema = False
 
-    dolphie.hide_dashboard = parameter_options["hide_dashboard"]
+    dolphie.startup_panels = parameter_options["startup_panels"].split(",")
+    for panel in dolphie.startup_panels:
+        if not hasattr(dolphie, f"display_{panel}_panel"):
+            sys.exit(console.print(f"Panel '{panel}' is not valid (see --help for more information)"))
 
     if os.path.exists(dolphie.quick_switch_hosts_file):
         with open(dolphie.quick_switch_hosts_file, "r") as file:
@@ -584,7 +587,7 @@ class DolphieApp(App):
 
         # Set these components by default to not show
         components_to_disable = [".panel_container", "Sparkline"]
-        exempt_components = {"panel_dashboard", "panel_processlist"}
+        exempt_components = {}
 
         for component in components_to_disable:
             display_off_components = self.query(component)
@@ -592,12 +595,10 @@ class DolphieApp(App):
                 if display_off_component.id not in exempt_components:
                     display_off_component.display = False
 
-        dolphie.display_processlist_panel = True
-        if dolphie.hide_dashboard:
-            self.query_one("#panel_dashboard", Container).display = False
-            dolphie.display_dashboard_panel = False
-        else:
-            dolphie.display_dashboard_panel = True
+        for panel in dolphie.startup_panels:
+            dom_element = self.query_one(f"#panel_{panel}")
+            setattr(dolphie, f"display_{panel}_panel", True)
+            dom_element.display = True
 
         # Set default switches to be toggled on
         switches = self.query(".switch_container Switch")
