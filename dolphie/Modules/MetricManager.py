@@ -149,9 +149,9 @@ class Graph(Static):
         y_tick_interval = max_y_value / max_y_ticks
 
         if y_tick_interval >= 1:
-            y_ticks = [i * y_tick_interval for i in range(max_y_ticks + 1)]
+            y_ticks = [i * y_tick_interval for i in range(int(max_y_ticks) + 1)]
         else:
-            y_ticks = [i for i in range(max_y_value + 1)]
+            y_ticks = [i for i in range(int(max_y_value) + 1)]
 
         format_function = get_number_format_function(self.metric_instance)
         y_labels = [format_function(val) for val in y_ticks]

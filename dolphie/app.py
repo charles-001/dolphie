@@ -527,6 +527,11 @@ class DolphieApp(App):
                     self.app.query_one("#main_container").display = True
                     self.layout_graphs()
 
+                    # We only want to do this on startup
+                    if not dolphie.first_loop:
+                        for panel in dolphie.startup_panels:
+                            self.query_one(f"#panel_{panel}").display = True
+
                 # Set read-only mode for header
                 self.update_header(freshly_connected)
 
@@ -567,6 +572,9 @@ class DolphieApp(App):
 
                 # Save read_only value so we can reference it later
                 dolphie.read_only_data = dolphie.global_variables["read_only"]
+
+                # This denotes that we've gone through the first loop of the worker thread
+                dolphie.first_loop = True
             except NoMatches:
                 # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
                 # with worker thread/state change due to asynchronous nature of the worker thread
@@ -586,7 +594,7 @@ class DolphieApp(App):
         dolphie.load_host_cache_file()
 
         # Set these components by default to not show
-        components_to_disable = [".panel_container", "Sparkline"]
+        components_to_disable = [".panel_container", "Sparkline", "#panel_processlist"]
         exempt_components = {}
 
         for component in components_to_disable:
@@ -596,9 +604,7 @@ class DolphieApp(App):
                     display_off_component.display = False
 
         for panel in dolphie.startup_panels:
-            dom_element = self.query_one(f"#panel_{panel}")
             setattr(dolphie, f"display_{panel}_panel", True)
-            dom_element.display = True
 
         # Set default switches to be toggled on
         switches = self.query(".switch_container Switch")

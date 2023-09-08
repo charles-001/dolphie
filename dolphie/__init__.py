@@ -67,6 +67,7 @@ class Dolphie:
         self.host_cache: dict = {}
         self.host_cache_from_file: dict = {}
         self.startup_panels: str = None
+        self.first_loop: bool = False
 
         # Panel display states
         self.display_dashboard_panel: bool = False
