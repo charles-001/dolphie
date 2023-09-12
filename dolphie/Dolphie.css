@@ -94,6 +94,9 @@ Input {
     background: #121626;
     border: solid #4d5980;
 }
+Input:focus {
+    border: solid #7586be;
+}
 Input>.input--placeholder {
     color: #7e8dac;
 }
@@ -149,15 +152,20 @@ Sparkline > .sparkline--min-color {
 
 Button.-primary {
     background: #1b2c5a;
-    border-top: tall #5e72a7;
+    border-top: tall #40558c;
     border-bottom: tall #0d152b;
 }
 Button.-primary:hover {
     background: #263a70;
-    border-top: tall #718ac7;
+    border-top: tall #4f69ac;
     border-bottom: tall #162244;
 }
-
+Button.-primary:focus {
+    background: #263a70;
+    border-top: tall #4f69ac;
+    border-bottom: tall #162244;
+    text-style: bold;
+}
 Button.-default {
     background: #282d3c;
     border-top: tall #606577;
@@ -167,6 +175,12 @@ Button.-default:hover {
     background: #363c50;
     border-top: tall #757b91;
     border-bottom: tall #222634;
+}
+Button.-default:focus {
+    background: #363c50;
+    border-top: tall #757b91;
+    border-bottom: tall #222634;
+    text-style: bold;
 }
 
 Switch {

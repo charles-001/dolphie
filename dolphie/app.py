@@ -455,12 +455,12 @@ class DolphieApp(App):
             dolphie.massage_metrics_data()
 
             if dolphie.group_replication or dolphie.innodb_cluster:
-                dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
-                dolphie.group_replication_data = dolphie.main_db_connection.fetchone()
+                if dolphie.is_mysql_version_at_least("8.0.13"):
+                    dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
+                    dolphie.group_replication_data = dolphie.main_db_connection.fetchone()
 
                 dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
                 dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
-
                 for member_role_data in dolphie.group_replication_members:
                     if (
                         member_role_data["MEMBER_ID"] == dolphie.server_uuid
