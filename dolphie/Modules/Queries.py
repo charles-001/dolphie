@@ -278,7 +278,7 @@ class MySQLQueries:
         SELECT
             *
         FROM
-            performance_schema.replication_group_members JOIN
+            performance_schema.replication_group_members LEFT JOIN
             performance_schema.replication_group_member_stats USING(MEMBER_ID)
     """
     replicaset_find_replicas: str = """
