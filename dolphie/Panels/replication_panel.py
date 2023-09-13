@@ -388,23 +388,23 @@ def create_group_replication_member_table(dolphie: Dolphie):
 
     group_replica_tables = {}
     for row in dolphie.group_replication_members:
-        trx_queued = row.get("COUNT_TRANSACTIONS_IN_QUEUE")
-        trx_checked = row.get("COUNT_TRANSACTIONS_CHECKED")
-        trx_detected = row.get("COUNT_TRANSACTIONS_DETECTED")
-        trx_rows_validating = row.get("COUNT_TRANSACTIONS_ROWS_VALIDATING")
-        trx_applied_queue = row.get("COUNT_TRANSACTIONS_REMOTE_IN_APPLIER")
-        trx_applied = row.get("COUNT_TRANSACTIONS_REMOTE_APPLIED")
-        trx_local_proposed = row.get("COUNT_TRANSACTIONS_LOCAL_PROPOSED")
-        trx_local_rollback = row.get("COUNT_TRANSACTIONS_LOCAL_ROLLBACK")
+        trx_queued = row.get("COUNT_TRANSACTIONS_IN_QUEUE", "N/A")
+        trx_checked = row.get("COUNT_TRANSACTIONS_CHECKED", "N/A")
+        trx_detected = row.get("COUNT_TRANSACTIONS_DETECTED", "N/A")
+        trx_rows_validating = row.get("COUNT_TRANSACTIONS_ROWS_VALIDATING", "N/A")
+        trx_applied_queue = row.get("COUNT_TRANSACTIONS_REMOTE_IN_APPLIER", "N/A")
+        trx_applied = row.get("COUNT_TRANSACTIONS_REMOTE_APPLIED", "N/A")
+        trx_local_proposed = row.get("COUNT_TRANSACTIONS_LOCAL_PROPOSED", "N/A")
+        trx_local_rollback = row.get("COUNT_TRANSACTIONS_LOCAL_ROLLBACK", "N/A")
 
-        member_role = row.get("MEMBER_ROLE")
+        member_role = row.get("MEMBER_ROLE", "N/A")
         if member_role == "PRIMARY":
             table_border = "highlight"
             member_role = f"[highlight]{member_role}[/highlight]"
         else:
             table_border = "table_border"
 
-        member_state = row.get("MEMBER_STATE")
+        member_state = row.get("MEMBER_STATE", "N/A")
         if member_state == "ONLINE":
             member_state = f"[green]{member_state}[/green]"
         else:
@@ -418,7 +418,7 @@ def create_group_replication_member_table(dolphie: Dolphie):
         table.add_row("[label]UUID", "%s" % row.get("MEMBER_ID"))
         table.add_row("[label]Role", member_role)
         table.add_row("[label]State", member_state)
-        table.add_row("[label]Version", row.get("MEMBER_VERSION"))
+        table.add_row("[label]Version", row.get("MEMBER_VERSION", "N/A"))
 
         table.add_row(
             "[label]Conflict",
