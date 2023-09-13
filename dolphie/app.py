@@ -463,8 +463,8 @@ class DolphieApp(App):
                 dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
                 for member_role_data in dolphie.group_replication_members:
                     if (
-                        member_role_data["MEMBER_ID"] == dolphie.server_uuid
-                        and member_role_data["MEMBER_ROLE"] == "PRIMARY"
+                        member_role_data.get("MEMBER_ID") == dolphie.server_uuid
+                        and member_role_data.get("MEMBER_ROLE") == "PRIMARY"
                     ):
                         dolphie.is_group_replication_primary = True
                         break

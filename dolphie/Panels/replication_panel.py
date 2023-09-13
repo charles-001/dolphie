@@ -397,27 +397,28 @@ def create_group_replication_member_table(dolphie: Dolphie):
         trx_local_proposed = row.get("COUNT_TRANSACTIONS_LOCAL_PROPOSED")
         trx_local_rollback = row.get("COUNT_TRANSACTIONS_LOCAL_ROLLBACK")
 
-        if row["MEMBER_ROLE"] == "PRIMARY":
+        member_role = row.get("MEMBER_ROLE")
+        if member_role == "PRIMARY":
             table_border = "highlight"
-            member_role = f"[highlight]{row['MEMBER_ROLE']}[/highlight]"
+            member_role = f"[highlight]{member_role}[/highlight]"
         else:
             table_border = "table_border"
-            member_role = f"{row['MEMBER_ROLE']}"
 
-        if row["MEMBER_STATE"] == "ONLINE":
-            member_state = f"[green]{row['MEMBER_STATE']}[/green]"
+        member_state = row.get("MEMBER_STATE")
+        if member_state == "ONLINE":
+            member_state = f"[green]{member_state}[/green]"
         else:
-            member_state = f"[red]{row['MEMBER_STATE']}[/red]"
+            member_state = f"[red]{member_state}[/red]"
 
         table = Table(box=box.ROUNDED, show_header=False, style=table_border)
         table.add_column()
         table.add_column()
 
-        table.add_row("[label]Member", f"{row['MEMBER_HOST']}:{row['MEMBER_PORT']}")
-        table.add_row("[label]UUID", "%s" % row["MEMBER_ID"])
+        table.add_row("[label]Member", f"{row.get('MEMBER_HOST')}:{row.get('MEMBER_PORT')}")
+        table.add_row("[label]UUID", "%s" % row.get("MEMBER_ID"))
         table.add_row("[label]Role", member_role)
         table.add_row("[label]State", member_state)
-        table.add_row("[label]Version", row["MEMBER_VERSION"])
+        table.add_row("[label]Version", row.get("MEMBER_VERSION"))
 
         table.add_row(
             "[label]Conflict",
@@ -441,7 +442,7 @@ def create_group_replication_member_table(dolphie: Dolphie):
             "[label]Rows", f"{format_number(trx_rows_validating)} [dark_gray](used for certification)[/dark_gray]"
         )
 
-        group_replica_tables[row["MEMBER_ID"]] = table
+        group_replica_tables[row.get("MEMBER_ID")] = table
 
     return group_replica_tables
 
