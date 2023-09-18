@@ -183,16 +183,6 @@ def create_replication_table(dolphie: Dolphie, data=None, dashboard_table=False,
         sbm_source = dolphie.replica_lag_source
         data["Seconds_Behind_Master"] = dolphie.replica_lag
 
-    if data["Slave_IO_Running"].lower() == "no":
-        io_thread_running = "[red]NO[/red]"
-    else:
-        io_thread_running = "[green]Yes[/green]"
-
-    if data["Slave_SQL_Running"].lower() == "no":
-        sql_thread_running = "[red]NO[/red]"
-    else:
-        sql_thread_running = "[green]Yes[/green]"
-
     speed = 0
     if data["Seconds_Behind_Master"] is not None:
         replica_sbm = data["Seconds_Behind_Master"]
@@ -246,6 +236,16 @@ def create_replication_table(dolphie: Dolphie, data=None, dashboard_table=False,
 
     if not dashboard_table:
         table.add_row("[label]User", "%s" % data["Master_User"])
+
+    if data["Slave_IO_Running"].lower() == "yes":
+        io_thread_running = "[green]Yes[/green]"
+    else:
+        io_thread_running = "[red]NO[/red]"
+
+    if data["Slave_SQL_Running"].lower() == "yes":
+        sql_thread_running = "[green]Yes[/green]"
+    else:
+        sql_thread_running = "[red]NO[/red]"
 
     table.add_row(
         "[label]Thread",
