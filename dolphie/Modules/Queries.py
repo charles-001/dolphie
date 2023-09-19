@@ -121,11 +121,11 @@ class MySQLQueries:
             u.user AS user,
             total_connections,
             current_connections,
-            CONVERT(SUM(sum_rows_affected), UNSIGNED) AS sum_rows_affected,
-            CONVERT(SUM(sum_rows_sent), UNSIGNED) AS sum_rows_sent,
-            CONVERT(SUM(sum_rows_examined), UNSIGNED) AS sum_rows_examined,
-            CONVERT(SUM(sum_created_tmp_disk_tables), UNSIGNED) AS sum_created_tmp_disk_tables,
-            CONVERT(SUM(sum_created_tmp_tables), UNSIGNED) AS sum_created_tmp_tables,
+            CONVERT(SUM(sum_rows_affected), UNSIGNED) AS rows_affected,
+            CONVERT(SUM(sum_rows_sent), UNSIGNED) AS rows_sent,
+            CONVERT(SUM(sum_rows_examined), UNSIGNED) AS rows_examined,
+            CONVERT(SUM(sum_created_tmp_disk_tables), UNSIGNED) AS created_tmp_disk_tables,
+            CONVERT(SUM(sum_created_tmp_tables), UNSIGNED) AS created_tmp_tables,
             plugin,
             CASE
                 WHEN (password_lifetime IS NULL OR password_lifetime = 0) AND @@default_password_lifetime = 0 THEN "N/A"
@@ -135,6 +135,28 @@ class MySQLQueries:
                     " days"
                 )
             END AS password_expires_in
+        FROM
+            performance_schema.users u
+            JOIN performance_schema.events_statements_summary_by_user_by_event_name ess ON u.user = ess.user
+            JOIN mysql.user mysql_user ON mysql_user.user = u.user
+        WHERE
+            current_connections != 0
+        GROUP BY
+            user
+        ORDER BY
+            current_connections DESC
+    """
+    ps_user_statisitics_56: str = """
+        SELECT
+            u.user AS user,
+            total_connections,
+            current_connections,
+            CONVERT(SUM(sum_rows_affected), UNSIGNED) AS rows_affected,
+            CONVERT(SUM(sum_rows_sent), UNSIGNED) AS rows_sent,
+            CONVERT(SUM(sum_rows_examined), UNSIGNED) AS rows_examined,
+            CONVERT(SUM(sum_created_tmp_disk_tables), UNSIGNED) AS created_tmp_disk_tables,
+            CONVERT(SUM(sum_created_tmp_tables), UNSIGNED) AS created_tmp_tables,
+            plugin
         FROM
             performance_schema.users u
             JOIN performance_schema.events_statements_summary_by_user_by_event_name ess ON u.user = ess.user

@@ -975,63 +975,46 @@ class Dolphie:
             self.app.push_screen(CommandScreen(self.read_only, self.app_version, self.mysql_host, screen_data))
 
     def create_user_stats_table(self):
-        table = Table(header_style="bold white", box=box.ROUNDED, style="table_border")
-
-        columns = {}
-        user_stats = {}
-
-        if self.performance_schema_enabled:
-            self.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
-
-            columns.update(
-                {
-                    "User": {"field": "user", "format_number": False},
-                    "Active": {"field": "current_connections", "format_number": True},
-                    "Total": {"field": "total_connections", "format_number": True},
-                    "Rows Read": {"field": "rows_read", "format_number": True},
-                    "Rows Sent": {"field": "rows_sent", "format_number": True},
-                    "Rows Updated": {"field": "rows_affected", "format_number": True},
-                    "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
-                    "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
-                    "Plugin": {"field": "plugin", "format_number": False},
-                    "Password Expire": {"field": "password_expires_in", "format_number": False},
-                }
-            )
-        else:
+        if not self.performance_schema_enabled:
             return False
 
-        users = self.secondary_db_connection.fetchall()
-        for user in users:
-            username = user["user"]
-            user_stats[username] = {
-                "user": username,
-                "total_connections": user["total_connections"],
-                "current_connections": user["current_connections"],
-                "password_expires_in": user["password_expires_in"],
-                "plugin": user["plugin"],
-                "rows_affected": user["sum_rows_affected"],
-                "rows_sent": user["sum_rows_sent"],
-                "rows_read": user["sum_rows_examined"],
-                "created_tmp_disk_tables": user["sum_created_tmp_disk_tables"],
-                "created_tmp_tables": user["sum_created_tmp_tables"],
-            }
+        columns = {
+            "User": {"field": "user", "format_number": False},
+            "Active": {"field": "current_connections", "format_number": True},
+            "Total": {"field": "total_connections", "format_number": True},
+            "Rows Read": {"field": "rows_examined", "format_number": True},
+            "Rows Sent": {"field": "rows_sent", "format_number": True},
+            "Rows Updated": {"field": "rows_affected", "format_number": True},
+            "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
+            "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
+            "Plugin": {"field": "plugin", "format_number": False},
+            "Password Expire": {"field": "password_expires_in", "format_number": False},
+        }
 
+        table = Table(header_style="bold white", box=box.ROUNDED, style="table_border")
         for column, data in columns.items():
             table.add_column(column, no_wrap=True)
 
-        for user_data in user_stats.values():
+        if self.is_mysql_version_at_least("5.7"):
+            self.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
+        else:
+            self.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics_56)
+
+        users = self.secondary_db_connection.fetchall()
+        for user in users:
             row_values = []
+
             for column, data in columns.items():
-                value = user_data.get(data["field"])
+                value = user.get(data["field"], "N/A")
 
                 if data["format_number"]:
-                    row_values.append(format_number(value) if value else "")
+                    row_values.append(format_number(value) if value else "0")
                 else:
                     row_values.append(value or "")
 
             table.add_row(*row_values)
 
-        return table if user_stats else False
+        return table
 
     def load_host_cache_file(self):
         if os.path.exists(self.host_cache_file):
