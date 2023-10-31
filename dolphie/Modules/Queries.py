@@ -64,11 +64,15 @@ class MySQLQueries:
                 UNION
 
                 SELECT MIN(
-                    IF(
-                        GTID_SUBTRACT(LAST_QUEUED_TRANSACTION, LAST_APPLIED_TRANSACTION) = '',
-                        0,
-                        TIMESTAMPDIFF(SECOND, LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP, NOW())
-                    )
+                    CASE
+                        WHEN
+                            LAST_QUEUED_TRANSACTION = 'ANONYMOUS' OR
+                            LAST_APPLIED_TRANSACTION = 'ANONYMOUS' OR
+                            GTID_SUBTRACT(LAST_QUEUED_TRANSACTION, LAST_APPLIED_TRANSACTION) = ''
+                            THEN 0
+                        ELSE
+                            TIMESTAMPDIFF(SECOND, LAST_APPLIED_TRANSACTION_IMMEDIATE_COMMIT_TIMESTAMP, NOW())
+                    END
                 ) AS `lag`
                 FROM performance_schema.replication_applier_status_by_worker w
                 JOIN performance_schema.replication_connection_status s ON s.channel_name = w.channel_name

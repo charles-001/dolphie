@@ -135,8 +135,8 @@ def create_panel(dolphie: Dolphie) -> Panel:
                     total_thread_events = row["total_thread_events"]
                     continue
 
-                last_applied_transaction = ""
-                if row["last_applied_transaction"]:
+                last_applied_transaction = row["last_applied_transaction"]
+                if row["last_applied_transaction"] and "-" in row["last_applied_transaction"]:
                     source_id_split = row["last_applied_transaction"].split("-")[4].split(":")[0]
                     transaction_id = row["last_applied_transaction"].split(":")[1]
                     last_applied_transaction = f"…[dark_gray]{source_id_split}[/dark_gray]:{transaction_id}"
@@ -299,7 +299,11 @@ def create_replication_table(dolphie: Dolphie, data=None, dashboard_table=False,
         ]
 
         for status_filter in replication_status_filtering:
-            value = dolphie.replication_status.get(status_filter)
+            if replica_thread_id:
+                value = data.get(status_filter)
+            else:
+                value = dolphie.replication_status.get(status_filter)
+
             status_filter_formatted = f"Filter: {status_filter.split('Replicate_')[1]}"
             if value:
                 table.add_row(f"[label]{status_filter_formatted}", str(value))
