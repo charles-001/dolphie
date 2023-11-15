@@ -27,7 +27,6 @@ class MySQLQueries:
             command != 'Daemon'
             $1
     """
-
     ps_query: str = """
         SELECT
             processlist_id                      AS id,
@@ -53,6 +52,14 @@ class MySQLQueries:
             processlist_id IS NOT NULL AND
             processlist_time IS NOT NULL AND
             processlist_command != 'Daemon'
+            $1
+    """
+    # 5.x: information_schema.INNODB_LOCK_WAITS
+    # 8.x: performance_schema.data_lock_waits
+    fetch_trx_locks: str = """
+        SELECT
+            COUNT(*) AS lock_count
+        FROM
             $1
     """
     ps_replica_lag: str = """
@@ -339,6 +346,17 @@ class MySQLQueries:
         ORDER BY
             view_id DESC
             LIMIT 1;
+    """
+    get_binlog_transaction_compression_percentage: str = """
+        SELECT
+            compression_percentage
+        FROM
+            performance_schema.binary_log_transaction_compression_stats
+        WHERE
+            log_type = 'BINARY' AND
+            compression_type = 'ZSTD'
+        LIMIT
+            1
     """
     status: str = "SHOW GLOBAL STATUS"
     variables: str = "SHOW GLOBAL VARIABLES"

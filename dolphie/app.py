@@ -220,6 +220,16 @@ Environment variables support these options:
         ),
     )
     parser.add_argument(
+        "--graph-marker",
+        dest="graph_marker",
+        default="braille",
+        type=str,
+        help=(
+            "What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default:"
+            " %(default)s]"
+        ),
+    )
+    parser.add_argument(
         "--show-trxs-only",
         dest="show_trxs_only",
         action="store_true",
@@ -381,6 +391,8 @@ Environment variables support these options:
         if not hasattr(dolphie, f"display_{panel}_panel"):
             sys.exit(console.print(f"Panel '{panel}' is not valid (see --help for more information)"))
 
+    dolphie.graph_marker = parameter_options["graph_marker"]
+
     if os.path.exists(dolphie.quick_switch_hosts_file):
         with open(dolphie.quick_switch_hosts_file, "r") as file:
             dolphie.quick_switch_hosts = [line.strip() for line in file]
@@ -440,6 +452,13 @@ class DolphieApp(App):
             dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
             dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
+            if dolphie.is_mysql_version_at_least("8.0"):
+                fetch_locks_query = MySQLQueries.fetch_trx_locks.replace("$1", "performance_schema.data_lock_waits")
+            else:
+                fetch_locks_query = MySQLQueries.fetch_trx_locks.replace("$1", "information_schema.INNODB_LOCK_WAITS")
+            dolphie.main_db_connection.execute(fetch_locks_query)
+            dolphie.lock_metrics = dolphie.main_db_connection.fetchone()
+
             if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
                 find_replicas_query = MySQLQueries.ps_find_replicas
             else:
@@ -473,6 +492,12 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.binlog_status)
                 dolphie.binlog_status = dolphie.main_db_connection.fetchone()
 
+                if dolphie.global_variables.get("binlog_transaction_compression") == "ON":
+                    dolphie.main_db_connection.execute(MySQLQueries.get_binlog_transaction_compression_percentage)
+                    dolphie.binlog_transaction_compression_percentage = dolphie.main_db_connection.fetchone().get(
+                        "compression_percentage"
+                    )
+
             if dolphie.display_replication_panel:
                 dolphie.replica_tables = replication_panel.fetch_replica_table_data(dolphie)
 
@@ -495,6 +520,7 @@ class DolphieApp(App):
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
                 disk_io_metrics=dolphie.disk_io_metrics,
+                lock_metrics=dolphie.lock_metrics,
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
@@ -606,6 +632,10 @@ class DolphieApp(App):
         for panel in dolphie.startup_panels:
             setattr(dolphie, f"display_{panel}_panel", True)
 
+        graphs = self.query(MetricManager.Graph)
+        for graph in graphs:
+            graph.marker = dolphie.graph_marker
+
         # Set default switches to be toggled on
         switches = self.query(".switch_container Switch")
         switches_to_toggle = [switch for switch in switches if switch.id not in ["Queries", "Threads_connected"]]
@@ -634,28 +664,6 @@ class DolphieApp(App):
 
         metric_instance_name = event.tab.id.split("tab_")[1]
         self.update_graphs(metric_instance_name)
-
-    @on(Switch.Changed)
-    def switch_changed(self, event: Switch.Changed):
-        if len(self.screen_stack) > 1:
-            return
-
-        metric_instance_name = event.switch.name
-        metric = event.switch.id
-
-        metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
-        metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
-        metric_data.visible = event.value
-
-        self.update_graphs(metric_instance_name)
-
-    def generate_switches(self, metric_instance_name):
-        metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
-
-        for metric, metric_data in metric_instance.__dict__.items():
-            if isinstance(metric_data, MetricManager.MetricData) and metric_data.graphable:
-                yield Label(metric_data.label)
-                yield Switch(animate=False, id=metric, name=metric_instance_name)
 
     def update_graphs(self, tab_metric_instance_name):
         for metric_instance in self.dolphie.metric_manager.metrics.__dict__.values():
@@ -755,6 +763,46 @@ class DolphieApp(App):
         self.query_one("#graph_adaptive_hash_index").styles.width = "50%"
         self.query_one("#graph_adaptive_hash_index_hit_ratio").styles.width = "50%"
 
+    @on(Switch.Changed)
+    def switch_changed(self, event: Switch.Changed):
+        if len(self.screen_stack) > 1:
+            return
+
+        metric_instance_name = event.switch.name
+        metric = event.switch.id
+
+        metric_instance = getattr(self.dolphie.metric_manager.metrics, metric_instance_name)
+        metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+        metric_data.visible = event.value
+
+        self.update_graphs(metric_instance_name)
+
+    def create_tab(self, tab_formatted_name, metric_instance, create_switches=True):
+        tab_name = metric_instance.tab_name
+        graph_names = metric_instance.graphs
+
+        with TabPane(tab_formatted_name, id=f"tab_{tab_name}"):
+            yield Label(classes="stats_data", id=f"stats_{tab_name}")
+
+            with Horizontal():
+                # Customize these since they have multiple graphs
+                if tab_name == "redo_log":
+                    graph_names = ["graph_redo_log", "graph_redo_log_active_count", "graph_redo_log_bar"]
+                elif tab_name == "adaptive_hash_index":
+                    graph_names = ["graph_adaptive_hash_index", "graph_adaptive_hash_index_hit_ratio"]
+
+                for graph_name in graph_names:
+                    yield MetricManager.Graph(id=graph_name, classes="panel_data")
+
+            if create_switches:
+                with Horizontal(classes="switch_container"):
+                    switch_metric_instance = getattr(self.dolphie.metric_manager.metrics, tab_name)
+
+                    for metric, metric_data in switch_metric_instance.__dict__.items():
+                        if isinstance(metric_data, MetricManager.MetricData) and metric_data.graphable:
+                            yield Label(metric_data.label)
+                            yield Switch(animate=False, id=metric, name=tab_name)
+
     def compose(self) -> ComposeResult:
         yield TopBar(host="Connecting to MySQL", app_version=self.dolphie.app_version, help="press [b]?[/b] for help")
 
@@ -766,78 +814,26 @@ class DolphieApp(App):
 
             with Container(id="panel_graphs", classes="panel_container"):
                 with TabbedContent(initial="tab_dml", id="tabbed_content"):
-                    with TabPane("DML", id="tab_dml"):
-                        yield Label(id="stats_dml", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_dml", classes="panel_data")
-
-                        with Horizontal(classes="switch_container"):
-                            yield from self.generate_switches("dml")
-
-                    with TabPane("Table Cache", id="tab_table_cache"):
-                        yield Label(id="stats_table_cache", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_table_cache", classes="panel_data")
-
-                        with Horizontal(classes="switch_container"):
-                            yield from self.generate_switches("table_cache")
-
-                    with TabPane("Threads", id="tab_threads"):
-                        yield Label(id="stats_threads", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_threads", classes="panel_data")
-
-                        with Horizontal(classes="switch_container"):
-                            yield from self.generate_switches("threads")
-
-                    with TabPane("BP Requests", id="tab_buffer_pool_requests"):
-                        yield Label(id="stats_buffer_pool_requests", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_buffer_pool_requests", classes="panel_data")
-
-                        with Horizontal(classes="switch_container"):
-                            yield from self.generate_switches("buffer_pool_requests")
-                    with TabPane("Checkpoint", id="tab_checkpoint"):
-                        yield Label(id="stats_checkpoint", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_checkpoint", classes="panel_data")
-
-                    with TabPane("Redo Log", id="tab_redo_log"):
-                        yield Label(id="stats_redo_log", classes="stats_data")
-                        with Horizontal():
-                            yield MetricManager.Graph(id="graph_redo_log", classes="panel_data")
-                            yield MetricManager.Graph(id="graph_redo_log_active_count", classes="panel_data")
-                            yield MetricManager.Graph(bar=True, id="graph_redo_log_bar", classes="panel_data")
-
-                    with TabPane("AHI", id="tab_adaptive_hash_index"):
-                        yield Label(id="stats_adaptive_hash_index", classes="stats_data")
-                        with Horizontal():
-                            yield MetricManager.Graph(id="graph_adaptive_hash_index", classes="panel_data")
-                            yield MetricManager.Graph(id="graph_adaptive_hash_index_hit_ratio", classes="panel_data")
-
-                        with Horizontal(classes="switch_container"):
-                            yield from self.generate_switches("adaptive_hash_index")
-
-                    with TabPane("Temp Objects", id="tab_temporary_objects"):
-                        yield Label(id="stats_temporary_objects", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_temporary_objects", classes="panel_data")
-                        with Horizontal(classes="switch_container"):
-                            yield from self.generate_switches("temporary_objects")
-
-                    with TabPane("Aborted Connections", id="tab_aborted_connections"):
-                        yield Label(id="stats_aborted_connections", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_aborted_connections", classes="panel_data")
-                        with Horizontal(classes="switch_container"):
-                            yield from self.generate_switches("aborted_connections")
-
-                    with TabPane("Disk I/O", id="tab_disk_io"):
-                        yield Label(id="stats_disk_io", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_disk_io", classes="panel_data")
-
-                        with Horizontal(classes="switch_container"):
-                            yield from self.generate_switches("disk_io")
-
-                    with TabPane("Replication", id="tab_replication_lag"):
-                        yield Label(id="stats_replication_lag", classes="stats_data")
-                        yield MetricManager.Graph(id="graph_replication_lag", classes="panel_data")
+                    metrics = self.dolphie.metric_manager.metrics
+                    tabs = [
+                        ("DML", metrics.dml, True),
+                        ("Locks", metrics.locks, False),
+                        ("Table Cache", metrics.table_cache, True),
+                        ("Threads", metrics.threads, True),
+                        ("BP Requests", metrics.buffer_pool_requests, True),
+                        ("Checkpoint", metrics.checkpoint, False),
+                        ("Redo Log", metrics.redo_log, False),
+                        ("AHI", metrics.adaptive_hash_index, True),
+                        ("Temp Objects", metrics.temporary_objects, True),
+                        ("Aborted Connections", metrics.aborted_connections, True),
+                        ("Disk I/O", metrics.disk_io, True),
+                        ("Replication", metrics.replication_lag, False),
+                    ]
+                    for tab_name, metric_instance, create_switches in tabs:
+                        yield from self.create_tab(tab_name, metric_instance, create_switches)
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
-                yield Static(id="panel_replication_data", classes="panel_data")
+                yield Static(id="panel_replication_data")
 
             yield DataTable(id="panel_processlist", classes="panel_data", show_cursor=False)
 

@@ -19,7 +19,7 @@ class Database:
                 user=user,
                 passwd=password,
                 unix_socket=socket,
-                port=port,
+                port=int(port),
                 use_unicode=False,
                 ssl=ssl,
                 autocommit=True,
@@ -94,10 +94,10 @@ class Database:
     def fetch_status_and_variables(self, command):
         command_data = {}
 
-        if command in {"status", "variables"}:
-            self.execute(getattr(MySQLQueries, command))
-            data = self.fetchall()
+        self.execute(getattr(MySQLQueries, command))
+        data = self.fetchall()
 
+        if command in {"status", "variables"}:
             for row in data:
                 variable = row["Variable_name"]
                 value = row["Value"]
@@ -106,9 +106,6 @@ class Database:
 
                 command_data[variable] = converted_value
         elif command == "innodb_metrics":
-            self.execute(MySQLQueries.innodb_metrics)
-            data = self.fetchall()
-
             for row in data:
                 metric = row["NAME"]
                 value = int(row["COUNT"])

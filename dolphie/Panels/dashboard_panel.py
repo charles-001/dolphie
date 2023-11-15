@@ -207,7 +207,11 @@ def create_panel(dolphie: Dolphie) -> Table:
         table_primary.add_row("[label]GTID", gtid_mode)
 
         binlog_compression = global_variables.get("binlog_transaction_compression", "N/A")
-        table_primary.add_row("[label]Compression", binlog_compression)
+        binlog_compression_percentage = ""
+        if binlog_compression == "ON":
+            binlog_compression_percentage = f" ({dolphie.binlog_transaction_compression_percentage}% gain)"
+
+        table_primary.add_row("[label]Compression", f"{binlog_compression}{binlog_compression_percentage}")
 
         tables_to_add.append(table_primary)
 

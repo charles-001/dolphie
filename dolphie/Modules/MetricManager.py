@@ -9,10 +9,10 @@ from textual.widgets import Static
 
 
 class Graph(Static):
-    def __init__(self, bar=False, *args, **kwargs) -> None:
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
 
-        self.bar = bar
+        self.marker = None
         self.metric_instance = None
 
     def on_show(self) -> None:
@@ -36,7 +36,7 @@ class Graph(Static):
         plt.plotsize(self.size.width, self.size.height)
 
         max_y_value = 0
-        if type(self.metric_instance) == CheckpointMetrics:
+        if isinstance(self.metric_instance, CheckpointMetrics):
             x = self.metric_instance.datetimes
             y = self.metric_instance.Innodb_checkpoint_age.values
 
@@ -64,12 +64,12 @@ class Graph(Static):
                 plt.plot(
                     x,
                     y,
-                    marker="braille",
+                    marker=self.marker,
                     label=self.metric_instance.Innodb_checkpoint_age.label,
                     color=self.metric_instance.Innodb_checkpoint_age.color,
                 )
                 max_y_value = self.metric_instance.checkpoint_age_max
-        elif type(self.metric_instance) == RedoLogMetrics and self.bar:
+        elif isinstance(self.metric_instance, RedoLogMetrics) and self.id == "graph_redo_log_bar":
             if self.metric_instance.Innodb_lsn_current.values:
                 x = [0]
                 y = [
@@ -110,7 +110,7 @@ class Graph(Static):
                     color=bar_color,
                 )
                 max_y_value = max(self.metric_instance.redo_log_size, max(y))
-        elif type(self.metric_instance) == RedoLogActiveCountMetrics:
+        elif isinstance(self.metric_instance, RedoLogActiveCountMetrics):
             x = self.metric_instance.datetimes
             y = self.metric_instance.Active_redo_log_count.values
 
@@ -129,7 +129,7 @@ class Graph(Static):
                 plt.plot(
                     x,
                     y,
-                    marker="braille",
+                    marker=self.marker,
                     label=self.metric_instance.Active_redo_log_count.label,
                     color=self.metric_instance.Active_redo_log_count.color,
                 )
@@ -142,7 +142,7 @@ class Graph(Static):
                     y = metric_data.values
 
                     if y:
-                        plt.plot(x, y, marker="braille", label=metric_data.label, color=metric_data.color)
+                        plt.plot(x, y, marker=self.marker, label=metric_data.label, color=metric_data.color)
                         max_y_value = max(max_y_value, max(y))
 
         max_y_ticks = 5
@@ -346,6 +346,15 @@ class DiskIOMetrics:
 
 
 @dataclass
+class LocksMetrics:
+    lock_count: MetricData
+    graphs: List[str]
+    tab_name: str = "locks"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+
+
+@dataclass
 class MetricInstances:
     dml: DMLMetrics
     replication_lag: ReplicationLagMetrics
@@ -360,6 +369,7 @@ class MetricInstances:
     temporary_objects: TemporaryObjectMetrics
     aborted_connections: AbortedConnectionsMetrics
     disk_io: DiskIOMetrics
+    locks: LocksMetrics
 
 
 class MetricManager:
@@ -456,6 +466,10 @@ class MetricManager:
                 io_read=MetricData(label="Read", color=MetricColor.blue),
                 io_write=MetricData(label="Write", color=MetricColor.green),
             ),
+            locks=LocksMetrics(
+                graphs=["graph_locks"],
+                lock_count=MetricData(label="Lock Count", color=MetricColor.blue, per_second_calculation=False),
+            ),
         )
 
     def refresh_data(
@@ -466,6 +480,7 @@ class MetricManager:
         global_status: Dict[str, int],
         innodb_metrics: Dict[str, int],
         disk_io_metrics: Dict[str, int],
+        lock_metrics: Dict[str, int],
         replication_status: Dict[str, Union[int, str]],
         replication_lag: int,  # this can be from SHOW SLAVE STatus/Performance Schema/heartbeat table
     ):
@@ -475,11 +490,12 @@ class MetricManager:
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
         self.disk_io_metrics = disk_io_metrics
+        self.lock_metrics = lock_metrics
         self.replication_status = replication_status
         self.replication_lag = replication_lag
 
         # Support MySQL 8.0.30+ redo log size variable
-        innodb_redo_log_capacity = self.global_variables.get("innodb_redo_log_capacity", 0) * 32
+        innodb_redo_log_capacity = self.global_variables.get("innodb_redo_log_capacity", 0)
         innodb_log_file_size = round(
             self.global_variables.get("innodb_log_file_size", 0)
             * self.global_variables.get("innodb_log_files_in_group", 1)
@@ -490,6 +506,7 @@ class MetricManager:
         self.update_metrics_replication_lag()
         self.update_metrics_checkpoint()
         self.update_metrics_adaptive_hash_index_hit_ratio()
+        self.update_metrics_locks()
 
         self.metrics.redo_log.redo_log_size = self.redo_log_size
 
@@ -552,6 +569,11 @@ class MetricManager:
         metric_instance.checkpoint_age_max = max_checkpoint_age_bytes
         metric_instance.checkpoint_age_sync_flush = checkpoint_age_sync_flush_bytes
 
+    def update_metrics_locks(self):
+        metric_instance = self.metrics.locks
+        self.add_metric(metric_instance.lock_count, self.lock_metrics.get("lock_count"))
+        metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
+
     def get_metric_calculate_per_sec(self, metric_name, metric_source=None, format=True):
         if not metric_source:
             metric_source = self.global_status
@@ -613,9 +635,7 @@ class MetricManager:
             color_code = (
                 "green"
                 if self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio > 70
-                else "yellow"
-                if self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio > 50
-                else "red"
+                else "yellow" if self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio > 50 else "red"
             )
 
             return f"[{color_code}]{self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio:.2f}%[/{color_code}]"

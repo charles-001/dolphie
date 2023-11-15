@@ -68,6 +68,7 @@ class Dolphie:
         self.host_cache_from_file: dict = {}
         self.startup_panels: str = None
         self.first_loop: bool = False
+        self.graph_marker: str = None
 
         # Panel display states
         self.display_dashboard_panel: bool = False
@@ -94,6 +95,7 @@ class Dolphie:
         self.innodb_metrics: dict = {}
         self.disk_io_metrics: dict = {}
         self.global_variables: dict = {}
+        self.lock_metrics: dict = {}
         self.global_status: dict = {}
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
@@ -104,6 +106,7 @@ class Dolphie:
         self.active_redo_logs: int = None
         self.mysql_host: str = None
         self.quick_switched_connection: bool = False
+        self.binlog_transaction_compression_percentage: int = None
 
         # These are for replicas in replication panel
         self.replica_data: dict = {}
@@ -967,7 +970,7 @@ class Dolphie:
                 "",
                 Align.center(
                     "[light_blue][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
-                    " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-select-text"
+                    " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-copy-text"
                 ),
             )
 
