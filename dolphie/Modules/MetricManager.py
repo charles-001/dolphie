@@ -571,7 +571,7 @@ class MetricManager:
 
     def update_metrics_locks(self):
         metric_instance = self.metrics.locks
-        self.add_metric(metric_instance.lock_count, self.lock_metrics.get("lock_count"))
+        self.add_metric(metric_instance.lock_count, len(self.lock_metrics))
         metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def get_metric_calculate_per_sec(self, metric_name, metric_source=None, format=True):

@@ -18,7 +18,12 @@ import myloginpath
 from dolphie import Dolphie
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
-from dolphie.Panels import dashboard_panel, processlist_panel, replication_panel
+from dolphie.Panels import (
+    dashboard_panel,
+    locks_panel,
+    processlist_panel,
+    replication_panel,
+)
 from dolphie.Widgets.topbar import TopBar
 from rich.console import Console
 from rich.prompt import Prompt
@@ -452,13 +457,6 @@ class DolphieApp(App):
             dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
             dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
-            if dolphie.is_mysql_version_at_least("8.0"):
-                fetch_locks_query = MySQLQueries.fetch_trx_locks.replace("$1", "performance_schema.data_lock_waits")
-            else:
-                fetch_locks_query = MySQLQueries.fetch_trx_locks.replace("$1", "information_schema.INNODB_LOCK_WAITS")
-            dolphie.main_db_connection.execute(fetch_locks_query)
-            dolphie.lock_metrics = dolphie.main_db_connection.fetchone()
-
             if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
                 find_replicas_query = MySQLQueries.ps_find_replicas
             else:
@@ -504,6 +502,14 @@ class DolphieApp(App):
             if dolphie.display_processlist_panel:
                 dolphie.processlist_threads = processlist_panel.fetch_data(dolphie)
 
+            # We don't check if panel is visible or not since we use this data for Locks graph
+            if dolphie.is_mysql_version_at_least("8.0"):
+                locks_panel_query = MySQLQueries.locks_query_8
+            else:
+                locks_panel_query = MySQLQueries.locks_query_5
+            dolphie.main_db_connection.execute(locks_panel_query)
+            dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
+
             # If we're not displaying the replication panel, close all replica connections
             if not dolphie.display_replication_panel and dolphie.replica_connections:
                 for connection in dolphie.replica_connections.values():
@@ -520,7 +526,7 @@ class DolphieApp(App):
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
                 disk_io_metrics=dolphie.disk_io_metrics,
-                lock_metrics=dolphie.lock_metrics,
+                lock_metrics=dolphie.lock_transactions,
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
@@ -580,6 +586,9 @@ class DolphieApp(App):
                 if dolphie.display_replication_panel:
                     self.refresh_panel("replication")
 
+                if dolphie.display_locks_panel:
+                    self.refresh_panel("locks")
+
                 if dolphie.display_graphs_panel:
                     # Hide/show replication tab based on replication status
                     replication_tab = self.app.query_one("#tabbed_content", TabbedContent)
@@ -620,7 +629,7 @@ class DolphieApp(App):
         dolphie.load_host_cache_file()
 
         # Set these components by default to not show
-        components_to_disable = [".panel_container", "Sparkline", "#panel_processlist"]
+        components_to_disable = [".panel_container", "Sparkline", "#panel_processlist", "#panel_locks"]
         exempt_components = {}
 
         for component in components_to_disable:
@@ -705,6 +714,8 @@ class DolphieApp(App):
             self.query_one("#panel_dashboard_data", Static).update(dashboard_panel.create_panel(self.dolphie))
         elif panel_name == "processlist":
             processlist_panel.create_panel(self.dolphie)
+        elif panel_name == "locks":
+            locks_panel.create_panel(self.dolphie)
 
     def update_header(self, freshly_connected):
         dolphie = self.dolphie
@@ -835,6 +846,7 @@ class DolphieApp(App):
             with VerticalScroll(id="panel_replication", classes="panel_container"):
                 yield Static(id="panel_replication_data")
 
+            yield DataTable(id="panel_locks", classes="panel_data", show_cursor=False)
             yield DataTable(id="panel_processlist", classes="panel_data", show_cursor=False)
 
 

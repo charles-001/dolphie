@@ -150,6 +150,9 @@ Sparkline > .sparkline--min-color {
 #panel_processlist {
     padding-top: 1;
 }
+#panel_locks {
+    padding-top: 1;
+}
 
 Button.-primary {
     background: #1b2c5a;

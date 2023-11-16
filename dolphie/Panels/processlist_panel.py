@@ -79,15 +79,13 @@ def create_panel(dolphie: Dolphie) -> DataTable:
                 column_field = column_data["field"]
                 column_format_number = column_data["format_number"]
 
-                update_width = False
                 if column_field == "query":
                     value = re.sub(r"\s+", " ", thread[column_field])
-                    update_width = True
                 else:
                     value = format_number(thread[column_field]) if column_format_number else thread[column_field]
 
                 if value != datatable_row[column_id] or column_field == "formatted_time":
-                    processlist_datatable.update_cell(thread_id, column_name, value, update_width=update_width)
+                    processlist_datatable.update_cell(thread_id, column_name, value)
         else:
             # Add a new row to the datatable if thread_id does not exist
             row_values = []

@@ -75,6 +75,7 @@ class Dolphie:
         self.display_processlist_panel: bool = False
         self.display_replication_panel: bool = False
         self.display_graphs_panel: bool = False
+        self.display_locks_panel: bool = False
 
         self.reset_runtime_variables()
 
@@ -89,6 +90,7 @@ class Dolphie:
         self.read_only: str = None
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
+        self.lock_transactions: dict = {}
         self.pause_refresh: bool = False
         self.previous_binlog_position: int = 0
         self.previous_replica_sbm: int = 0
@@ -303,6 +305,9 @@ class Dolphie:
         elif key == "4":
             self.toggle_panel("graphs")
             self.app.update_graphs("dml")
+        elif key == "5":
+            self.toggle_panel("locks")
+            self.app.query_one("#panel_locks").clear()
         elif key == "grave_accent":
 
             def command_get_input(data):
@@ -919,6 +924,7 @@ class Dolphie:
                 "2": "Show/hide Processlist",
                 "3": "Show/hide Replication/Replicas",
                 "4": "Show/hide Graph Metrics",
+                "5": "Show/hide Locks",
             }
             table_panels = Table(box=box.HORIZONTALS, style="table_border", title="Panels", title_style="bold")
             table_panels.add_column("Key", justify="center", style="b highlight")
