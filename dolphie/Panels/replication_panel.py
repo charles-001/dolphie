@@ -23,7 +23,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
         and not dolphie.innodb_cluster
         and not dolphie.innodb_cluster_read_replica
     ):
-        return "[yellow]This panel has no data to display[/yellow]"
+        return "[yellow]Replication/Replicas panel has no data to display[/yellow]"
 
     def create_group_replication_panel():
         if not dolphie.group_replication and not dolphie.innodb_cluster:
@@ -426,10 +426,8 @@ def create_group_replication_member_table(dolphie: Dolphie):
 
         table.add_row(
             "[label]Conflict",
-            (
-                f"[label]Queue[/label]: {format_number(trx_queued)} [label]Checked[/label]:"
-                f" {format_number(trx_checked)} [label]Detected[/label]: {format_number(trx_detected)}"
-            ),
+            f"[label]Queue[/label]: {format_number(trx_queued)} [label]Checked[/label]:"
+            f" {format_number(trx_checked)} [label]Detected[/label]: {format_number(trx_detected)}",
         )
         table.add_row(
             "[label]Applied",
@@ -437,10 +435,8 @@ def create_group_replication_member_table(dolphie: Dolphie):
         )
         table.add_row(
             "[label]Local",
-            (
-                f"[label]Proposed[/label]: {format_number(trx_local_proposed)} [label]Rollback[/label]:"
-                f" {format_number(trx_local_rollback)}"
-            ),
+            f"[label]Proposed[/label]: {format_number(trx_local_proposed)} [label]Rollback[/label]:"
+            f" {format_number(trx_local_rollback)}",
         )
         table.add_row(
             "[label]Rows", f"{format_number(trx_rows_validating)} [dark_gray](used for certification)[/dark_gray]"

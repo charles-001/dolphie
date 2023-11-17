@@ -209,7 +209,10 @@ def create_panel(dolphie: Dolphie) -> Table:
         binlog_compression = global_variables.get("binlog_transaction_compression", "N/A")
         binlog_compression_percentage = ""
         if binlog_compression == "ON":
-            binlog_compression_percentage = f" ({dolphie.binlog_transaction_compression_percentage}% gain)"
+            if dolphie.binlog_transaction_compression_percentage:
+                binlog_compression_percentage = f" ({dolphie.binlog_transaction_compression_percentage}% gain)"
+            else:
+                binlog_compression_percentage = " (N/A gain)"
 
         table_primary.add_row("[label]Compression", f"{binlog_compression}{binlog_compression_percentage}")
 

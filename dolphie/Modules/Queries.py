@@ -54,49 +54,24 @@ class MySQLQueries:
             processlist_command != 'Daemon'
             $1
     """
-    locks_query_5: str = """
+    locks_query: str = """
         SELECT
-            IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
-            IFNULL(r.trx_query, "")                                      AS waiting_query,
-            IFNULL(r.trx_rows_modified, "")                              AS waiting_rows_modified,
-            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_started, NOW()), "")      AS waiting_age,
-            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()), "") AS waiting_wait_secs,
-            IFNULL(b.trx_mysql_thread_id, "")                            AS blocking_thread,
-            IFNULL(b.trx_query, "")                                      AS blocking_query,
-            IFNULL(b.trx_rows_modified, "")                              AS blocking_rows_modified,
-            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_started, NOW()), "")      AS blocking_age,
-            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_wait_started, NOW()), "") AS blocking_wait_secs,
-            IFNULL(lock_mode, "")                                        AS lock_mode,
-            IFNULL(lock_type, "")                                        AS lock_type
+            wait_age,
+            locked_type,
+            waiting_trx_id,
+            waiting_trx_age,
+            waiting_trx_rows_modified,
+            waiting_trx_rows_locked,
+            waiting_lock_mode,
+            IFNULL(waiting_query, "")  AS waiting_query,
+            blocking_trx_id,
+            blocking_trx_age,
+            blocking_trx_rows_modified,
+            blocking_trx_rows_locked,
+            blocking_lock_mode,
+            IFNULL(blocking_query, "") AS blocking_query
         FROM
-            INFORMATION_SCHEMA.INNODB_LOCK_WAITS w
-            JOIN INFORMATION_SCHEMA.INNODB_TRX b   ON b.trx_id  = w.blocking_trx_id
-            JOIN INFORMATION_SCHEMA.INNODB_TRX r   ON r.trx_id  = w.requesting_trx_id
-            JOIN INFORMATION_SCHEMA.INNODB_LOCKS l ON l.lock_id = w.requested_lock_id
-        ORDER BY
-            TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
-    """
-    locks_query_8: str = """
-        SELECT
-            IFNULL(r.trx_mysql_thread_id, "")                            AS waiting_thread,
-            IFNULL(r.trx_query, "")                                      AS waiting_query,
-            IFNULL(r.trx_rows_modified, "")                              AS waiting_rows_modified,
-            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_started, NOW()), "")      AS waiting_age,
-            IFNULL(TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()), "") AS waiting_wait_secs,
-            IFNULL(b.trx_mysql_thread_id, "")                            AS blocking_thread,
-            IFNULL(b.trx_query, "")                                      AS blocking_query,
-            IFNULL(b.trx_rows_modified, "")                              AS blocking_rows_modified,
-            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_started, NOW()), "")      AS blocking_age,
-            IFNULL(TIMESTAMPDIFF(SECOND, b.trx_wait_started, NOW()), "") AS blocking_wait_secs,
-            IFNULL(lock_mode, "")                                        AS lock_mode,
-            IFNULL(lock_type, "")                                        AS lock_type
-        FROM
-            performance_schema.data_lock_waits w
-            JOIN INFORMATION_SCHEMA.INNODB_TRX b ON b.trx_id         = w.blocking_engine_transaction_id
-            JOIN INFORMATION_SCHEMA.INNODB_TRX r ON r.trx_id         = w.requesting_engine_transaction_id
-            JOIN performance_schema.data_locks l ON l.engine_lock_id = w.requesting_engine_lock_id
-        ORDER BY
-            TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()) DESC
+            sys.innodb_lock_waits
     """
     ps_replica_lag: str = """
         SELECT MAX(`lag`) AS Seconds_Behind_Master

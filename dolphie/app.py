@@ -502,13 +502,10 @@ class DolphieApp(App):
             if dolphie.display_processlist_panel:
                 dolphie.processlist_threads = processlist_panel.fetch_data(dolphie)
 
-            # We don't check if panel is visible or not since we use this data for Locks graph
-            if dolphie.is_mysql_version_at_least("8.0"):
-                locks_panel_query = MySQLQueries.locks_query_8
-            else:
-                locks_panel_query = MySQLQueries.locks_query_5
-            dolphie.main_db_connection.execute(locks_panel_query)
-            dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
+            if dolphie.is_mysql_version_at_least("5.7"):
+                # We don't check if panel is visible or not since we use this data for Locks graph
+                dolphie.main_db_connection.execute(MySQLQueries.locks_query)
+                dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
 
             # If we're not displaying the replication panel, close all replica connections
             if not dolphie.display_replication_panel and dolphie.replica_connections:
@@ -844,7 +841,7 @@ class DolphieApp(App):
                         yield from self.create_tab(tab_name, metric_instance, create_switches)
 
             with VerticalScroll(id="panel_replication", classes="panel_container"):
-                yield Static(id="panel_replication_data")
+                yield Static(id="panel_replication_data", classes="panel_data")
 
             yield DataTable(id="panel_locks", classes="panel_data", show_cursor=False)
             yield DataTable(id="panel_processlist", classes="panel_data", show_cursor=False)

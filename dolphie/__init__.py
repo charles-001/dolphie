@@ -306,6 +306,10 @@ class Dolphie:
             self.toggle_panel("graphs")
             self.app.update_graphs("dml")
         elif key == "5":
+            if not self.is_mysql_version_at_least("5.7"):
+                self.notify("Locks panel requires MySQL 5.7+")
+                return
+
             self.toggle_panel("locks")
             self.app.query_one("#panel_locks").clear()
         elif key == "grave_accent":
