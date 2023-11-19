@@ -24,7 +24,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
     }
 
     # Hacky way to calculate the width of the query columns
-    query_characters = round((dolphie.app.console.size.width / 2) - ((len(columns) * 4) + 6))
+    query_characters = round((dolphie.app.console.size.width / 2) - ((len(columns) * 4) + 4))
     columns["waiting_query"]["width"] = query_characters
     columns["blocking_query"]["width"] = query_characters
 
