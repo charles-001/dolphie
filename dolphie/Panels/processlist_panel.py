@@ -3,6 +3,7 @@ import re
 from dolphie import Dolphie
 from dolphie.Modules.Functions import format_number, format_time
 from dolphie.Modules.Queries import MySQLQueries
+from rich.markup import escape as markup_escape
 from textual.widgets import DataTable
 
 
@@ -80,7 +81,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
                 column_format_number = column_data["format_number"]
 
                 if column_field == "query":
-                    value = re.sub(r"\s+", " ", thread[column_field])
+                    value = markup_escape(re.sub(r"\s+", " ", thread[column_field]))
                 else:
                     value = format_number(thread[column_field]) if column_format_number else thread[column_field]
 
@@ -94,7 +95,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
                 column_format_number = column_data["format_number"]
 
                 if column_field == "query":
-                    value = re.sub(r"\s+", " ", thread[column_field])
+                    value = markup_escape(re.sub(r"\s+", " ", thread[column_field]))
                 else:
                     value = format_number(thread[column_field]) if column_format_number else thread[column_field]
 

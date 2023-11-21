@@ -2,6 +2,7 @@ from re import sub
 
 from dolphie import Dolphie
 from dolphie.Modules.Functions import format_number
+from rich.markup import escape as markup_escape
 from textual.widgets import DataTable
 
 
@@ -42,7 +43,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
             column_format_number = column_data["format_number"]
 
             if column_name == "Query":
-                value = sub(r"\s+", " ", lock[column_key][0:query_characters])
+                value = markup_escape(sub(r"\s+", " ", lock[column_key][0:query_characters]))
             else:
                 if column_format_number:
                     value = format_number(lock[column_key])
