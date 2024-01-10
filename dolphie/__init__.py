@@ -16,7 +16,6 @@ from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.modal import CommandModal
 from dolphie.Widgets.new_version_modal import NewVersionModal
-from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from packaging.version import parse as parse_version
 from rich import box
 from rich.align import Align
@@ -290,7 +289,7 @@ class Dolphie:
     def capture_key(self, key):
         screen_data = None
 
-        if not self.main_db_connection:
+        if not self.main_db_connection and key not in ["grave_accent", "q", "question_mark"]:
             self.notify("Database connection must be established before using commands")
 
             return
@@ -313,26 +312,7 @@ class Dolphie:
             self.toggle_panel("locks")
             self.app.query_one("#panel_locks").clear()
         elif key == "grave_accent":
-
-            def command_get_input(data):
-                host_port = data["host"].split(":")
-                self.host = host_port[0]
-                self.port = int(host_port[1]) if len(host_port) > 1 else 3306
-
-                password = data.get("password")
-                if password:
-                    self.password = password
-
-                # Trigger a quick switch connection for the worker thread
-                self.quick_switched_connection = True
-
-                self.app.query_one("#main_container").display = False
-                self.app.query_one("LoadingIndicator").display = True
-                self.app.query_one("#panel_dashboard_queries_qps").display = False
-                self.app.query_one("TopBar").host = "Connecting to MySQL"
-
-            self.app.push_screen(QuickSwitchHostModal(quick_switch_hosts=self.quick_switch_hosts), command_get_input)
-
+            self.app.quick_switch_connection()
         elif key == "a":
             if self.show_additional_query_columns:
                 self.show_additional_query_columns = False

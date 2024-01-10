@@ -24,6 +24,7 @@ from dolphie.Panels import (
     processlist_panel,
     replication_panel,
 )
+from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from dolphie.Widgets.topbar import TopBar
 from rich.console import Console
 from rich.prompt import Prompt
@@ -43,7 +44,7 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
-from textual.worker import Worker, WorkerState
+from textual.worker import Worker, WorkerState, get_current_worker
 
 
 def parse_args(dolphie: Dolphie):
@@ -413,6 +414,8 @@ class DolphieApp(App):
         self.dolphie = dolphie
         dolphie.app = self
 
+        self.worker_cancel_output: str = None
+
         theme = Theme(
             {
                 "white": "#e9e9e9",
@@ -527,9 +530,15 @@ class DolphieApp(App):
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
-
         except ManualException as e:
-            self.exit(message=e.output())
+            # This will set up the worker state change function below to trigger the
+            # quick switch connection modal with the error
+            self.query_one("#main_container").display = False
+            self.query_one("LoadingIndicator").display = False
+            self.query_one("TopBar").host = ""
+
+            self.worker_cancel_output = e.output()
+            get_current_worker().cancel()
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         if event.state == WorkerState.SUCCESS:
@@ -613,6 +622,38 @@ class DolphieApp(App):
                 pass
 
             self.set_timer(self.dolphie.refresh_interval, self.worker_fetch_data)
+        elif event.state == WorkerState.CANCELLED:
+            self.quick_switch_connection()
+
+    def quick_switch_connection(self):
+        def command_get_input(data):
+            host_port = data["host"].split(":")
+            self.dolphie.host = host_port[0]
+            self.dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
+
+            password = data.get("password")
+            if password:
+                self.dolphie.password = password
+
+            # Trigger a quick switch connection for the worker thread
+            self.dolphie.quick_switched_connection = True
+
+            self.query_one("#main_container").display = False
+            self.query_one("LoadingIndicator").display = True
+            self.query_one("#panel_dashboard_queries_qps").display = False
+            self.query_one("TopBar").host = "Connecting to MySQL"
+
+            if self.worker_cancel_output:
+                self.worker_fetch_data()
+
+            self.worker_cancel_output = ""
+
+        self.app.push_screen(
+            QuickSwitchHostModal(
+                quick_switch_hosts=self.dolphie.quick_switch_hosts, error_message=self.worker_cancel_output
+            ),
+            command_get_input,
+        )
 
     def on_key(self, event: events.Key):
         if len(self.screen_stack) > 1:
@@ -654,14 +695,7 @@ class DolphieApp(App):
 
     def _handle_exception(self, error: Exception) -> None:
         self.bell()
-
-        # We have a ManualException class that we use to output errors in a nice format
-        if error.__class__.__name__ == "ManualException":
-            message = error.output()
-        else:
-            message = Traceback(show_locals=True, width=None, locals_max_length=5)
-
-        self.exit(message=message)
+        self.exit(message=Traceback(show_locals=True, width=None, locals_max_length=5))
 
     @on(TabbedContent.TabActivated)
     def tab_changed(self, event: TabbedContent.TabActivated):

@@ -170,17 +170,17 @@ Button.-primary:focus {
     border-bottom: tall #162244;
     text-style: bold;
 }
-Button.-default {
+Button {
     background: #282d3c;
     border-top: tall #606577;
     border-bottom: tall #151820;
 }
-Button.-default:hover {
+Button:hover {
     background: #363c50;
     border-top: tall #757b91;
     border-bottom: tall #222634;
 }
-Button.-default:focus {
+Button:focus {
     background: #363c50;
     border-top: tall #757b91;
     border-bottom: tall #222634;
@@ -266,15 +266,19 @@ Toast {
 }
 Toast.-information {
     border-left: wide #788bc9;
+    border-right: wide #192036;
 }
 Toast.-warning {
     border-left: wide #f0e357;
+    border-right: wide #192036;
 }
 Toast.-success {
     border-left: wide #5bd088;
+    border-right: wide #192036;
 }
 Toast.-error {
     border-left: wide #f05757;
+    border-right: wide #192036;
 }
 Toast.-error .toast--title {
     color: #ed6363;

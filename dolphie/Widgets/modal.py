@@ -44,7 +44,6 @@ class CommandModal(ModalScreen):
             height: auto;
             content-align: center middle;
         }
-
     """
     BINDINGS = [
         Binding("escape", "app.pop_screen", "", show=False),

@@ -1,42 +1,31 @@
 from rich import box
-from rich.style import Style
 from rich.syntax import Syntax
 from rich.table import Table
 
 
 class ManualException(Exception):
-    def __init__(self, message, query="", reason=""):
-        self.message = message
+    def __init__(self, reason, query=""):
         self.reason = reason
         self.query = query
 
     def output(self):
-        table_exception = Table(
-            box=box.SIMPLE_HEAVY,
-            title="  Dolphie:dolphin:",
-            title_style=Style(bold=True),
-            title_justify="left",
-            header_style=Style(color="indian_red", bold=True),
-            show_header=True,
-        )
+        table_exception = Table(box=box.ROUNDED, show_header=True, style="#ec8888")
 
-        table_exception.add_column("Error", justify="left")
-        table_exception.add_row(self.message)
-
+        table_exception.add_column("Error")
         if self.query:
             self.query = Syntax(
-                self.query,
+                self.query.strip(),
                 "sql",
                 line_numbers=False,
                 word_wrap=True,
                 theme="monokai",
-                background_color="default",
+                background_color="#121626",
             )
+            table_exception.add_row("[white]Failed to execute query:[/white]")
             table_exception.add_row(self.query)
-
-        table_exception.add_row("")
+            table_exception.add_row("")
 
         if self.reason:
-            table_exception.add_row(self.reason, style="indian_red")
+            table_exception.add_row(self.reason)
 
         return table_exception

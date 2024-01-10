@@ -23,6 +23,9 @@ class TopBar(Container):
 
         self.read_only = read_only
         self.app_version = app_version
+
+        if not host:
+            host = "N/A"
         self.host = host
 
     def watch_app_version(self):

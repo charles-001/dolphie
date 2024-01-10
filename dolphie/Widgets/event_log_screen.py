@@ -147,7 +147,6 @@ class EventLog(Screen):
                     table.add_row(timestamp, level, row["message"])
             else:
                 table.display = False
-                search_text.display = False
                 info.display = True
                 info.update("No events found")
         else:
