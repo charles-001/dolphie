@@ -1,14 +1,16 @@
 from datetime import datetime, timedelta
 
-from dolphie import Dolphie
 from dolphie.Modules.Functions import format_bytes, format_number
+from dolphie.Modules.TabManager import Tab
 from dolphie.Panels import replication_panel
 from rich import box
 from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie) -> Table:
+def create_panel(tab: Tab) -> Table:
+    dolphie = tab.dolphie
+
     global_status = dolphie.global_status
     global_variables = dolphie.global_variables
     binlog_status = dolphie.binlog_status
@@ -226,7 +228,7 @@ def create_panel(dolphie: Dolphie) -> Table:
     # Replication #
     ###############
     if dolphie.replication_status and not dolphie.display_replication_panel:
-        tables_to_add.append(replication_panel.create_replication_table(dolphie, dashboard_table=True))
+        tables_to_add.append(replication_panel.create_replication_table(tab, dashboard_table=True))
 
     ###############
     # Statistics #

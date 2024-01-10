@@ -1,12 +1,14 @@
 from re import sub
 
-from dolphie import Dolphie
 from dolphie.Modules.Functions import format_number
+from dolphie.Modules.TabManager import Tab
 from rich.markup import escape as markup_escape
 from textual.widgets import DataTable
 
 
-def create_panel(dolphie: Dolphie) -> DataTable:
+def create_panel(tab: Tab) -> DataTable:
+    dolphie = tab.dolphie
+
     columns = {
         "wait_age": {"name": "Lock Age", "width": 8, "format_number": False},
         "locked_type": {"name": "Lock Type", "width": 10, "format_number": False},
@@ -29,7 +31,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
     columns["waiting_query"]["width"] = query_characters
     columns["blocking_query"]["width"] = query_characters
 
-    locks_datatable = dolphie.app.query_one("#panel_locks", DataTable)
+    locks_datatable = tab.panel_locks
     locks_datatable.clear(columns=True)
 
     for column_key, column_data in columns.items():

@@ -69,7 +69,7 @@ class Graph(Static):
                     color=self.metric_instance.Innodb_checkpoint_age.color,
                 )
                 max_y_value = self.metric_instance.checkpoint_age_max
-        elif isinstance(self.metric_instance, RedoLogMetrics) and self.id == "graph_redo_log_bar":
+        elif isinstance(self.metric_instance, RedoLogMetrics) and "graph_redo_log_bar" in self.id:
             if self.metric_instance.Innodb_lsn_current.values:
                 x = [0]
                 y = [

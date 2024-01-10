@@ -2,9 +2,9 @@ import re
 from datetime import timedelta
 
 import pymysql
-from dolphie import Dolphie
 from dolphie.Modules.Functions import format_number
 from dolphie.Modules.Queries import MySQLQueries
+from dolphie.Modules.TabManager import Tab
 from rich import box
 from rich.align import Align
 from rich.console import Group
@@ -13,7 +13,9 @@ from rich.style import Style
 from rich.table import Table
 
 
-def create_panel(dolphie: Dolphie) -> Panel:
+def create_panel(tab: Tab) -> Panel:
+    dolphie = tab.dolphie
+
     if (
         dolphie.display_replication_panel
         and not dolphie.replica_data
@@ -149,7 +151,7 @@ def create_panel(dolphie: Dolphie) -> Panel:
                 )
 
         table_grid_replication = Table.grid()
-        table_grid_replication.add_row(create_replication_table(dolphie), table_thread_applier_status)
+        table_grid_replication.add_row(create_replication_table(tab), table_thread_applier_status)
 
         return Panel(
             Group(Align.center(replication_variables), Align.center(table_grid_replication)),
@@ -168,7 +170,9 @@ def create_panel(dolphie: Dolphie) -> Panel:
     return Group(*[panel for panel in group_panels if panel])
 
 
-def create_replication_table(dolphie: Dolphie, data=None, dashboard_table=False, replica_thread_id=None) -> Table:
+def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica_thread_id=None) -> Table:
+    dolphie = tab.dolphie
+
     # When replica_thread_id is specified, that means we're creating a table for a replica and not replication
     if replica_thread_id:
         if dolphie.replica_connections[replica_thread_id]["previous_sbm"] is not None:
@@ -386,7 +390,9 @@ def create_replication_table(dolphie: Dolphie, data=None, dashboard_table=False,
     return table
 
 
-def create_group_replication_member_table(dolphie: Dolphie):
+def create_group_replication_member_table(tab: Tab):
+    dolphie = tab.dolphie
+
     if not dolphie.group_replication_members:
         return None
 
@@ -447,7 +453,9 @@ def create_group_replication_member_table(dolphie: Dolphie):
     return group_replica_tables
 
 
-def fetch_replica_table_data(dolphie: Dolphie):
+def fetch_replica_table_data(tab: Tab):
+    dolphie = tab.dolphie
+
     replica_tables = {}
 
     # Only run this query if we don't have replica ports or if the number of replicas has changed
@@ -512,7 +520,7 @@ def fetch_replica_table_data(dolphie: Dolphie):
 
                 if replica_data:
                     replica_tables[host_and_port] = create_replication_table(
-                        dolphie, data=replica_data, replica_thread_id=thread_id
+                        tab, data=replica_data, replica_thread_id=thread_id
                     )
             except pymysql.Error as e:
                 table = Table(box=box.ROUNDED, show_header=False, style="table_border")
