@@ -144,13 +144,11 @@ Sparkline > .sparkline--min-color {
     color: #384c7a;
 }
 
-#panel_graphs {
+
+.pad_top_0 {
     padding-top: 0;
 }
-#panel_processlist {
-    padding-top: 1;
-}
-#panel_locks {
+.top_pad_1 {
     padding-top: 1;
 }
 

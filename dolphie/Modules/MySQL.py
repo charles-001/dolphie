@@ -43,7 +43,7 @@ class Database:
             if ignore_error:
                 return None
             else:
-                raise ManualException(e.args[1], query=query)
+                raise ManualException(str(e), query=query)
 
     def process_row(self, row):
         processed_row = {}

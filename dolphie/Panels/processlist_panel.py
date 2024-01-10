@@ -1,13 +1,15 @@
 import re
 
-from dolphie import Dolphie
 from dolphie.Modules.Functions import format_number, format_time
 from dolphie.Modules.Queries import MySQLQueries
+from dolphie.Modules.TabManager import Tab
 from rich.markup import escape as markup_escape
 from textual.widgets import DataTable
 
 
-def create_panel(dolphie: Dolphie) -> DataTable:
+def create_panel(tab: Tab) -> DataTable:
+    dolphie = tab.dolphie
+
     if not dolphie.performance_schema_enabled and dolphie.use_performance_schema:
         dolphie.notify("Performance Schema is not enabled on this host, using Information Schema instead")
         dolphie.use_performance_schema = False
@@ -51,7 +53,7 @@ def create_panel(dolphie: Dolphie) -> DataTable:
         ]
     )
 
-    processlist_datatable = dolphie.app.query_one("#panel_processlist", DataTable)
+    processlist_datatable = tab.panel_processlist
 
     # Clear table if columns change
     if len(processlist_datatable.columns) != len(columns):
@@ -111,7 +113,9 @@ def create_panel(dolphie: Dolphie) -> DataTable:
     processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 
 
-def fetch_data(dolphie: Dolphie):
+def fetch_data(tab: Tab):
+    dolphie = tab.dolphie
+
     if dolphie.use_performance_schema:
         processlist_query = MySQLQueries.ps_query
     else:
