@@ -830,7 +830,7 @@ class DolphieApp(App):
         dolphie.quick_switched_connection = False
 
         # Set the graph switches to what they're currently selected to since we reset metric_manager
-        switches = self.query(f"#switch_container_{tab.id} Switch")
+        switches = self.query(f".switch_container_{tab.id} Switch")
         for switch in switches:
             switch: Switch
             metric_instance_name = switch.name
