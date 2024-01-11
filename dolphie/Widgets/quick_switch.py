@@ -50,8 +50,14 @@ class QuickSwitchHostModal(ModalScreen):
         Binding("escape", "app.pop_screen", "", show=False),
     ]
 
-    def __init__(self, quick_switch_hosts, error_message=None):
+    def __init__(self, host, port, quick_switch_hosts, error_message=None):
         super().__init__()
+
+        self.host = host
+        self.port = port
+
+        if self.host and self.port:
+            self.host = f"{self.host}:{self.port}"
 
         self.dropdown_items = []
         if quick_switch_hosts:
@@ -72,7 +78,7 @@ class QuickSwitchHostModal(ModalScreen):
             with Vertical(classes="main_container"):
                 yield Label("Quick Switch Host")
                 yield AutoComplete(
-                    Input(id="host", placeholder="Start typing to search for a host"),
+                    Input(value=self.host, id="host", placeholder="Start typing to search for a host"),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
                 )
                 yield Input(id="password", placeholder="Password (empty for current)", password=True)
