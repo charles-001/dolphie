@@ -25,7 +25,7 @@ class TopBar(Container):
         self.app_version = app_version
 
         if not host:
-            host = "N/A"
+            host = ""
         self.host = host
 
     def watch_app_version(self):

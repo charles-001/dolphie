@@ -25,7 +25,7 @@ class Tab:
     dolphie: Dolphie
 
     worker: Worker = None
-    worker_cancel_output: str = None
+    worker_cancel_error: str = None
 
     main_container: VerticalScroll = None
     loading_indicator: LoadingIndicator = None
@@ -39,18 +39,20 @@ class Tab:
     panel_dashboard_data: Static = None
     panel_replication_data: Static = None
 
+    queue_for_removal: bool = False
+
 
 class TabManager:
     def __init__(self, app: App):
         self.app = app
 
         self.tabs: dict = {}
-        self.tab_counter: int = 1
+        self.tab_id_counter: int = 1
 
         self.tabbed_content = self.app.query_one("#tabbed_content", TabbedContent)
 
     async def create_tab(self, tab_name: str, dolphie: Dolphie):
-        tab_id = self.tab_counter
+        tab_id = self.tab_id_counter
 
         await self.tabbed_content.add_pane(
             TabPane(
@@ -108,7 +110,10 @@ class TabManager:
                     tab_formatted_name,
                     Label(id=f"stats_{metric_tab_name}_{tab_id}", classes="stats_data"),
                     Horizontal(id=f"graph_container_{metric_tab_name}_{tab_id}"),
-                    Horizontal(id=f"switch_container_{metric_tab_name}_{tab_id}", classes="switch_container"),
+                    Horizontal(
+                        id=f"switch_container_{metric_tab_name}_{tab_id}",
+                        classes=f"switch_container_{tab_id} switch_container",
+                    ),
                     id=f"graph_tab_{metric_tab_name}_{tab_id}",
                     name=metric_tab_name,
                 )
@@ -139,6 +144,11 @@ class TabManager:
 
         # Create a new tab instance
         dolphie = copy.copy(dolphie)
+        dolphie.reset_runtime_variables()
+        if tab_id != 1:
+            dolphie.host = ""
+            dolphie.port = ""
+
         tab = Tab(id=tab_id, name=tab_name, dolphie=dolphie)
 
         dolphie.tab_id = tab_id
@@ -178,28 +188,32 @@ class TabManager:
             graph.marker = dolphie.graph_marker
 
         # Set default switches to be toggled on
-        switches = self.app.query(".switch_container Switch")
+        switches = self.app.query(f".switch_container_{tab_id} Switch")
         switches_to_toggle = [switch for switch in switches if switch.id not in ["Queries", "Threads_connected"]]
         for switch in switches_to_toggle:
             switch.toggle()
 
+        # Save the tab instance to the tab manager
         self.tabs[tab_id] = tab
 
+        # Switch to the new tab
         self.switch_tab(tab_id)
 
-        self.tab_counter += 1
+        # Increment the tab id counter
+        self.tab_id_counter += 1
 
     async def remove_tab(self, tab_id: int):
         await self.tabbed_content.remove_pane(f"tab_{self.get_tab(tab_id).id}")
 
-        self.tabs.pop(tab_id, None)
+        tab = self.get_tab(tab_id)
+        tab.queue_for_removal = True
+
         self.switch_tab(list(self.tabs.keys())[-1])
 
     def switch_tab(self, tab_id: int):
         tab = self.get_tab(tab_id)
         self.app.tab = tab  # Update the current tab variable for the app
-
-        # self.app.update_machine_state(tab.name, tab.state)
+        self.app.update_header(tab=tab)
 
     def get_tab(self, id: int) -> Tab:
         if id in self.tabs:

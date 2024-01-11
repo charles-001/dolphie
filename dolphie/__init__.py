@@ -57,7 +57,6 @@ class Dolphie:
         self.host_cache: dict = {}
         self.host_cache_from_file: dict = {}
         self.startup_panels: str = None
-        self.first_loop: bool = False
         self.graph_marker: str = None
 
         # Panel display states
@@ -75,6 +74,7 @@ class Dolphie:
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
+        self.first_loop: bool = False
         self.polling_latency: float = 0
         self.read_only_data: str = None
         self.read_only: str = None
