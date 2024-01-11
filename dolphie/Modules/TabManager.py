@@ -212,8 +212,10 @@ class TabManager:
 
     def switch_tab(self, tab_id: int):
         tab = self.get_tab(tab_id)
+
         self.app.tab = tab  # Update the current tab variable for the app
-        self.app.update_header(tab=tab)
+
+        self.app.update_topbar(tab=tab)
 
     def get_tab(self, id: int) -> Tab:
         if id in self.tabs:

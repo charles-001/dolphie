@@ -38,11 +38,6 @@ def create_panel(tab: Tab) -> Table:
         style=table_line_color,
     )
 
-    if dolphie.polling_latency < 1:
-        refresh_latency = 0
-    else:
-        refresh_latency = round(dolphie.polling_latency - dolphie.refresh_interval, 2)
-
     if dolphie.replicaset:
         host_type = "InnoDB ReplicaSet"
     elif dolphie.innodb_cluster_read_replica:
@@ -70,7 +65,7 @@ def create_panel(tab: Tab) -> Table:
     )
     table_information.add_row("[label]Type", host_type)
     table_information.add_row("[label]Uptime", uptime)
-    table_information.add_row("[label]Runtime", f"{runtime} [label]latency:[/label] {refresh_latency}s")
+    table_information.add_row("[label]Runtime", f"{runtime} [label]latency:[/label] {dolphie.refresh_latency}s")
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
         "[label]Threads",
@@ -244,14 +239,24 @@ def create_panel(tab: Tab) -> Table:
     table_stats.add_column()
     table_stats.add_column(min_width=7)
 
-    table_stats.add_row("[label]Queries", dolphie.metric_manager.get_metric_calculate_per_sec("Queries"))
-    table_stats.add_row("[label]SELECT", dolphie.metric_manager.get_metric_calculate_per_sec("Com_select"))
-    table_stats.add_row("[label]INSERT", dolphie.metric_manager.get_metric_calculate_per_sec("Com_insert"))
-    table_stats.add_row("[label]UPDATE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_update"))
-    table_stats.add_row("[label]DELETE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_delete"))
-    table_stats.add_row("[label]REPLACE", dolphie.metric_manager.get_metric_calculate_per_sec("Com_replace"))
-    table_stats.add_row("[label]COMMIT", dolphie.metric_manager.get_metric_calculate_per_sec("Com_commit"))
-    table_stats.add_row("[label]ROLLBACK", dolphie.metric_manager.get_metric_calculate_per_sec("Com_rollback"))
+    metrics = dolphie.metric_manager.metrics.dml
+    metric_labels = {
+        "Queries": "Queries",
+        "SELECT": "Com_select",
+        "INSERT": "Com_insert",
+        "UPDATE": "Com_update",
+        "DELETE": "Com_delete",
+        "REPLACE": "Com_replace",
+        "COMMIT": "Com_commit",
+        "ROLLBACK": "Com_rollback",
+    }
+
+    for label, metric_name in metric_labels.items():
+        if getattr(metrics, metric_name).values:
+            metric_value = getattr(metrics, metric_name).values[-1]
+            table_stats.add_row(f"[label]{label}", format_number(metric_value))
+        else:
+            table_stats.add_row(f"[label]{label}", "0")
 
     tables_to_add.append(table_stats)
 
