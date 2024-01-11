@@ -76,8 +76,8 @@ class Dolphie:
         self.worker_previous_start_time: datetime = datetime.now()
         self.first_loop: bool = False
         self.polling_latency: float = 0
-        self.read_only_data: str = None
-        self.read_only: str = None
+        self.refresh_latency: str = "0"
+        self.read_only_status: str = None
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
         self.lock_transactions: dict = {}

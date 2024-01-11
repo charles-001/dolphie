@@ -470,6 +470,7 @@ class DolphieApp(App):
 
             dolphie.worker_start_time = datetime.now()
             dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
+            dolphie.refresh_latency = round(dolphie.polling_latency - dolphie.refresh_interval, 2)
             dolphie.worker_previous_start_time = dolphie.worker_start_time
 
             dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
@@ -551,21 +552,12 @@ class DolphieApp(App):
         except ManualException as e:
             # This will set up the worker state change function below to trigger the
             # quick switch connection modal with the error
+
             tab.main_container.display = False
             tab.loading_indicator.display = False
-            self.topbar.host = ""
 
             tab.worker_cancel_error = e.output()
             tab.worker.cancel()
-
-            self.notify(
-                f"Host [light_blue]{tab.dolphie.host}:{tab.dolphie.port}[/light_blue] has been disconnected",
-                title="Error",
-                severity="error",
-                timeout=15,
-            )
-
-            self.quick_switch_connection(tab)
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
@@ -581,75 +573,93 @@ class DolphieApp(App):
                 or dolphie.pause_refresh
                 or not tab.dolphie.main_db_connection.connection.open
                 or tab.id != self.tab.id
+                or dolphie.quick_switched_connection
             ):
-                self.set_timer(0.5, partial(self.worker_fetch_data, tab.id))
+                self.set_timer(tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id))
+
                 return
 
-            try:
-                loading_indicator = tab.loading_indicator
-                if loading_indicator.display:
-                    loading_indicator.display = False
-                    tab.main_container.display = True
-
-                    self.layout_graphs()
-
-                    # We only want to do this on startup
-                    for panel in dolphie.startup_panels:
-                        self.query_one(f"#panel_{panel}_{tab.id}").display = True
-
-                # Set read-only mode for header
-                self.update_header(tab=tab)
-
-                if dolphie.display_dashboard_panel:
-                    self.refresh_panel("dashboard")
-
-                    # Update the sparkline for queries per second
-                    sparkline = tab.sparkline
-                    sparkline_data = dolphie.metric_manager.metrics.dml.Queries.values
-                    if not sparkline.display:
-                        sparkline_data = [0]
-                        sparkline.display = True
-
-                    sparkline.data = sparkline_data
-                    sparkline.refresh()
-
-                if dolphie.display_processlist_panel:
-                    self.refresh_panel("processlist")
-
-                if dolphie.display_replication_panel:
-                    self.refresh_panel("replication")
-
-                if dolphie.display_locks_panel:
-                    self.refresh_panel("locks")
-
-                if dolphie.display_graphs_panel:
-                    graph_panel = self.query_one(f"#tabbed_content_{tab.id}", TabbedContent)
-
-                    # Hide/show replication tab based on replication status
-                    if dolphie.replication_status:
-                        graph_panel.show_tab(f"graph_tab_replication_lag_{tab.id}")
-                    else:
-                        graph_panel.hide_tab(f"graph_tab_replication_lag_{tab.id}")
-
-                    # Refresh the graph(s) for the selected tab
-                    self.update_graphs(graph_panel.get_pane(graph_panel.active).name)
-
-                # We take a snapshot of the processlist to be used for commands
-                # since the data can change after a key is pressed
-                dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
-
-                # This denotes that we've gone through the first loop of the worker thread
-                dolphie.first_loop = True
-            except NoMatches:
-                # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
-                # with worker thread/state change due to asynchronous nature of the worker thread
-                pass
+            self.refresh_screen(tab)
 
             self.set_timer(tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id))
         elif event.state == WorkerState.CANCELLED:
             # Only show the modal if there's a worker cancel error
             if tab.worker_cancel_error:
+                if self.tab.id != tab.id:
+                    self.notify(
+                        f"Host [light_blue]{tab.dolphie.host}:{tab.dolphie.port}[/light_blue] has been disconnected",
+                        title="Error",
+                        severity="error",
+                        timeout=10,
+                    )
+
+                self.tab_manager.tabbed_content.active = f"tab_{tab.id}"
+                self.tab_manager.switch_tab(tab.id)
+
                 self.quick_switch_connection(tab)
+
+    def refresh_screen(self, tab: Tab):
+        dolphie = tab.dolphie
+
+        try:
+            loading_indicator = tab.loading_indicator
+            if loading_indicator.display:
+                loading_indicator.display = False
+                tab.main_container.display = True
+
+                self.layout_graphs()
+
+                # We only want to do this on startup
+                for panel in dolphie.startup_panels:
+                    self.query_one(f"#panel_{panel}_{tab.id}").display = True
+
+            # Set read-only mode for header
+            self.update_topbar(tab=tab)
+
+            if dolphie.display_dashboard_panel:
+                self.refresh_panel("dashboard")
+
+                # Update the sparkline for queries per second
+                sparkline = tab.sparkline
+                sparkline_data = dolphie.metric_manager.metrics.dml.Queries.values
+                if not sparkline.display:
+                    sparkline_data = [0]
+                    sparkline.display = True
+
+                sparkline.data = sparkline_data
+                sparkline.refresh()
+
+            if dolphie.display_processlist_panel:
+                self.refresh_panel("processlist")
+
+            if dolphie.display_replication_panel:
+                self.refresh_panel("replication")
+
+            if dolphie.display_locks_panel:
+                self.refresh_panel("locks")
+
+            if dolphie.display_graphs_panel:
+                graph_panel = self.query_one(f"#tabbed_content_{tab.id}", TabbedContent)
+
+                # Hide/show replication tab based on replication status
+                if dolphie.replication_status:
+                    graph_panel.show_tab(f"graph_tab_replication_lag_{tab.id}")
+                else:
+                    graph_panel.hide_tab(f"graph_tab_replication_lag_{tab.id}")
+
+                # Refresh the graph(s) for the selected tab
+                self.update_graphs(graph_panel.get_pane(graph_panel.active).name)
+
+            # We take a snapshot of the processlist to be used for commands
+            # since the data can change after a key is pressed
+            dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
+
+            # This denotes that we've gone through the first loop of the worker thread
+            dolphie.first_loop = True
+        except NoMatches:
+            # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
+            # with worker thread/state change due to asynchronous nature of the worker thread
+            pass
 
     def quick_switch_connection(self, tab: Tab):
         def command_get_input(data):
@@ -720,7 +730,10 @@ class DolphieApp(App):
     @on(TabbedContent.TabActivated, "#tabbed_content")
     def tab_changed(self, event: TabbedContent.TabActivated):
         self.tab_manager.switch_tab(event.pane.name)
-        self.update_header(tab=self.tab)
+        self.update_topbar(tab=self.tab)
+
+        if self.tab.dolphie.main_db_connection:
+            self.refresh_screen(self.tab)
 
     @on(TabbedContent.TabActivated, ".metrics_tabbed_content")
     def metric_tab_changed(self, event: TabbedContent.TabActivated):
@@ -779,11 +792,11 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         current_ro_status = dolphie.global_variables.get("read_only")
-        status_highlight = "read-only" if current_ro_status == "ON" else "read/write"
+        formatted_ro_status = "RO" if current_ro_status == "ON" else "R/W"
+        status = "read-only" if current_ro_status == "ON" else "read/write"
 
         message = (
-            f"Host [light_blue]{dolphie.host}:{dolphie.port}[/light_blue] is now [b highlight]{status_highlight}[/b"
-            " highlight]"
+            f"Host [light_blue]{dolphie.host}:{dolphie.port}[/light_blue] is now [b highlight]{status}[/b highlight]"
         )
 
         if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
@@ -791,26 +804,24 @@ class DolphieApp(App):
         elif current_ro_status == "ON" and dolphie.group_replication and dolphie.is_group_replication_primary:
             message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
 
-        if dolphie.read_only != current_ro_status and dolphie.first_loop:
+        if dolphie.read_only_status != formatted_ro_status and dolphie.first_loop:
             self.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
-        dolphie.read_only = current_ro_status
+        dolphie.read_only_status = formatted_ro_status
 
-    def update_header(self, tab: Tab):
+    def update_topbar(self, tab: Tab):
         dolphie = tab.dolphie
 
-        current_ro_status = dolphie.global_variables.get("read_only")
-        if not current_ro_status:
-            self.topbar.host = ""
+        if not dolphie.read_only_status:
+            if not tab.loading_indicator.display:
+                self.topbar.host = ""
             return
 
         if self.tab.id == tab.id:
-            formatted_ro_status = "RO" if current_ro_status == "ON" else "R/W"
-
             if dolphie.main_db_connection and not dolphie.main_db_connection.connection.open:
-                formatted_ro_status = "DISCONNECTED"
+                dolphie.read_only_status = "DISCONNECTED"
 
-            self.topbar.host = f"[[white]{formatted_ro_status}[/white]] {dolphie.mysql_host}"
+            self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
 
     def quick_host_switch(self, tab: Tab):
         dolphie = tab.dolphie
@@ -923,8 +934,10 @@ class DolphieApp(App):
                 self.notify("Main tab cannot be removed")
                 return
             else:
-                self.tab.dolphie.main_db_connection.connection.close()
-                self.tab.dolphie.secondary_db_connection.connection.close()
+                if self.tab.dolphie.main_db_connection:
+                    self.tab.dolphie.main_db_connection.connection.close()
+                if self.tab.dolphie.secondary_db_connection:
+                    self.tab.dolphie.secondary_db_connection.connection.close()
 
                 await self.tab_manager.remove_tab(self.tab.id)
         elif key == "a":
@@ -989,7 +1002,7 @@ class DolphieApp(App):
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
                 self.app.push_screen(
                     EventLog(
-                        dolphie.read_only,
+                        dolphie.read_only_status,
                         dolphie.app_version,
                         dolphie.mysql_host,
                         dolphie.secondary_db_connection,
@@ -1215,9 +1228,10 @@ class DolphieApp(App):
             )
 
         elif key == "R":
-            dolphie.metric_manager = MetricManager()
-            active_graph = self.app.query_one(f"#tabbed_content_{self.tab.id}").active
-            self.update_graphs(active_graph.split("tab_")[1])
+            dolphie.metric_manager.reset()
+
+            active_graph = self.app.query_one(f"#tabbed_content_{self.tab.id}", TabbedContent)
+            self.update_graphs(active_graph.get_pane(active_graph.active).name)
             self.notify("Metrics have been reset", severity="success")
 
         elif key == "s":
@@ -1373,7 +1387,7 @@ class DolphieApp(App):
                 screen_data = Group(*[element for element in elements if element])
 
                 self.app.push_screen(
-                    CommandScreen(dolphie.read_only, dolphie.app_version, dolphie.mysql_host, screen_data)
+                    CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
                 )
 
             self.app.push_screen(
@@ -1455,7 +1469,7 @@ class DolphieApp(App):
                     screen_data = Align.center(table_grid)
 
                     self.app.push_screen(
-                        CommandScreen(dolphie.read_only, dolphie.app_version, dolphie.mysql_host, screen_data)
+                        CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
                     )
                 else:
                     if input_variable:
@@ -1585,7 +1599,9 @@ class DolphieApp(App):
             )
 
         if screen_data:
-            self.app.push_screen(CommandScreen(dolphie.read_only, dolphie.app_version, dolphie.mysql_host, screen_data))
+            self.app.push_screen(
+                CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
+            )
 
     def toggle_panel(self, panel_name):
         panel = self.app.query_one(f"#panel_{panel_name}_{self.tab.id}")
