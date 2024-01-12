@@ -449,14 +449,24 @@ class DolphieApp(App):
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
 
+        dolphie = tab.dolphie
+
         # We have to queue the tab for removal because if we don't do it in the worker thread it will
         # be removed while the worker thread is running which will error due to objects not existing
         if tab.queue_for_removal:
+            # Cleanup connections
+            if dolphie.main_db_connection.connection.open:
+                dolphie.main_db_connection.connection.close()
+            if dolphie.secondary_db_connection.connection.open:
+                dolphie.secondary_db_connection.connection.close()
+
+            if dolphie.replica_connections:
+                for connection in dolphie.replica_connections.values():
+                    connection["connection"].close()
+
             self.tab_manager.tabs.pop(tab.id, None)
             tab.worker.cancel()
             return
-
-        dolphie = tab.dolphie
 
         if dolphie.quick_switched_connection:
             self.quick_host_switch(tab)
@@ -597,6 +607,7 @@ class DolphieApp(App):
                 self.tab_manager.switch_tab(tab.id)
 
                 self.quick_switch_connection(tab)
+                self.bell()
 
     def refresh_screen(self, tab: Tab):
         dolphie = tab.dolphie
@@ -826,7 +837,7 @@ class DolphieApp(App):
     def quick_host_switch(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.reset_runtime_variables()
+        dolphie.reset_runtime_variables(include_panels=False)
         dolphie.quick_switched_connection = False
 
         # Set the graph switches to what they're currently selected to since we reset metric_manager
@@ -934,11 +945,6 @@ class DolphieApp(App):
                 self.notify("Main tab cannot be removed")
                 return
             else:
-                if self.tab.dolphie.main_db_connection:
-                    self.tab.dolphie.main_db_connection.connection.close()
-                if self.tab.dolphie.secondary_db_connection:
-                    self.tab.dolphie.secondary_db_connection.connection.close()
-
                 await self.tab_manager.remove_tab(self.tab.id)
         elif key == "a":
             if self.show_additional_query_columns:

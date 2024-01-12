@@ -59,17 +59,17 @@ class Dolphie:
         self.startup_panels: str = None
         self.graph_marker: str = None
 
-        # Panel display states
-        self.display_dashboard_panel: bool = False
-        self.display_processlist_panel: bool = False
-        self.display_replication_panel: bool = False
-        self.display_graphs_panel: bool = False
-        self.display_locks_panel: bool = False
-
         self.reset_runtime_variables()
 
-    def reset_runtime_variables(self):
+    def reset_runtime_variables(self, include_panels=True):
         self.metric_manager = MetricManager()
+
+        if include_panels:
+            self.display_dashboard_panel: bool = False
+            self.display_processlist_panel: bool = False
+            self.display_replication_panel: bool = False
+            self.display_graphs_panel: bool = False
+            self.display_locks_panel: bool = False
 
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
@@ -151,8 +151,12 @@ class Dolphie:
         except Exception:
             pass
 
-    def is_mysql_version_at_least(self, target):
-        parsed_source = parse_version(self.mysql_version)
+    def is_mysql_version_at_least(self, target, use_version=None):
+        version = self.mysql_version
+        if use_version:
+            version = use_version
+
+        parsed_source = parse_version(version)
         parsed_target = parse_version(target)
 
         return parsed_source >= parsed_target
@@ -364,21 +368,27 @@ class Dolphie:
         if not self.global_status.get("Innodb_lsn_current"):
             self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
 
-    def fetch_replication_data(self, replica_cursor=None):
+    def fetch_replication_data(self, replica_object=None):
+        use_version = self.mysql_version
+        if replica_object:
+            use_version = replica_object["mysql_version"]
+
         if self.heartbeat_table:
             query = MySQLQueries.heartbeat_replica_lag
             replica_lag_source = "HB"
-        elif self.is_mysql_version_at_least("8.0") and self.performance_schema_enabled and not self.mariadb:
-            query = MySQLQueries.ps_replica_lag
+        elif (
+            self.is_mysql_version_at_least("8.0", use_version) and self.performance_schema_enabled and not self.mariadb
+        ):
             replica_lag_source = "PS"
+            query = MySQLQueries.ps_replica_lag
         else:
             query = MySQLQueries.replication_status
             replica_lag_source = None
 
         replica_lag_data = None
-        if replica_cursor:
-            replica_cursor.execute(query)
-            replica_lag_data = replica_cursor.fetchone()
+        if replica_object:
+            replica_object["cursor"].execute(query)
+            replica_lag_data = replica_object["cursor"].fetchone()
         else:
             self.main_db_connection.execute(MySQLQueries.replication_status)
             replica_lag_data = self.main_db_connection.fetchone()
@@ -407,7 +417,7 @@ class Dolphie:
         if replica_lag_data and replica_lag_data["Seconds_Behind_Master"] is not None:
             replica_lag = int(replica_lag_data["Seconds_Behind_Master"])
 
-        if replica_cursor:
+        if replica_object:
             return replica_lag_source, replica_lag
         else:
             # Save the previous replica lag for to determine Speed data point
