@@ -946,6 +946,17 @@ class DolphieApp(App):
                 return
             else:
                 await self.tab_manager.remove_tab(self.tab.id)
+        elif key == "ctrl+a" or key == "ctrl+d":
+            all_tabs = list(self.tab_manager.tabs.keys())
+            all_tabs.sort()
+
+            if key == "ctrl+a":
+                switch_to_tab = all_tabs[(all_tabs.index(self.tab.id) - 1) % len(all_tabs)]
+            elif key == "ctrl+d":
+                switch_to_tab = all_tabs[(all_tabs.index(self.tab.id) + 1) % len(all_tabs)]
+
+            self.tab_manager.tabbed_content.active = f"tab_{switch_to_tab}"
+            self.tab_manager.switch_tab(switch_to_tab)
         elif key == "a":
             if dolphie.show_additional_query_columns:
                 dolphie.show_additional_query_columns = False
@@ -1536,6 +1547,8 @@ class DolphieApp(App):
                 "u": "List active connected users and their statistics",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
                 "z": "Display all entries in the host cache",
+                "ctrl+a": "Switch to the previous tab",
+                "ctrl+d": "Switch to the next tab",
             }
 
             table_keys = Table(box=box.HORIZONTALS, style="table_border", title="Commands", title_style="bold")

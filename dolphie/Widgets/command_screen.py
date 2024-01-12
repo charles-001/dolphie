@@ -21,10 +21,8 @@ class CommandScreen(Screen):
         self.data = data
 
     def on_key(self, event: events.Key):
-        exclude_events = ["up", "down", "left", "right", "pageup", "pagedown", "home", "end", "tab", "enter"]
-        if event.key not in exclude_events:
-            if self.screen.is_attached:
-                self.app.pop_screen()
+        if event.key == "q" and self.screen.is_attached:
+            self.app.pop_screen()
 
     def compose(self) -> ComposeResult:
         yield TopBar(read_only=self.read_only, app_version=self.app_version, host=self.host)
