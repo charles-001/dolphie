@@ -170,16 +170,16 @@ def create_panel(tab: Tab) -> Panel:
     return Group(*[panel for panel in group_panels if panel])
 
 
-def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica_thread_id=None) -> Table:
+def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica_object=None) -> Table:
     dolphie = tab.dolphie
 
-    # When replica_thread_id is specified, that means we're creating a table for a replica and not replication
-    if replica_thread_id:
-        if dolphie.replica_connections[replica_thread_id]["previous_sbm"] is not None:
-            replica_previous_replica_sbm = dolphie.replica_connections[replica_thread_id]["previous_sbm"]
+    # When replica_object is specified, that means we're creating a table for a replica and not replication
+    if replica_object:
+        if replica_object["previous_sbm"] is not None:
+            replica_previous_replica_sbm = replica_object["previous_sbm"]
 
-        db_cursor = dolphie.replica_connections[replica_thread_id]["cursor"]
-        sbm_source, data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica_cursor=db_cursor)
+        db_cursor = replica_object["cursor"]
+        sbm_source, data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica_object=replica_object)
     else:
         data = dolphie.replication_status
         replica_previous_replica_sbm = dolphie.previous_replica_sbm
@@ -191,8 +191,8 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
     if data["Seconds_Behind_Master"] is not None:
         replica_sbm = data["Seconds_Behind_Master"]
 
-        if replica_thread_id:
-            dolphie.replica_connections[replica_thread_id]["previous_sbm"] = replica_sbm
+        if replica_object:
+            replica_object["previous_sbm"] = replica_sbm
 
         if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
             speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.polling_latency)
@@ -233,8 +233,9 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
     else:
         table.add_column(min_width=60, overflow="fold")
 
-    if replica_thread_id:
-        table.add_row("[label]Host", "%s" % dolphie.replica_connections[replica_thread_id]["host"])
+    if replica_object:
+        table.add_row("[label]Host", "%s" % replica_object["host"])
+        table.add_row("[label]Version", "%s" % replica_object["mysql_version"])
     else:
         table.add_row("[label]Primary", "%s" % data["Master_Host"])
 
@@ -303,7 +304,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         ]
 
         for status_filter in replication_status_filtering:
-            if replica_thread_id:
+            if replica_object:
                 value = data.get(status_filter)
             else:
                 value = dolphie.replication_status.get(status_filter)
@@ -330,7 +331,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
             table.add_row("[label]Auto Position", "%s" % data["Auto_Position"])
 
             # We find errant transactions for replicas here
-            if replica_thread_id:
+            if replica_object:
 
                 def remove_primary_uuid_gtid_set(gtid_sets):
                     lines = gtid_sets.splitlines()
@@ -499,6 +500,17 @@ def fetch_replica_table_data(tab: Tab):
                     "cursor": None,
                     "previous_sbm": 0,
                 }
+                replica = dolphie.replica_connections[thread_id]
+                replica["cursor"] = replica["connection"].cursor(pymysql.cursors.DictCursor)
+
+                # Save the MySQL version for the replica
+                replica["cursor"].execute("SELECT @@version")
+                version_split = replica["cursor"].fetchone()["@@version"].split(".")
+                replica["mysql_version"] = "%s.%s.%s" % (
+                    version_split[0],
+                    version_split[1],
+                    version_split[2].split("-")[0],
+                )
             except pymysql.Error as e:
                 table = Table(box=box.ROUNDED, show_header=False, style="table_border")
                 table.add_column()
@@ -510,17 +522,16 @@ def fetch_replica_table_data(tab: Tab):
 
                 replica_tables[host_and_port] = table
 
-        replica_connection = dolphie.replica_connections.get(thread_id)
-        if replica_connection:
-            host_and_port = replica_connection["host"]
+        replica_object = dolphie.replica_connections.get(thread_id)
+        if replica_object:
+            host_and_port = replica_object["host"]
             try:
-                replica_connection["cursor"] = replica_connection["connection"].cursor(pymysql.cursors.DictCursor)
-                replica_connection["cursor"].execute(MySQLQueries.replication_status)
-                replica_data = replica_connection["cursor"].fetchone()
+                replica_object["cursor"].execute(MySQLQueries.replication_status)
+                replica_data = replica_object["cursor"].fetchone()
 
                 if replica_data:
                     replica_tables[host_and_port] = create_replication_table(
-                        tab, data=replica_data, replica_thread_id=thread_id
+                        tab, data=replica_data, replica_object=replica_object
                     )
             except pymysql.Error as e:
                 table = Table(box=box.ROUNDED, show_header=False, style="table_border")
