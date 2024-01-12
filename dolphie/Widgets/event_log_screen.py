@@ -75,12 +75,7 @@ class EventLog(Screen):
             table.move_cursor(row=table.row_count - 1)
 
     def compose(self) -> ComposeResult:
-        yield TopBar(
-            read_only=self.read_only,
-            app_version=self.app_version,
-            host=self.host,
-            help="Press [b]q[/b] to return",
-        )
+        yield TopBar(read_only=self.read_only, app_version=self.app_version, host=self.host)
 
         yield Label("[b white]1[/b white] = top of events/[b white]2[/b white] = bottom of events", id="help")
         with Horizontal():
