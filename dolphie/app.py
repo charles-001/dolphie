@@ -947,17 +947,19 @@ class DolphieApp(App):
             else:
                 await self.tab_manager.remove_tab(self.tab.id)
         elif key == "a":
-            if self.show_additional_query_columns:
-                self.show_additional_query_columns = False
+            if dolphie.show_additional_query_columns:
+                dolphie.show_additional_query_columns = False
+                self.notify("Processlist will now hide additional columns")
             else:
-                self.show_additional_query_columns = True
+                dolphie.show_additional_query_columns = True
+                self.notify("Processlist will now show additional columns")
 
         elif key == "c":
-            self.user_filter = ""
-            self.db_filter = ""
-            self.host_filter = ""
-            self.query_time_filter = ""
-            self.query_filter = ""
+            dolphie.user_filter = ""
+            dolphie.db_filter = ""
+            dolphie.host_filter = ""
+            dolphie.query_time_filter = ""
+            dolphie.query_filter = ""
 
             self.notify("Cleared all filters", severity="success")
 
@@ -1031,7 +1033,7 @@ class DolphieApp(App):
 
                 attribute = filters_mapping.get(filter_name)
                 if attribute:
-                    setattr(self, attribute, int(filter_value) if attribute == "query_time_filter" else filter_value)
+                    setattr(dolphie, attribute, int(filter_value) if attribute == "query_time_filter" else filter_value)
                     self.notify(
                         f"Filtering [b]{filter_name.capitalize()}[/b] by [b highlight]{filter_value}[/b highlight]",
                         severity="success",
@@ -1182,11 +1184,11 @@ class DolphieApp(App):
             table3.add_column("Current", header_style=header_style)
             table3.add_column("Total", header_style=header_style)
 
-            dolphie.execute(MySQLQueries.memory_by_host)
-            data = dolphie.fetchall()
+            dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_host)
+            data = dolphie.secondary_db_connection.fetchall()
             for row in data:
                 table3.add_row(
-                    self.get_hostname(row["host"]),
+                    dolphie.get_hostname(row["host"]),
                     format_sys_table_memory(row["current_allocated"]),
                     format_sys_table_memory(row["total_allocated"]),
                 )
