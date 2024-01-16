@@ -520,11 +520,12 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.binlog_status)
                 dolphie.binlog_status = dolphie.main_db_connection.fetchone()
 
-                if dolphie.global_variables.get("binlog_transaction_compression") == "ON":
-                    dolphie.main_db_connection.execute(MySQLQueries.get_binlog_transaction_compression_percentage)
-                    dolphie.binlog_transaction_compression_percentage = dolphie.main_db_connection.fetchone().get(
-                        "compression_percentage"
-                    )
+                # This can cause MySQL to crash: https://perconadev.atlassian.net/browse/PS-9066
+                # if dolphie.global_variables.get("binlog_transaction_compression") == "ON":
+                #     dolphie.main_db_connection.execute(MySQLQueries.get_binlog_transaction_compression_percentage)
+                #     dolphie.binlog_transaction_compression_percentage = dolphie.main_db_connection.fetchone().get(
+                #         "compression_percentage"
+                #     )
 
             if dolphie.display_replication_panel:
                 dolphie.replica_tables = replication_panel.fetch_replica_table_data(tab)
