@@ -101,10 +101,8 @@ class QuickSwitchHostModal(ModalScreen):
             modal_footer = self.query_one("#modal_footer", Label)
             host_split = host.value.split(":")
             if len(host_split) == 2:
-                host.value = host_split[0]
-                port_str = host_split[1]
                 try:
-                    int(port_str)
+                    int(host_split[1])
                 except ValueError:
                     error_message = "Port must be a valid integer"
             elif len(host_split) > 2:
