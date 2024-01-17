@@ -1,5 +1,3 @@
-import re
-
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -80,7 +78,11 @@ class QuickSwitchHostModal(ModalScreen):
             with Vertical(classes="main_container"):
                 yield Label("Quick Switch Host")
                 yield AutoComplete(
-                    Input(value=self.host, id="host", placeholder="Start typing to search for a host"),
+                    Input(
+                        value=self.host,
+                        id="host",
+                        placeholder="Start typing to search for a host - format is host:port",
+                    ),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
                 )
                 yield Input(id="password", placeholder="Password (empty for current)", password=True)
@@ -97,9 +99,18 @@ class QuickSwitchHostModal(ModalScreen):
             password = self.query_one("#password", Input)
 
             modal_footer = self.query_one("#modal_footer", Label)
-            if not re.match(r"^[a-zA-Z0-9.-]+:\d+$", host.value):
-                error_message = "Host must be in the format of host:port"
-            elif not host.value:
+            host_split = host.value.split(":")
+            if len(host_split) == 2:
+                host.value = host_split[0]
+                port_str = host_split[1]
+                try:
+                    int(port_str)
+                except ValueError:
+                    error_message = "Port must be a valid integer"
+            elif len(host_split) > 2:
+                error_message = "Host cannot contain more than one colon"
+
+            if not host.value:
                 error_message = "Host cannot be empty"
 
             if error_message:

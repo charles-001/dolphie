@@ -23,6 +23,8 @@ class Database:
                 use_unicode=False,
                 ssl=ssl,
                 autocommit=True,
+                read_timeout=5,
+                write_timeout=5,
             )
             self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
         except pymysql.Error as e:
