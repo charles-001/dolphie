@@ -45,7 +45,7 @@ def create_panel(tab: Tab) -> Panel:
             value = setting[0].get(variable, "N/A")
             group_replication_variables += f"[b light_blue]{setting[1]}[/b light_blue] {value}  "
 
-        group_replication_member_tables = create_group_replication_member_table(dolphie)
+        group_replication_member_tables = create_group_replication_member_table(tab)
 
         table_group_members_grid = Table.grid()
         if group_replication_member_tables:

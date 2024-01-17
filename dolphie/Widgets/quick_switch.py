@@ -1,3 +1,5 @@
+import re
+
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -89,12 +91,20 @@ class QuickSwitchHostModal(ModalScreen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "submit":
+            error_message = None
+
             host = self.query_one("#host", Input)
             password = self.query_one("#password", Input)
 
-            if not host.value:
-                self.query_one("#modal_footer", Static).update("Host cannot be empty")
-                self.query_one("#modal_footer", Static).display = True
+            modal_footer = self.query_one("#modal_footer", Label)
+            if not re.match(r"^[a-zA-Z0-9.-]+:\d+$", host.value):
+                error_message = "Host must be in the format of host:port"
+            elif not host.value:
+                error_message = "Host cannot be empty"
+
+            if error_message:
+                modal_footer.update(error_message)
+                modal_footer.display = True
                 return
 
             self.dismiss({"host": host.value, "password": password.value})
