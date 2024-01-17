@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
+from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from textual.app import App
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.widgets import (
@@ -15,7 +16,7 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
-from textual.worker import Worker
+from textual.worker import Worker, WorkerState
 
 
 @dataclass
@@ -39,7 +40,67 @@ class Tab:
     panel_dashboard_data: Static = None
     panel_replication_data: Static = None
 
+    topbar_data: str = "Connecting to MySQL"
+
     queue_for_removal: bool = False
+
+    def update_topbar(self):
+        dolphie = self.dolphie
+
+        if not dolphie.read_only_status:
+            if not self.loading_indicator.display:
+                self.topbar_data = ""
+            return
+
+        if dolphie.main_db_connection and not dolphie.main_db_connection.connection.open:
+            dolphie.read_only_status = "DISCONNECTED"
+
+        self.topbar_data = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
+
+    def quick_switch_connection(self):
+        dolphie = self.dolphie
+
+        def command_get_input(data):
+            host_port = data["host"].split(":")
+
+            dolphie.host = host_port[0]
+            dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
+
+            password = data.get("password")
+            if password:
+                dolphie.password = password
+
+            # Trigger a quick switch connection for the worker thread
+            dolphie.quick_switched_connection = True
+
+            self.loading_indicator.display = True
+            self.main_container.display = False
+            self.sparkline.display = False
+            self.topbar_data = "Connecting to MySQL"
+
+            if not self.worker or self.worker.state == WorkerState.CANCELLED:
+                self.worker_cancel_error = ""
+                self.dolphie.app.worker_fetch_data(self.id)
+
+        self.loading_indicator.display = False
+
+        # If we're here because of a worker cancel error, we want to pre-populate the host/port
+        if self.worker_cancel_error:
+            host = dolphie.host
+            port = dolphie.port
+        else:
+            host = ""
+            port = ""
+
+        self.dolphie.app.push_screen(
+            QuickSwitchHostModal(
+                host=host,
+                port=port,
+                quick_switch_hosts=dolphie.quick_switch_hosts,
+                error_message=self.worker_cancel_error,
+            ),
+            command_get_input,
+        )
 
 
 class TabManager:
@@ -139,9 +200,6 @@ class TabManager:
                             Switch(animate=False, id=metric, name=metric_tab_name)
                         )
 
-        # Switch to the new tab
-        self.tabbed_content.active = f"tab_{tab_id}"
-
         # Create a new tab instance
         dolphie = copy.copy(dolphie)
         dolphie.reset_runtime_variables()
@@ -208,15 +266,28 @@ class TabManager:
         tab = self.get_tab(tab_id)
         tab.queue_for_removal = True
 
-        self.switch_tab(list(self.tabs.keys())[-1])
-
     def switch_tab(self, tab_id: int):
         tab = self.get_tab(tab_id)
 
         self.app.tab = tab  # Update the current tab variable for the app
 
-        self.app.update_topbar(tab=tab)
+        self.tabbed_content.active = f"tab_{tab.id}"
+
+        tab.update_topbar()
+
+        # Update the topbar
+        self.app.topbar.host = tab.topbar_data
 
     def get_tab(self, id: int) -> Tab:
         if id in self.tabs:
             return self.tabs[id]
+
+    def get_all_tabs(self) -> list:
+        all_tabs = []
+
+        for tab in self.tabs.values():
+            tab: Tab
+            if not tab.queue_for_removal:
+                all_tabs.append(tab.id)
+
+        return all_tabs

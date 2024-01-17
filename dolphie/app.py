@@ -31,7 +31,6 @@ from dolphie.Panels import (
 from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.modal import CommandModal
-from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from dolphie.Widgets.topbar import TopBar
 from rich import box
 from rich.align import Align
@@ -465,11 +464,24 @@ class DolphieApp(App):
                     connection["connection"].close()
 
             self.tab_manager.tabs.pop(tab.id, None)
+
             tab.worker.cancel()
             return
 
         if dolphie.quick_switched_connection:
-            self.quick_host_switch(tab)
+            dolphie.reset_runtime_variables(include_panels=False)
+            self.quick_switched_connection = False
+
+            # Set the graph switches to what they're currently selected to since we reset metric_manager
+            switches = self.app.query(f".switch_container_{self.tab.id} Switch")
+            for switch in switches:
+                switch: Switch
+                metric_instance_name = switch.name
+                metric = switch.id
+
+                metric_instance = getattr(dolphie.metric_manager.metrics, metric_instance_name)
+                metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+                metric_data.visible = switch.value
 
         if dolphie.metric_manager.worker_start_time:
             dolphie.metric_manager.update_metrics_with_last_value()
@@ -547,7 +559,7 @@ class DolphieApp(App):
                 dolphie.replica_data = {}
                 dolphie.replica_tables = {}
 
-            self.monitor_read_only_change(tab)
+            dolphie.monitor_read_only_change()
 
             dolphie.metric_manager.refresh_data(
                 worker_start_time=dolphie.worker_start_time,
@@ -604,10 +616,9 @@ class DolphieApp(App):
                         timeout=10,
                     )
 
-                self.tab_manager.tabbed_content.active = f"tab_{tab.id}"
                 self.tab_manager.switch_tab(tab.id)
 
-                self.quick_switch_connection(tab)
+                tab.quick_switch_connection()
                 self.bell()
 
     def refresh_screen(self, tab: Tab):
@@ -625,8 +636,11 @@ class DolphieApp(App):
                 for panel in dolphie.startup_panels:
                     self.query_one(f"#panel_{panel}_{tab.id}").display = True
 
-            # Set read-only mode for header
-            self.update_topbar(tab=tab)
+            # Update tab's topbar data
+            tab.update_topbar()
+
+            if self.tab.id == tab.id:
+                self.topbar.host = tab.topbar_data
 
             if dolphie.display_dashboard_panel:
                 self.refresh_panel("dashboard")
@@ -673,49 +687,6 @@ class DolphieApp(App):
             # with worker thread/state change due to asynchronous nature of the worker thread
             pass
 
-    def quick_switch_connection(self, tab: Tab):
-        def command_get_input(data):
-            host_port = data["host"].split(":")
-
-            tab.dolphie.host = host_port[0]
-            tab.dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
-
-            password = data.get("password")
-            if password:
-                tab.dolphie.password = password
-
-            # Trigger a quick switch connection for the worker thread
-            tab.dolphie.quick_switched_connection = True
-
-            tab.loading_indicator.display = True
-            tab.main_container.display = False
-            tab.sparkline.display = False
-            self.topbar.host = "Connecting to MySQL"
-
-            if not tab.worker or tab.worker.state == WorkerState.CANCELLED:
-                tab.worker_cancel_error = ""
-                self.worker_fetch_data(tab.id)
-
-        tab.loading_indicator.display = False
-
-        # If we're here because of a worker cancel error, we want to pre-populate the host/port
-        if tab.worker_cancel_error:
-            host = tab.dolphie.host
-            port = tab.dolphie.port
-        else:
-            host = ""
-            port = ""
-
-        self.app.push_screen(
-            QuickSwitchHostModal(
-                host=host,
-                port=port,
-                quick_switch_hosts=tab.dolphie.quick_switch_hosts,
-                error_message=tab.worker_cancel_error,
-            ),
-            command_get_input,
-        )
-
     async def on_key(self, event: events.Key):
         if len(self.screen_stack) > 1:
             return
@@ -742,7 +713,6 @@ class DolphieApp(App):
     @on(TabbedContent.TabActivated, "#tabbed_content")
     def tab_changed(self, event: TabbedContent.TabActivated):
         self.tab_manager.switch_tab(event.pane.name)
-        self.update_topbar(tab=self.tab)
 
         if self.tab.dolphie.main_db_connection:
             self.refresh_screen(self.tab)
@@ -800,58 +770,6 @@ class DolphieApp(App):
         elif panel_name == "locks":
             locks_panel.create_panel(self.tab)
 
-    def monitor_read_only_change(self, tab: Tab):
-        dolphie = tab.dolphie
-
-        current_ro_status = dolphie.global_variables.get("read_only")
-        formatted_ro_status = "RO" if current_ro_status == "ON" else "R/W"
-        status = "read-only" if current_ro_status == "ON" else "read/write"
-
-        message = (
-            f"Host [light_blue]{dolphie.host}:{dolphie.port}[/light_blue] is now [b highlight]{status}[/b highlight]"
-        )
-
-        if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
-            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
-        elif current_ro_status == "ON" and dolphie.group_replication and dolphie.is_group_replication_primary:
-            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
-
-        if dolphie.read_only_status != formatted_ro_status and dolphie.first_loop:
-            self.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
-
-        dolphie.read_only_status = formatted_ro_status
-
-    def update_topbar(self, tab: Tab):
-        dolphie = tab.dolphie
-
-        if not dolphie.read_only_status:
-            if not tab.loading_indicator.display:
-                self.topbar.host = ""
-            return
-
-        if self.tab.id == tab.id:
-            if dolphie.main_db_connection and not dolphie.main_db_connection.connection.open:
-                dolphie.read_only_status = "DISCONNECTED"
-
-            self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
-
-    def quick_host_switch(self, tab: Tab):
-        dolphie = tab.dolphie
-
-        dolphie.reset_runtime_variables(include_panels=False)
-        dolphie.quick_switched_connection = False
-
-        # Set the graph switches to what they're currently selected to since we reset metric_manager
-        switches = self.query(f".switch_container_{tab.id} Switch")
-        for switch in switches:
-            switch: Switch
-            metric_instance_name = switch.name
-            metric = switch.id
-
-            metric_instance = getattr(dolphie.metric_manager.metrics, metric_instance_name)
-            metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
-            metric_data.visible = switch.value
-
     def layout_graphs(self):
         if self.tab.dolphie.is_mysql_version_at_least("8.0.30"):
             self.query_one(f"#graph_redo_log_{self.tab.id}").styles.width = "55%"
@@ -905,6 +823,8 @@ class DolphieApp(App):
             "question_mark",
             "plus",
             "minus",
+            "ctrl+a",
+            "ctrl+d",
         ]
         if not dolphie.main_db_connection and key not in exclude_keys:
             self.notify("Database connection must be established before using commands")
@@ -929,13 +849,13 @@ class DolphieApp(App):
             self.toggle_panel("locks")
             self.app.query_one(f"#panel_locks_{self.tab.id}").clear()
         elif key == "grave_accent":
-            self.quick_switch_connection(self.tab)
+            self.tab.quick_switch_connection()
         elif key == "plus":
 
             async def command_get_input(tab_name):
                 await self.tab_manager.create_tab(tab_name, dolphie)
                 self.topbar.host = ""
-                self.quick_switch_connection(self.tab)
+                self.tab.quick_switch_connection()
 
             self.app.push_screen(
                 CommandModal(command="new_tab", message="What would you like to name the new tab?"),
@@ -948,16 +868,15 @@ class DolphieApp(App):
             else:
                 await self.tab_manager.remove_tab(self.tab.id)
         elif key == "ctrl+a" or key == "ctrl+d":
-            all_tabs = list(self.tab_manager.tabs.keys())
-            all_tabs.sort()
+            all_tabs = self.tab_manager.get_all_tabs()
 
             if key == "ctrl+a":
                 switch_to_tab = all_tabs[(all_tabs.index(self.tab.id) - 1) % len(all_tabs)]
             elif key == "ctrl+d":
                 switch_to_tab = all_tabs[(all_tabs.index(self.tab.id) + 1) % len(all_tabs)]
 
-            self.tab_manager.tabbed_content.active = f"tab_{switch_to_tab}"
             self.tab_manager.switch_tab(switch_to_tab)
+
         elif key == "a":
             if dolphie.show_additional_query_columns:
                 dolphie.show_additional_query_columns = False
@@ -1125,7 +1044,6 @@ class DolphieApp(App):
                                 threads_killed += 1
                     except Exception as e:
                         self.notify(str(e), title="Error Killing Thread ID", severity="error")
-                        return
 
                 if threads_killed:
                     self.notify(f"Killed [highlight]{threads_killed}[/highlight] threads")

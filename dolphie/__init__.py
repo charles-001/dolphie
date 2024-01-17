@@ -263,6 +263,23 @@ class Dolphie:
                 file.write(host)
                 self.quick_switch_hosts.append(host[:-1])  # remove the \n
 
+    def monitor_read_only_change(self):
+        current_ro_status = self.global_variables.get("read_only")
+        formatted_ro_status = "RO" if current_ro_status == "ON" else "R/W"
+        status = "read-only" if current_ro_status == "ON" else "read/write"
+
+        message = f"Host [light_blue]{self.host}:{self.port}[/light_blue] is now [b highlight]{status}[/b highlight]"
+
+        if current_ro_status == "ON" and not self.replication_status and not self.group_replication:
+            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+        elif current_ro_status == "ON" and self.group_replication and self.is_group_replication_primary:
+            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+
+        if self.read_only_status != formatted_ro_status and self.first_loop:
+            self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
+
+        self.read_only_status = formatted_ro_status
+
     def command_input_to_variable(self, return_data):
         variable = return_data[0]
         value = return_data[1]
