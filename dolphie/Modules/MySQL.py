@@ -1,5 +1,4 @@
 import pymysql
-from dolphie.Modules.Functions import detect_encoding
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
 
@@ -52,10 +51,7 @@ class Database:
 
         for field, value in row.items():
             if isinstance(value, (bytes, bytearray)):
-                if "query" in field:
-                    processed_row[field] = value.decode(detect_encoding(value))
-                else:
-                    processed_row[field] = value.decode()
+                processed_row[field] = value.decode()
             else:
                 processed_row[field] = value
 
@@ -88,9 +84,8 @@ class Database:
         value = data.get(field)
 
         if isinstance(value, (bytes, bytearray)):
-            if field == "Status":
-                return value.decode(detect_encoding(value))
             return value.decode()
+
         return value
 
     def fetch_status_and_variables(self, command):
