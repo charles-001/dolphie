@@ -198,7 +198,10 @@ def fetch_data(tab: Tab):
 
     for thread in threads:
         # Don't include Dolphie's threads
-        if dolphie.main_db_connection_id == thread["id"] or dolphie.secondary_db_connection_id == thread["id"]:
+        if (
+            dolphie.main_db_connection.connection_id == thread["id"]
+            or dolphie.secondary_db_connection.connection_id == thread["id"]
+        ):
             continue
 
         command = thread["command"]

@@ -274,6 +274,9 @@ Toast.-success {
     border-left: wide #5bd088;
     border-right: wide #192036;
 }
+Toast.-success .toast--title {
+    color: #6ae398;
+}
 Toast.-error {
     border-left: wide #f05757;
     border-right: wide #192036;

@@ -125,8 +125,6 @@ class Dolphie:
         self.main_db_connection: Database = None
         # Secondary connection is for ad-hoc commands that are not a part of the worker thread
         self.secondary_db_connection: Database = None
-        self.main_db_connection_id: int = None
-        self.secondary_db_connection_id: int = None
         self.performance_schema_enabled: bool = False
         self.use_performance_schema: bool = True
         self.server_uuid: str = None
@@ -162,16 +160,12 @@ class Dolphie:
         return parsed_source >= parsed_target
 
     def db_connect(self):
-        self.main_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
-        self.secondary_db_connection = Database(self.host, self.user, self.password, self.socket, self.port, self.ssl)
-
-        # Get connection IDs so we can exclude them from processlist
-        self.main_db_connection_id = self.main_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
-        self.secondary_db_connection_id = self.secondary_db_connection.fetch_value_from_field("SELECT CONNECTION_ID()")
-
-        # Reduce any issues with the queries Dolphie runs (mostly targetting only_full_group_by)
-        self.main_db_connection.execute("SET SESSION sql_mode = ''")
-        self.secondary_db_connection.execute("SET SESSION sql_mode = ''")
+        self.main_db_connection = Database(
+            self.app, self.tab_name, self.host, self.user, self.password, self.socket, self.port, self.ssl
+        )
+        self.secondary_db_connection = Database(
+            self.app, self.tab_name, self.host, self.user, self.password, self.socket, self.port, self.ssl
+        )
 
         global_variables = self.main_db_connection.fetch_status_and_variables("variables")
 
