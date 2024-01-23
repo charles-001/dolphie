@@ -27,7 +27,8 @@ class ManualException(Exception):
 
         if self.reason:
             # pymysql for some reason returns "ny connections" instead of "Too many connections"
-            self.reason = self.reason.replace("ny connections", "Too many connections")
+            if isinstance(self.reason, str):
+                self.reason = self.reason.replace("ny connections", "Too many connections")
 
             table_exception.add_row(self.reason)
 

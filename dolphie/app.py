@@ -598,13 +598,15 @@ class DolphieApp(App):
                 or tab.id != self.tab.id
                 or dolphie.quick_switched_connection
             ):
-                self.set_timer(tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id))
+                self.worker_timer = self.set_timer(
+                    tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id)
+                )
 
                 return
 
             self.refresh_screen(tab)
 
-            self.set_timer(tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id))
+            self.worker_timer = self.set_timer(tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id))
         elif event.state == WorkerState.CANCELLED:
             # Only show the modal if there's a worker cancel error
             if tab.worker_cancel_error:
@@ -850,6 +852,10 @@ class DolphieApp(App):
             self.app.query_one(f"#panel_locks_{self.tab.id}").clear()
         elif key == "grave_accent":
             self.tab.quick_switch_connection()
+        elif key == "space":
+            if self.tab.worker.state != WorkerState.RUNNING:
+                self.worker_timer.stop()
+                self.worker_fetch_data(self.tab.id)
         elif key == "plus":
 
             async def command_get_input(tab_name):
@@ -1466,6 +1472,7 @@ class DolphieApp(App):
                 "u": "List active connected users and their statistics",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
                 "z": "Display all entries in the host cache",
+                "space": "Force a manual refresh of all panels",
                 "ctrl+a": "Switch to the previous tab",
                 "ctrl+d": "Switch to the next tab",
             }
