@@ -6,6 +6,7 @@ from dolphie import Dolphie
 from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from textual.app import App
 from textual.containers import Container, Horizontal, VerticalScroll
+from textual.timer import Timer
 from textual.widgets import (
     DataTable,
     Label,
@@ -26,6 +27,7 @@ class Tab:
     dolphie: Dolphie
 
     worker: Worker = None
+    worker_timer: Timer = None
     worker_cancel_error: str = None
 
     main_container: VerticalScroll = None
