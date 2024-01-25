@@ -45,6 +45,9 @@ class Tab:
     dashboard_statistics: Static = None
     dashboard_replication: Static = None
 
+    replication_status: Static = None
+    replication_thread_applier: Static = None
+
     panel_dashboard_data: Static = None
     panel_replication_data: Static = None
 
@@ -146,6 +149,8 @@ class TabManager:
                         classes="panel_container",
                     ),
                     VerticalScroll(
+                        Static(id=f"replication_status_{tab_id}", classes="replication_status"),
+                        Static(id=f"replication_thread_applier_{tab_id}", classes="replication_thread_applier"),
                         Static(id=f"panel_replication_data_{tab_id}", classes="panel_data"),
                         id=f"panel_replication_{tab_id}",
                         classes="panel_container",
@@ -241,6 +246,9 @@ class TabManager:
         tab.dashboard_binary_log = self.app.query_one(f"#dashboard_binary_log_{tab.id}", Static)
         tab.dashboard_statistics = self.app.query_one(f"#dashboard_statistics_{tab.id}", Static)
         tab.dashboard_replication = self.app.query_one(f"#dashboard_replication_{tab.id}", Static)
+
+        tab.replication_status = self.app.query_one(f"#replication_status_{tab.id}", Static)
+        tab.replication_thread_applier = self.app.query_one(f"#replication_thread_applier_{tab.id}", Static)
 
         tab.panel_replication_data = self.app.query_one(f"#panel_replication_data_{tab.id}", Static)
 

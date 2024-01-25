@@ -235,7 +235,7 @@ def create_panel(tab: Tab) -> Table:
     )
 
     table_stats.add_column()
-    table_stats.add_column()
+    table_stats.add_column(min_width=6)
 
     # Add DML statistics
     metrics = dolphie.metric_manager.metrics.dml

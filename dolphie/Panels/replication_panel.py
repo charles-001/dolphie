@@ -150,8 +150,10 @@ def create_panel(tab: Tab) -> Panel:
                     last_applied_transaction,
                 )
 
+            tab.replication_thread_applier.update(table_thread_applier_status)
+
         table_grid_replication = Table.grid()
-        table_grid_replication.add_row(create_replication_table(tab), table_thread_applier_status)
+        # table_grid_replication.add_row(create_replication_table(tab))
 
         return Panel(
             Group(Align.center(replication_variables), Align.center(table_grid_replication)),
@@ -236,8 +238,8 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         )
 
     if dashboard_table:
-        table.add_column(width=22)
         table.add_column(no_wrap=True)
+        table.add_column()
     else:
         table.add_column()
         table.add_column(min_width=60, overflow="fold")
@@ -399,8 +401,9 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
 
     if dashboard_table:
         tab.dashboard_replication.update(table)
-
-    return table
+    else:
+        tab.replication_status.update(table)
+    # return table
 
 
 def create_group_replication_member_table(tab: Tab):
