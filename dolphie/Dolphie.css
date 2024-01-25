@@ -62,6 +62,36 @@ TopBar {
     color: #8f9fc1;
 }
 
+.dashboard  {
+    dock: top;
+    margin-bottom: 1;
+}
+.dashboard > Center {
+    layout: horizontal;
+    content-align: center middle;
+}
+.dashboard > Center > * {
+    content-align: center top;
+    background: #0b1221;
+    border: tall #1c2238;
+    height: 11;
+}
+.dashboard > Center > .dashboard_host_information {
+    width: 24vw;
+}
+.dashboard > Center > .dashboard_innodb_information {
+    width: 18vw;
+}
+.dashboard > Center > .dashboard_binary_log {
+    width: 20vw;
+}
+.dashboard > Center > .dashboard_replication {
+    width: 25vw;
+}
+.dashboard > Center > .dashboard_statistics {
+    width: 12vw;
+}
+
 TabPane {
     padding: 0;
 }

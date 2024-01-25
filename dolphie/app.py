@@ -761,10 +761,10 @@ class DolphieApp(App):
             self.tab.panel_replication_data.update(replication_panel.create_panel(self.tab))
 
             if toggled and self.tab.dolphie.replication_status:
-                self.tab.panel_dashboard_data.update(dashboard_panel.create_panel(self.tab))
+                dashboard_panel.create_panel(self.tab)
 
         elif panel_name == "dashboard":
-            self.tab.panel_dashboard_data.update(dashboard_panel.create_panel(self.tab))
+            dashboard_panel.create_panel(self.tab)
         elif panel_name == "processlist":
             processlist_panel.create_panel(self.tab)
         elif panel_name == "locks":

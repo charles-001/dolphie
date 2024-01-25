@@ -219,18 +219,27 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
     if dashboard_table:
         table_title = "Replication"
 
-    table = Table(
-        show_header=False,
-        box=box.ROUNDED,
-        title=table_title,
-        title_style=Style(bold=True),
-        style="table_border",
-    )
-
-    table.add_column()
-    if dashboard_table:
-        table.add_column(max_width=25, no_wrap=True)
+        table = Table(
+            show_header=False,
+            box=None,
+            title=table_title,
+            title_style=Style(color="#bbc8e8", bold=True),
+            style="table_border",
+        )
     else:
+        table = Table(
+            show_header=False,
+            box=box.ROUNDED,
+            title=table_title,
+            title_style=Style(bold=True),
+            style="table_border",
+        )
+
+    if dashboard_table:
+        table.add_column(width=22)
+        table.add_column(no_wrap=True)
+    else:
+        table.add_column()
         table.add_column(min_width=60, overflow="fold")
 
     if replica_object:
@@ -387,6 +396,9 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
             table.add_row("[label]Executed GTID", "%s" % executed_gtid_set)
         elif mariadb_gtid_enabled:
             table.add_row("[label]GTID IO Pos", "%s" % data["Gtid_IO_Pos"])
+
+    if dashboard_table:
+        tab.dashboard_replication.update(table)
 
     return table
 

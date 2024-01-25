@@ -5,7 +5,7 @@ import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
 from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from textual.app import App
-from textual.containers import Container, Horizontal, VerticalScroll
+from textual.containers import Center, Container, Horizontal, VerticalScroll
 from textual.timer import Timer
 from textual.widgets import (
     DataTable,
@@ -38,6 +38,12 @@ class Tab:
     panel_replication: VerticalScroll = None
     panel_locks: DataTable = None
     panel_processlist: DataTable = None
+
+    dashboard_host_information: Static = None
+    dashboard_innodb: Static = None
+    dashboard_binary_log: Static = None
+    dashboard_statistics: Static = None
+    dashboard_replication: Static = None
 
     panel_dashboard_data: Static = None
     panel_replication_data: Static = None
@@ -123,11 +129,17 @@ class TabManager:
                 LoadingIndicator(id=f"loading_indicator_{tab_id}"),
                 VerticalScroll(
                     Container(
-                        Static(id=f"panel_dashboard_data_{tab_id}", classes="panel_data"),
-                        Sparkline([], id=f"panel_dashboard_queries_qps_{tab_id}"),
+                        Center(
+                            Static(id=f"dashboard_host_information_{tab_id}", classes="dashboard_host_information"),
+                            Static(id=f"dashboard_innodb_{tab_id}", classes="dashboard_innodb_information"),
+                            Static(id=f"dashboard_binary_log_{tab_id}", classes="dashboard_binary_log"),
+                            Static(id=f"dashboard_replication_{tab_id}", classes="dashboard_replication"),
+                            Static(id=f"dashboard_statistics_{tab_id}", classes="dashboard_statistics"),
+                        ),
                         id=f"panel_dashboard_{tab_id}",
-                        classes="panel_container",
+                        classes="panel_container dashboard",
                     ),
+                    Sparkline([], id=f"panel_dashboard_queries_qps_{tab_id}"),
                     Container(
                         TabbedContent(id=f"tabbed_content_{tab_id}", classes="metrics_tabbed_content"),
                         id=f"panel_graphs_{tab_id}",
@@ -224,7 +236,12 @@ class TabManager:
         tab.panel_locks = self.app.query_one(f"#panel_locks_{tab.id}", DataTable)
         tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", DataTable)
 
-        tab.panel_dashboard_data = self.app.query_one(f"#panel_dashboard_data_{tab.id}", Static)
+        tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
+        tab.dashboard_innodb = self.app.query_one(f"#dashboard_innodb_{tab.id}", Static)
+        tab.dashboard_binary_log = self.app.query_one(f"#dashboard_binary_log_{tab.id}", Static)
+        tab.dashboard_statistics = self.app.query_one(f"#dashboard_statistics_{tab.id}", Static)
+        tab.dashboard_replication = self.app.query_one(f"#dashboard_replication_{tab.id}", Static)
+
         tab.panel_replication_data = self.app.query_one(f"#panel_replication_data_{tab.id}", Static)
 
         tab.panel_processlist.classes = "panel_container pad_top_1"
