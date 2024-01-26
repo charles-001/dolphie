@@ -114,12 +114,13 @@ def create_panel(tab: Tab):
                                 Static(replica_table, id=f"replica_{replica_id}_{tab.id}", classes=f"replica_{tab.id}"),
                             )
                         )
-        elif not dolphie.replica_connections:
+        elif not dolphie.replica_connections and dolphie.replica_data:
             tab.replicas_container.mount(
                 LoadingIndicator(),
                 Center(Label(f"\n[b]Loading [light_blue]{len(dolphie.replica_data)}[/light_blue] replicas...")),
             )
         else:
+            tab.replicas_container.remove_children()
             tab.replicas_container.display = False
 
     def create_cluster_panel():
