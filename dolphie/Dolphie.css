@@ -103,30 +103,37 @@ TopBar {
     layout: horizontal;
     content-align: center middle;
 }
-.replication > Center > * {
+.replication > Center > ScrollableContainer {
     content-align: center top;
     background: #0b1221;
     border: tall #1c2238;
+    height: auto;
+    max-height: 18;
+}
+.replication > Center > ScrollableContainer > Static {
     width: auto;
 }
 .replication > Center > .replication_status {
-    max-width: 60vw;
+    max-width: 85;
 }
 .replication > Center > .replication_thread_applier {
-    max-width: 40vw;
+    max-width: 60;
 }
 
 .replicas {
     height: auto;
 }
-.replicas > Container > VerticalScroll  {
+.replicas > Container > ScrollableContainer  {
     background: #0b1221;
     border: tall #1c2238;
     height: auto;
     max-height: 18;
     width: 50vw;
 }
-.replicas > Container > VerticalScroll > Label {
+.replicas > Container > ScrollableContainer > Static {
+    width: auto;
+}
+.replicas > Container > ScrollableContainer > Label {
     width: 100%;
     content-align: center middle;
     color: #bbc8e8;

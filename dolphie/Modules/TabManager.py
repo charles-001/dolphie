@@ -5,7 +5,13 @@ import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
 from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from textual.app import App
-from textual.containers import Center, Container, Horizontal, VerticalScroll
+from textual.containers import (
+    Center,
+    Container,
+    Horizontal,
+    ScrollableContainer,
+    VerticalScroll,
+)
 from textual.timer import Timer
 from textual.widgets import (
     DataTable,
@@ -49,6 +55,7 @@ class Tab:
     replication_container: Container = None
     replication_variables: Label = None
     replication_status: Static = None
+    replication_thread_applier_container: ScrollableContainer = None
     replication_thread_applier: Static = None
 
     replicas_container: Container = None
@@ -158,8 +165,14 @@ class TabManager:
                             Label("[b]Replication\n"),
                             Label(id=f"replication_variables_{tab_id}"),
                             Center(
-                                Static(id=f"replication_status_{tab_id}", classes="replication_status"),
-                                Static(id=f"replication_thread_applier_{tab_id}", classes="replication_thread_applier"),
+                                ScrollableContainer(
+                                    Static(id=f"replication_status_{tab_id}"), classes="replication_status"
+                                ),
+                                ScrollableContainer(
+                                    Static(id=f"replication_thread_applier_{tab_id}"),
+                                    id=f"replication_thread_applier_container_{tab_id}",
+                                    classes="replication_thread_applier",
+                                ),
                             ),
                             Rule(line_style="heavy"),
                             id=f"replication_container_{tab_id}",
@@ -268,6 +281,9 @@ class TabManager:
         tab.replication_container = self.app.query_one(f"#replication_container_{tab.id}", Container)
         tab.replication_variables = self.app.query_one(f"#replication_variables_{tab.id}", Label)
         tab.replication_status = self.app.query_one(f"#replication_status_{tab.id}", Static)
+        tab.replication_thread_applier_container = self.app.query_one(
+            f"#replication_thread_applier_container_{tab.id}", ScrollableContainer
+        )
         tab.replication_thread_applier = self.app.query_one(f"#replication_thread_applier_{tab.id}", Static)
 
         tab.panel_processlist.classes = "panel_container pad_top_1"

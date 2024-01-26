@@ -11,7 +11,7 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
-from textual.containers import Center, Container, VerticalScroll
+from textual.containers import Center, Container, ScrollableContainer
 from textual.widgets import Label, LoadingIndicator, Static
 
 
@@ -109,7 +109,7 @@ def create_panel(tab: Tab):
                         existing_replica[0].update(replica_table)
                     else:
                         container.mount(
-                            VerticalScroll(
+                            ScrollableContainer(
                                 Label(replica_host),
                                 Static(replica_table, id=f"replica_{replica_id}_{tab.id}", classes=f"replica_{tab.id}"),
                             )
@@ -191,9 +191,9 @@ def create_panel(tab: Tab):
                 )
 
             tab.replication_thread_applier.update(table_thread_applier_status)
-            tab.replication_thread_applier.display = True
+            tab.replication_thread_applier_container.display = True
         else:
-            tab.replication_thread_applier.display = False
+            tab.replication_thread_applier_container.display = False
 
         tab.replication_variables.update(replication_variables)
         create_replication_table(tab)
