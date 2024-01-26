@@ -103,8 +103,8 @@ class Dolphie:
         # These are for replicas in replication panel
         self.replica_data: dict = {}
         self.replica_connections: dict = {}
-        self.replica_tables: dict = {}
         self.replica_ports: dict = {}
+        self.replica_increment_num: int = 1
 
         # Types of hosts
         self.galera_cluster: bool = False

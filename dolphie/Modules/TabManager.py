@@ -11,6 +11,7 @@ from textual.widgets import (
     DataTable,
     Label,
     LoadingIndicator,
+    Rule,
     Sparkline,
     Static,
     Switch,
@@ -35,7 +36,7 @@ class Tab:
     sparkline: Sparkline = None
     panel_dashboard: Container = None
     panel_graphs: Container = None
-    panel_replication: VerticalScroll = None
+    panel_replication: Container = None
     panel_locks: DataTable = None
     panel_processlist: DataTable = None
 
@@ -45,11 +46,14 @@ class Tab:
     dashboard_statistics: Static = None
     dashboard_replication: Static = None
 
+    replication_container: Container = None
+    replication_variables: Label = None
     replication_status: Static = None
     replication_thread_applier: Static = None
 
-    panel_dashboard_data: Static = None
-    panel_replication_data: Static = None
+    replicas_container: Container = None
+
+    cluster_data: Static = None
 
     topbar_data: str = "Connecting to MySQL"
 
@@ -139,21 +143,32 @@ class TabManager:
                             Static(id=f"dashboard_replication_{tab_id}", classes="dashboard_replication"),
                             Static(id=f"dashboard_statistics_{tab_id}", classes="dashboard_statistics"),
                         ),
+                        Sparkline([], id=f"panel_dashboard_queries_qps_{tab_id}"),
                         id=f"panel_dashboard_{tab_id}",
                         classes="panel_container dashboard",
                     ),
-                    Sparkline([], id=f"panel_dashboard_queries_qps_{tab_id}"),
                     Container(
                         TabbedContent(id=f"tabbed_content_{tab_id}", classes="metrics_tabbed_content"),
                         id=f"panel_graphs_{tab_id}",
                         classes="panel_container",
                     ),
-                    VerticalScroll(
-                        Static(id=f"replication_status_{tab_id}", classes="replication_status"),
-                        Static(id=f"replication_thread_applier_{tab_id}", classes="replication_thread_applier"),
-                        Static(id=f"panel_replication_data_{tab_id}", classes="panel_data"),
+                    Container(
+                        Container(
+                            Rule(line_style="heavy"),
+                            Label("[b]Replication\n"),
+                            Label(id=f"replication_variables_{tab_id}"),
+                            Center(
+                                Static(id=f"replication_status_{tab_id}", classes="replication_status"),
+                                Static(id=f"replication_thread_applier_{tab_id}", classes="replication_thread_applier"),
+                            ),
+                            Rule(line_style="heavy"),
+                            id=f"replication_container_{tab_id}",
+                            classes="replication",
+                        ),
+                        Container(id=f"replicas_container_{tab_id}", classes="replicas"),
+                        Static(id=f"cluster_data_{tab_id}"),
                         id=f"panel_replication_{tab_id}",
-                        classes="panel_container",
+                        classes="panel_container replication_panel",
                     ),
                     DataTable(id=f"panel_locks_{tab_id}", classes="panel_data", show_cursor=False),
                     DataTable(id=f"panel_processlist_{tab_id}", classes="panel_data", show_cursor=False),
@@ -237,7 +252,7 @@ class TabManager:
         tab.sparkline = self.app.query_one(f"#panel_dashboard_queries_qps_{tab.id}", Sparkline)
         tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)
         tab.panel_graphs = self.app.query_one(f"#panel_graphs_{tab.id}", Container)
-        tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", VerticalScroll)
+        tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
         tab.panel_locks = self.app.query_one(f"#panel_locks_{tab.id}", DataTable)
         tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", DataTable)
 
@@ -247,10 +262,13 @@ class TabManager:
         tab.dashboard_statistics = self.app.query_one(f"#dashboard_statistics_{tab.id}", Static)
         tab.dashboard_replication = self.app.query_one(f"#dashboard_replication_{tab.id}", Static)
 
+        tab.replicas_container = self.app.query_one(f"#replicas_container_{tab.id}", Container)
+        tab.cluster_data = self.app.query_one(f"#cluster_data_{tab.id}", Static)
+
+        tab.replication_container = self.app.query_one(f"#replication_container_{tab.id}", Container)
+        tab.replication_variables = self.app.query_one(f"#replication_variables_{tab.id}", Label)
         tab.replication_status = self.app.query_one(f"#replication_status_{tab.id}", Static)
         tab.replication_thread_applier = self.app.query_one(f"#replication_thread_applier_{tab.id}", Static)
-
-        tab.panel_replication_data = self.app.query_one(f"#panel_replication_data_{tab.id}", Static)
 
         tab.panel_processlist.classes = "panel_container pad_top_1"
         tab.panel_locks.classes = "panel_container pad_top_1"

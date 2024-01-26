@@ -25,10 +25,11 @@ DataTable {
 Graph {
     height: 16;
 }
-
-Horizontal {
-    height: auto;
+Rule {
+    color: #293351;
+    margin: 0;
 }
+
 LoadingIndicator {
     color: #8fb0ee;
     height: 20%;
@@ -64,7 +65,6 @@ TopBar {
 
 .dashboard  {
     dock: top;
-    margin-bottom: 1;
 }
 .dashboard > Center {
     layout: horizontal;
@@ -90,6 +90,55 @@ TopBar {
 }
 .dashboard > Center > .dashboard_statistics {
     width: 12vw;
+}
+
+.replication {
+    height: auto;
+}
+.replication > Label {
+    width: 100%;
+    content-align: center middle;
+}
+.replication > Center {
+    layout: horizontal;
+    content-align: center middle;
+}
+.replication > Center > * {
+    content-align: center top;
+    background: #0b1221;
+    border: tall #1c2238;
+    width: auto;
+}
+.replication > Center > .replication_status {
+    max-width: 60vw;
+}
+.replication > Center > .replication_thread_applier {
+    max-width: 40vw;
+}
+
+.replicas {
+    height: auto;
+}
+.replicas > Container > VerticalScroll  {
+    background: #0b1221;
+    border: tall #1c2238;
+    height: auto;
+    max-height: 18;
+    width: 50vw;
+}
+.replicas > Container > VerticalScroll > Label {
+    width: 100%;
+    content-align: center middle;
+    color: #bbc8e8;
+    text-style: bold;
+}
+.replica_container {
+    height: auto;
+    layout: horizontal;
+}
+
+.pad_bottom_1 {
+    padding-bottom: 1;
 }
 
 TabPane {

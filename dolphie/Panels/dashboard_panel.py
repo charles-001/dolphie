@@ -95,7 +95,7 @@ def create_panel(tab: Tab) -> Table:
     )
 
     table_innodb.add_column()
-    table_innodb.add_column()
+    table_innodb.add_column(width=9)
 
     history_list_length = dolphie.innodb_metrics.get("trx_rseg_history_len", "N/A")
 

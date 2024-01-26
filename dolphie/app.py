@@ -428,6 +428,7 @@ class DolphieApp(App):
                 "dark_gray": "#969aad",
                 "highlight": "#91abec",
                 "label": "#c5c7d2",
+                "b label": "b #c5c7d2",
                 "light_blue": "#bbc8e8",
                 "b white": "b #e9e9e9",
                 "b highlight": "b #91abec",
@@ -460,8 +461,9 @@ class DolphieApp(App):
                 dolphie.secondary_db_connection.connection.close()
 
             if dolphie.replica_connections:
-                for connection in dolphie.replica_connections.values():
-                    connection["connection"].close()
+                for replica in dolphie.replica_connections.values():
+                    if replica["connection"] and replica["connection"].open:
+                        replica["connection"].close()
 
             self.tab_manager.tabs.pop(tab.id, None)
 
@@ -540,7 +542,7 @@ class DolphieApp(App):
                 #     )
 
             if dolphie.display_replication_panel:
-                dolphie.replica_tables = replication_panel.fetch_replica_table_data(tab)
+                replication_panel.fetch_replica_table_data(tab)
 
             if dolphie.display_processlist_panel:
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
@@ -552,12 +554,12 @@ class DolphieApp(App):
 
             # If we're not displaying the replication panel, close all replica connections
             if not dolphie.display_replication_panel and dolphie.replica_connections:
-                for connection in dolphie.replica_connections.values():
-                    connection["connection"].close()
+                for replica in dolphie.replica_connections.values():
+                    if replica["connection"] and replica["connection"].open:
+                        replica["connection"].close()
 
                 dolphie.replica_connections = {}
                 dolphie.replica_data = {}
-                dolphie.replica_tables = {}
 
             dolphie.monitor_read_only_change()
 
@@ -758,7 +760,7 @@ class DolphieApp(App):
         if panel_name == "replication":
             # When replication panel status is changed, we need to refresh the dashboard panel as well since
             # it adds/removes it from there
-            self.tab.panel_replication_data.update(replication_panel.create_panel(self.tab))
+            replication_panel.create_panel(self.tab)
 
             if toggled and self.tab.dolphie.replication_status:
                 dashboard_panel.create_panel(self.tab)
@@ -837,6 +839,7 @@ class DolphieApp(App):
             self.toggle_panel("processlist")
             self.app.query_one(f"#panel_processlist_{self.tab.id}").clear()
         elif key == "3":
+            self.tab.replicas_container.remove_children()
             self.toggle_panel("replication")
         elif key == "4":
             self.toggle_panel("graphs")

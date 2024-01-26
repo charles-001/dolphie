@@ -11,9 +11,11 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
+from textual.containers import Center, Container, VerticalScroll
+from textual.widgets import Label, LoadingIndicator, Static
 
 
-def create_panel(tab: Tab) -> Panel:
+def create_panel(tab: Tab):
     dolphie = tab.dolphie
 
     if (
@@ -69,46 +71,81 @@ def create_panel(tab: Tab) -> Panel:
         )
 
     def create_replica_panel():
-        if not dolphie.replica_tables and not dolphie.replica_data:
-            return None
+        if dolphie.replica_connections:
+            tab.replicas_container.display = True
 
-        if dolphie.replica_tables:
-            table_grid = Table.grid()
+            sorted_replica_connections = sorted(dolphie.replica_connections.items(), key=lambda x: x[1]["host"])
 
-            num_replicas = len(dolphie.replica_tables)
-            for i in range(0, num_replicas, 2):
-                table_grid.add_row(*[table for _, table in sorted(list(dolphie.replica_tables.items()))[i : i + 2]])
+            # Quick & easy way to remove replicas that no longer exist
+            if len(sorted_replica_connections) != len(dolphie.app.query(f".replica_{tab.id}")):
+                tab.replicas_container.remove_children()
 
-            content = table_grid
-        elif dolphie.replica_data:
-            num_replicas = len(dolphie.replica_data)
-            content = "\nLoading...\n"
+            # Iterate over replicas in pairs
+            for i in range(0, len(sorted_replica_connections), 2):
+                replica_pair = list(sorted_replica_connections)[i : i + 2]
 
-        title = "Replica" if num_replicas == 1 else "Replicas"
-        return Panel(
-            Align.center(content),
-            title=f"[b white]{num_replicas} {title}",
-            box=box.HORIZONTALS,
-            border_style="panel_border",
-        )
+                # Create a container for each pair of replicas
+                container_id = f"replica_container_{i}_{tab.id}"
+                container = tab.dolphie.app.query(f"#{container_id}")
+                if container:
+                    container = container[0]
+                else:
+                    is_last_row = i + 2 >= len(sorted_replica_connections)
+
+                    container_classes = "replica_container"
+                    if not is_last_row:
+                        container_classes += " pad_bottom_1"
+
+                    container = Container(id=container_id, classes=container_classes)
+                    tab.replicas_container.mount(container)
+
+                for _, replica in replica_pair:
+                    replica_id = replica["id"]
+                    replica_table = replica["table"]
+                    replica_host = replica["host"]
+
+                    existing_replica = tab.dolphie.app.query(f"#replica_{replica_id}_{tab.id}")
+                    if existing_replica:
+                        existing_replica[0].update(replica_table)
+                    else:
+                        container.mount(
+                            VerticalScroll(
+                                Label(replica_host),
+                                Static(replica_table, id=f"replica_{replica_id}_{tab.id}", classes=f"replica_{tab.id}"),
+                            )
+                        )
+        elif not dolphie.replica_connections:
+            tab.replicas_container.mount(
+                LoadingIndicator(),
+                Center(Label(f"\n[b]Loading [light_blue]{len(dolphie.replica_data)}[/light_blue] replicas...")),
+            )
+        else:
+            tab.replicas_container.display = False
 
     def create_cluster_panel():
         if not dolphie.galera_cluster:
+            tab.cluster_data.display = False
             return None
 
-        return Panel(
-            Align.center(
-                "\n[b light_blue]State[/b light_blue] "
-                f" {dolphie.global_status.get('wsrep_local_state_comment', 'N/A')}\n"
-            ),
-            title="[b white]Cluster",
-            box=box.HORIZONTALS,
-            border_style="panel_border",
+        tab.cluster_data.display = True
+        tab.cluster_data.update(
+            Panel(
+                Align.center(
+                    "\n[b light_blue]State[/b light_blue] "
+                    f" {dolphie.global_status.get('wsrep_local_state_comment', 'N/A')}\n"
+                ),
+                title="[b white]Cluster",
+                box=box.HORIZONTALS,
+                border_style="panel_border",
+            )
         )
 
     def create_replication_panel():
         if not dolphie.replication_status:
+            tab.replication_container.display = False
             return None
+
+        tab.replication_container.display = True
 
         replication_variables = ""
         available_replication_variables = {
@@ -125,7 +162,9 @@ def create_panel(tab: Tab) -> Panel:
 
         table_thread_applier_status = Table()
         if dolphie.replication_applier_status:
-            table_thread_applier_status = Table(title_style=Style(bold=True), style="panel_border", box=box.ROUNDED)
+            table_thread_applier_status = Table(
+                title_style=Style(bold=True), style="panel_border", header_style="b label", box=None
+            )
             table_thread_applier_status.add_column("Worker", justify="center")
             table_thread_applier_status.add_column("Usage", min_width=6)
             table_thread_applier_status.add_column("Apply Time")
@@ -151,28 +190,19 @@ def create_panel(tab: Tab) -> Panel:
                 )
 
             tab.replication_thread_applier.update(table_thread_applier_status)
+            tab.replication_thread_applier.display = True
+        else:
+            tab.replication_thread_applier.display = False
 
-        table_grid_replication = Table.grid()
-        # table_grid_replication.add_row(create_replication_table(tab))
+        tab.replication_variables.update(replication_variables)
+        create_replication_table(tab)
 
-        return Panel(
-            Group(Align.center(replication_variables), Align.center(table_grid_replication)),
-            title="[b white]Replication",
-            box=box.HORIZONTALS,
-            border_style="panel_border",
-        )
-
-    group_panels = [
-        create_group_replication_panel(),
-        create_cluster_panel(),
-        create_replication_panel(),
-        create_replica_panel(),
-    ]
-
-    return Group(*[panel for panel in group_panels if panel])
+    create_replication_panel()
+    create_replica_panel()
+    create_cluster_panel()
 
 
-def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica_object=None) -> Table:
+def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica_object=None):
     dolphie = tab.dolphie
 
     # When replica_object is specified, that means we're creating a table for a replica and not replication
@@ -231,7 +261,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
     else:
         table = Table(
             show_header=False,
-            box=box.ROUNDED,
+            box=None,
             title=table_title,
             title_style=Style(bold=True),
             style="table_border",
@@ -245,7 +275,6 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         table.add_column(min_width=60, overflow="fold")
 
     if replica_object:
-        table.add_row("[label]Host", "%s" % replica_object["host"])
         table.add_row("[label]Version", "%s" % replica_object["mysql_version"])
     else:
         table.add_row("[label]Primary", "%s" % data["Master_Host"])
@@ -401,9 +430,10 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
 
     if dashboard_table:
         tab.dashboard_replication.update(table)
+    elif replica_object:
+        return table
     else:
         tab.replication_status.update(table)
-    # return table
 
 
 def create_group_replication_member_table(tab: Tab):
@@ -472,8 +502,6 @@ def create_group_replication_member_table(tab: Tab):
 def fetch_replica_table_data(tab: Tab):
     dolphie = tab.dolphie
 
-    replica_tables = {}
-
     # Only run this query if we don't have replica ports or if the number of replicas has changed
     if len(dolphie.replica_connections) != len(dolphie.replica_data):
         # Remove replica connections that no longer exist
@@ -502,61 +530,61 @@ def fetch_replica_table_data(tab: Tab):
             host_and_port = "%s:%s" % (host, port)
             try:
                 dolphie.replica_connections[thread_id] = {
+                    "id": dolphie.replica_increment_num,
                     "host": host_and_port,
-                    "connection": pymysql.connect(
-                        host=host,
-                        user=dolphie.user,
-                        passwd=dolphie.password,
-                        port=port,
-                        ssl=dolphie.ssl,
-                        autocommit=True,
-                        connect_timeout=3,
-                    ),
+                    "connection": None,
                     "cursor": None,
                     "previous_sbm": 0,
                 }
-                replica = dolphie.replica_connections[thread_id]
-                replica["cursor"] = replica["connection"].cursor(pymysql.cursors.DictCursor)
+                replica_object = dolphie.replica_connections[thread_id]
+                replica_object["connection"] = pymysql.connect(
+                    host=host,
+                    user=dolphie.user,
+                    passwd=dolphie.password,
+                    port=port,
+                    ssl=dolphie.ssl,
+                    autocommit=True,
+                    connect_timeout=3,
+                )
+                replica_object["cursor"] = replica_object["connection"].cursor(pymysql.cursors.DictCursor)
 
                 # Save the MySQL version for the replica
-                replica["cursor"].execute("SELECT @@version")
-                version_split = replica["cursor"].fetchone()["@@version"].split(".")
-                replica["mysql_version"] = "%s.%s.%s" % (
+                replica_object["cursor"].execute("SELECT @@version")
+                version_split = replica_object["cursor"].fetchone()["@@version"].split(".")
+                replica_object["mysql_version"] = "%s.%s.%s" % (
                     version_split[0],
                     version_split[1],
                     version_split[2].split("-")[0],
                 )
+
+                dolphie.replica_increment_num += 1
             except pymysql.Error as e:
-                table = Table(box=box.ROUNDED, show_header=False, style="table_border")
+                table = Table(box=None, show_header=False, style="table_border")
                 table.add_column()
                 table.add_column()
 
-                table.add_row("[label]Host", host_and_port)
                 table.add_row("[label]User", row["user"])
-                table.add_row("[label]Error", "[red]%s[red]" % e.args[1])
+                table.add_row("[label]Error", "[red]%s[/red]" % e.args[1])
 
-                replica_tables[host_and_port] = table
+                replica_object["table"] = table
 
-        replica_object = dolphie.replica_connections.get(thread_id)
-        if replica_object:
-            host_and_port = replica_object["host"]
-            try:
+        try:
+            replica_object = dolphie.replica_connections[thread_id]
+
+            if replica_object["connection"]:
                 replica_object["cursor"].execute(MySQLQueries.replication_status)
                 replica_data = replica_object["cursor"].fetchone()
 
                 if replica_data:
-                    replica_tables[host_and_port] = create_replication_table(
+                    replica_object["table"] = create_replication_table(
                         tab, data=replica_data, replica_object=replica_object
                     )
-            except pymysql.Error as e:
-                table = Table(box=box.ROUNDED, show_header=False, style="table_border")
-                table.add_column()
-                table.add_column()
+        except pymysql.Error as e:
+            table = Table(box=None, show_header=False, style="table_border")
+            table.add_column()
+            table.add_column()
 
-                table.add_row("[label]Host", host_and_port)
-                table.add_row("[label]User", row["user"])
-                table.add_row("[label]Error", "[red]%s[red]" % e.args[1])
+            table.add_row("[label]User", row["user"])
+            table.add_row("[label]Error", "[red]%s[/red]" % e.args[1])
 
-                replica_tables[host_and_port] = table
-
-    return replica_tables
+            replica_object["table"] = table
