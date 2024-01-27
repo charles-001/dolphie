@@ -559,7 +559,6 @@ class DolphieApp(App):
                         replica["connection"].close()
 
                 dolphie.replica_connections = {}
-                dolphie.available_replicas = {}
 
             dolphie.monitor_read_only_change()
 
@@ -853,9 +852,10 @@ class DolphieApp(App):
             self.toggle_panel("processlist")
             self.app.query_one(f"#panel_processlist_{self.tab.id}").clear()
         elif key == "3":
-            self.tab.replicas_container.remove_children()
             self.toggle_panel("replication")
 
+            for member in self.query(f".replica_container_{self.tab.id}"):
+                member.remove()
         elif key == "4":
             self.toggle_panel("graphs")
             self.app.update_graphs("dml")

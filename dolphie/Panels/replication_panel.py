@@ -7,12 +7,11 @@ from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 from rich import box
 from rich.align import Align
-from rich.console import Group
 from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
-from textual.containers import Center, Container, ScrollableContainer
-from textual.widgets import Label, LoadingIndicator, Static
+from textual.containers import Container, ScrollableContainer
+from textual.widgets import Label, Static
 
 
 def create_panel(tab: Tab):
@@ -31,7 +30,10 @@ def create_panel(tab: Tab):
 
     def create_group_replication_panel():
         if not dolphie.group_replication and not dolphie.innodb_cluster:
+            tab.group_replication_container.display = False
             return None
+
+        tab.group_replication_container.display = True
 
         available_group_replication_variables = {
             "group_replication_view_change_uuid": [dolphie.global_variables, "View UUID"],
@@ -39,7 +41,6 @@ def create_panel(tab: Tab):
             "group_replication_consistency": [dolphie.global_variables, "Global Consistency"],
             "group_replication_paxos_single_leader": [dolphie.global_variables, "Paxos Single Leader"],
             "write_concurrency": [dolphie.group_replication_data, "Write Concurrency"],
-            "protocol_version": [dolphie.group_replication_data, "Protocol Version"],
         }
 
         group_replication_variables = ""
@@ -47,40 +48,84 @@ def create_panel(tab: Tab):
             value = setting[0].get(variable, "N/A")
             group_replication_variables += f"[b light_blue]{setting[1]}[/b light_blue] {value}  "
 
-        group_replication_member_tables = create_group_replication_member_table(tab)
-
-        table_group_members_grid = Table.grid()
-        if group_replication_member_tables:
-            for i in range(0, len(group_replication_member_tables), 3):
-                table_group_members_grid.add_row(
-                    *[table for _, table in sorted(list(group_replication_member_tables.items()))[i : i + 3]]
-                )
-
         title = "Group Replication"
         if dolphie.innodb_cluster:
             title = "InnoDB Cluster"
-
-        return Panel(
-            Group(Align.center(group_replication_variables), Align.center(table_group_members_grid)),
-            title=(
-                f"[b white]{title}"
-                f" ([highlight]{dolphie.global_variables.get('group_replication_group_name', 'N/A')}[/highlight])"
-            ),
-            box=box.HORIZONTALS,
-            border_style="panel_border",
+        title = (
+            f"[b]{title} "
+            f"([highlight]{dolphie.global_variables.get('group_replication_group_name', 'N/A')}[/highlight])\n"
         )
+        tab.group_replication_title.update(title)
+        tab.group_replication_data.update(group_replication_variables)
+
+        group_replication_member_tables = create_group_replication_member_table(tab)
+        sorted_replication_members = sorted(group_replication_member_tables.items(), key=lambda x: x[1]["host"])
+        if group_replication_member_tables:
+            # Quick & easy way to remove members that no longer exist
+            if len(dolphie.group_replication_members) != len(dolphie.app.query(f".group_member_{tab.id}")):
+                for member in dolphie.app.query(f".group_replication_container_{tab.id}"):
+                    member.remove()
+
+            # Iterate over members in pairs of 3
+            for i in range(0, len(sorted_replication_members), 3):
+                member_pair = list(sorted_replication_members)[i : i + 3]
+
+                # Create a container for each pair of members
+                container_id = f"group_replication_container_{i}_{tab.id}"
+                container = tab.dolphie.app.query(f"#{container_id}")
+                if container:
+                    container = container[0]
+                else:
+                    is_last_row = i + 3 >= len(sorted_replication_members)
+
+                    container_classes = f"group_replication_container group_replication_container_{tab.id}"
+                    if not is_last_row:
+                        container_classes += " pad_bottom_1"
+
+                    num_containers = len(dolphie.app.query(f".group_replication_container_{tab.id}"))
+                    container = Container(id=container_id, classes=container_classes)
+                    tab.group_replication_container.mount(container, after=2 + num_containers)
+
+                for member_id, _ in member_pair:
+                    member_table = group_replication_member_tables.get(member_id).get("table")
+                    if not member_table:
+                        continue
+
+                    existing_member = tab.dolphie.app.query(f"#group_member_{member_id}_{tab.id}")
+                    if existing_member:
+                        existing_member[0].update(member_table)
+                    else:
+                        container.mount(
+                            Container(
+                                ScrollableContainer(
+                                    Static(
+                                        member_table,
+                                        id=f"group_member_{member_id}_{tab.id}",
+                                        classes=f"group_member_{tab.id}",
+                                    ),
+                                ),
+                            ),
+                        )
 
     def create_replica_panel():
-        if dolphie.replica_connections:
+        if not dolphie.replica_connections and dolphie.available_replicas:
             tab.replicas_container.display = True
+            tab.replicas_title.update(
+                f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
+            )
+            tab.replicas_loading_indicator.display = True
+        elif dolphie.replica_connections:
+            tab.replicas_loading_indicator.display = False
 
+            tab.replicas_title.update(f"[b]Replicas ([highlight]{len(dolphie.available_replicas)}[/highlight])\n")
             sorted_replica_connections = sorted(dolphie.replica_connections.items(), key=lambda x: x[1]["host"])
 
             # Quick & easy way to remove replicas that no longer exist
             if len(sorted_replica_connections) != len(dolphie.app.query(f".replica_{tab.id}")):
-                tab.replicas_container.remove_children()
+                for member in dolphie.app.query(f".replica_container_{tab.id}"):
+                    member.remove()
 
-            # Iterate over replicas in pairs
+            # Iterate over replicas in pairs of 2
             for i in range(0, len(sorted_replica_connections), 2):
                 replica_pair = list(sorted_replica_connections)[i : i + 2]
 
@@ -92,17 +137,21 @@ def create_panel(tab: Tab):
                 else:
                     is_last_row = i + 2 >= len(sorted_replica_connections)
 
-                    container_classes = "replica_container"
+                    container_classes = f"replica_container replica_container_{tab.id}"
                     if not is_last_row:
                         container_classes += " pad_bottom_1"
 
+                    num_containers = len(dolphie.app.query(f".replica_container_{tab.id}"))
                     container = Container(id=container_id, classes=container_classes)
-                    tab.replicas_container.mount(container)
+                    tab.replicas_container.mount(container, after=2 + num_containers)
 
                 for _, replica in replica_pair:
-                    replica_id = replica["id"]
-                    replica_table = replica["table"]
-                    replica_host = replica["host"]
+                    replica_id = replica.get("id")
+                    replica_host = replica.get("host")
+                    replica_table = replica.get("table")
+
+                    if not replica_table:
+                        continue
 
                     existing_replica = tab.dolphie.app.query(f"#replica_{replica_id}_{tab.id}")
                     if existing_replica:
@@ -118,14 +167,7 @@ def create_panel(tab: Tab):
                                 ),
                             ),
                         )
-        elif not dolphie.replica_connections and dolphie.available_replicas:
-            tab.replicas_container.display = True
-            tab.replicas_container.mount(
-                LoadingIndicator(),
-                Center(Label(f"\n[b]Loading [light_blue]{len(dolphie.available_replicas)}[/light_blue] replicas...")),
-            )
         else:
-            tab.replicas_container.remove_children()
             tab.replicas_container.display = False
 
     def create_cluster_panel():
@@ -444,10 +486,7 @@ def create_group_replication_member_table(tab: Tab):
 
         member_role = row.get("MEMBER_ROLE", "N/A")
         if member_role == "PRIMARY":
-            table_border = "highlight"
-            member_role = f"[highlight]{member_role}[/highlight]"
-        else:
-            table_border = "table_border"
+            member_role = f"[b][highlight]{member_role}[/highlight]"
 
         member_state = row.get("MEMBER_STATE", "N/A")
         if member_state == "ONLINE":
@@ -455,7 +494,7 @@ def create_group_replication_member_table(tab: Tab):
         else:
             member_state = f"[red]{member_state}[/red]"
 
-        table = Table(box=box.ROUNDED, show_header=False, style=table_border)
+        table = Table(box=None, show_header=False)
         table.add_column()
         table.add_column()
 
@@ -483,7 +522,10 @@ def create_group_replication_member_table(tab: Tab):
             "[label]Rows", f"{format_number(trx_rows_validating)} [dark_gray](used for certification)[/dark_gray]"
         )
 
-        group_replica_tables[row.get("MEMBER_ID")] = table
+        group_replica_tables[row.get("MEMBER_ID")] = {
+            "host": f"{row.get('MEMBER_HOST')}:{row.get('MEMBER_PORT')}",
+            "table": table,
+        }
 
     return group_replica_tables
 
@@ -548,9 +590,9 @@ def fetch_replica_table_data(tab: Tab):
 
                 dolphie.replica_increment_num += 1
             except pymysql.Error as e:
-                table = Table(box=None, show_header=False, style="table_border")
+                table = Table(box=None, show_header=False)
                 table.add_column()
-                table.add_column()
+                table.add_column(overflow="fold")
 
                 table.add_row("[label]User", row["user"])
                 table.add_row("[label]Error", "[red]%s[/red]" % e.args[1])
@@ -569,9 +611,9 @@ def fetch_replica_table_data(tab: Tab):
                         tab, data=replica_data, replica_object=replica_object
                     )
         except pymysql.Error as e:
-            table = Table(box=None, show_header=False, style="table_border")
+            table = Table(box=None, show_header=False)
             table.add_column()
-            table.add_column()
+            table.add_column(overflow="fold")
 
             table.add_row("[label]User", row["user"])
             table.add_row("[label]Error", "[red]%s[/red]" % e.args[1])

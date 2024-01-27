@@ -128,9 +128,39 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
 }
+.replicas Label {
+    width: 100%;
+    content-align: center middle;
+}
 .replica_container {
     height: auto;
     layout: horizontal;
+}
+
+.group_replication {
+    height: auto;
+}
+.group_replication > Container > Container {
+    height: auto;
+    width: auto;
+}
+.group_replication > Container > Container > ScrollableContainer  {
+    background: #0b1221;
+    border: tall #1c2238;
+    height: auto;
+    max-height: 18;
+}
+.group_replication > Container > Container > ScrollableContainer > Static {
+    width: auto;
+}
+.group_replication > Label {
+    width: 100%;
+    content-align: center middle;
+}
+.group_replication_container {
+    height: auto;
+    layout: grid;
+    grid-size: 3;
 }
 
 .pad_bottom_1 {

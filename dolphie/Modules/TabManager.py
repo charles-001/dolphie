@@ -58,8 +58,13 @@ class Tab:
     replication_thread_applier_container: ScrollableContainer = None
     replication_thread_applier: Static = None
 
+    group_replication_container: Container = None
     replicas_container: Container = None
 
+    replicas_loading_indicator: LoadingIndicator = None
+    replicas_title: Label = None
+    group_replication_title: Label = None
+    group_replication_data: Static = None
     cluster_data: Static = None
 
     topbar_data: str = "Connecting to MySQL"
@@ -178,7 +183,22 @@ class TabManager:
                             id=f"replication_container_{tab_id}",
                             classes="replication",
                         ),
-                        Container(id=f"replicas_container_{tab_id}", classes="replicas"),
+                        Container(
+                            Rule(line_style="heavy"),
+                            Label(id=f"replicas_title_{tab_id}"),
+                            LoadingIndicator(id=f"replicas_loading_indicator_{tab_id}"),
+                            Rule(line_style="heavy"),
+                            id=f"replicas_container_{tab_id}",
+                            classes="replicas",
+                        ),
+                        Container(
+                            Rule(line_style="heavy"),
+                            Label(id=f"group_replication_title_{tab_id}"),
+                            Label(id=f"group_replication_data_{tab_id}"),
+                            Rule(line_style="heavy"),
+                            id=f"group_replication_container_{tab_id}",
+                            classes="group_replication",
+                        ),
                         Static(id=f"cluster_data_{tab_id}"),
                         id=f"panel_replication_{tab_id}",
                         classes="panel_container replication_panel",
@@ -275,7 +295,14 @@ class TabManager:
         tab.dashboard_statistics = self.app.query_one(f"#dashboard_statistics_{tab.id}", Static)
         tab.dashboard_replication = self.app.query_one(f"#dashboard_replication_{tab.id}", Static)
 
+        tab.group_replication_container = self.app.query_one(f"#group_replication_container_{tab.id}", Container)
         tab.replicas_container = self.app.query_one(f"#replicas_container_{tab.id}", Container)
+
+        tab.group_replication_data = self.app.query_one(f"#group_replication_data_{tab.id}", Static)
+        tab.group_replication_title = self.app.query_one(f"#group_replication_title_{tab.id}", Label)
+        tab.replicas_title = self.app.query_one(f"#replicas_title_{tab.id}", Label)
+        tab.replicas_loading_indicator = self.app.query_one(f"#replicas_loading_indicator_{tab.id}", LoadingIndicator)
+
         tab.cluster_data = self.app.query_one(f"#cluster_data_{tab.id}", Static)
 
         tab.replication_container = self.app.query_one(f"#replication_container_{tab.id}", Container)
