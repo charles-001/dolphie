@@ -775,16 +775,16 @@ class DolphieApp(App):
         if toggled or not self.tab.dolphie.first_loop:  # Include this so we're not updating the sizes every loop
             if self.tab.dolphie.replication_status and not self.tab.dolphie.display_replication_panel:
                 self.tab.dashboard_host_information.styles.width = "25vw"
-                self.tab.dashboard_binary_log.styles.width = "18vw"
-                self.tab.dashboard_innodb.styles.width = "20vw"
+                self.tab.dashboard_binary_log.styles.width = "21vw"
+                self.tab.dashboard_innodb.styles.width = "17vw"
                 self.tab.dashboard_replication.styles.width = "25vw"
                 self.tab.dashboard_statistics.styles.width = "12vw"
             else:
-                self.tab.dashboard_host_information.styles.width = "30vw"
-                self.tab.dashboard_binary_log.styles.width = "25vw"
-                self.tab.dashboard_innodb.styles.width = "27vw"
+                self.tab.dashboard_host_information.styles.width = "32vw"
+                self.tab.dashboard_binary_log.styles.width = "27vw"
+                self.tab.dashboard_innodb.styles.width = "24vw"
                 self.tab.dashboard_replication.styles.width = "0"
-                self.tab.dashboard_statistics.styles.width = "18vw"
+                self.tab.dashboard_statistics.styles.width = "17vw"
 
     def layout_graphs(self):
         if self.tab.dolphie.is_mysql_version_at_least("8.0.30"):
