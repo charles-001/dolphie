@@ -14,7 +14,6 @@ def create_panel(tab: Tab) -> Table:
     global_variables = dolphie.global_variables
     binlog_status = dolphie.binlog_status
 
-    tables_to_add = []
     uptime = str(timedelta(seconds=global_status["Uptime"]))
 
     table_title_style = Style(color="#bbc8e8", bold=True)
@@ -209,7 +208,6 @@ def create_panel(tab: Tab) -> Table:
         table_primary.add_row("[label]Compression", binlog_compression)
 
         tab.dashboard_binary_log.update(table_primary)
-        # tables_to_add.append(table_primary)
 
         # Save some global_variables to be used in next refresh
         if dolphie.binlog_status:
@@ -220,7 +218,7 @@ def create_panel(tab: Tab) -> Table:
     ###############
     if dolphie.replication_status and not dolphie.display_replication_panel:
         tab.dashboard_replication.display = True
-        tables_to_add.append(replication_panel.create_replication_table(tab, dashboard_table=True))
+        tab.dashboard_replication.update(replication_panel.create_replication_table(tab, dashboard_table=True))
     else:
         tab.dashboard_replication.display = False
     ###############

@@ -119,6 +119,7 @@ def create_panel(tab: Tab):
                             ),
                         )
         elif not dolphie.replica_connections and dolphie.available_replicas:
+            tab.replicas_container.display = True
             tab.replicas_container.mount(
                 LoadingIndicator(),
                 Center(Label(f"\n[b]Loading [light_blue]{len(dolphie.available_replicas)}[/light_blue] replicas...")),
@@ -197,14 +198,15 @@ def create_panel(tab: Tab):
             tab.replication_thread_applier_container.display = False
 
         tab.replication_variables.update(replication_variables)
-        create_replication_table(tab)
+        tab.replication_status.update(create_replication_table(tab))
 
     create_replication_panel()
     create_replica_panel()
     create_cluster_panel()
+    create_group_replication_panel()
 
 
-def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica_object=None):
+def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica_object=None) -> Table:
     dolphie = tab.dolphie
 
     # When replica_object is specified, that means we're creating a table for a replica and not replication
@@ -420,12 +422,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         elif mariadb_gtid_enabled:
             table.add_row("[label]GTID IO Pos", "%s" % data["Gtid_IO_Pos"])
 
-    if dashboard_table:
-        tab.dashboard_replication.update(table)
-    elif replica_object:
-        return table
-    else:
-        tab.replication_status.update(table)
+    return table
 
 
 def create_group_replication_member_table(tab: Tab):
