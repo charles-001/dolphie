@@ -20,7 +20,7 @@ def create_panel(tab: Tab):
 
     if (
         dolphie.display_replication_panel
-        and not dolphie.replica_data
+        and not dolphie.available_replicas
         and not dolphie.replication_status
         and not dolphie.galera_cluster
         and not dolphie.group_replication
@@ -109,15 +109,19 @@ def create_panel(tab: Tab):
                         existing_replica[0].update(replica_table)
                     else:
                         container.mount(
-                            ScrollableContainer(
+                            Container(
                                 Label(replica_host),
-                                Static(replica_table, id=f"replica_{replica_id}_{tab.id}", classes=f"replica_{tab.id}"),
-                            )
+                                ScrollableContainer(
+                                    Static(
+                                        replica_table, id=f"replica_{replica_id}_{tab.id}", classes=f"replica_{tab.id}"
+                                    ),
+                                ),
+                            ),
                         )
-        elif not dolphie.replica_connections and dolphie.replica_data:
+        elif not dolphie.replica_connections and dolphie.available_replicas:
             tab.replicas_container.mount(
                 LoadingIndicator(),
-                Center(Label(f"\n[b]Loading [light_blue]{len(dolphie.replica_data)}[/light_blue] replicas...")),
+                Center(Label(f"\n[b]Loading [light_blue]{len(dolphie.available_replicas)}[/light_blue] replicas...")),
             )
         else:
             tab.replicas_container.remove_children()
@@ -161,11 +165,8 @@ def create_panel(tab: Tab):
             replication_variables += f"[b light_blue]{setting_display_name}[/b light_blue] {value}  "
         replication_variables = replication_variables.strip()
 
-        table_thread_applier_status = Table()
         if dolphie.replication_applier_status:
-            table_thread_applier_status = Table(
-                title_style=Style(bold=True), style="panel_border", header_style="b label", box=None
-            )
+            table_thread_applier_status = Table(box=None)
             table_thread_applier_status.add_column("Worker", justify="center")
             table_thread_applier_status.add_column("Usage", min_width=6)
             table_thread_applier_status.add_column("Apply Time")
@@ -248,32 +249,22 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         mariadb_gtid_enabled = True
         gtid_status = data["Using_Gtid"]
 
-    table_title = ""
+    table = Table(show_header=False, box=None)
     if dashboard_table:
-        table_title = "Replication"
-
         table = Table(
             show_header=False,
             box=None,
-            title=table_title,
+            expand=True,
+            title="Replication",
             title_style=Style(color="#bbc8e8", bold=True),
             style="table_border",
         )
-    else:
-        table = Table(
-            show_header=False,
-            box=None,
-            title=table_title,
-            title_style=Style(bold=True),
-            style="table_border",
-        )
 
-    if dashboard_table:
         table.add_column(no_wrap=True)
         table.add_column()
     else:
         table.add_column()
-        table.add_column(min_width=60, overflow="fold")
+        table.add_column(overflow="fold")
 
     if replica_object:
         table.add_row("[label]Version", "%s" % replica_object["mysql_version"])
@@ -504,9 +495,9 @@ def fetch_replica_table_data(tab: Tab):
     dolphie = tab.dolphie
 
     # Only run this query if we don't have replica ports or if the number of replicas has changed
-    if len(dolphie.replica_connections) != len(dolphie.replica_data):
+    if len(dolphie.replica_connections) != len(dolphie.available_replicas):
         # Remove replica connections that no longer exist
-        unique_ids = set(row["id"] for row in dolphie.replica_data)
+        unique_ids = set(row["id"] for row in dolphie.available_replicas)
         for thread in list(dolphie.replica_connections.keys()):
             if thread not in unique_ids:
                 del dolphie.replica_connections[thread]
@@ -517,7 +508,7 @@ def fetch_replica_table_data(tab: Tab):
         for row in replica_data:
             dolphie.replica_ports[row["Slave_UUID"]] = row["Port"]
 
-    for row in dolphie.replica_data:
+    for row in dolphie.available_replicas:
         thread_id = row["id"]
 
         host = dolphie.get_hostname(row["host"].split(":")[0])

@@ -101,7 +101,7 @@ class Dolphie:
         self.binlog_transaction_compression_percentage: int = None
 
         # These are for replicas in replication panel
-        self.replica_data: dict = {}
+        self.available_replicas: dict = {}
         self.replica_connections: dict = {}
         self.replica_ports: dict = {}
         self.replica_increment_num: int = 1

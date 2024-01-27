@@ -507,7 +507,7 @@ class DolphieApp(App):
                 find_replicas_query = MySQLQueries.pl_find_replicas
 
             dolphie.main_db_connection.execute(find_replicas_query)
-            dolphie.replica_data = dolphie.main_db_connection.fetchall()
+            dolphie.available_replicas = dolphie.main_db_connection.fetchall()
 
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
             dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
@@ -559,7 +559,7 @@ class DolphieApp(App):
                         replica["connection"].close()
 
                 dolphie.replica_connections = {}
-                dolphie.replica_data = {}
+                dolphie.available_replicas = {}
 
             dolphie.monitor_read_only_change()
 
@@ -772,6 +772,20 @@ class DolphieApp(App):
         elif panel_name == "locks":
             locks_panel.create_panel(self.tab)
 
+        if toggled or not self.tab.dolphie.first_loop:  # Include this so we're not updating the sizes every loop
+            if self.tab.dolphie.replication_status and not self.tab.dolphie.display_replication_panel:
+                self.tab.dashboard_host_information.styles.width = "25vw"
+                self.tab.dashboard_binary_log.styles.width = "18vw"
+                self.tab.dashboard_innodb.styles.width = "20vw"
+                self.tab.dashboard_replication.styles.width = "25vw"
+                self.tab.dashboard_statistics.styles.width = "12vw"
+            else:
+                self.tab.dashboard_host_information.styles.width = "30vw"
+                self.tab.dashboard_binary_log.styles.width = "25vw"
+                self.tab.dashboard_innodb.styles.width = "27vw"
+                self.tab.dashboard_replication.styles.width = "0"
+                self.tab.dashboard_statistics.styles.width = "18vw"
+
     def layout_graphs(self):
         if self.tab.dolphie.is_mysql_version_at_least("8.0.30"):
             self.query_one(f"#graph_redo_log_{self.tab.id}").styles.width = "55%"
@@ -841,6 +855,7 @@ class DolphieApp(App):
         elif key == "3":
             self.tab.replicas_container.remove_children()
             self.toggle_panel("replication")
+
         elif key == "4":
             self.toggle_panel("graphs")
             self.app.update_graphs("dml")

@@ -48,8 +48,8 @@ def create_panel(tab: Tab) -> Table:
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
     replicas = 0
-    if dolphie.replica_data:
-        replicas = len(dolphie.replica_data)
+    if dolphie.available_replicas:
+        replicas = len(dolphie.available_replicas)
 
     table_information.add_column()
     table_information.add_column(min_width=25, max_width=27)

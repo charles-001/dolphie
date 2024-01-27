@@ -76,21 +76,6 @@ TopBar {
     border: tall #1c2238;
     height: 11;
 }
-.dashboard > Center > .dashboard_host_information {
-    width: 24vw;
-}
-.dashboard > Center > .dashboard_innodb_information {
-    width: 18vw;
-}
-.dashboard > Center > .dashboard_binary_log {
-    width: 20vw;
-}
-.dashboard > Center > .dashboard_replication {
-    width: 25vw;
-}
-.dashboard > Center > .dashboard_statistics {
-    width: 12vw;
-}
 
 .replication {
     height: auto;
@@ -123,17 +108,21 @@ TopBar {
 .replicas {
     height: auto;
 }
-.replicas > Container > ScrollableContainer  {
+.replicas > Container > Container {
+    height: auto;
+    width: auto;
+}
+.replicas > Container > Container > ScrollableContainer  {
     background: #0b1221;
     border: tall #1c2238;
     height: auto;
     max-height: 18;
     width: 50vw;
 }
-.replicas > Container > ScrollableContainer > Static {
+.replicas > Container > Container > ScrollableContainer > Static {
     width: auto;
 }
-.replicas > Container > ScrollableContainer > Label {
+.replicas > Container > Container > Label {
     width: 100%;
     content-align: center middle;
     color: #bbc8e8;
