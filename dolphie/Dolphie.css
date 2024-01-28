@@ -25,6 +25,9 @@ DataTable {
 Graph {
     height: 16;
 }
+Horizontal {
+    height: auto;
+}
 Rule {
     color: #293351;
     margin: 0;

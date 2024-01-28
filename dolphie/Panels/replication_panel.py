@@ -115,6 +115,7 @@ def create_panel(tab: Tab):
             )
             tab.replicas_loading_indicator.display = True
         elif dolphie.replica_connections:
+            tab.replicas_container.display = True
             tab.replicas_loading_indicator.display = False
 
             tab.replicas_title.update(f"[b]Replicas ([highlight]{len(dolphie.available_replicas)}[/highlight])\n")
@@ -530,7 +531,7 @@ def create_group_replication_member_table(tab: Tab):
     return group_replica_tables
 
 
-def fetch_replica_table_data(tab: Tab):
+def fetch_replicas(tab: Tab):
     dolphie = tab.dolphie
 
     # Only run this query if we don't have replica ports or if the number of replicas has changed

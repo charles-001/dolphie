@@ -4,10 +4,10 @@ import socket
 from datetime import datetime
 from importlib import metadata
 
+import dolphie.Modules.MetricManager as MetricManager
 import requests
 from dolphie.Modules.Functions import format_number
 from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.MetricManager import MetricManager
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Widgets.new_version_modal import NewVersionModal
@@ -15,6 +15,7 @@ from packaging.version import parse as parse_version
 from rich import box
 from rich.table import Table
 from textual.app import App
+from textual.widgets import Switch
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -62,7 +63,19 @@ class Dolphie:
         self.reset_runtime_variables()
 
     def reset_runtime_variables(self, include_panels=True):
-        self.metric_manager = MetricManager()
+        self.metric_manager = MetricManager.MetricManager()
+
+        # Set the graph switches to what they're currently selected to since we reset metric_manager
+        if self.app:
+            switches = self.app.query(f".switch_container_{self.tab_id} Switch")
+            for switch in switches:
+                switch: Switch
+                metric_instance_name = switch.name
+                metric = switch.id
+
+                metric_instance = getattr(self.metric_manager.metrics, metric_instance_name)
+                metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+                metric_data.visible = switch.value
 
         if include_panels:
             self.display_dashboard_panel: bool = False
