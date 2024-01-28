@@ -19,7 +19,7 @@ import myloginpath
 import pymysql
 from dolphie import Dolphie
 from dolphie.DataTypes import Panels
-from dolphie.Modules.Functions import format_number, format_sys_table_memory
+from dolphie.Modules.Functions import format_sys_table_memory
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab, TabManager
@@ -32,11 +32,11 @@ from dolphie.Panels import (
 from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.modal import CommandModal
+from dolphie.Widgets.thread_screen import ThreadScreen
 from dolphie.Widgets.topbar import TopBar
 from rich import box
 from rich.align import Align
 from rich.console import Console, Group
-from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.style import Style
 from rich.syntax import Syntax
@@ -1195,38 +1195,35 @@ class DolphieApp(App):
         elif key == "t":
 
             def command_get_input(thread_id):
-                elements = []
-
                 thread_data = dolphie.processlist_threads_snapshot.get(thread_id)
                 if not thread_data:
                     self.notify("Thread ID was not found in processlist")
                     return
 
-                table = Table(box=box.ROUNDED, show_header=False, style="table_border")
-                table.add_column("")
-                table.add_column("")
+                thread_table = Table(box=None, show_header=False)
+                thread_table.add_column("")
+                thread_table.add_column("", overflow="fold")
 
-                table.add_row("[label]Thread ID", str(thread_id))
-                table.add_row("[label]User", thread_data["user"])
-                table.add_row("[label]Host", thread_data["host"])
-                table.add_row("[label]Database", thread_data["db"])
-                table.add_row("[label]Command", thread_data["command"])
-                table.add_row("[label]State", thread_data["state"])
-                table.add_row("[label]Time", str(timedelta(seconds=thread_data["time"])).zfill(8))
-                table.add_row("[label]Rows Locked", thread_data["trx_rows_locked"])
-                table.add_row("[label]Rows Modified", thread_data["trx_rows_modified"])
+                thread_table.add_row("[label]Thread ID", str(thread_id))
+                thread_table.add_row("[label]User", thread_data["user"])
+                thread_table.add_row("[label]Host", thread_data["host"])
+                thread_table.add_row("[label]Database", thread_data["db"])
+                thread_table.add_row("[label]Command", thread_data["command"])
+                thread_table.add_row("[label]State", thread_data["state"])
+                thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data["time"])).zfill(8))
+                thread_table.add_row("[label]Rows Locked", thread_data["trx_rows_locked"])
+                thread_table.add_row("[label]Rows Modified", thread_data["trx_rows_modified"])
 
                 if (
                     "innodb_thread_concurrency" in dolphie.global_variables
                     and dolphie.global_variables["innodb_thread_concurrency"]
                 ):
-                    table.add_row("[label]Tickets", thread_data["trx_concurrency_tickets"])
+                    thread_table.add_row("[label]Tickets", thread_data["trx_concurrency_tickets"])
 
-                table.add_row("", "")
-                table.add_row("[label]TRX Time", thread_data["trx_time"])
-                table.add_row("[label]TRX State", thread_data["trx_state"])
-                table.add_row("[label]TRX Operation", thread_data["trx_operation_state"])
-                elements.append(Group(Align.center("[b white]Thread Details[/b white]"), Align.center(table)))
+                thread_table.add_row("", "")
+                thread_table.add_row("[label]TRX Time", thread_data["trx_time"])
+                thread_table.add_row("[label]TRX State", thread_data["trx_state"])
+                thread_table.add_row("[label]TRX Operation", thread_data["trx_operation_state"])
 
                 query = sqlformat(thread_data["query"], reindent_aligned=True)
                 query_db = thread_data["db"]
@@ -1241,7 +1238,7 @@ class DolphieApp(App):
                         line_numbers=False,
                         word_wrap=True,
                         theme="monokai",
-                        background_color="#030918",
+                        background_color="#0b1221",
                     )
 
                     if query_db:
@@ -1253,53 +1250,8 @@ class DolphieApp(App):
                         except pymysql.Error as e:
                             explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
 
-                    if explain_data:
-                        explain_table = Table(box=box.HEAVY_EDGE, style="table_border")
-
-                        columns = []
-                        for row in explain_data:
-                            values = []
-                            for column, value in row.items():
-                                # Exclude possbile_keys field since it takes up too much space
-                                if column == "possible_keys":
-                                    continue
-
-                                # Don't duplicate columns
-                                if column not in columns:
-                                    explain_table.add_column(column)
-                                    columns.append(column)
-
-                                if column == "key" and value is None:
-                                    value = "[b white on #B30000]NO INDEX[/b white on #B30000]"
-
-                                if column == "rows":
-                                    value = format_number(value)
-
-                                values.append(str(value))
-
-                            explain_table.add_row(*values)
-
-                        query_panel_title = "[b white]Query & Explain[/b white]"
-                        query_panel_elements = Group(Align.center(formatted_query), "", Align.center(explain_table))
-                    elif explain_failure:
-                        query_panel_title = "[b white]Query & Explain[/b white]"
-                        query_panel_elements = Group(Align.center(formatted_query), "", Align.center(explain_failure))
-                    else:
-                        query_panel_title = "[b white]Query[/b white]"
-                        query_panel_elements = Align.center(formatted_query)
-
-                    elements.append(
-                        Panel(
-                            query_panel_elements,
-                            title=query_panel_title,
-                            box=box.HORIZONTALS,
-                            border_style="panel_border",
-                        )
-                    )
-
                 # Transaction history
-                transaction_history_title = ""
-                transaction_history_table = Table(box=box.ROUNDED, style="table_border")
+                transaction_history_table = None
                 if (
                     dolphie.is_mysql_version_at_least("5.7")
                     and dolphie.performance_schema_enabled
@@ -1310,34 +1262,37 @@ class DolphieApp(App):
                     transaction_history = dolphie.secondary_db_connection.fetchall()
 
                     if transaction_history:
-                        transaction_history_title = "[b]Transaction History[/b]"
+                        transaction_history_table = Table(box=None, header_style="#c5c7d2")
                         transaction_history_table.add_column("Start Time")
-                        transaction_history_table.add_column("Query")
+                        transaction_history_table.add_column("Query", overflow="fold")
 
                         for query in transaction_history:
-                            formatted_query = ""
+                            trx_history_formatted_query = ""
                             if query["sql_text"]:
-                                formatted_query = Syntax(
+                                trx_history_formatted_query = Syntax(
                                     re.sub(r"\s+", " ", query["sql_text"]),
                                     "sql",
                                     line_numbers=False,
                                     word_wrap=True,
                                     theme="monokai",
-                                    background_color="#030918",
+                                    background_color="#0b1221",
                                 )
 
                             transaction_history_table.add_row(
-                                query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), formatted_query
+                                query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), trx_history_formatted_query
                             )
 
-                        elements.append(
-                            Group(Align.center(transaction_history_title), Align.center(transaction_history_table))
-                        )
-
-                screen_data = Group(*[element for element in elements if element])
-
                 self.app.push_screen(
-                    CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
+                    ThreadScreen(
+                        read_only=dolphie.read_only_status,
+                        app_version=dolphie.app_version,
+                        host=dolphie.mysql_host,
+                        thread_table=thread_table,
+                        query=formatted_query,
+                        explain_data=explain_data,
+                        explain_failure=explain_failure,
+                        transaction_history_table=transaction_history_table,
+                    )
                 )
 
             self.app.push_screen(

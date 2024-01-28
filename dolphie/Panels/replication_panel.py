@@ -210,7 +210,7 @@ def create_panel(tab: Tab):
         replication_variables = replication_variables.strip()
 
         if dolphie.replication_applier_status:
-            table_thread_applier_status = Table(box=None)
+            table_thread_applier_status = Table(box=None, header_style="#c5c7d2")
             table_thread_applier_status.add_column("Worker", justify="center")
             table_thread_applier_status.add_column("Usage", min_width=6)
             table_thread_applier_status.add_column("Apply Time")
