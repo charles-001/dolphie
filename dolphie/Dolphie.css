@@ -15,10 +15,10 @@
 }
 RichLog {
     background: #030918;
-    
 }
 DataTable {
-    background: #030918;
+    background: #0b1221;
+    border: tall #1c2238;
     overflow-x: hidden;
     max-height: 100%;
 }
@@ -29,7 +29,7 @@ Horizontal {
     height: auto;
 }
 Rule {
-    color: #293351;
+    color: #2e375a;
     margin: 0;
 }
 
@@ -148,7 +148,7 @@ TopBar {
     width: auto;
 }
 .group_replication > Container > Container > ScrollableContainer  {
-    background: #0b1221;
+    background: hsl(221, 50%, 9%);
     border: tall #1c2238;
     height: auto;
     max-height: 18;
@@ -180,7 +180,7 @@ Tabs:focus .underline--bar {
     color: #caddfe;
 }
 Underline > .underline--bar {
-    background: #2e3f5f;
+    background: #2e375a;
     color: #82a5e1;
 }
 AutoComplete {
@@ -200,11 +200,13 @@ Dropdown .autocomplete--selection-cursor {
 Input {
     width: 40;
     margin: 0 2;
-    background: #121626;
-    border: solid #4d5980;
+    margin-bottom: 1;
+    background: #101321;
+    border: tall #242c46;
 }
 Input:focus {
-    border: solid #7586be;
+    background: #101321;
+    border: tall #3d4a75;
 }
 Input>.input--placeholder {
     color: #7e8dac;
@@ -216,24 +218,17 @@ Input>.input--placeholder {
     text-style: bold;
 }
 
-.panel_data {
-    content-align: center middle;
-}
 .panel_container {
-    padding-top: 1;
+    margin-top: 1;
     height: auto;
 }
 .button_container {
     width: 100%;
     align-horizontal: center;
-    padding-top: 1;
-}
-.sparkline_label {
-    padding-top: 1;
 }
 .switch_container {
     align: center top;
-    padding-top: 1;
+    margin: 1 0 1 0;
     height: auto;
 }
 .switch_container > Label {

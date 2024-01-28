@@ -21,6 +21,12 @@ class EventLog(Screen):
             text-style: bold;
             margin-right: -1;
         }
+        EventLog DataTable {
+            background: #000718;
+            border: none;
+            overflow-x: hidden;
+            max-height: 100%;
+        }
         #info {
             padding-top: 1;
             width: 100%;

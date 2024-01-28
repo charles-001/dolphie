@@ -203,8 +203,8 @@ class TabManager:
                         id=f"panel_replication_{tab_id}",
                         classes="panel_container replication_panel",
                     ),
-                    DataTable(id=f"panel_locks_{tab_id}", classes="panel_data", show_cursor=False),
-                    DataTable(id=f"panel_processlist_{tab_id}", classes="panel_data", show_cursor=False),
+                    DataTable(id=f"panel_locks_{tab_id}", classes="panel_container pad_top_1", show_cursor=False),
+                    DataTable(id=f"panel_processlist_{tab_id}", classes="panel_container pad_top_1", show_cursor=False),
                     classes="tab",
                     id=f"main_container_{tab_id}",
                 ),
@@ -312,10 +312,6 @@ class TabManager:
             f"#replication_thread_applier_container_{tab.id}", ScrollableContainer
         )
         tab.replication_thread_applier = self.app.query_one(f"#replication_thread_applier_{tab.id}", Static)
-
-        tab.panel_processlist.classes = "panel_container pad_top_1"
-        tab.panel_locks.classes = "panel_container pad_top_1"
-        tab.panel_graphs.classes = "panel_container pad_top_0"
 
         # By default, hide all the panels
         tab.panel_dashboard.display = False
