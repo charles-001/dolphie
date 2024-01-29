@@ -311,8 +311,6 @@ class Dolphie:
         }
 
         table = Table(
-            title="Users",
-            title_style="b #bbc8e8",
             header_style="b",
             box=box.SIMPLE_HEAVY,
             show_edge=False,

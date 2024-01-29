@@ -921,7 +921,11 @@ class DolphieApp(App):
 
             # Create dictionary of tables
             for table_counter in range(1, max_num_tables + 1):
-                tables[table_counter] = Table(box=box.HORIZONTALS, show_header=False, style="table_border")
+                table_box = box.HORIZONTALS
+                if max_num_tables == 1:
+                    table_box = None
+
+                tables[table_counter] = Table(box=table_box, show_header=False, style="table_border")
                 tables[table_counter].add_column("")
 
             # Loop over databases
@@ -944,7 +948,7 @@ class DolphieApp(App):
             table_grid.add_row(*all_tables)
 
             screen_data = Group(
-                Align.center("[b #bbc8e8]Databases[/b #bbc8e8] ([b highlight]%s[/b highlight])" % db_count),
+                Align.center("[b #bbc8e8]Databases[/b #bbc8e8] ([b highlight]%s[/b highlight])\n" % db_count),
                 Align.center(table_grid),
             )
 
@@ -1316,7 +1320,7 @@ class DolphieApp(App):
         elif key == "u":
             user_stat_data = dolphie.create_user_stats_table()
             if user_stat_data:
-                screen_data = Align.center(user_stat_data)
+                screen_data = Group(Align.center("[b #bbc8e8]Users\n"), Align.center(user_stat_data))
             else:
                 self.notify("User statistics command requires Performance Schema to be enabled")
 
@@ -1390,8 +1394,6 @@ class DolphieApp(App):
         elif key == "z":
             if dolphie.host_cache:
                 table = Table(
-                    title="[b #bbc8e8]Host Cache[/b #bbc8e8] ([b highlight]%s[/b highlight])" % len(dolphie.host_cache),
-                    title_style=Style(bold=True),
                     box=box.SIMPLE_HEAVY,
                     show_edge=False,
                     style="table_border",
@@ -1403,7 +1405,12 @@ class DolphieApp(App):
                     if ip:
                         table.add_row(ip, addr)
 
-                screen_data = table
+                screen_data = Group(
+                    Align.center(
+                        "[b #bbc8e8]Host Cache[/b #bbc8e8] ([b highlight]%s[/b highlight])\n" % len(dolphie.host_cache)
+                    ),
+                    table,
+                )
             else:
                 screen_data = "\nThere are currently no hosts resolved"
 
