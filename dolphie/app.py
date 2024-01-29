@@ -436,7 +436,7 @@ class DolphieApp(App):
                 "b red": "b #fd8383",
                 "b light_blue": "b #bbc8e8",
                 "panel_border": "#6171a6",
-                "table_border": "#52608d",
+                "table_border": "#313C5F",
             }
         )
         self.console.push_theme(theme)
@@ -921,7 +921,7 @@ class DolphieApp(App):
 
             # Create dictionary of tables
             for table_counter in range(1, max_num_tables + 1):
-                tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="table_border")
+                tables[table_counter] = Table(box=box.HORIZONTALS, show_header=False, style="table_border")
                 tables[table_counter].add_column("")
 
             # Loop over databases
@@ -944,9 +944,8 @@ class DolphieApp(App):
             table_grid.add_row(*all_tables)
 
             screen_data = Group(
-                Align.center("[b]Databases[/b]"),
+                Align.center("[b #bbc8e8]Databases[/b #bbc8e8] ([b highlight]%s[/b highlight])" % db_count),
                 Align.center(table_grid),
-                Align.center("Total: [b highlight]%s[/b highlight]" % db_count),
             )
 
         elif key == "e":
@@ -1096,7 +1095,7 @@ class DolphieApp(App):
                 return
 
             table_grid = Table.grid()
-            table1 = Table(box=box.ROUNDED, style="table_border")
+            table1 = Table(box=box.SIMPLE_HEAVY, style="table_border")
 
             header_style = Style(bold=True)
             table1.add_column("User", header_style=header_style)
@@ -1112,7 +1111,7 @@ class DolphieApp(App):
                     format_sys_table_memory(row["total_allocated"]),
                 )
 
-            table2 = Table(box=box.ROUNDED, style="table_border")
+            table2 = Table(box=box.SIMPLE_HEAVY, style="table_border")
             table2.add_column("Code Area", header_style=header_style)
             table2.add_column("Current", header_style=header_style)
 
@@ -1121,7 +1120,7 @@ class DolphieApp(App):
             for row in data:
                 table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
 
-            table3 = Table(box=box.ROUNDED, style="table_border")
+            table3 = Table(box=box.SIMPLE_HEAVY, style="table_border")
             table3.add_column("Host", header_style=header_style)
             table3.add_column("Current", header_style=header_style)
             table3.add_column("Total", header_style=header_style)
@@ -1135,7 +1134,7 @@ class DolphieApp(App):
                     format_sys_table_memory(row["total_allocated"]),
                 )
 
-            table_grid.add_row("", Align.center("[b]Memory Allocation[/b]"), "")
+            table_grid.add_row("", Align.center("[b #bbc8e8]Memory Allocation"), "")
             table_grid.add_row(table1, table3, table2)
 
             screen_data = Align.center(table_grid)
@@ -1262,7 +1261,7 @@ class DolphieApp(App):
                     transaction_history = dolphie.secondary_db_connection.fetchall()
 
                     if transaction_history:
-                        transaction_history_table = Table(box=None, header_style="#c5c7d2")
+                        transaction_history_table = Table(box=None)
                         transaction_history_table.add_column("Start Time")
                         transaction_history_table.add_column("Query", overflow="fold")
 
@@ -1345,7 +1344,7 @@ class DolphieApp(App):
 
                 # Create the number of tables we want
                 while table_counter <= max_num_tables:
-                    tables[table_counter] = Table(box=box.ROUNDED, show_header=False, style="table_border")
+                    tables[table_counter] = Table(box=box.HORIZONTALS, show_header=False, style="table_border")
                     tables[table_counter].add_column("")
                     tables[table_counter].add_column("")
 
@@ -1390,7 +1389,13 @@ class DolphieApp(App):
 
         elif key == "z":
             if dolphie.host_cache:
-                table = Table(box=box.ROUNDED, style="table_border")
+                table = Table(
+                    title="[b #bbc8e8]Host Cache[/b #bbc8e8] ([b highlight]%s[/b highlight])" % len(dolphie.host_cache),
+                    title_style=Style(bold=True),
+                    box=box.SIMPLE_HEAVY,
+                    show_edge=False,
+                    style="table_border",
+                )
                 table.add_column("Host/IP")
                 table.add_column("Hostname (if resolved)")
 
@@ -1398,16 +1403,17 @@ class DolphieApp(App):
                     if ip:
                         table.add_row(ip, addr)
 
-                screen_data = Group(
-                    Align.center("[b]Host Cache[/b]"),
-                    Align.center(table),
-                    Align.center("Total: [b highlight]%s" % len(dolphie.host_cache)),
-                )
+                screen_data = table
             else:
-                screen_data = Align.center("\nThere are currently no hosts resolved")
+                screen_data = "\nThere are currently no hosts resolved"
 
         elif key == "question_mark":
             keys = {
+                "1": "Show/hide Dashboard",
+                "2": "Show/hide Processlist",
+                "3": "Show/hide Replication/Replicas",
+                "4": "Show/hide Graph Metrics",
+                "5": "Show/hide Locks",
                 "`": "Quickly connect to another host",
                 "+": "Create a new tab",
                 "-": "Remove the current tab",
@@ -1438,25 +1444,19 @@ class DolphieApp(App):
                 "ctrl+d": "Switch to the next tab",
             }
 
-            table_keys = Table(box=box.HORIZONTALS, style="table_border", title="Commands", title_style="bold")
+            table_keys = Table(
+                box=box.SIMPLE_HEAVY,
+                show_edge=False,
+                style="table_border",
+                title="Commands",
+                title_style="bold #bbc8e8",
+                header_style="bold",
+            )
             table_keys.add_column("Key", justify="center", style="b highlight")
             table_keys.add_column("Description")
 
             for key, description in keys.items():
                 table_keys.add_row(key, description)
-
-            panels = {
-                "1": "Show/hide Dashboard",
-                "2": "Show/hide Processlist",
-                "3": "Show/hide Replication/Replicas",
-                "4": "Show/hide Graph Metrics",
-                "5": "Show/hide Locks",
-            }
-            table_panels = Table(box=box.HORIZONTALS, style="table_border", title="Panels", title_style="bold")
-            table_panels.add_column("Key", justify="center", style="b highlight")
-            table_panels.add_column("Description")
-            for key, description in sorted(panels.items()):
-                table_panels.add_row(key, description)
 
             datapoints = {
                 "Read Only": "If the host is in read-only mode",
@@ -1486,7 +1486,12 @@ class DolphieApp(App):
             }
 
             table_terminology = Table(
-                box=box.HORIZONTALS, style="table_border", title="Terminology", title_style="bold"
+                box=box.SIMPLE_HEAVY,
+                show_edge=False,
+                style="table_border",
+                title="Terminology",
+                title_style="bold #bbc8e8",
+                header_style="bold",
             )
             table_terminology.add_column("Datapoint", style="highlight")
             table_terminology.add_column("Description")
@@ -1495,8 +1500,6 @@ class DolphieApp(App):
 
             screen_data = Group(
                 Align.center(table_keys),
-                "",
-                Align.center(table_panels),
                 "",
                 Align.center(table_terminology),
                 "",

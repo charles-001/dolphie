@@ -11,7 +11,7 @@ from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
 from textual.containers import Container, ScrollableContainer
-from textual.widgets import Label, Static
+from textual.widgets import Static
 
 
 def create_panel(tab: Tab):
@@ -148,7 +148,6 @@ def create_panel(tab: Tab):
 
                 for _, replica in replica_pair:
                     replica_id = replica.get("id")
-                    replica_host = replica.get("host")
                     replica_table = replica.get("table")
 
                     if not replica_table:
@@ -160,7 +159,6 @@ def create_panel(tab: Tab):
                     else:
                         container.mount(
                             Container(
-                                Label(replica_host),
                                 ScrollableContainer(
                                     Static(
                                         replica_table, id=f"replica_{replica_id}_{tab.id}", classes=f"replica_{tab.id}"
@@ -312,6 +310,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         table.add_column(overflow="fold")
 
     if replica_object:
+        table.add_row("[b][light_blue]Host", "[light_blue]%s" % replica_object["host"])
         table.add_row("[label]Version", "%s" % replica_object["mysql_version"])
     else:
         table.add_row("[label]Primary", "%s" % data["Master_Host"])
@@ -499,7 +498,7 @@ def create_group_replication_member_table(tab: Tab):
         table.add_column()
         table.add_column()
 
-        table.add_row("[label]Member", f"{row.get('MEMBER_HOST')}:{row.get('MEMBER_PORT')}")
+        table.add_row("[b][light_blue]Member", f"[light_blue]{row.get('MEMBER_HOST')}:{row.get('MEMBER_PORT')}")
         table.add_row("[label]UUID", "%s" % row.get("MEMBER_ID"))
         table.add_row("[label]Role", member_role)
         table.add_row("[label]State", member_state)

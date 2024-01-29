@@ -28,6 +28,9 @@ class CommandModal(ModalScreen):
             width: auto;
             height: auto;
         }
+        CommandModal #filter_radio_buttons {
+            margin-bottom: 1;
+        }
         CommandModal #kill_container {
             width: 100%;
             height: 6;

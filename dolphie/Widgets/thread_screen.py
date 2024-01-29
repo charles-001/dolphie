@@ -25,6 +25,7 @@ class ThreadScreen(Screen):
         ThreadScreen > Label {
             width: 100%;
             content-align: center middle;
+            color: #bbc8e8;
             text-style: bold;
             margin-bottom: 1;
         }

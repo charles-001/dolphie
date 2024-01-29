@@ -310,7 +310,14 @@ class Dolphie:
             "Password Expire": {"field": "password_expires_in", "format_number": False},
         }
 
-        table = Table(header_style="bold white", box=box.ROUNDED, style="table_border")
+        table = Table(
+            title="Users",
+            title_style="b #bbc8e8",
+            header_style="b",
+            box=box.SIMPLE_HEAVY,
+            show_edge=False,
+            style="table_border",
+        )
         for column, data in columns.items():
             table.add_column(column, no_wrap=True)
 
