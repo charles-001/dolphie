@@ -44,6 +44,10 @@ ModalScreen {
     color: #4d5a85;
 }
 
+Sparkline {
+    margin-top: 1;
+}
+
 TopBar {
     dock: top;
     background: #192036;
