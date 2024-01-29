@@ -12,6 +12,8 @@ class CommandScreen(Screen):
             padding: 1;
         }
         CommandScreen Center > Static {
+            padding-left: 1;
+            padding-right: 1;
             background: #0b1221;
             border: tall #1c2238;
             width: auto;
