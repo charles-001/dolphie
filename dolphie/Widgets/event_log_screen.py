@@ -1,3 +1,5 @@
+import textwrap
+
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Widgets.topbar import TopBar
 from textual import events, on
@@ -147,7 +149,14 @@ class EventLog(Screen):
 
                     timestamp = f"[#858A97]{row['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}[/#858A97]"
 
-                    table.add_row(timestamp, level, row["message"])
+                    # Wrap the message to 125 characters so hopefully we don't get a scrollbar
+                    wrapped_message = textwrap.wrap(row["message"], width=125)
+                    wrapped_message = "\n".join(wrapped_message)
+
+                    line_counts = [cell.count("\n") + 1 for cell in wrapped_message]
+                    height = max(line_counts)
+
+                    table.add_row(timestamp, level, wrapped_message, height=height)
             else:
                 table.display = False
                 info.display = True

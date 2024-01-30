@@ -1623,7 +1623,9 @@ class DolphieApp(App):
 
                     table.add_row(*row_values)
 
-                screen_data = Group(Align.center("[b #bbc8e8]Users\n"), Align.center(table))
+                screen_data = Group(
+                    Align.center(f"[b #bbc8e8]Users ([highlight]{len(users)}[/highlight])\n"), Align.center(table)
+                )
 
                 self.call_from_thread(show_command_screen)
         except ManualException as e:
