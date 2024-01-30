@@ -32,10 +32,11 @@ class ReplicaManager:
         return self.replicas[thread_id]
 
     def remove_all(self):
-        for replica in self.replicas.values():
-            replica.connection.close()
+        if self.replicas:
+            for replica in self.replicas.values():
+                replica.connection.close()
 
-        self.replicas = {}
+            self.replicas = {}
 
     def get_sorted_replicas(self) -> List[Replica]:
         return sorted(self.replicas.values(), key=lambda x: x.host)

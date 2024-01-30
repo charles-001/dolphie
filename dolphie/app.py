@@ -460,9 +460,12 @@ class DolphieApp(App):
             dolphie.secondary_db_connection.close()
             dolphie.replica_manager.remove_all()
 
-            self.tab_manager.tabs.pop(tab.id, None)
-
+            tab.replicas_worker_timer.stop()
+            tab.worker_timer.stop()
+            tab.replicas_worker.cancel()
             tab.worker.cancel()
+
+            self.tab_manager.tabs.pop(tab.id, None)
             return
 
         if dolphie.quick_switched_connection:
@@ -620,20 +623,8 @@ class DolphieApp(App):
 
                     return
 
-                if dolphie.display_replication_panel:
-                    if dolphie.available_replicas:
-                        replication_panel.create_replica_panel(tab)
-                else:
-                    # If we're not displaying the replication panel, close all replica connections
-                    dolphie.replica_manager.remove_all()
-
-                    # Reset to default loading indicator
-                    tab.replicas_title.update(
-                        f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
-                    )
-                    tab.replicas_loading_indicator.display = True
-                    for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
-                        member.remove()
+                if dolphie.display_replication_panel and dolphie.available_replicas:
+                    replication_panel.create_replica_panel(tab)
 
                 tab.replicas_worker_timer = self.set_timer(
                     tab.dolphie.refresh_interval, partial(self.worker_fetch_replicas, tab.id)
@@ -650,24 +641,21 @@ class DolphieApp(App):
 
         dolphie = tab.dolphie
 
-        # Skip this if the conditions are right
-        if (
-            len(self.screen_stack) > 1
-            or dolphie.pause_refresh
-            or tab.id != self.tab.id
-            or dolphie.quick_switched_connection
-        ):
-            return
-
         if dolphie.display_replication_panel:
             if dolphie.available_replicas:
                 if not dolphie.replica_manager.replicas:
+                    tab.replicas_container.display = True
+                    tab.replicas_loading_indicator.display = True
                     tab.replicas_title.update(
                         f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
                     )
-                    tab.replicas_loading_indicator.display = True
 
                 replication_panel.fetch_replicas(tab)
+            else:
+                tab.replicas_container.display = False
+        else:
+            # If we're not displaying the replication panel, close all replica connections
+            dolphie.replica_manager.remove_all()
 
     def refresh_screen(self, tab: Tab):
         dolphie = tab.dolphie
@@ -918,8 +906,18 @@ class DolphieApp(App):
         elif key == "3":
             self.toggle_panel(Panels.REPLICATION)
 
-            for member in self.query(f".replica_container_{tab.id}"):
-                member.remove()
+            tab.replicas_container.display = False
+            if not dolphie.display_replication_panel:
+                for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
+                    member.remove()
+            else:
+                if dolphie.available_replicas:
+                    tab.replicas_container.display = True
+                    tab.replicas_title.update(
+                        f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
+                    )
+                    tab.replicas_loading_indicator.display = True
+
         elif key == "4":
             self.toggle_panel(Panels.GRAPHS)
             self.app.update_graphs("dml")

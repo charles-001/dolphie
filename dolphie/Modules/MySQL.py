@@ -101,8 +101,9 @@ class Database:
                         # 2055: Lost connection to MySQL server at hostname
 
                         self.app.notify(
-                            f"Tab [highlight]{self.tab_name}[/highlight]: {error_message}",
-                            title=f"MySQL Connection Error ({self.host}:{self.port})",
+                            f"Tab [highlight]{self.tab_name}[/highlight]"
+                            f" ([light_blue]{self.host}:{self.port}[/light_blue]): {error_message}",
+                            title="MySQL Connection Lost",
                             severity="error",
                             timeout=10,
                         )
@@ -111,8 +112,9 @@ class Database:
                         self.connect()
 
                         self.app.notify(
-                            f"Tab [highlight]{self.tab_name}[/highlight]: Successfully reconnected",
-                            title=f"MySQL Connection ({self.host}:{self.port})",
+                            f"Tab [highlight]{self.tab_name}[/highlight]"
+                            f" ([light_blue]{self.host}:{self.port}[/light_blue]): Successfully reconnected",
+                            title="MySQL Connection Created",
                             severity="success",
                             timeout=10,
                         )
