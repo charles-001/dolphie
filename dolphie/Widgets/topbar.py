@@ -5,7 +5,6 @@ from textual.widgets import Label
 
 
 class TopBar(Container):
-    app_version = reactive("", init=False)
     host = reactive("", init=False)
 
     def __init__(self, read_only="", app_version="", host="", help=""):
@@ -27,9 +26,6 @@ class TopBar(Container):
         if not host:
             host = ""
         self.host = host
-
-    def watch_app_version(self):
-        self.topbar_title.update(f" [b light_blue]dolphie[/b light_blue] :dolphin: [light_blue]v{self.app_version}")
 
     def watch_host(self):
         if self.read_only:

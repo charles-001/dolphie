@@ -1,5 +1,6 @@
 import textwrap
 
+from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Widgets.topbar import TopBar
 from textual import events, on
@@ -49,13 +50,13 @@ class EventLog(Screen):
         }
     """
 
-    def __init__(self, read_only, app_version, host, db):
+    def __init__(self, read_only, app_version, host, db_connection: Database):
         super().__init__()
 
         self.read_only = read_only
         self.app_version = app_version
         self.host = host
-        self.db = db
+        self.db_connection = db_connection
 
         self.levels = {
             "system": {"active": True, "sql": "prio = 'System'"},
@@ -126,8 +127,8 @@ class EventLog(Screen):
 
         if where_clause:
             query = MySQLQueries.error_log.replace("$1", f"AND ({where_clause})")
-            event_count = self.db.execute(query)
-            data = self.db.fetchall()
+            event_count = self.db_connection.execute(query)
+            data = self.db_connection.fetchall()
 
             if data:
                 table.add_column(f"Event ({event_count})")
@@ -149,8 +150,8 @@ class EventLog(Screen):
 
                     timestamp = f"[#858A97]{row['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}[/#858A97]"
 
-                    # Wrap the message to 125 characters so hopefully we don't get a scrollbar
-                    wrapped_message = textwrap.wrap(row["message"], width=125)
+                    # Wrap the message to 78% of console width so hopefully we don't get a scrollbar
+                    wrapped_message = textwrap.wrap(row["message"], width=round(self.app.console.width * 0.78))
                     wrapped_message = "\n".join(wrapped_message)
 
                     line_counts = [cell.count("\n") + 1 for cell in wrapped_message]
