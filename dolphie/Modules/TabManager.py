@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
 from dolphie.Widgets.quick_switch import QuickSwitchHostModal
+from dolphie.Widgets.spinner import SpinnerWidget
 from textual.app import App
 from textual.containers import (
     Center,
@@ -45,6 +46,8 @@ class Tab:
     panel_replication: Container = None
     panel_locks: DataTable = None
     panel_processlist: DataTable = None
+
+    spinner: SpinnerWidget = None
 
     dashboard_host_information: Static = None
     dashboard_innodb: Static = None
@@ -146,6 +149,7 @@ class TabManager:
             TabPane(
                 tab_name,
                 LoadingIndicator(id=f"loading_indicator_{tab_id}"),
+                SpinnerWidget(id=f"spinner_{tab_id}"),
                 VerticalScroll(
                     Container(
                         Center(
@@ -288,6 +292,9 @@ class TabManager:
         tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
         tab.panel_locks = self.app.query_one(f"#panel_locks_{tab.id}", DataTable)
         tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", DataTable)
+
+        tab.spinner = self.app.query_one(f"#spinner_{tab.id}", SpinnerWidget)
+        tab.spinner.hide()
 
         tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
         tab.dashboard_innodb = self.app.query_one(f"#dashboard_innodb_{tab.id}", Static)

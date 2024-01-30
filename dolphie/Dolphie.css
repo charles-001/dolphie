@@ -48,6 +48,12 @@ Sparkline {
     margin-top: 1;
 }
 
+SpinnerWidget {
+    color: #8fb0ee;
+    height: auto;
+    content-align: center middle;
+}
+
 TopBar {
     dock: top;
     background: #192036;

@@ -16,10 +16,9 @@ from urllib.parse import urlparse
 
 import dolphie.Modules.MetricManager as MetricManager
 import myloginpath
-import pymysql
 from dolphie import Dolphie
 from dolphie.DataTypes import Panels
-from dolphie.Modules.Functions import format_sys_table_memory
+from dolphie.Modules.Functions import format_number, format_sys_table_memory
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab, TabManager
@@ -741,6 +740,15 @@ class DolphieApp(App):
         )
         self.query_one(f"#stats_{tab_metric_instance_name}_{self.tab.id}").update(formatted_stat_data)
 
+    def toggle_panel(self, panel_name):
+        panel = self.app.query_one(f"#panel_{panel_name}_{self.tab.id}")
+
+        new_display = not panel.display
+        panel.display = new_display
+        setattr(self.tab.dolphie, f"display_{panel_name}_panel", new_display)
+        if panel_name not in ["graphs"]:
+            self.app.refresh_panel(panel_name, toggled=True)
+
     def refresh_panel(self, panel_name, toggled=False):
         # If loading indicator is displaying, don't refresh
         if self.tab.loading_indicator.display:
@@ -803,10 +811,6 @@ class DolphieApp(App):
         metric_data.visible = event.value
 
         self.update_graphs(metric_instance_name)
-
-    def compose(self) -> ComposeResult:
-        yield TopBar(host="Connecting to MySQL", app_version=self.dolphie.app_version, help="press [b]?[/b] for help")
-        yield TabbedContent(id="tabbed_content")
 
     async def capture_key(self, key):
         screen_data = None
@@ -907,50 +911,7 @@ class DolphieApp(App):
             self.notify("Cleared all filters", severity="success")
 
         elif key == "d":
-            tables = {}
-            all_tables = []
-
-            db_count = dolphie.secondary_db_connection.execute(MySQLQueries.databases)
-            databases = dolphie.secondary_db_connection.fetchall()
-
-            # Determine how many tables to provide data
-            max_num_tables = 1 if db_count <= 20 else 3
-
-            # Calculate how many databases per table
-            row_per_count = db_count // max_num_tables
-
-            # Create dictionary of tables
-            for table_counter in range(1, max_num_tables + 1):
-                table_box = box.HORIZONTALS
-                if max_num_tables == 1:
-                    table_box = None
-
-                tables[table_counter] = Table(box=table_box, show_header=False, style="table_border")
-                tables[table_counter].add_column("")
-
-            # Loop over databases
-            db_counter = 1
-            table_counter = 1
-
-            # Sort the databases by name
-            for database in databases:
-                tables[table_counter].add_row(database["SCHEMA_NAME"])
-                db_counter += 1
-
-                if db_counter > row_per_count and table_counter < max_num_tables:
-                    table_counter += 1
-                    db_counter = 1
-
-            # Collect table data into an array
-            all_tables = [table_data for table_data in tables.values() if table_data]
-
-            table_grid = Table.grid()
-            table_grid.add_row(*all_tables)
-
-            screen_data = Group(
-                Align.center("[b #bbc8e8]Databases[/b #bbc8e8] ([b highlight]%s[/b highlight])\n" % db_count),
-                Align.center(table_grid),
-            )
+            self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "e":
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
@@ -1011,16 +972,8 @@ class DolphieApp(App):
 
         elif key == "k":
 
-            def command_get_input(thread_id):
-                try:
-                    if dolphie.aws_rds:
-                        dolphie.secondary_db_connection.cursor.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                    else:
-                        dolphie.secondary_db_connection.cursor.execute("KILL %s" % thread_id)
-
-                    self.notify("Killed Thread ID [b highlight]%s[/b highlight]" % thread_id, severity="success")
-                except Exception as e:
-                    self.notify(e.args[1], title="Error killing Thread ID", severity="error")
+            def command_get_input(data):
+                self.run_command_in_worker(key=key, dolphie=dolphie, additional_data=data)
 
             self.app.push_screen(
                 CommandModal(
@@ -1034,36 +987,7 @@ class DolphieApp(App):
         elif key == "K":
 
             def command_get_input(data):
-                def execute_kill(thread_id):
-                    query = "CALL mysql.rds_kill(%s)" if dolphie.aws_rds else "KILL %s"
-                    dolphie.secondary_db_connection.cursor.execute(query % thread_id)
-
-                kill_type, kill_value, include_sleeping_queries, lower_limit, upper_limit = data
-                db_field = {"username": "user", "host": "host", "time_range": "time"}.get(kill_type)
-
-                commands_to_kill = ["Query", "Execute"]
-
-                if include_sleeping_queries:
-                    commands_to_kill.append("Sleep")
-
-                threads_killed = 0
-                for thread_id, thread in dolphie.processlist_threads_snapshot.items():
-                    try:
-                        if thread["command"] in commands_to_kill:
-                            if kill_type == "time_range":
-                                if lower_limit <= thread["time"] <= upper_limit:
-                                    execute_kill(thread_id)
-                                    threads_killed += 1
-                            elif thread[db_field] == kill_value:
-                                execute_kill(thread_id)
-                                threads_killed += 1
-                    except Exception as e:
-                        self.notify(str(e), title="Error Killing Thread ID", severity="error")
-
-                if threads_killed:
-                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] threads")
-                else:
-                    self.notify("No threads were killed")
+                self.run_command_in_worker(key=key, dolphie=dolphie, additional_data=data)
 
             self.app.push_screen(
                 CommandModal(
@@ -1075,73 +999,16 @@ class DolphieApp(App):
             )
 
         elif key == "l":
-            deadlock = ""
-            output = re.search(
-                r"------------------------\nLATEST\sDETECTED\sDEADLOCK\n------------------------"
-                "\n(.*?)------------\nTRANSACTIONS",
-                dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status"),
-                flags=re.S,
-            )
-            if output:
-                deadlock = output.group(1)
-
-                deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
-                screen_data = deadlock
-            else:
-                screen_data = Align.center("No deadlock detected")
+            self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "o":
-            screen_data = dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
+            self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "m":
             if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
                 self.notify("Memory usage command requires MySQL 5.7+ with Performance Schema enabled")
-                return
-
-            table_grid = Table.grid()
-            table1 = Table(box=box.SIMPLE_HEAVY, style="table_border")
-
-            header_style = Style(bold=True)
-            table1.add_column("User", header_style=header_style)
-            table1.add_column("Current", header_style=header_style)
-            table1.add_column("Total", header_style=header_style)
-
-            dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_user)
-            data = dolphie.secondary_db_connection.fetchall()
-            for row in data:
-                table1.add_row(
-                    row["user"],
-                    format_sys_table_memory(row["current_allocated"]),
-                    format_sys_table_memory(row["total_allocated"]),
-                )
-
-            table2 = Table(box=box.SIMPLE_HEAVY, style="table_border")
-            table2.add_column("Code Area", header_style=header_style)
-            table2.add_column("Current", header_style=header_style)
-
-            dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_code_area)
-            data = dolphie.secondary_db_connection.fetchall()
-            for row in data:
-                table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
-
-            table3 = Table(box=box.SIMPLE_HEAVY, style="table_border")
-            table3.add_column("Host", header_style=header_style)
-            table3.add_column("Current", header_style=header_style)
-            table3.add_column("Total", header_style=header_style)
-
-            dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_host)
-            data = dolphie.secondary_db_connection.fetchall()
-            for row in data:
-                table3.add_row(
-                    dolphie.get_hostname(row["host"]),
-                    format_sys_table_memory(row["current_allocated"]),
-                    format_sys_table_memory(row["total_allocated"]),
-                )
-
-            table_grid.add_row("", Align.center("[b #bbc8e8]Memory Allocation"), "")
-            table_grid.add_row(table1, table3, table2)
-
-            screen_data = Align.center(table_grid)
+            else:
+                self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "p":
             if not dolphie.pause_refresh:
@@ -1197,106 +1064,8 @@ class DolphieApp(App):
 
         elif key == "t":
 
-            def command_get_input(thread_id):
-                thread_data = dolphie.processlist_threads_snapshot.get(thread_id)
-                if not thread_data:
-                    self.notify("Thread ID was not found in processlist")
-                    return
-
-                thread_table = Table(box=None, show_header=False)
-                thread_table.add_column("")
-                thread_table.add_column("", overflow="fold")
-
-                thread_table.add_row("[label]Thread ID", str(thread_id))
-                thread_table.add_row("[label]User", thread_data["user"])
-                thread_table.add_row("[label]Host", thread_data["host"])
-                thread_table.add_row("[label]Database", thread_data["db"])
-                thread_table.add_row("[label]Command", thread_data["command"])
-                thread_table.add_row("[label]State", thread_data["state"])
-                thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data["time"])).zfill(8))
-                thread_table.add_row("[label]Rows Locked", thread_data["trx_rows_locked"])
-                thread_table.add_row("[label]Rows Modified", thread_data["trx_rows_modified"])
-
-                if (
-                    "innodb_thread_concurrency" in dolphie.global_variables
-                    and dolphie.global_variables["innodb_thread_concurrency"]
-                ):
-                    thread_table.add_row("[label]Tickets", thread_data["trx_concurrency_tickets"])
-
-                thread_table.add_row("", "")
-                thread_table.add_row("[label]TRX Time", thread_data["trx_time"])
-                thread_table.add_row("[label]TRX State", thread_data["trx_state"])
-                thread_table.add_row("[label]TRX Operation", thread_data["trx_operation_state"])
-
-                query = sqlformat(thread_data["query"], reindent_aligned=True)
-                query_db = thread_data["db"]
-
-                if query:
-                    explain_failure = ""
-                    explain_data = ""
-
-                    formatted_query = Syntax(
-                        query,
-                        "sql",
-                        line_numbers=False,
-                        word_wrap=True,
-                        theme="monokai",
-                        background_color="#0b1221",
-                    )
-
-                    if query_db:
-                        try:
-                            dolphie.secondary_db_connection.cursor.execute("USE %s" % query_db)
-                            dolphie.secondary_db_connection.cursor.execute("EXPLAIN %s" % query)
-
-                            explain_data = dolphie.secondary_db_connection.fetchall()
-                        except pymysql.Error as e:
-                            explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.args[1]
-
-                # Transaction history
-                transaction_history_table = None
-                if (
-                    dolphie.is_mysql_version_at_least("5.7")
-                    and dolphie.performance_schema_enabled
-                    and thread_data["mysql_thread_id"]
-                ):
-                    query = MySQLQueries.thread_transaction_history.replace("$1", str(thread_data["mysql_thread_id"]))
-                    dolphie.secondary_db_connection.cursor.execute(query)
-                    transaction_history = dolphie.secondary_db_connection.fetchall()
-
-                    if transaction_history:
-                        transaction_history_table = Table(box=None)
-                        transaction_history_table.add_column("Start Time")
-                        transaction_history_table.add_column("Query", overflow="fold")
-
-                        for query in transaction_history:
-                            trx_history_formatted_query = ""
-                            if query["sql_text"]:
-                                trx_history_formatted_query = Syntax(
-                                    re.sub(r"\s+", " ", query["sql_text"]),
-                                    "sql",
-                                    line_numbers=False,
-                                    word_wrap=True,
-                                    theme="monokai",
-                                    background_color="#0b1221",
-                                )
-
-                            transaction_history_table.add_row(
-                                query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), trx_history_formatted_query
-                            )
-
-                self.app.push_screen(
-                    ThreadScreen(
-                        read_only=dolphie.read_only_status,
-                        app_version=dolphie.app_version,
-                        host=dolphie.mysql_host,
-                        thread_table=thread_table,
-                        query=formatted_query,
-                        explain_data=explain_data,
-                        explain_failure=explain_failure,
-                        transaction_history_table=transaction_history_table,
-                    )
-                )
+            def command_get_input(data):
+                self.run_command_in_worker(key=key, dolphie=dolphie, additional_data=data)
 
             self.app.push_screen(
                 CommandModal(
@@ -1318,11 +1087,10 @@ class DolphieApp(App):
                 self.notify("Processlist will now only show threads that have an active transaction")
 
         elif key == "u":
-            user_stat_data = dolphie.create_user_stats_table()
-            if user_stat_data:
-                screen_data = Group(Align.center("[b #bbc8e8]Users\n"), Align.center(user_stat_data))
-            else:
+            if not dolphie.performance_schema_enabled:
                 self.notify("User statistics command requires Performance Schema to be enabled")
+            else:
+                self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "v":
 
@@ -1521,14 +1289,342 @@ class DolphieApp(App):
                 CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
             )
 
-    def toggle_panel(self, panel_name):
-        panel = self.app.query_one(f"#panel_{panel_name}_{self.tab.id}")
+    @work(thread=True)
+    def run_command_in_worker(self, key: str, dolphie: Dolphie, additional_data=None):
+        tab = self.tab_manager.get_tab(dolphie.tab_id)
 
-        new_display = not panel.display
-        panel.display = new_display
-        setattr(self.tab.dolphie, f"display_{panel_name}_panel", new_display)
-        if panel_name not in ["graphs"]:
-            self.app.refresh_panel(panel_name, toggled=True)
+        # These are the screens to display we use for the commands
+        def show_command_screen():
+            self.app.push_screen(
+                CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
+            )
+
+        def show_thread_screen():
+            self.app.push_screen(
+                ThreadScreen(
+                    read_only=dolphie.read_only_status,
+                    app_version=dolphie.app_version,
+                    host=dolphie.mysql_host,
+                    thread_table=thread_table,
+                    query=formatted_query,
+                    explain_data=explain_data,
+                    explain_failure=explain_failure,
+                    transaction_history_table=transaction_history_table,
+                )
+            )
+
+        tab.spinner.show()
+
+        try:
+            if key == "d":
+                tables = {}
+                all_tables = []
+
+                db_count = dolphie.secondary_db_connection.execute(MySQLQueries.databases)
+                databases = dolphie.secondary_db_connection.fetchall()
+
+                # Determine how many tables to provide data
+                max_num_tables = 1 if db_count <= 20 else 3
+
+                # Calculate how many databases per table
+                row_per_count = db_count // max_num_tables
+
+                # Create dictionary of tables
+                for table_counter in range(1, max_num_tables + 1):
+                    table_box = box.HORIZONTALS
+                    if max_num_tables == 1:
+                        table_box = None
+
+                    tables[table_counter] = Table(box=table_box, show_header=False, style="table_border")
+                    tables[table_counter].add_column("")
+
+                # Loop over databases
+                db_counter = 1
+                table_counter = 1
+
+                # Sort the databases by name
+                for database in databases:
+                    tables[table_counter].add_row(database["SCHEMA_NAME"])
+                    db_counter += 1
+
+                    if db_counter > row_per_count and table_counter < max_num_tables:
+                        table_counter += 1
+                        db_counter = 1
+
+                # Collect table data into an array
+                all_tables = [table_data for table_data in tables.values() if table_data]
+
+                table_grid = Table.grid()
+                table_grid.add_row(*all_tables)
+
+                screen_data = Group(
+                    Align.center("[b #bbc8e8]Databases[/b #bbc8e8] ([b highlight]%s[/b highlight])\n" % db_count),
+                    Align.center(table_grid),
+                )
+
+                self.call_from_thread(show_command_screen)
+
+            if key == "k":
+                thread_id = additional_data
+                try:
+                    if dolphie.aws_rds:
+                        dolphie.secondary_db_connection.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                    else:
+                        dolphie.secondary_db_connection.execute("KILL %s" % thread_id)
+
+                    self.notify("Killed Thread ID [b highlight]%s[/b highlight]" % thread_id, severity="success")
+                except ManualException as e:
+                    self.notify(e.reason, title="Error killing Thread ID", severity="error")
+
+            if key == "K":
+
+                def execute_kill(thread_id):
+                    query = "CALL mysql.rds_kill(%s)" if dolphie.aws_rds else "KILL %s"
+                    dolphie.secondary_db_connection.execute(query % thread_id)
+
+                kill_type, kill_value, include_sleeping_queries, lower_limit, upper_limit = additional_data
+                db_field = {"username": "user", "host": "host", "time_range": "time"}.get(kill_type)
+
+                commands_to_kill = ["Query", "Execute"]
+
+                if include_sleeping_queries:
+                    commands_to_kill.append("Sleep")
+
+                tab.spinner.show()
+                threads_killed = 0
+                for thread_id, thread in dolphie.processlist_threads_snapshot.items():
+                    try:
+                        if thread["command"] in commands_to_kill:
+                            if kill_type == "time_range":
+                                if lower_limit <= thread["time"] <= upper_limit:
+                                    execute_kill(thread_id)
+                                    threads_killed += 1
+                            elif thread[db_field] == kill_value:
+                                execute_kill(thread_id)
+                                threads_killed += 1
+                    except ManualException as e:
+                        self.notify(e.reason, title="Error Killing Thread ID", severity="error")
+
+                if threads_killed:
+                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] threads")
+                else:
+                    self.notify("No threads were killed")
+
+            elif key == "l":
+                deadlock = ""
+                output = re.search(
+                    r"------------------------\nLATEST\sDETECTED\sDEADLOCK\n------------------------"
+                    "\n(.*?)------------\nTRANSACTIONS",
+                    dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status"),
+                    flags=re.S,
+                )
+                if output:
+                    deadlock = output.group(1)
+
+                    deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
+                    screen_data = deadlock
+                else:
+                    screen_data = Align.center("No deadlock detected")
+
+                self.call_from_thread(show_command_screen)
+
+            elif key == "o":
+                screen_data = dolphie.secondary_db_connection.fetch_value_from_field(
+                    MySQLQueries.innodb_status, "Status"
+                )
+
+                self.call_from_thread(show_command_screen)
+
+            elif key == "m":
+                table_grid = Table.grid()
+                table1 = Table(box=box.SIMPLE_HEAVY, style="table_border")
+
+                header_style = Style(bold=True)
+                table1.add_column("User", header_style=header_style)
+                table1.add_column("Current", header_style=header_style)
+                table1.add_column("Total", header_style=header_style)
+
+                dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_user)
+                data = dolphie.secondary_db_connection.fetchall()
+                for row in data:
+                    table1.add_row(
+                        row["user"],
+                        format_sys_table_memory(row["current_allocated"]),
+                        format_sys_table_memory(row["total_allocated"]),
+                    )
+
+                table2 = Table(box=box.SIMPLE_HEAVY, style="table_border")
+                table2.add_column("Code Area", header_style=header_style)
+                table2.add_column("Current", header_style=header_style)
+
+                dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_code_area)
+                data = dolphie.secondary_db_connection.fetchall()
+                for row in data:
+                    table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
+
+                table3 = Table(box=box.SIMPLE_HEAVY, style="table_border")
+                table3.add_column("Host", header_style=header_style)
+                table3.add_column("Current", header_style=header_style)
+                table3.add_column("Total", header_style=header_style)
+
+                dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_host)
+                data = dolphie.secondary_db_connection.fetchall()
+                for row in data:
+                    table3.add_row(
+                        dolphie.get_hostname(row["host"]),
+                        format_sys_table_memory(row["current_allocated"]),
+                        format_sys_table_memory(row["total_allocated"]),
+                    )
+
+                table_grid.add_row("", Align.center("[b #bbc8e8]Memory Allocation"), "")
+                table_grid.add_row(table1, table3, table2)
+
+                screen_data = Align.center(table_grid)
+
+                self.call_from_thread(show_command_screen)
+            elif key == "t":
+                formatted_query = ""
+                explain_failure = ""
+                explain_data = ""
+
+                thread_id = additional_data
+
+                thread_data = dolphie.processlist_threads_snapshot.get(thread_id)
+
+                thread_table = Table(box=None, show_header=False)
+                thread_table.add_column("")
+                thread_table.add_column("", overflow="fold")
+
+                thread_table.add_row("[label]Thread ID", str(thread_id))
+                thread_table.add_row("[label]User", thread_data["user"])
+                thread_table.add_row("[label]Host", thread_data["host"])
+                thread_table.add_row("[label]Database", thread_data["db"])
+                thread_table.add_row("[label]Command", thread_data["command"])
+                thread_table.add_row("[label]State", thread_data["state"])
+                thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data["time"])).zfill(8))
+                thread_table.add_row("[label]Rows Locked", thread_data["trx_rows_locked"])
+                thread_table.add_row("[label]Rows Modified", thread_data["trx_rows_modified"])
+
+                if (
+                    "innodb_thread_concurrency" in dolphie.global_variables
+                    and dolphie.global_variables["innodb_thread_concurrency"]
+                ):
+                    thread_table.add_row("[label]Tickets", thread_data["trx_concurrency_tickets"])
+
+                thread_table.add_row("", "")
+                thread_table.add_row("[label]TRX Time", thread_data["trx_time"])
+                thread_table.add_row("[label]TRX State", thread_data["trx_state"])
+                thread_table.add_row("[label]TRX Operation", thread_data["trx_operation_state"])
+
+                query = sqlformat(thread_data["query"], reindent_aligned=True)
+                query_db = thread_data["db"]
+                if query:
+                    formatted_query = Syntax(
+                        query,
+                        "sql",
+                        line_numbers=False,
+                        word_wrap=True,
+                        theme="monokai",
+                        background_color="#0b1221",
+                    )
+
+                    if query_db:
+                        try:
+                            dolphie.secondary_db_connection.execute("USE %s" % query_db)
+                            dolphie.secondary_db_connection.execute("EXPLAIN %s" % query)
+
+                            explain_data = dolphie.secondary_db_connection.fetchall()
+                        except ManualException as e:
+                            explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.reason
+
+                # Transaction history
+                transaction_history_table = None
+                if (
+                    dolphie.is_mysql_version_at_least("5.7")
+                    and dolphie.performance_schema_enabled
+                    and thread_data["mysql_thread_id"]
+                ):
+                    query = MySQLQueries.thread_transaction_history.replace("$1", str(thread_data["mysql_thread_id"]))
+                    dolphie.secondary_db_connection.execute(query)
+                    transaction_history = dolphie.secondary_db_connection.fetchall()
+
+                    if transaction_history:
+                        transaction_history_table = Table(box=None)
+                        transaction_history_table.add_column("Start Time")
+                        transaction_history_table.add_column("Query", overflow="fold")
+
+                        for query in transaction_history:
+                            trx_history_formatted_query = ""
+                            if query["sql_text"]:
+                                trx_history_formatted_query = Syntax(
+                                    re.sub(r"\s+", " ", query["sql_text"]),
+                                    "sql",
+                                    line_numbers=False,
+                                    word_wrap=True,
+                                    theme="monokai",
+                                    background_color="#0b1221",
+                                )
+
+                            transaction_history_table.add_row(
+                                query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), trx_history_formatted_query
+                            )
+
+                self.call_from_thread(show_thread_screen)
+
+            elif key == "u":
+                if dolphie.is_mysql_version_at_least("5.7"):
+                    dolphie.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
+                else:
+                    dolphie.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics_56)
+
+                users = dolphie.secondary_db_connection.fetchall()
+
+                columns = {
+                    "User": {"field": "user", "format_number": False},
+                    "Active": {"field": "current_connections", "format_number": True},
+                    "Total": {"field": "total_connections", "format_number": True},
+                    "Rows Read": {"field": "rows_examined", "format_number": True},
+                    "Rows Sent": {"field": "rows_sent", "format_number": True},
+                    "Rows Updated": {"field": "rows_affected", "format_number": True},
+                    "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
+                    "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
+                    "Plugin": {"field": "plugin", "format_number": False},
+                    "Password Expire": {"field": "password_expires_in", "format_number": False},
+                }
+
+                table = Table(
+                    header_style="b",
+                    box=box.SIMPLE_HEAVY,
+                    show_edge=False,
+                    style="table_border",
+                )
+                for column, data in columns.items():
+                    table.add_column(column, no_wrap=True)
+
+                for user in users:
+                    row_values = []
+
+                    for column, data in columns.items():
+                        value = user.get(data["field"], "N/A")
+
+                        if data["format_number"]:
+                            row_values.append(format_number(value) if value else "0")
+                        else:
+                            row_values.append(value or "")
+
+                    table.add_row(*row_values)
+
+                screen_data = Group(Align.center("[b #bbc8e8]Users\n"), Align.center(table))
+
+                self.call_from_thread(show_command_screen)
+        except ManualException as e:
+            self.notify(e.reason, title=f"Error running hotkey '{key}'", severity="error", timeout=10)
+
+        tab.spinner.hide()
+
+    def compose(self) -> ComposeResult:
+        yield TopBar(host="Connecting to MySQL", app_version=self.dolphie.app_version, help="press [b]?[/b] for help")
+        yield TabbedContent(id="tabbed_content")
 
 
 def main():

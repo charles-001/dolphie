@@ -4,7 +4,7 @@ from textual import events, on
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
-from textual.widgets import DataTable, Input, Label, Switch
+from textual.widgets import DataTable, Input, Label, LoadingIndicator, Switch
 
 
 class EventLog(Screen):
@@ -83,6 +83,8 @@ class EventLog(Screen):
     def compose(self) -> ComposeResult:
         yield TopBar(read_only=self.read_only, app_version=self.app_version, host=self.host)
 
+        yield LoadingIndicator()
+
         yield Label("[b white]1[/b white] = top of events/[b white]2[/b white] = bottom of events", id="help")
         with Horizontal():
             switch_options = [("System", "system"), ("Warning", "warning"), ("Error", "error")]
@@ -155,3 +157,5 @@ class EventLog(Screen):
             search_text.display = False
             info.display = True
             info.update("Toggle the switches above to filter what events you'd like to see")
+
+        self.query_one(LoadingIndicator).display = False

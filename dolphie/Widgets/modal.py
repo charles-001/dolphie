@@ -46,6 +46,7 @@ class CommandModal(ModalScreen):
             width: 100%;
             height: auto;
             content-align: center middle;
+            padding-bottom: 1;
         }
     """
     BINDINGS = [

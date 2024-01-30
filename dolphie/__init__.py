@@ -6,14 +6,11 @@ from importlib import metadata
 
 import dolphie.Modules.MetricManager as MetricManager
 import requests
-from dolphie.Modules.Functions import format_number
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Widgets.new_version_modal import NewVersionModal
 from packaging.version import parse as parse_version
-from rich import box
-from rich.table import Table
 from textual.app import App
 from textual.widgets import Switch
 
@@ -177,7 +174,7 @@ class Dolphie:
             self.app, self.tab_name, self.host, self.user, self.password, self.socket, self.port, self.ssl
         )
         self.secondary_db_connection = Database(
-            self.app, self.tab_name, self.host, self.user, self.password, self.socket, self.port, self.ssl
+            self.app, self.tab_name, self.host, self.user, self.password, self.socket, self.port, self.ssl, False
         )
 
         global_variables = self.main_db_connection.fetch_status_and_variables("variables")
@@ -292,53 +289,6 @@ class Dolphie:
         value = return_data[1]
         if value:
             setattr(self, variable, value)
-
-    def create_user_stats_table(self):
-        if not self.performance_schema_enabled:
-            return False
-
-        columns = {
-            "User": {"field": "user", "format_number": False},
-            "Active": {"field": "current_connections", "format_number": True},
-            "Total": {"field": "total_connections", "format_number": True},
-            "Rows Read": {"field": "rows_examined", "format_number": True},
-            "Rows Sent": {"field": "rows_sent", "format_number": True},
-            "Rows Updated": {"field": "rows_affected", "format_number": True},
-            "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
-            "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
-            "Plugin": {"field": "plugin", "format_number": False},
-            "Password Expire": {"field": "password_expires_in", "format_number": False},
-        }
-
-        table = Table(
-            header_style="b",
-            box=box.SIMPLE_HEAVY,
-            show_edge=False,
-            style="table_border",
-        )
-        for column, data in columns.items():
-            table.add_column(column, no_wrap=True)
-
-        if self.is_mysql_version_at_least("5.7"):
-            self.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
-        else:
-            self.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics_56)
-
-        users = self.secondary_db_connection.fetchall()
-        for user in users:
-            row_values = []
-
-            for column, data in columns.items():
-                value = user.get(data["field"], "N/A")
-
-                if data["format_number"]:
-                    row_values.append(format_number(value) if value else "0")
-                else:
-                    row_values.append(value or "")
-
-            table.add_row(*row_values)
-
-        return table
 
     def load_host_cache_file(self):
         if os.path.exists(self.host_cache_file):

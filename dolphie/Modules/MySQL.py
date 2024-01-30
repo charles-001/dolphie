@@ -7,7 +7,18 @@ from textual.app import App
 
 
 class Database:
-    def __init__(self, app: App, tab_name: str, host: str, user: str, password: str, socket: str, port: int, ssl: str):
+    def __init__(
+        self,
+        app: App,
+        tab_name: str,
+        host: str,
+        user: str,
+        password: str,
+        socket: str,
+        port: int,
+        ssl: str,
+        save_connection_id: bool = True,
+    ):
         self.connection: pymysql.Connection = None
         self.connection_id: int = None
 
@@ -19,6 +30,7 @@ class Database:
         self.socket = socket
         self.port = port
         self.ssl = ssl
+        self.save_connection_id = save_connection_id
 
         self.max_reconnect_attempts = 3
 
@@ -35,13 +47,13 @@ class Database:
                 use_unicode=False,
                 ssl=self.ssl,
                 autocommit=True,
-                read_timeout=5,
-                write_timeout=5,
+                connect_timeout=5,
             )
             self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
 
             # Get connection ID for processlist filtering
-            self.connection_id = self.fetch_value_from_field("SELECT CONNECTION_ID()")
+            if self.save_connection_id:
+                self.connection_id = self.fetch_value_from_field("SELECT CONNECTION_ID()")
 
             # Reduce any issues with the queries Dolphie runs (mostly targetting only_full_group_by)
             self.execute("SET SESSION sql_mode = ''")
