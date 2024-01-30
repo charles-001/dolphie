@@ -1717,7 +1717,11 @@ class DolphieApp(App):
         tab.spinner.hide()
 
     def compose(self) -> ComposeResult:
-        yield TopBar(host="Connecting to MySQL", app_version=self.dolphie.app_version, help="press [b]?[/b] for help")
+        yield TopBar(
+            host="Connecting to MySQL",
+            app_version=self.dolphie.app_version,
+            help="press [b highlight]?[/b highlight] for help",
+        )
         yield TabbedContent(id="tabbed_content")
 
 
