@@ -813,6 +813,12 @@ class DolphieApp(App):
         self.update_graphs(metric_instance_name)
 
     async def capture_key(self, key):
+        if self.tab.command_started:
+            self.notify("There's already a command running, please wait for it to finish")
+            return
+
+        self.tab.command_started = True
+
         screen_data = None
         dolphie = self.tab.dolphie
 
@@ -1289,6 +1295,8 @@ class DolphieApp(App):
                 CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
             )
 
+        self.tab.command_started = False
+
     @work(thread=True)
     def run_command_in_worker(self, key: str, dolphie: Dolphie, additional_data=None):
         tab = self.tab_manager.get_tab(dolphie.tab_id)
@@ -1313,6 +1321,7 @@ class DolphieApp(App):
                 )
             )
 
+        self.tab.command_started = True
         tab.spinner.show()
 
         try:
@@ -1621,6 +1630,7 @@ class DolphieApp(App):
             self.notify(e.reason, title=f"Error running hotkey '{key}'", severity="error", timeout=10)
 
         tab.spinner.hide()
+        self.tab.command_started = False
 
     def compose(self) -> ComposeResult:
         yield TopBar(host="Connecting to MySQL", app_version=self.dolphie.app_version, help="press [b]?[/b] for help")
