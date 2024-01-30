@@ -149,8 +149,7 @@ def create_panel(tab: Tab):
                     tab.replicas_container.mount(container, after=2 + num_containers)
 
                 for replica in replica_pair:
-                    replica: Replica
-                    replica_id = replica.ai_id
+                    replica_id = replica.thread_id
                     replica_table = replica.table
 
                     if not replica_table:
@@ -566,7 +565,7 @@ def fetch_replicas(tab: Tab):
         if thread_id not in dolphie.replica_manager.replicas:
             host_and_port = "%s:%s" % (host, port)
             try:
-                replica: Replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port)
+                replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port)
                 replica.connection = Database(
                     app=dolphie.app,
                     tab_name=dolphie.tab_name,

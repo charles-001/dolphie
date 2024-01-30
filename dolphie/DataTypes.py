@@ -1,20 +1,13 @@
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 from dolphie.Modules.MySQL import Database
 from rich.table import Table
 
 
-class EnumBase:
-    @classmethod
-    def ALL(cls):
-        return [value for name, value in cls.__dict__.items() if not name.startswith("__") and isinstance(value, str)]
-
-
 @dataclass
 class Replica:
     thread_id: int
-    ai_id: int
     host: str
     connection: Database = None
     table: Table = None
@@ -24,14 +17,13 @@ class Replica:
 
 class ReplicaManager:
     def __init__(self):
-        self.replicas: dict = {}
-        self.ports: dict = {}
+        self.replicas: Dict[int, Replica] = {}
+        self.ports: Dict[str, int] = {}
 
         self.replica_increment_num: int = 1
 
     def add(self, thread_id: int, host: str) -> Replica:
-        self.replicas[thread_id] = Replica(thread_id=thread_id, ai_id=self.replica_increment_num, host=host)
-        self.replica_increment_num += 1
+        self.replicas[thread_id] = Replica(thread_id=thread_id, host=host)
 
         return self.replicas[thread_id]
 
@@ -51,7 +43,7 @@ class ReplicaManager:
         return sorted(self.replicas.values(), key=lambda x: x.host)
 
 
-class Panels(EnumBase):
+class Panels:
     DASHBOARD = "dashboard"
     PROCESSLIST = "processlist"
     GRAPHS = "graphs"
