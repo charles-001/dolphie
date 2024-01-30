@@ -455,15 +455,9 @@ class DolphieApp(App):
         # be removed while the worker thread is running which will error due to objects not existing
         if tab.queue_for_removal:
             # Cleanup connections
-            if dolphie.main_db_connection.connection.open:
-                dolphie.main_db_connection.connection.close()
-            if dolphie.secondary_db_connection.connection.open:
-                dolphie.secondary_db_connection.connection.close()
-
-            if dolphie.replica_connections:
-                for replica in dolphie.replica_connections.values():
-                    if replica["connection"] and replica["connection"].open:
-                        replica["connection"].close()
+            dolphie.main_db_connection.close()
+            dolphie.secondary_db_connection.close()
+            dolphie.replica_manager.remove_all()
 
             self.tab_manager.tabs.pop(tab.id, None)
 
@@ -534,12 +528,7 @@ class DolphieApp(App):
                 replication_panel.fetch_replicas(tab)
             else:
                 # If we're not displaying the replication panel, close all replica connections
-                if dolphie.replica_connections:
-                    for replica in dolphie.replica_connections.values():
-                        if replica["connection"] and replica["connection"].open:
-                            replica["connection"].close()
-
-                    dolphie.replica_connections = {}
+                dolphie.replica_manager.remove_all()
 
             if dolphie.display_processlist_panel:
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
@@ -813,14 +802,7 @@ class DolphieApp(App):
         self.update_graphs(metric_instance_name)
 
     async def capture_key(self, key):
-        if self.tab.command_started:
-            self.notify("There's already a command running, please wait for it to finish")
-            return
-
-        self.tab.command_started = True
-
-        screen_data = None
-        dolphie = self.tab.dolphie
+        tab = self.tab_manager.get_tab(self.tab.id)
 
         exclude_keys = [
             "up",
@@ -841,20 +823,32 @@ class DolphieApp(App):
             "ctrl+a",
             "ctrl+d",
         ]
+
+        screen_data = None
+        dolphie = tab.dolphie
+
+        # Prevent commands from being run if the secondary connection is processing a query already
+        if (
+            dolphie.secondary_db_connection
+            and dolphie.secondary_db_connection.running_query
+            and key not in exclude_keys
+        ):
+            self.notify("There's already a command running - please wait for it to finish")
+            return
+
         if not dolphie.main_db_connection and key not in exclude_keys:
             self.notify("Database connection must be established before using commands")
-
             return
 
         if key == "1":
             self.toggle_panel(Panels.DASHBOARD)
         elif key == "2":
             self.toggle_panel(Panels.PROCESSLIST)
-            self.app.query_one(f"#panel_processlist_{self.tab.id}").clear()
+            self.app.query_one(f"#panel_processlist_{tab.id}").clear()
         elif key == "3":
             self.toggle_panel(Panels.REPLICATION)
 
-            for member in self.query(f".replica_container_{self.tab.id}"):
+            for member in self.query(f".replica_container_{tab.id}"):
                 member.remove()
         elif key == "4":
             self.toggle_panel(Panels.GRAPHS)
@@ -865,13 +859,13 @@ class DolphieApp(App):
                 return
 
             self.toggle_panel(Panels.LOCKS)
-            self.app.query_one(f"#panel_locks_{self.tab.id}").clear()
+            self.app.query_one(f"#panel_locks_{tab.id}").clear()
         elif key == "grave_accent":
             self.tab.quick_switch_connection()
         elif key == "space":
-            if self.tab.worker.state != WorkerState.RUNNING:
-                self.tab.worker_timer.stop()
-                self.worker_fetch_data(self.tab.id)
+            if tab.worker.state != WorkerState.RUNNING:
+                tab.worker_timer.stop()
+                self.worker_fetch_data(tab.id)
         elif key == "plus":
 
             async def command_get_input(tab_name):
@@ -884,18 +878,18 @@ class DolphieApp(App):
                 command_get_input,
             )
         elif key == "minus":
-            if self.tab.id == 1:
+            if tab.id == 1:
                 self.notify("Main tab cannot be removed")
                 return
             else:
-                await self.tab_manager.remove_tab(self.tab.id)
+                await self.tab_manager.remove_tab(tab.id)
         elif key == "ctrl+a" or key == "ctrl+d":
             all_tabs = self.tab_manager.get_all_tabs()
 
             if key == "ctrl+a":
-                switch_to_tab = all_tabs[(all_tabs.index(self.tab.id) - 1) % len(all_tabs)]
+                switch_to_tab = all_tabs[(all_tabs.index(tab.id) - 1) % len(all_tabs)]
             elif key == "ctrl+d":
-                switch_to_tab = all_tabs[(all_tabs.index(self.tab.id) + 1) % len(all_tabs)]
+                switch_to_tab = all_tabs[(all_tabs.index(tab.id) + 1) % len(all_tabs)]
 
             self.tab_manager.switch_tab(switch_to_tab)
 
@@ -918,6 +912,22 @@ class DolphieApp(App):
 
         elif key == "d":
             self.run_command_in_worker(key=key, dolphie=dolphie)
+
+        elif key == "D":
+            if dolphie.main_db_connection and not dolphie.main_db_connection.connection.open:
+                self.notify("Database connection must be established before disconnecting")
+                return
+
+            tab.worker_timer.stop()
+            tab.worker.cancel()
+            tab.worker = None
+
+            dolphie.main_db_connection.close()
+            dolphie.secondary_db_connection.close()
+            dolphie.replica_manager.remove_all()
+
+            tab.main_container.display = False
+            self.topbar.host = f"[[white]DISCONNECTED[/white]] {dolphie.mysql_host}"
 
         elif key == "e":
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
@@ -1056,7 +1066,7 @@ class DolphieApp(App):
         elif key == "R":
             dolphie.metric_manager.reset()
 
-            active_graph = self.app.query_one(f"#tabbed_content_{self.tab.id}", TabbedContent)
+            active_graph = self.app.query_one(f"#tabbed_content_{tab.id}", TabbedContent)
             self.update_graphs(active_graph.get_pane(active_graph.active).name)
             self.notify("Metrics have been reset", severity="success")
 
@@ -1201,6 +1211,7 @@ class DolphieApp(App):
                 "a": "Toggle additional processlist columns",
                 "c": "Clear all filters set",
                 "d": "Display all databases",
+                "D": "Disconnect from the tab's host",
                 "e": "Display error log from Performance Schema",
                 "f": "Filter processlist by a supported option",
                 "i": "Toggle displaying idle threads",
@@ -1295,11 +1306,9 @@ class DolphieApp(App):
                 CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
             )
 
-        self.tab.command_started = False
-
     @work(thread=True)
     def run_command_in_worker(self, key: str, dolphie: Dolphie, additional_data=None):
-        tab = self.tab_manager.get_tab(dolphie.tab_id)
+        tab = self.tab_manager.get_tab(self.tab.id)
 
         # These are the screens to display we use for the commands
         def show_command_screen():
@@ -1321,7 +1330,6 @@ class DolphieApp(App):
                 )
             )
 
-        self.tab.command_started = True
         tab.spinner.show()
 
         try:
@@ -1632,7 +1640,6 @@ class DolphieApp(App):
             self.notify(e.reason, title=f"Error running hotkey '{key}'", severity="error", timeout=10)
 
         tab.spinner.hide()
-        self.tab.command_started = False
 
     def compose(self) -> ComposeResult:
         yield TopBar(host="Connecting to MySQL", app_version=self.dolphie.app_version, help="press [b]?[/b] for help")

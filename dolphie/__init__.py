@@ -6,6 +6,7 @@ from importlib import metadata
 
 import dolphie.Modules.MetricManager as MetricManager
 import requests
+from dolphie.DataTypes import Replica, ReplicaManager
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
@@ -111,10 +112,8 @@ class Dolphie:
         self.binlog_transaction_compression_percentage: int = None
 
         # These are for replicas in replication panel
+        self.replica_manager = ReplicaManager()
         self.available_replicas: dict = {}
-        self.replica_connections: dict = {}
-        self.replica_ports: dict = {}
-        self.replica_increment_num: int = 1
 
         # Types of hosts
         self.galera_cluster: bool = False
@@ -347,10 +346,10 @@ class Dolphie:
         if not self.global_status.get("Innodb_lsn_current"):
             self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
 
-    def fetch_replication_data(self, replica_object=None):
+    def fetch_replication_data(self, replica: Replica = None):
         use_version = self.mysql_version
-        if replica_object:
-            use_version = replica_object["mysql_version"]
+        if replica:
+            use_version = replica.mysql_version
 
         if self.heartbeat_table:
             query = MySQLQueries.heartbeat_replica_lag
@@ -365,9 +364,9 @@ class Dolphie:
             replica_lag_source = None
 
         replica_lag_data = None
-        if replica_object:
-            replica_object["cursor"].execute(query)
-            replica_lag_data = replica_object["cursor"].fetchone()
+        if replica:
+            replica.connection.execute(query)
+            replica_lag_data = replica.connection.fetchone()
         else:
             self.main_db_connection.execute(MySQLQueries.replication_status)
             replica_lag_data = self.main_db_connection.fetchone()
@@ -396,7 +395,7 @@ class Dolphie:
         if replica_lag_data and replica_lag_data["Seconds_Behind_Master"] is not None:
             replica_lag = int(replica_lag_data["Seconds_Behind_Master"])
 
-        if replica_object:
+        if replica:
             return replica_lag_source, replica_lag
         else:
             # Save the previous replica lag for to determine Speed data point

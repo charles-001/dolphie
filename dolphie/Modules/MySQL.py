@@ -33,6 +33,7 @@ class Database:
         self.save_connection_id = save_connection_id
 
         self.max_reconnect_attempts = 3
+        self.running_query = False
 
         self.connect()
 
@@ -74,11 +75,16 @@ class Database:
         query = "/* dolphie */ " + query
 
         error_message = None
+        self.running_query = True
         for _ in range(self.max_reconnect_attempts):
             try:
-                return self.cursor.execute(query, values)
+                rows = self.cursor.execute(query, values)
+                self.running_query = False
+                return rows
             except pymysql.Error as e:
                 if ignore_error:
+                    self.running_query = False
+
                     return None
                 else:
                     error_code = e.args[0]
@@ -93,7 +99,7 @@ class Database:
 
                         self.app.notify(
                             f"Tab [highlight]{self.tab_name}[/highlight]: {error_message}",
-                            title="MySQL Connection Error",
+                            title=f"MySQL Connection Error ({self.host}:{self.port})",
                             severity="error",
                             timeout=10,
                         )
@@ -102,8 +108,8 @@ class Database:
                         self.connect()
 
                         self.app.notify(
-                            f"Tab [highlight]{self.tab_name}[/highlight]: Successfully reconnected!",
-                            title="MySQL Connection",
+                            f"Tab [highlight]{self.tab_name}[/highlight]: Successfully reconnected",
+                            title=f"MySQL Connection ({self.host}:{self.port})",
                             severity="success",
                             timeout=10,
                         )
@@ -111,6 +117,8 @@ class Database:
                         time.sleep(1)
                     else:
                         raise ManualException(error_message, query=query)
+
+        self.running_query = False
 
         if error_message is not None:
             raise ManualException(

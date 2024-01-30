@@ -1,8 +1,10 @@
 import re
 from datetime import timedelta
 
-import pymysql
+from dolphie.DataTypes import Replica
 from dolphie.Modules.Functions import format_number
+from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 from rich import box
@@ -108,18 +110,18 @@ def create_panel(tab: Tab):
                         )
 
     def create_replica_panel():
-        if not dolphie.replica_connections and dolphie.available_replicas:
+        if not dolphie.replica_manager.replicas and dolphie.available_replicas:
             tab.replicas_container.display = True
             tab.replicas_title.update(
                 f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
             )
             tab.replicas_loading_indicator.display = True
-        elif dolphie.replica_connections:
+        elif dolphie.replica_manager.replicas:
             tab.replicas_container.display = True
             tab.replicas_loading_indicator.display = False
 
             tab.replicas_title.update(f"[b]Replicas ([highlight]{len(dolphie.available_replicas)}[/highlight])\n")
-            sorted_replica_connections = sorted(dolphie.replica_connections.items(), key=lambda x: x[1]["host"])
+            sorted_replica_connections = dolphie.replica_manager.get_sorted_replicas()
 
             # Quick & easy way to remove replicas that no longer exist
             if len(sorted_replica_connections) != len(dolphie.app.query(f".replica_{tab.id}")):
@@ -146,9 +148,10 @@ def create_panel(tab: Tab):
                     container = Container(id=container_id, classes=container_classes)
                     tab.replicas_container.mount(container, after=2 + num_containers)
 
-                for _, replica in replica_pair:
-                    replica_id = replica.get("id")
-                    replica_table = replica.get("table")
+                for replica in replica_pair:
+                    replica: Replica
+                    replica_id = replica.ai_id
+                    replica_table = replica.table
 
                     if not replica_table:
                         continue
@@ -247,16 +250,15 @@ def create_panel(tab: Tab):
     create_group_replication_panel()
 
 
-def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica_object=None) -> Table:
+def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica: Replica = None) -> Table:
     dolphie = tab.dolphie
 
-    # When replica_object is specified, that means we're creating a table for a replica and not replication
-    if replica_object:
-        if replica_object["previous_sbm"] is not None:
-            replica_previous_replica_sbm = replica_object["previous_sbm"]
+    # When replica_thread_id is specified, that means we're creating a table for a replica and not replication
+    if replica:
+        if replica.previous_sbm is not None:
+            replica_previous_replica_sbm = replica.previous_sbm
 
-        db_cursor = replica_object["cursor"]
-        sbm_source, data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica_object=replica_object)
+        sbm_source, data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica=replica)
     else:
         data = dolphie.replication_status
         replica_previous_replica_sbm = dolphie.previous_replica_sbm
@@ -268,8 +270,8 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
     if data["Seconds_Behind_Master"] is not None:
         replica_sbm = data["Seconds_Behind_Master"]
 
-        if replica_object:
-            replica_object["previous_sbm"] = replica_sbm
+        if replica:
+            replica.previous_sbm = replica_sbm
 
         if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
             speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.polling_latency)
@@ -309,9 +311,9 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         table.add_column()
         table.add_column(overflow="fold")
 
-    if replica_object:
-        table.add_row("[b][light_blue]Host", "[light_blue]%s" % replica_object["host"])
-        table.add_row("[label]Version", "%s" % replica_object["mysql_version"])
+    if replica:
+        table.add_row("[b][light_blue]Host", "[light_blue]%s" % replica.host)
+        table.add_row("[label]Version", "%s" % replica.mysql_version)
     else:
         table.add_row("[label]Primary", "%s" % data["Master_Host"])
 
@@ -380,7 +382,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         ]
 
         for status_filter in replication_status_filtering:
-            if replica_object:
+            if replica:
                 value = data.get(status_filter)
             else:
                 value = dolphie.replication_status.get(status_filter)
@@ -407,7 +409,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
             table.add_row("[label]Auto Position", "%s" % data["Auto_Position"])
 
             # We find errant transactions for replicas here
-            if replica_object:
+            if replica:
 
                 def remove_primary_uuid_gtid_set(gtid_sets):
                     lines = gtid_sets.splitlines()
@@ -433,8 +435,10 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
                 replica_gtid_set = remove_primary_uuid_gtid_set(executed_gtid_set)
                 primary_gtid_set = remove_primary_uuid_gtid_set(dolphie.global_variables["gtid_executed"])
 
-                db_cursor.execute(f"SELECT GTID_SUBTRACT('{replica_gtid_set}', '{primary_gtid_set}') AS errant_trxs")
-                gtid_data = db_cursor.fetchone()
+                replica.connection.execute(
+                    f"SELECT GTID_SUBTRACT('{replica_gtid_set}', '{primary_gtid_set}') AS errant_trxs"
+                )
+                gtid_data = replica.connection.fetchone()
                 if gtid_data.get("errant_trxs"):
                     errant_trx = f"[red]{gtid_data['errant_trxs']}[/red]"
                 else:
@@ -534,88 +538,74 @@ def fetch_replicas(tab: Tab):
     dolphie = tab.dolphie
 
     # Only run this query if we don't have replica ports or if the number of replicas has changed
-    if len(dolphie.replica_connections) != len(dolphie.available_replicas):
+    if len(dolphie.replica_manager.replicas) != len(dolphie.available_replicas):
         # Remove replica connections that no longer exist
         unique_ids = set(row["id"] for row in dolphie.available_replicas)
-        for thread in list(dolphie.replica_connections.keys()):
-            if thread not in unique_ids:
-                del dolphie.replica_connections[thread]
+        for thread_id in list(dolphie.replica_manager.replicas.keys()):
+            if thread_id not in unique_ids:
+                dolphie.replica_manager.remove(thread_id)
 
-        dolphie.replica_ports = {}
+        dolphie.replica_manager.ports = {}
         dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
         replica_data = dolphie.main_db_connection.fetchall()
         for row in replica_data:
-            dolphie.replica_ports[row["Slave_UUID"]] = row["Port"]
+            dolphie.replica_manager.ports[row["Slave_UUID"]] = row["Port"]
 
     for row in dolphie.available_replicas:
+        replica_error = None
+
         thread_id = row["id"]
 
         host = dolphie.get_hostname(row["host"].split(":")[0])
-        port = dolphie.replica_ports.get(row["replica_uuid"], 3306)
+        port = dolphie.replica_manager.ports.get(row["replica_uuid"], 3306)
 
         # This lets us connect to replicas on the same host as the primary if we're connecting remotely
         if host == "localhost" or host == "127.0.0.1":
             host = dolphie.host
 
-        if thread_id not in dolphie.replica_connections:
+        if thread_id not in dolphie.replica_manager.replicas:
             host_and_port = "%s:%s" % (host, port)
             try:
-                dolphie.replica_connections[thread_id] = {
-                    "id": dolphie.replica_increment_num,
-                    "host": host_and_port,
-                    "connection": None,
-                    "cursor": None,
-                    "previous_sbm": 0,
-                }
-                replica_object = dolphie.replica_connections[thread_id]
-                replica_object["connection"] = pymysql.connect(
+                replica: Replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port)
+                replica.connection = Database(
+                    app=dolphie.app,
+                    tab_name=dolphie.tab_name,
                     host=host,
                     user=dolphie.user,
-                    passwd=dolphie.password,
+                    password=dolphie.password,
                     port=port,
+                    socket=None,
                     ssl=dolphie.ssl,
-                    autocommit=True,
-                    connect_timeout=3,
+                    save_connection_id=False,
                 )
-                replica_object["cursor"] = replica_object["connection"].cursor(pymysql.cursors.DictCursor)
 
                 # Save the MySQL version for the replica
-                replica_object["cursor"].execute("SELECT @@version")
-                version_split = replica_object["cursor"].fetchone()["@@version"].split(".")
-                replica_object["mysql_version"] = "%s.%s.%s" % (
+                version_split = replica.connection.fetch_value_from_field("SELECT @@version").split(".")
+                replica.mysql_version = "%s.%s.%s" % (
                     version_split[0],
                     version_split[1],
                     version_split[2].split("-")[0],
                 )
-
-                dolphie.replica_increment_num += 1
-            except pymysql.Error as e:
-                table = Table(box=None, show_header=False)
-                table.add_column()
-                table.add_column(overflow="fold")
-
-                table.add_row("[label]User", row["user"])
-                table.add_row("[label]Error", "[red]%s[/red]" % e.args[1])
-
-                replica_object["table"] = table
+            except ManualException as e:
+                replica_error = e.reason
 
         try:
-            replica_object = dolphie.replica_connections[thread_id]
-
-            if replica_object["connection"]:
-                replica_object["cursor"].execute(MySQLQueries.replication_status)
-                replica_data = replica_object["cursor"].fetchone()
+            replica = dolphie.replica_manager.get(thread_id)
+            if replica.connection:
+                replica.connection.execute(MySQLQueries.replication_status)
+                replica_data = replica.connection.fetchone()
 
                 if replica_data:
-                    replica_object["table"] = create_replication_table(
-                        tab, data=replica_data, replica_object=replica_object
-                    )
-        except pymysql.Error as e:
+                    replica.table = create_replication_table(tab, data=replica_data, replica=replica)
+        except ManualException as e:
+            replica_error = e.reason
+
+        if replica_error:
             table = Table(box=None, show_header=False)
             table.add_column()
             table.add_column(overflow="fold")
 
             table.add_row("[label]User", row["user"])
-            table.add_row("[label]Error", "[red]%s[/red]" % e.args[1])
+            table.add_row("[label]Error", "[red]%s[/red]" % replica_error)
 
-            replica_object["table"] = table
+            replica.table = table

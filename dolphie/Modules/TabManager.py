@@ -38,8 +38,6 @@ class Tab:
     worker_timer: Timer = None
     worker_cancel_error: str = None
 
-    command_started: bool = False
-
     main_container: VerticalScroll = None
     loading_indicator: LoadingIndicator = None
     sparkline: Sparkline = None
