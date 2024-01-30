@@ -121,6 +121,7 @@ class Database:
 
                         time.sleep(1)
                     else:
+                        self.running_query = False
                         raise ManualException(error_message, query=query)
 
         self.running_query = False
