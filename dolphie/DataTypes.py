@@ -25,7 +25,7 @@ class ReplicaManager:
 
         return self.replicas[thread_id]
 
-    def remove(self, thread_id):
+    def remove(self, thread_id: int):
         del self.replicas[thread_id]
 
     def get(self, thread_id: int) -> Replica:

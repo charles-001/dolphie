@@ -494,7 +494,17 @@ class DolphieApp(App):
                 find_replicas_query = MySQLQueries.pl_find_replicas
 
             dolphie.main_db_connection.execute(find_replicas_query)
-            dolphie.available_replicas = dolphie.main_db_connection.fetchall()
+            available_replicas = dolphie.main_db_connection.fetchall()
+            # We update the replica ports used if the number of replicas have changed
+            if len(available_replicas) != len(dolphie.available_replicas):
+                dolphie.replica_manager.ports = {}
+
+                dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
+                replica_data = dolphie.main_db_connection.fetchall()
+                for row in replica_data:
+                    dolphie.replica_manager.ports[row["Slave_UUID"]] = row["Port"]
+
+                dolphie.available_replicas = available_replicas
 
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
             dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
@@ -527,13 +537,6 @@ class DolphieApp(App):
                 #     dolphie.binlog_transaction_compression_percentage = dolphie.main_db_connection.fetchone().get(
                 #         "compression_percentage"
                 #     )
-
-            if dolphie.display_replication_panel and dolphie.available_replicas:
-                dolphie.replica_manager.ports = {}
-                dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
-                replica_data = dolphie.main_db_connection.fetchall()
-                for row in replica_data:
-                    dolphie.replica_manager.ports[row["Slave_UUID"]] = row["Port"]
 
             if dolphie.display_processlist_panel:
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)

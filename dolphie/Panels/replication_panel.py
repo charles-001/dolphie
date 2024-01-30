@@ -533,10 +533,10 @@ def fetch_replicas(tab: Tab):
     # Only run this query if we don't have replica ports or if the number of replicas has changed
     if len(dolphie.replica_manager.replicas) != len(dolphie.available_replicas):
         # Remove replica connections that no longer exist
-        unique_ids = set(row["id"] for row in dolphie.available_replicas)
-        for thread_id in list(dolphie.replica_manager.replicas.keys()):
-            if thread_id not in unique_ids:
-                dolphie.replica_manager.remove(thread_id)
+        unique_ids = {row["id"] for row in dolphie.available_replicas}
+        to_remove = set(dolphie.replica_manager.replicas.keys()) - unique_ids
+        for thread_id in to_remove:
+            dolphie.replica_manager.remove(thread_id)
 
     for row in dolphie.available_replicas:
         replica_error = None
