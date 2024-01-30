@@ -76,9 +76,6 @@ TopBar {
     color: #8f9fc1;
 }
 
-.dashboard  {
-    dock: top;
-}
 .dashboard > Center {
     layout: horizontal;
     content-align: center middle;
