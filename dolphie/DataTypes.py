@@ -20,8 +20,6 @@ class ReplicaManager:
         self.replicas: Dict[int, Replica] = {}
         self.ports: Dict[str, int] = {}
 
-        self.replica_increment_num: int = 1
-
     def add(self, thread_id: int, host: str) -> Replica:
         self.replicas[thread_id] = Replica(thread_id=thread_id, host=host)
 

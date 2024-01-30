@@ -448,6 +448,7 @@ class DolphieApp(App):
         # Get our worker thread
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
+        tab.worker.group = "main"
 
         dolphie = tab.dolphie
 
@@ -524,11 +525,12 @@ class DolphieApp(App):
                 #         "compression_percentage"
                 #     )
 
-            if dolphie.display_replication_panel:
-                replication_panel.fetch_replicas(tab)
-            else:
-                # If we're not displaying the replication panel, close all replica connections
-                dolphie.replica_manager.remove_all()
+            if dolphie.display_replication_panel and dolphie.available_replicas:
+                dolphie.replica_manager.ports = {}
+                dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
+                replica_data = dolphie.main_db_connection.fetchall()
+                for row in replica_data:
+                    dolphie.replica_manager.ports[row["Slave_UUID"]] = row["Port"]
 
             if dolphie.display_processlist_panel:
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
@@ -566,39 +568,106 @@ class DolphieApp(App):
         if not tab:
             return
 
-        if event.state == WorkerState.SUCCESS:
-            dolphie = tab.dolphie
+        dolphie = tab.dolphie
 
-            # Skip this if the conditions are right
-            if (
-                len(self.screen_stack) > 1
-                or dolphie.pause_refresh
-                or not tab.dolphie.main_db_connection.connection.open
-                or tab.id != self.tab.id
-                or dolphie.quick_switched_connection
-            ):
-                tab.worker_timer = self.set_timer(tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id))
-
-                return
-
-            self.refresh_screen(tab)
-
-            tab.worker_timer = self.set_timer(tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id))
-        elif event.state == WorkerState.CANCELLED:
-            # Only show the modal if there's a worker cancel error
-            if tab.worker_cancel_error:
-                if self.tab.id != tab.id:
-                    self.notify(
-                        f"Host [light_blue]{tab.dolphie.host}:{tab.dolphie.port}[/light_blue] has been disconnected",
-                        title="Error",
-                        severity="error",
-                        timeout=10,
+        if event.worker.group == "main":
+            if event.state == WorkerState.SUCCESS:
+                # Skip this if the conditions are right
+                if (
+                    len(self.screen_stack) > 1
+                    or dolphie.pause_refresh
+                    or not tab.dolphie.main_db_connection.connection.open
+                    or tab.id != self.tab.id
+                    or dolphie.quick_switched_connection
+                ):
+                    tab.worker_timer = self.set_timer(
+                        tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id)
                     )
 
-                self.tab_manager.switch_tab(tab.id)
+                    return
 
-                tab.quick_switch_connection()
-                self.bell()
+                self.refresh_screen(tab)
+
+                tab.worker_timer = self.set_timer(tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id))
+            elif event.state == WorkerState.CANCELLED:
+                # Only show the modal if there's a worker cancel error
+                if tab.worker_cancel_error:
+                    if self.tab.id != tab.id:
+                        self.notify(
+                            f"Host [light_blue]{tab.dolphie.host}:{tab.dolphie.port}[/light_blue] has been"
+                            " disconnected",
+                            title="Error",
+                            severity="error",
+                            timeout=10,
+                        )
+
+                    self.tab_manager.switch_tab(tab.id)
+
+                    tab.quick_switch_connection()
+                    self.bell()
+        elif event.worker.group == "replicas":
+            if event.state == WorkerState.SUCCESS:
+                # Skip this if the conditions are right
+                if (
+                    len(self.screen_stack) > 1
+                    or dolphie.pause_refresh
+                    or tab.id != self.tab.id
+                    or dolphie.quick_switched_connection
+                ):
+                    tab.replicas_worker_timer = self.set_timer(
+                        tab.dolphie.refresh_interval, partial(self.worker_fetch_replicas, tab.id)
+                    )
+
+                    return
+
+                if dolphie.display_replication_panel:
+                    if dolphie.available_replicas:
+                        replication_panel.create_replica_panel(tab)
+                else:
+                    # If we're not displaying the replication panel, close all replica connections
+                    dolphie.replica_manager.remove_all()
+
+                    # Reset to default loading indicator
+                    tab.replicas_title.update(
+                        f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
+                    )
+                    tab.replicas_loading_indicator.display = True
+                    for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
+                        member.remove()
+
+                tab.replicas_worker_timer = self.set_timer(
+                    tab.dolphie.refresh_interval, partial(self.worker_fetch_replicas, tab.id)
+                )
+
+    @work(thread=True)
+    def worker_fetch_replicas(self, tab_id: int):
+        tab = self.tab_manager.get_tab(tab_id)
+
+        # Get our worker thread
+        tab.replicas_worker = get_current_worker()
+        tab.replicas_worker.name = tab_id
+        tab.replicas_worker.group = "replicas"
+
+        dolphie = tab.dolphie
+
+        # Skip this if the conditions are right
+        if (
+            len(self.screen_stack) > 1
+            or dolphie.pause_refresh
+            or tab.id != self.tab.id
+            or dolphie.quick_switched_connection
+        ):
+            return
+
+        if dolphie.display_replication_panel:
+            if dolphie.available_replicas:
+                if not dolphie.replica_manager.replicas:
+                    tab.replicas_title.update(
+                        f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
+                    )
+                    tab.replicas_loading_indicator.display = True
+
+                replication_panel.fetch_replicas(tab)
 
     def refresh_screen(self, tab: Tab):
         dolphie = tab.dolphie
@@ -684,6 +753,7 @@ class DolphieApp(App):
         dolphie.check_for_update()
 
         self.worker_fetch_data(self.tab.id)
+        self.worker_fetch_replicas(self.tab.id)
 
     def _handle_exception(self, error: Exception) -> None:
         self.bell()
@@ -921,6 +991,10 @@ class DolphieApp(App):
             tab.worker_timer.stop()
             tab.worker.cancel()
             tab.worker = None
+
+            tab.replicas_worker_timer.stop()
+            tab.replicas_worker.cancel()
+            tab.replicas_worker = None
 
             dolphie.main_db_connection.close()
             dolphie.secondary_db_connection.close()

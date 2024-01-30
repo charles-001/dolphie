@@ -87,8 +87,11 @@ class Database:
 
                     return None
                 else:
-                    error_code = e.args[0]
-                    error_message = e.args[1]
+                    if len(e.args) == 1:
+                        error_code = e.args[0]
+                    else:
+                        error_code = e.args[0]
+                        error_message = e.args[1]
 
                     # Check if the error is due to a connection issue
                     if error_code in (0, 2006, 2013, 2055):

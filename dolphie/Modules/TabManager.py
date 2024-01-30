@@ -38,6 +38,9 @@ class Tab:
     worker_timer: Timer = None
     worker_cancel_error: str = None
 
+    replicas_worker: worker = None
+    replicas_worker_timer: Timer = None
+
     main_container: VerticalScroll = None
     loading_indicator: LoadingIndicator = None
     sparkline: Sparkline = None
@@ -108,9 +111,14 @@ class Tab:
             self.sparkline.display = False
             self.topbar_data = "Connecting to MySQL"
 
+            self.replicas_title.update("")
+            for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
+                member.remove()
+
             if not self.worker or self.worker.state == WorkerState.CANCELLED:
                 self.worker_cancel_error = ""
                 self.dolphie.app.worker_fetch_data(self.id)
+                self.dolphie.app.worker_fetch_replicas(self.id)
 
         self.loading_indicator.display = False
 

@@ -109,68 +109,6 @@ def create_panel(tab: Tab):
                             ),
                         )
 
-    def create_replica_panel():
-        if not dolphie.replica_manager.replicas and dolphie.available_replicas:
-            tab.replicas_container.display = True
-            tab.replicas_title.update(
-                f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
-            )
-            tab.replicas_loading_indicator.display = True
-        elif dolphie.replica_manager.replicas:
-            tab.replicas_container.display = True
-            tab.replicas_loading_indicator.display = False
-
-            tab.replicas_title.update(f"[b]Replicas ([highlight]{len(dolphie.available_replicas)}[/highlight])\n")
-            sorted_replica_connections = dolphie.replica_manager.get_sorted_replicas()
-
-            # Quick & easy way to remove replicas that no longer exist
-            if len(sorted_replica_connections) != len(dolphie.app.query(f".replica_{tab.id}")):
-                for member in dolphie.app.query(f".replica_container_{tab.id}"):
-                    member.remove()
-
-            # Iterate over replicas in pairs of 2
-            for i in range(0, len(sorted_replica_connections), 2):
-                replica_pair = list(sorted_replica_connections)[i : i + 2]
-
-                # Create a container for each pair of replicas
-                container_id = f"replica_container_{i}_{tab.id}"
-                container = tab.dolphie.app.query(f"#{container_id}")
-                if container:
-                    container = container[0]
-                else:
-                    is_last_row = i + 2 >= len(sorted_replica_connections)
-
-                    container_classes = f"replica_container replica_container_{tab.id}"
-                    if not is_last_row:
-                        container_classes += " pad_bottom_1"
-
-                    num_containers = len(dolphie.app.query(f".replica_container_{tab.id}"))
-                    container = Container(id=container_id, classes=container_classes)
-                    tab.replicas_container.mount(container, after=2 + num_containers)
-
-                for replica in replica_pair:
-                    replica_id = replica.thread_id
-                    replica_table = replica.table
-
-                    if not replica_table:
-                        continue
-
-                    existing_replica = tab.dolphie.app.query(f"#replica_{replica_id}_{tab.id}")
-                    if existing_replica:
-                        existing_replica[0].update(replica_table)
-                    else:
-                        container.mount(
-                            Container(
-                                ScrollableContainer(
-                                    Static(
-                                        replica_table, id=f"replica_{replica_id}_{tab.id}", classes=f"replica_{tab.id}"
-                                    ),
-                                ),
-                            ),
-                        )
-        else:
-            tab.replicas_container.display = False
-
     def create_cluster_panel():
         if not dolphie.galera_cluster:
             tab.cluster_data.display = False
@@ -244,9 +182,65 @@ def create_panel(tab: Tab):
         tab.replication_status.update(create_replication_table(tab))
 
     create_replication_panel()
-    create_replica_panel()
     create_cluster_panel()
     create_group_replication_panel()
+
+
+def create_replica_panel(tab: Tab):
+    dolphie = tab.dolphie
+
+    if dolphie.replica_manager.replicas:
+        tab.replicas_container.display = True
+        tab.replicas_loading_indicator.display = False
+
+        tab.replicas_title.update(f"[b]Replicas ([highlight]{len(dolphie.available_replicas)}[/highlight])\n")
+        sorted_replica_connections = dolphie.replica_manager.get_sorted_replicas()
+
+        # Quick & easy way to remove replicas that no longer exist
+        if len(sorted_replica_connections) != len(dolphie.app.query(f".replica_{tab.id}")):
+            for member in dolphie.app.query(f".replica_container_{tab.id}"):
+                member.remove()
+
+        # Iterate over replicas in pairs of 2
+        for i in range(0, len(sorted_replica_connections), 2):
+            replica_pair = list(sorted_replica_connections)[i : i + 2]
+
+            # Create a container for each pair of replicas
+            container_id = f"replica_container_{i}_{tab.id}"
+            container = tab.dolphie.app.query(f"#{container_id}")
+            if container:
+                container = container[0]
+            else:
+                is_last_row = i + 2 >= len(sorted_replica_connections)
+
+                container_classes = f"replica_container replica_container_{tab.id}"
+                if not is_last_row:
+                    container_classes += " pad_bottom_1"
+
+                num_containers = len(dolphie.app.query(f".replica_container_{tab.id}"))
+                container = Container(id=container_id, classes=container_classes)
+                tab.replicas_container.mount(container, after=2 + num_containers)
+
+            for replica in replica_pair:
+                replica_id = replica.thread_id
+                replica_table = replica.table
+
+                if not replica_table:
+                    continue
+
+                existing_replica = tab.dolphie.app.query(f"#replica_{replica_id}_{tab.id}")
+                if existing_replica:
+                    existing_replica[0].update(replica_table)
+                else:
+                    container.mount(
+                        Container(
+                            ScrollableContainer(
+                                Static(replica_table, id=f"replica_{replica_id}_{tab.id}", classes=f"replica_{tab.id}"),
+                            ),
+                        ),
+                    )
+    else:
+        tab.replicas_container.display = False
 
 
 def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica: Replica = None) -> Table:
@@ -544,12 +538,6 @@ def fetch_replicas(tab: Tab):
             if thread_id not in unique_ids:
                 dolphie.replica_manager.remove(thread_id)
 
-        dolphie.replica_manager.ports = {}
-        dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
-        replica_data = dolphie.main_db_connection.fetchall()
-        for row in replica_data:
-            dolphie.replica_manager.ports[row["Slave_UUID"]] = row["Port"]
-
     for row in dolphie.available_replicas:
         replica_error = None
 
@@ -604,6 +592,7 @@ def fetch_replicas(tab: Tab):
             table.add_column()
             table.add_column(overflow="fold")
 
+            table.add_row("[b][light_blue]Host", "[light_blue]%s:%s" % (host, port))
             table.add_row("[label]User", row["user"])
             table.add_row("[label]Error", "[red]%s[/red]" % replica_error)
 
