@@ -578,7 +578,7 @@ def fetch_replicas(tab: Tab):
 
         try:
             replica = dolphie.replica_manager.get(thread_id)
-            if replica.connection:
+            if replica and replica.connection.is_connected():
                 replica.connection.execute(MySQLQueries.replication_status)
                 replica_data = replica.connection.fetchone()
 

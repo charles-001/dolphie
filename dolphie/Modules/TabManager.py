@@ -85,7 +85,7 @@ class Tab:
                 self.topbar_data = ""
             return
 
-        if dolphie.main_db_connection and not dolphie.main_db_connection.connection.open:
+        if dolphie.main_db_connection and not dolphie.main_db_connection.is_connected():
             dolphie.read_only_status = "DISCONNECTED"
 
         self.topbar_data = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"

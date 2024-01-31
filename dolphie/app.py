@@ -475,7 +475,7 @@ class DolphieApp(App):
             dolphie.metric_manager.update_metrics_with_last_value()
 
         try:
-            if not dolphie.main_db_connection or not dolphie.main_db_connection.connection.open:
+            if not dolphie.main_db_connection or not dolphie.main_db_connection.is_connected():
                 dolphie.db_connect()
 
             dolphie.worker_start_time = datetime.now()
@@ -581,7 +581,7 @@ class DolphieApp(App):
                 if (
                     len(self.screen_stack) > 1
                     or dolphie.pause_refresh
-                    or not tab.dolphie.main_db_connection.connection.open
+                    or not tab.dolphie.main_db_connection.is_connected()
                     or tab.id != self.tab.id
                     or dolphie.quick_switched_connection
                 ):
@@ -996,10 +996,6 @@ class DolphieApp(App):
             self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "D":
-            if dolphie.main_db_connection and not dolphie.main_db_connection.connection.open:
-                self.notify("Database connection must be established before disconnecting")
-                return
-
             tab.worker_timer.stop()
             tab.worker.cancel()
             tab.worker = None

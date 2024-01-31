@@ -64,18 +64,25 @@ class Database:
             raise ManualException("SSL certificate file path isn't valid!")
 
     def close(self):
-        if self.connection and self.connection.open:
+        if self.is_connected():
             self.connection.close()
 
+    def is_connected(self) -> bool:
+        if self.connection:
+            return self.connection.open
+
+        return False
+
     def execute(self, query, values=None, ignore_error=False):
-        if not self.connection.open:
-            return
+        if not self.is_connected():
+            return None
+
+        error_message = None
+        self.running_query = True
 
         # Prefix all queries with dolphie so they can be identified in the processlist from other people
         query = "/* dolphie */ " + query
 
-        error_message = None
-        self.running_query = True
         for _ in range(self.max_reconnect_attempts):
             try:
                 rows = self.cursor.execute(query, values)
@@ -133,7 +140,7 @@ class Database:
                 query=query,
             )
 
-    def process_row(self, row):
+    def _process_row(self, row):
         processed_row = {}
 
         for field, value in row.items():
@@ -145,7 +152,10 @@ class Database:
         return processed_row
 
     def fetchall(self):
-        rows = [self.process_row(row) for row in self.cursor.fetchall()]
+        if not self.is_connected():
+            return None
+
+        rows = [self._process_row(row) for row in self.cursor.fetchall()]
 
         if not rows:
             return []
@@ -153,14 +163,20 @@ class Database:
         return rows
 
     def fetchone(self):
+        if not self.is_connected():
+            return
+
         row = self.cursor.fetchone()
 
         if not row:
             return {}
 
-        return self.process_row(row)
+        return self._process_row(row)
 
     def fetch_value_from_field(self, query, field=None, values=None):
+        if not self.is_connected():
+            return None
+
         self.execute(query, values)
         data = self.cursor.fetchone()
 
@@ -176,6 +192,9 @@ class Database:
         return value
 
     def fetch_status_and_variables(self, command):
+        if not self.is_connected():
+            return None
+
         command_data = {}
 
         self.execute(getattr(MySQLQueries, command))
