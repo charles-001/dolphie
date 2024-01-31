@@ -17,7 +17,6 @@ from urllib.parse import urlparse
 import dolphie.Modules.MetricManager as MetricManager
 import myloginpath
 from dolphie import Dolphie
-from dolphie.DataTypes import Panels
 from dolphie.Modules.Functions import format_number, format_sys_table_memory
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
@@ -224,8 +223,8 @@ Environment variables support these options:
         default="dashboard,processlist",
         type=str,
         help=(
-            "What panels to display on startup separated by a comma. Supports: dashboard/replication/processlist/graphs"
-            " [default: %(default)s]"
+            "What panels to display on startup separated by a comma. Supports:"
+            f" {'/'.join(dolphie.panels.all())} [default: %(default)s]"
         ),
     )
     parser.add_argument(
@@ -397,7 +396,7 @@ Environment variables support these options:
 
     dolphie.startup_panels = parameter_options["startup_panels"].split(",")
     for panel in dolphie.startup_panels:
-        if not hasattr(dolphie, f"display_{panel}_panel"):
+        if panel not in dolphie.panels.all():
             sys.exit(console.print(f"Panel '{panel}' is not valid (see --help for more information)"))
 
     dolphie.graph_marker = parameter_options["graph_marker"]
@@ -469,7 +468,7 @@ class DolphieApp(App):
             return
 
         if dolphie.quick_switched_connection:
-            dolphie.reset_runtime_variables(include_panels=False)
+            dolphie.reset_runtime_variables()
             self.quick_switched_connection = False
 
         if dolphie.metric_manager.worker_start_time:
@@ -527,7 +526,7 @@ class DolphieApp(App):
                         dolphie.is_group_replication_primary = True
                         break
 
-            if dolphie.display_dashboard_panel:
+            if dolphie.panels.dashboard.visible:
                 dolphie.main_db_connection.execute(MySQLQueries.binlog_status)
                 dolphie.binlog_status = dolphie.main_db_connection.fetchone()
 
@@ -538,7 +537,7 @@ class DolphieApp(App):
                 #         "compression_percentage"
                 #     )
 
-            if dolphie.display_processlist_panel:
+            if dolphie.panels.processlist.visible:
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
             if dolphie.is_mysql_version_at_least("5.7"):
@@ -626,7 +625,7 @@ class DolphieApp(App):
 
                     return
 
-                if dolphie.display_replication_panel and dolphie.available_replicas:
+                if dolphie.panels.replication.visible and dolphie.available_replicas:
                     replication_panel.create_replica_panel(tab)
 
                 tab.replicas_worker_timer = self.set_timer(
@@ -644,7 +643,7 @@ class DolphieApp(App):
 
         dolphie = tab.dolphie
 
-        if dolphie.display_replication_panel:
+        if dolphie.panels.replication.visible:
             if dolphie.available_replicas:
                 if not dolphie.replica_manager.replicas:
                     tab.replicas_container.display = True
@@ -666,14 +665,20 @@ class DolphieApp(App):
         try:
             loading_indicator = tab.loading_indicator
             if loading_indicator.display:
+                # We only want to do this on startup
+                # Set panels to be visible for the ones the user specifies
+                for panel in dolphie.panels.all():
+                    self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
+                    setattr(getattr(dolphie.panels, panel), "visible", False)
+
+                for panel in dolphie.startup_panels:
+                    self.query_one(f"#panel_{panel}_{tab.id}").display = True
+                    setattr(getattr(dolphie.panels, panel), "visible", True)
+
                 loading_indicator.display = False
                 tab.main_container.display = True
 
                 self.layout_graphs()
-
-                # We only want to do this on startup
-                for panel in dolphie.startup_panels:
-                    self.query_one(f"#panel_{panel}_{tab.id}").display = True
 
             # Update tab's topbar data
             tab.update_topbar()
@@ -681,8 +686,8 @@ class DolphieApp(App):
             if self.tab.id == tab.id:
                 self.topbar.host = tab.topbar_data
 
-            if dolphie.display_dashboard_panel:
-                self.refresh_panel(Panels.DASHBOARD)
+            if dolphie.panels.dashboard.visible:
+                self.refresh_panel(dolphie.panels.dashboard.name)
 
                 # Update the sparkline for queries per second
                 sparkline = tab.sparkline
@@ -694,16 +699,16 @@ class DolphieApp(App):
                 sparkline.data = sparkline_data
                 sparkline.refresh()
 
-            if dolphie.display_processlist_panel:
-                self.refresh_panel(Panels.PROCESSLIST)
+            if dolphie.panels.processlist.visible:
+                self.refresh_panel(dolphie.panels.processlist.name)
 
-            if dolphie.display_replication_panel:
-                self.refresh_panel(Panels.REPLICATION)
+            if dolphie.panels.replication.visible:
+                self.refresh_panel(dolphie.panels.replication.name)
 
-            if dolphie.display_locks_panel:
-                self.refresh_panel(Panels.LOCKS)
+            if dolphie.panels.locks.visible:
+                self.refresh_panel(dolphie.panels.locks.name)
 
-            if dolphie.display_graphs_panel:
+            if dolphie.panels.graphs.visible:
                 graph_panel = self.query_one(f"#tabbed_content_{tab.id}", TabbedContent)
 
                 # Hide/show replication tab based on replication status
@@ -795,8 +800,10 @@ class DolphieApp(App):
 
         new_display = not panel.display
         panel.display = new_display
-        setattr(self.tab.dolphie, f"display_{panel_name}_panel", new_display)
-        if panel_name not in ["graphs"]:
+
+        setattr(getattr(self.tab.dolphie.panels, panel_name), "visible", new_display)
+
+        if panel_name not in [self.tab.dolphie.panels.graphs.name]:
             self.app.refresh_panel(panel_name, toggled=True)
 
     def refresh_panel(self, panel_name, toggled=False):
@@ -804,23 +811,23 @@ class DolphieApp(App):
         if self.tab.loading_indicator.display:
             return
 
-        if panel_name == Panels.REPLICATION:
+        if panel_name == self.tab.dolphie.panels.replication.name:
             # When replication panel status is changed, we need to refresh the dashboard panel as well since
             # it adds/removes it from there
             replication_panel.create_panel(self.tab)
 
             if toggled and self.tab.dolphie.replication_status:
                 dashboard_panel.create_panel(self.tab)
-        elif panel_name == Panels.DASHBOARD:
+        elif panel_name == self.tab.dolphie.panels.dashboard.name:
             dashboard_panel.create_panel(self.tab)
-        elif panel_name == Panels.PROCESSLIST:
+        elif panel_name == self.tab.dolphie.panels.processlist.name:
             processlist_panel.create_panel(self.tab)
-        elif panel_name == Panels.LOCKS:
+        elif panel_name == self.tab.dolphie.panels.locks.name:
             locks_panel.create_panel(self.tab)
 
         if toggled or not self.tab.dolphie.first_loop:  # Include this so we're not updating the sizes every loop
             # Update the sizes of the panels depending if replication container is visible or not
-            if self.tab.dolphie.replication_status and not self.tab.dolphie.display_replication_panel:
+            if self.tab.dolphie.replication_status and not self.tab.dolphie.panels.replication.visible:
                 self.tab.dashboard_host_information.styles.width = "25vw"
                 self.tab.dashboard_binary_log.styles.width = "21vw"
                 self.tab.dashboard_innodb.styles.width = "17vw"
@@ -889,28 +896,25 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         # Prevent commands from being run if the secondary connection is processing a query already
-        if (
-            dolphie.secondary_db_connection
-            and dolphie.secondary_db_connection.running_query
-            and key not in exclude_keys
-        ):
-            self.notify("There's already a command running - please wait for it to finish")
-            return
+        if key not in exclude_keys:
+            if dolphie.secondary_db_connection and dolphie.secondary_db_connection.running_query:
+                self.notify("There's already a command running - please wait for it to finish")
+                return
 
-        if not dolphie.main_db_connection and key not in exclude_keys:
-            self.notify("Database connection must be established before using commands")
-            return
+            if not tab.worker:
+                self.notify("You must be connected to a host before using commands")
+                return
 
         if key == "1":
-            self.toggle_panel(Panels.DASHBOARD)
+            self.toggle_panel(dolphie.panels.dashboard.name)
         elif key == "2":
-            self.toggle_panel(Panels.PROCESSLIST)
+            self.toggle_panel(dolphie.panels.processlist.name)
             self.app.query_one(f"#panel_processlist_{tab.id}").clear()
         elif key == "3":
-            self.toggle_panel(Panels.REPLICATION)
+            self.toggle_panel(dolphie.panels.replication.name)
 
             tab.replicas_container.display = False
-            if not dolphie.display_replication_panel:
+            if not dolphie.panels.replication.visible:
                 for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
                     member.remove()
             else:
@@ -922,14 +926,14 @@ class DolphieApp(App):
                     tab.replicas_loading_indicator.display = True
 
         elif key == "4":
-            self.toggle_panel(Panels.GRAPHS)
+            self.toggle_panel(dolphie.panels.graphs.name)
             self.app.update_graphs("dml")
         elif key == "5":
             if not dolphie.is_mysql_version_at_least("5.7"):
                 self.notify("Locks panel requires MySQL 5.7+")
                 return
 
-            self.toggle_panel(Panels.LOCKS)
+            self.toggle_panel(dolphie.panels.locks.name)
             self.app.query_one(f"#panel_locks_{tab.id}").clear()
         elif key == "grave_accent":
             self.tab.quick_switch_connection()

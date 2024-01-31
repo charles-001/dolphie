@@ -42,15 +42,21 @@ class ReplicaManager:
         return sorted(self.replicas.values(), key=lambda x: x.host)
 
 
-class EnumBase:
+@dataclass
+class Panel:
+    name: str
+    visible: bool = False
+
+
+class Panels:
+    dashboard = Panel("dashboard")
+    processlist = Panel("processlist")
+    graphs = Panel("graphs")
+    replication = Panel("replication")
+    locks = Panel("locks")
+
     @classmethod
-    def ALL(cls):
-        return [value for name, value in cls.__dict__.items() if not name.startswith("__") and isinstance(value, str)]
-
-
-class Panels(EnumBase):
-    DASHBOARD = "dashboard"
-    PROCESSLIST = "processlist"
-    GRAPHS = "graphs"
-    REPLICATION = "replication"
-    LOCKS = "locks"
+    def all(cls):
+        return [
+            panel.name for name, panel in cls.__dict__.items() if not name.startswith("__") and isinstance(panel, Panel)
+        ]

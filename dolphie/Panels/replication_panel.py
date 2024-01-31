@@ -20,7 +20,7 @@ def create_panel(tab: Tab):
     dolphie = tab.dolphie
 
     if (
-        dolphie.display_replication_panel
+        dolphie.panels.replication.visible
         and not dolphie.available_replicas
         and not dolphie.replication_status
         and not dolphie.galera_cluster

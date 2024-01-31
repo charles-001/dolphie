@@ -216,7 +216,7 @@ def create_panel(tab: Tab) -> Table:
     ###############
     # Replication #
     ###############
-    if dolphie.replication_status and not dolphie.display_replication_panel:
+    if dolphie.replication_status and not dolphie.panels.replication.visible:
         tab.dashboard_replication.display = True
         tab.dashboard_replication.update(replication_panel.create_replication_table(tab, dashboard_table=True))
     else:

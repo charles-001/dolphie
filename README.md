@@ -96,7 +96,7 @@ options:
   --ssl-cert SSL_CERT   Path to the file that contains a PEM-formatted client certificate
   --ssl-key SSL_KEY     Path to the file that contains a PEM-formatted private key for the client certificate
   --panels STARTUP_PANELS
-                        What panels to display on startup separated by a comma. Supports: dashboard/replication/processlist/graphs [default: dashboard,processlist]
+                        What panels to display on startup separated by a comma. Supports: dashboard/replication/processlist/graphs/locks [default: dashboard,processlist]
   --graph-marker GRAPH_MARKER
                         What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --show-trxs-only      Start with only showing threads that have an active transaction

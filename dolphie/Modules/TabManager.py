@@ -3,7 +3,6 @@ from dataclasses import dataclass
 
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
-from dolphie.DataTypes import Panels
 from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from dolphie.Widgets.spinner import SpinnerWidget
 from textual.app import App
@@ -331,12 +330,12 @@ class TabManager:
 
         # By default, hide all the panels
         tab.sparkline.display = False
-        for panel in Panels.ALL():
+        for panel in tab.dolphie.panels.all():
             self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
 
         # Set panels to be visible for the ones the user specifies
         for panel in dolphie.startup_panels:
-            setattr(dolphie, f"display_{panel}_panel", True)
+            setattr(getattr(dolphie.panels, panel), "visible", True)
 
         # Set what marker we use for graphs
         graphs = self.app.query(MetricManager.Graph)

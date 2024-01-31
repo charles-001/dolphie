@@ -4,9 +4,9 @@ import socket
 from datetime import datetime
 from importlib import metadata
 
+import dolphie.DataTypes as DataTypes
 import dolphie.Modules.MetricManager as MetricManager
 import requests
-from dolphie.DataTypes import Replica, ReplicaManager
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
@@ -60,8 +60,9 @@ class Dolphie:
 
         self.reset_runtime_variables()
 
-    def reset_runtime_variables(self, include_panels=True):
+    def reset_runtime_variables(self):
         self.metric_manager = MetricManager.MetricManager()
+        self.panels = DataTypes.Panels()
 
         # Set the graph switches to what they're currently selected to since we reset metric_manager
         if self.app:
@@ -74,13 +75,6 @@ class Dolphie:
                 metric_instance = getattr(self.metric_manager.metrics, metric_instance_name)
                 metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
                 metric_data.visible = switch.value
-
-        if include_panels:
-            self.display_dashboard_panel: bool = False
-            self.display_processlist_panel: bool = False
-            self.display_replication_panel: bool = False
-            self.display_graphs_panel: bool = False
-            self.display_locks_panel: bool = False
 
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
@@ -112,7 +106,7 @@ class Dolphie:
         self.binlog_transaction_compression_percentage: int = None
 
         # These are for replicas in replication panel
-        self.replica_manager = ReplicaManager()
+        self.replica_manager = DataTypes.ReplicaManager()
         self.available_replicas: dict = {}
 
         # Types of hosts
@@ -346,7 +340,7 @@ class Dolphie:
         if not self.global_status.get("Innodb_lsn_current"):
             self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
 
-    def fetch_replication_data(self, replica: Replica = None):
+    def fetch_replication_data(self, replica: DataTypes.Replica = None):
         use_version = self.mysql_version
         if replica:
             use_version = replica.mysql_version
@@ -382,7 +376,7 @@ class Dolphie:
                 self.replication_applier_status = None
                 if (
                     self.is_mysql_version_at_least("8.0")
-                    and self.display_replication_panel
+                    and self.panels.replication.visible
                     and self.global_variables.get("slave_parallel_workers", 0) > 1
                 ):
                     self.main_db_connection.execute(MySQLQueries.replication_applier_status)
