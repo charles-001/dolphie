@@ -299,7 +299,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         )
 
         table.add_column(no_wrap=True)
-        table.add_column()
+        table.add_column(max_width=30)
     else:
         table.add_column()
         table.add_column(overflow="fold")

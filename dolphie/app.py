@@ -830,6 +830,7 @@ class DolphieApp(App):
             if self.tab.dolphie.replication_status and not self.tab.dolphie.panels.replication.visible:
                 self.tab.dashboard_host_information.styles.width = "25vw"
                 self.tab.dashboard_binary_log.styles.width = "21vw"
+
                 self.tab.dashboard_innodb.styles.width = "17vw"
                 self.tab.dashboard_replication.styles.width = "25vw"
                 self.tab.dashboard_statistics.styles.width = "12vw"
@@ -839,6 +840,12 @@ class DolphieApp(App):
                 self.tab.dashboard_innodb.styles.width = "24vw"
                 self.tab.dashboard_replication.styles.width = "0"
                 self.tab.dashboard_statistics.styles.width = "17vw"
+
+            self.tab.dashboard_host_information.styles.max_width = "45"
+            self.tab.dashboard_binary_log.styles.max_width = "38"
+            self.tab.dashboard_innodb.styles.max_width = "33"
+            self.tab.dashboard_replication.styles.max_width = "50"
+            self.tab.dashboard_statistics.styles.max_width = "22"
 
     def layout_graphs(self):
         if self.tab.dolphie.is_mysql_version_at_least("8.0.30"):

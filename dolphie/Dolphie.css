@@ -85,6 +85,7 @@ TopBar {
     background: #0b1221;
     border: tall #1c2238;
     height: 11;
+    width: auto;
 }
 
 .replication {
