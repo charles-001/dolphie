@@ -29,7 +29,7 @@ class ReplicaManager:
         del self.replicas[thread_id]
 
     def get(self, thread_id: int) -> Replica:
-        return self.replicas[thread_id]
+        return self.replicas.get(thread_id)
 
     def remove_all(self):
         if self.replicas:

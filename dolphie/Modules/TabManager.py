@@ -60,6 +60,7 @@ class Tab:
     dashboard_statistics: Static = None
     dashboard_replication: Static = None
 
+    replication_container_title: Static = None
     replication_container: Container = None
     replication_variables: Label = None
     replication_status: Static = None
@@ -83,19 +84,26 @@ class Tab:
         if self.replicas_worker_timer:
             self.replicas_worker_timer.stop()
 
-        self.worker.cancel()
+        if self.worker:
+            self.worker.cancel()
         self.worker = None
 
-        self.replicas_worker.cancel()
+        if self.replicas_worker:
+            self.replicas_worker.cancel()
         self.replicas_worker = None
 
-        self.dolphie.main_db_connection.close()
-        self.dolphie.secondary_db_connection.close()
+        if self.dolphie.main_db_connection:
+            self.dolphie.main_db_connection.close()
+
+        if self.dolphie.secondary_db_connection:
+            self.dolphie.secondary_db_connection.close()
 
         self.dolphie.replica_manager.remove_all()
 
         self.main_container.display = False
+        self.sparkline.display = False
 
+        self.replicas_title.update("")
         for member in self.dolphie.app.query(f".replica_container_{self.id}"):
             member.remove()
 
@@ -135,16 +143,7 @@ class Tab:
             if password:
                 dolphie.password = password
 
-            # Trigger a quick switch connection for the worker thread
-            dolphie.quick_switched_connection = True
-
-            self.loading_indicator.display = True
-            self.main_container.display = False
-            self.sparkline.display = False
-
-            self.replicas_title.update("")
-            for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
-                member.remove()
+            self.disconnect()
 
             if not self.worker or self.worker.state == WorkerState.CANCELLED:
                 self.worker_cancel_error = ""
@@ -210,6 +209,7 @@ class TabManager:
                         classes="panel_container",
                     ),
                     Container(
+                        Static(id=f"replication_container_title_{tab_id}", classes="replication_container_title"),
                         Container(
                             Rule(line_style="heavy"),
                             Label("[b]Replication\n"),
@@ -354,6 +354,7 @@ class TabManager:
 
         tab.cluster_data = self.app.query_one(f"#cluster_data_{tab.id}", Static)
 
+        tab.replication_container_title = self.app.query_one(f"#replication_container_title_{tab.id}", Static)
         tab.replication_container = self.app.query_one(f"#replication_container_{tab.id}", Container)
         tab.replication_variables = self.app.query_one(f"#replication_variables_{tab.id}", Label)
         tab.replication_status = self.app.query_one(f"#replication_status_{tab.id}", Static)

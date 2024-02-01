@@ -457,16 +457,16 @@ class DolphieApp(App):
             self.tab_manager.tabs.pop(tab.id, None)
             return
 
-        if dolphie.quick_switched_connection:
-            dolphie.reset_runtime_variables()
-            self.quick_switched_connection = False
-
         if dolphie.metric_manager.worker_start_time:
             dolphie.metric_manager.update_metrics_with_last_value()
 
         try:
             if not dolphie.main_db_connection or not dolphie.main_db_connection.is_connected():
+                dolphie.reset_runtime_variables()
+
                 tab.update_topbar(f"[[white]CONNECTING[/white]] {dolphie.host}:{dolphie.port}")
+                tab.loading_indicator.display = True
+
                 dolphie.db_connect()
 
             dolphie.worker_start_time = datetime.now()
@@ -571,7 +571,6 @@ class DolphieApp(App):
                     or dolphie.pause_refresh
                     or not tab.dolphie.main_db_connection.is_connected()
                     or tab.id != self.tab.id
-                    or dolphie.quick_switched_connection
                 ):
                     tab.worker_timer = self.set_timer(
                         tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id)
@@ -601,12 +600,7 @@ class DolphieApp(App):
         elif event.worker.group == "replicas":
             if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right
-                if (
-                    len(self.screen_stack) > 1
-                    or dolphie.pause_refresh
-                    or tab.id != self.tab.id
-                    or dolphie.quick_switched_connection
-                ):
+                if len(self.screen_stack) > 1 or dolphie.pause_refresh or tab.id != self.tab.id:
                     tab.replicas_worker_timer = self.set_timer(
                         tab.dolphie.refresh_interval, partial(self.worker_fetch_replicas, tab.id)
                     )

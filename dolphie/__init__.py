@@ -102,7 +102,6 @@ class Dolphie:
         self.replica_lag: int = None
         self.active_redo_logs: int = None
         self.mysql_host: str = None
-        self.quick_switched_connection: bool = False
         self.binlog_transaction_compression_percentage: int = None
 
         # These are for replicas in replication panel

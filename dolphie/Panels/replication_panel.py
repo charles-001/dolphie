@@ -28,7 +28,12 @@ def create_panel(tab: Tab):
         and not dolphie.innodb_cluster
         and not dolphie.innodb_cluster_read_replica
     ):
-        return "[yellow]Replication/Replicas panel has no data to display[/yellow]"
+        tab.replication_container_title.display = True
+        tab.replication_container_title.update(
+            Align.center("[b][light_blue]Replication/Replicas panel has no data to display")
+        )
+    else:
+        tab.replication_container_title.display = False
 
     def create_group_replication_panel():
         if not dolphie.group_replication and not dolphie.innodb_cluster:
@@ -550,8 +555,12 @@ def fetch_replicas(tab: Tab):
         if host == "localhost" or host == "127.0.0.1":
             host = dolphie.host
 
-        if thread_id not in dolphie.replica_manager.replicas:
-            host_and_port = "%s:%s" % (host, port)
+        host_and_port = "%s:%s" % (host, port)
+
+        replica = dolphie.replica_manager.get(thread_id)
+
+        # If we don't have a replica connection, we create one
+        if not replica:
             try:
                 replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port)
                 replica.connection = Database(
@@ -577,17 +586,15 @@ def fetch_replicas(tab: Tab):
                 replica_error = e.reason
 
         # If we have a replica connection, we fetch its replication status
-        if not replica_error:
-            replica = dolphie.replica_manager.get(thread_id)
-            if replica and replica.connection:
-                try:
-                    replica.connection.execute(MySQLQueries.replication_status)
+        if replica.connection:
+            try:
+                replica.connection.execute(MySQLQueries.replication_status)
 
-                    replica_data = replica.connection.fetchone()
-                    if replica_data:
-                        replica.table = create_replication_table(tab, data=replica_data, replica=replica)
-                except ManualException as e:
-                    replica_error = e.reason
+                replica_data = replica.connection.fetchone()
+                if replica_data:
+                    replica.table = create_replication_table(tab, data=replica_data, replica=replica)
+            except ManualException as e:
+                replica_error = e.reason
 
         if replica_error:
             table = Table(box=None, show_header=False)
