@@ -5,6 +5,7 @@ import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
 from dolphie.Widgets.quick_switch import QuickSwitchHostModal
 from dolphie.Widgets.spinner import SpinnerWidget
+from dolphie.Widgets.topbar import TopBar
 from textual.app import App
 from textual.containers import (
     Center,
@@ -41,6 +42,7 @@ class Tab:
     replicas_worker: worker = None
     replicas_worker_timer: Timer = None
 
+    topbar: TopBar = None
     main_container: VerticalScroll = None
     loading_indicator: LoadingIndicator = None
     sparkline: Sparkline = None
@@ -73,22 +75,51 @@ class Tab:
     group_replication_data: Static = None
     cluster_data: Static = None
 
-    topbar_data: str = "Connecting to MySQL"
-
     queue_for_removal: bool = False
 
-    def update_topbar(self):
+    def disconnect(self, stop_timers: bool = True, update_topbar: bool = True):
+        if stop_timers:
+            if self.worker_timer:
+                self.worker_timer.stop()
+
+            if self.replicas_worker_timer:
+                self.replicas_worker_timer.stop()
+
+        self.worker.cancel()
+        self.worker = None
+
+        self.replicas_worker.cancel()
+        self.replicas_worker = None
+
+        self.dolphie.main_db_connection.close()
+        self.dolphie.secondary_db_connection.close()
+
+        self.dolphie.replica_manager.remove_all()
+
+        self.main_container.display = False
+
+        if update_topbar:
+            self.update_topbar()
+
+    def update_topbar(self, custom_text: str = None):
         dolphie = self.dolphie
 
-        if not dolphie.read_only_status:
-            if not self.loading_indicator.display:
-                self.topbar_data = ""
+        if custom_text:
+            self.topbar.host = custom_text
             return
 
         if dolphie.main_db_connection and not dolphie.main_db_connection.is_connected():
             dolphie.read_only_status = "DISCONNECTED"
+        else:
+            if not self.worker:
+                if not self.loading_indicator.display:
+                    self.topbar.host = ""
 
-        self.topbar_data = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
+                # If there is no worker instance, we don't update the topbar
+                return
+
+        # Update the topbar
+        self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
 
     def quick_switch_connection(self):
         dolphie = self.dolphie
@@ -109,11 +140,12 @@ class Tab:
             self.loading_indicator.display = True
             self.main_container.display = False
             self.sparkline.display = False
-            self.topbar_data = "Connecting to MySQL"
 
             self.replicas_title.update("")
             for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
                 member.remove()
+
+            self.update_topbar("Connecting to MySQL")
 
             if not self.worker or self.worker.state == WorkerState.CANCELLED:
                 self.worker_cancel_error = ""
@@ -126,6 +158,8 @@ class Tab:
         if self.worker_cancel_error:
             host = dolphie.host
             port = dolphie.port
+
+            self.update_topbar()
         else:
             host = ""
             port = ""
@@ -292,6 +326,7 @@ class TabManager:
         dolphie.tab_name = tab_name
 
         # Save references to the widgets in the tab
+        tab.topbar = self.app.query_one(TopBar)
         tab.main_container = self.app.query_one(f"#main_container_{tab.id}", VerticalScroll)
         tab.loading_indicator = self.app.query_one(f"#loading_indicator_{tab.id}", LoadingIndicator)
         tab.sparkline = self.app.query_one(f"#panel_dashboard_queries_qps_{tab.id}", Sparkline)
@@ -371,9 +406,6 @@ class TabManager:
         self.tabbed_content.active = f"tab_{tab.id}"
 
         tab.update_topbar()
-
-        # Update the topbar
-        self.app.topbar.host = tab.topbar_data
 
     def get_tab(self, id: int) -> Tab:
         if id in self.tabs:

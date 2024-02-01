@@ -454,16 +454,7 @@ class DolphieApp(App):
         # We have to queue the tab for removal because if we don't do it in the worker thread it will
         # be removed while the worker thread is running which will error due to objects not existing
         if tab.queue_for_removal:
-            # Cleanup connections
-            dolphie.main_db_connection.close()
-            dolphie.secondary_db_connection.close()
-            dolphie.replica_manager.remove_all()
-
-            tab.replicas_worker_timer.stop()
-            tab.worker_timer.stop()
-            tab.replicas_worker.cancel()
-            tab.worker.cancel()
-
+            tab.disconnect(stop_timers=True, update_topbar=False)
             self.tab_manager.tabs.pop(tab.id, None)
             return
 
@@ -561,12 +552,9 @@ class DolphieApp(App):
         except ManualException as e:
             # This will set up the worker state change function below to trigger the
             # quick switch connection modal with the error
-
-            tab.main_container.display = False
-            tab.loading_indicator.display = False
-
             tab.worker_cancel_error = e.output()
-            tab.worker.cancel()
+
+            tab.disconnect(stop_timers=False)
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
@@ -680,11 +668,8 @@ class DolphieApp(App):
 
                 self.layout_graphs()
 
-            # Update tab's topbar data
-            tab.update_topbar()
-
             if self.tab.id == tab.id:
-                self.topbar.host = tab.topbar_data
+                tab.update_topbar()
 
             if dolphie.panels.dashboard.visible:
                 self.refresh_panel(dolphie.panels.dashboard.name)
@@ -738,8 +723,6 @@ class DolphieApp(App):
         await self.capture_key(event.key)
 
     async def on_mount(self):
-        self.topbar = self.query_one(TopBar)
-
         dolphie = self.dolphie
 
         self.tab_manager = TabManager(self)
@@ -909,7 +892,7 @@ class DolphieApp(App):
                 return
 
             if not tab.worker:
-                self.notify("You must be connected to a host before using commands")
+                self.notify("You must be connected to a host to use commands")
                 return
 
         if key == "1":
@@ -952,7 +935,7 @@ class DolphieApp(App):
 
             async def command_get_input(tab_name):
                 await self.tab_manager.create_tab(tab_name, dolphie)
-                self.topbar.host = ""
+                self.tab.topbar.host = ""
                 self.tab.quick_switch_connection()
 
             self.app.push_screen(
@@ -996,20 +979,7 @@ class DolphieApp(App):
             self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "D":
-            tab.worker_timer.stop()
-            tab.worker.cancel()
-            tab.worker = None
-
-            tab.replicas_worker_timer.stop()
-            tab.replicas_worker.cancel()
-            tab.replicas_worker = None
-
-            dolphie.main_db_connection.close()
-            dolphie.secondary_db_connection.close()
-            dolphie.replica_manager.remove_all()
-
-            tab.main_container.display = False
-            self.topbar.host = f"[[white]DISCONNECTED[/white]] {dolphie.mysql_host}"
+            tab.disconnect()
 
         elif key == "e":
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:

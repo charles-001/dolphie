@@ -578,10 +578,10 @@ def fetch_replicas(tab: Tab):
 
         try:
             replica = dolphie.replica_manager.get(thread_id)
-            if replica and replica.connection.is_connected():
+            if replica and replica.connection:
                 replica.connection.execute(MySQLQueries.replication_status)
-                replica_data = replica.connection.fetchone()
 
+                replica_data = replica.connection.fetchone()
                 if replica_data:
                     replica.table = create_replication_table(tab, data=replica_data, replica=replica)
         except ManualException as e:
