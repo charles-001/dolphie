@@ -17,6 +17,7 @@ class Replica:
 
 class ReplicaManager:
     def __init__(self):
+        self.available_replicas: list = []
         self.replicas: Dict[int, Replica] = {}
         self.ports: Dict[str, int] = {}
 

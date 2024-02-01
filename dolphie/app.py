@@ -486,7 +486,7 @@ class DolphieApp(App):
             dolphie.main_db_connection.execute(find_replicas_query)
             available_replicas = dolphie.main_db_connection.fetchall()
             # We update the replica ports used if the number of replicas have changed
-            if len(available_replicas) != len(dolphie.available_replicas):
+            if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
                 dolphie.replica_manager.ports = {}
 
                 dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
@@ -494,7 +494,7 @@ class DolphieApp(App):
                 for row in replica_data:
                     dolphie.replica_manager.ports[row["Slave_UUID"]] = row["Port"]
 
-                dolphie.available_replicas = available_replicas
+                dolphie.replica_manager.available_replicas = available_replicas
 
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
             dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
@@ -607,7 +607,7 @@ class DolphieApp(App):
 
                     return
 
-                if dolphie.panels.replication.visible and dolphie.available_replicas:
+                if dolphie.panels.replication.visible and dolphie.replica_manager.available_replicas:
                     replication_panel.create_replica_panel(tab)
 
                 tab.replicas_worker_timer = self.set_timer(2, partial(self.worker_fetch_replicas, tab.id))
@@ -623,12 +623,13 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if dolphie.panels.replication.visible:
-            if dolphie.available_replicas:
+            if dolphie.replica_manager.available_replicas:
                 if not dolphie.replica_manager.replicas:
                     tab.replicas_container.display = True
                     tab.replicas_loading_indicator.display = True
                     tab.replicas_title.update(
-                        f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
+                        f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
+                        " replicas...\n"
                     )
 
                 replication_panel.fetch_replicas(tab)
@@ -899,10 +900,11 @@ class DolphieApp(App):
                 for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
                     member.remove()
             else:
-                if dolphie.available_replicas:
+                if dolphie.replica_manager.available_replicas:
                     tab.replicas_container.display = True
                     tab.replicas_title.update(
-                        f"[b]Loading [highlight]{len(dolphie.available_replicas)}[/highlight] replicas...\n"
+                        f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
+                        " replicas...\n"
                     )
                     tab.replicas_loading_indicator.display = True
 

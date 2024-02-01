@@ -21,7 +21,7 @@ def create_panel(tab: Tab):
 
     if (
         dolphie.panels.replication.visible
-        and not dolphie.available_replicas
+        and not dolphie.replica_manager.available_replicas
         and not dolphie.replication_status
         and not dolphie.galera_cluster
         and not dolphie.group_replication
@@ -198,7 +198,9 @@ def create_replica_panel(tab: Tab):
         tab.replicas_container.display = True
         tab.replicas_loading_indicator.display = False
 
-        tab.replicas_title.update(f"[b]Replicas ([highlight]{len(dolphie.available_replicas)}[/highlight])\n")
+        tab.replicas_title.update(
+            f"[b]Replicas ([highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight])\n"
+        )
         sorted_replica_connections = dolphie.replica_manager.get_sorted_replicas()
 
         # Quick & easy way to remove replicas that no longer exist
@@ -536,14 +538,14 @@ def fetch_replicas(tab: Tab):
     dolphie = tab.dolphie
 
     # Only run this query if we don't have replica ports or if the number of replicas has changed
-    if len(dolphie.replica_manager.replicas) != len(dolphie.available_replicas):
+    if len(dolphie.replica_manager.replicas) != len(dolphie.replica_manager.available_replicas):
         # Remove replica connections that no longer exist
-        unique_ids = {row["id"] for row in dolphie.available_replicas}
+        unique_ids = {row["id"] for row in dolphie.replica_manager.available_replicas}
         to_remove = set(dolphie.replica_manager.replicas.keys()) - unique_ids
         for thread_id in to_remove:
             dolphie.replica_manager.remove(thread_id)
 
-    for row in dolphie.available_replicas:
+    for row in dolphie.replica_manager.available_replicas:
         replica_error = None
 
         thread_id = row["id"]

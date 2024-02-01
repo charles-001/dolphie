@@ -127,7 +127,6 @@ class Tab:
                 # If there is no worker instance, we don't update the topbar
                 return
 
-        # Update the topbar
         self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
 
     def quick_switch_connection(self):
@@ -147,6 +146,7 @@ class Tab:
 
             if not self.worker or self.worker.state == WorkerState.CANCELLED:
                 self.worker_cancel_error = ""
+
                 self.dolphie.app.worker_fetch_data(self.id)
                 self.dolphie.app.worker_fetch_replicas(self.id)
 

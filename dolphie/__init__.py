@@ -62,6 +62,7 @@ class Dolphie:
 
     def reset_runtime_variables(self):
         self.metric_manager = MetricManager.MetricManager()
+        self.replica_manager = DataTypes.ReplicaManager()
         self.panels = DataTypes.Panels()
 
         # Set the graph switches to what they're currently selected to since we reset metric_manager
@@ -103,10 +104,6 @@ class Dolphie:
         self.active_redo_logs: int = None
         self.mysql_host: str = None
         self.binlog_transaction_compression_percentage: int = None
-
-        # These are for replicas in replication panel
-        self.replica_manager = DataTypes.ReplicaManager()
-        self.available_replicas: dict = {}
 
         # Types of hosts
         self.galera_cluster: bool = False
