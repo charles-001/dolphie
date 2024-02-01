@@ -17,6 +17,9 @@ class TopBar(Container):
         self.topbar_help = Label(help, id="topbar_help")
 
         self.read_only = read_only
+
+        if host is None:
+            host = ""
         self.host = host
 
     def watch_host(self):

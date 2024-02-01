@@ -77,13 +77,11 @@ class Tab:
 
     queue_for_removal: bool = False
 
-    def disconnect(self, stop_timers: bool = True, update_topbar: bool = True):
-        if stop_timers:
-            if self.worker_timer:
-                self.worker_timer.stop()
-
-            if self.replicas_worker_timer:
-                self.replicas_worker_timer.stop()
+    def disconnect(self, update_topbar: bool = True):
+        if self.worker_timer:
+            self.worker_timer.stop()
+        if self.replicas_worker_timer:
+            self.replicas_worker_timer.stop()
 
         self.worker.cancel()
         self.worker = None
@@ -97,6 +95,9 @@ class Tab:
         self.dolphie.replica_manager.remove_all()
 
         self.main_container.display = False
+
+        for member in self.dolphie.app.query(f".replica_container_{self.id}"):
+            member.remove()
 
         if update_topbar:
             self.update_topbar()
@@ -144,8 +145,6 @@ class Tab:
             self.replicas_title.update("")
             for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
                 member.remove()
-
-            self.update_topbar("Connecting to MySQL")
 
             if not self.worker or self.worker.state == WorkerState.CANCELLED:
                 self.worker_cancel_error = ""

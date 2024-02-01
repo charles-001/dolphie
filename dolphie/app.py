@@ -440,21 +440,20 @@ class DolphieApp(App):
         self.console.push_theme(theme)
         self.console.set_window_title(self.TITLE)
 
-    @work(thread=True)
+    @work(thread=True, group="main")
     def worker_fetch_data(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
 
         # Get our worker thread
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
-        tab.worker.group = "main"
 
         dolphie = tab.dolphie
 
         # We have to queue the tab for removal because if we don't do it in the worker thread it will
         # be removed while the worker thread is running which will error due to objects not existing
         if tab.queue_for_removal:
-            tab.disconnect(stop_timers=True, update_topbar=False)
+            tab.disconnect(update_topbar=False)
             self.tab_manager.tabs.pop(tab.id, None)
             return
 
@@ -467,6 +466,7 @@ class DolphieApp(App):
 
         try:
             if not dolphie.main_db_connection or not dolphie.main_db_connection.is_connected():
+                tab.update_topbar(f"[[white]CONNECTING[/white]] {dolphie.host}:{dolphie.port}")
                 dolphie.db_connect()
 
             dolphie.worker_start_time = datetime.now()
@@ -554,7 +554,7 @@ class DolphieApp(App):
             # quick switch connection modal with the error
             tab.worker_cancel_error = e.output()
 
-            tab.disconnect(stop_timers=False)
+            tab.disconnect()
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
@@ -616,18 +616,15 @@ class DolphieApp(App):
                 if dolphie.panels.replication.visible and dolphie.available_replicas:
                     replication_panel.create_replica_panel(tab)
 
-                tab.replicas_worker_timer = self.set_timer(
-                    tab.dolphie.refresh_interval, partial(self.worker_fetch_replicas, tab.id)
-                )
+                tab.replicas_worker_timer = self.set_timer(2, partial(self.worker_fetch_replicas, tab.id))
 
-    @work(thread=True)
+    @work(thread=True, group="replicas")
     def worker_fetch_replicas(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
 
         # Get our worker thread
         tab.replicas_worker = get_current_worker()
         tab.replicas_worker.name = tab_id
-        tab.replicas_worker.group = "replicas"
 
         dolphie = tab.dolphie
 
@@ -1694,11 +1691,7 @@ class DolphieApp(App):
         tab.spinner.hide()
 
     def compose(self) -> ComposeResult:
-        yield TopBar(
-            host="Connecting to MySQL",
-            app_version=self.dolphie.app_version,
-            help="press [b highlight]?[/b highlight] for help",
-        )
+        yield TopBar(host="", app_version=self.dolphie.app_version, help="press [b highlight]?[/b highlight] for help")
         yield TabbedContent(id="tabbed_content")
 
 
