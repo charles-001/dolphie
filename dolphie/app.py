@@ -1234,7 +1234,9 @@ class DolphieApp(App):
                     table,
                 )
             else:
-                screen_data = "\nThere are currently no hosts resolved"
+                screen_data = Group(
+                    Align.center("[b #bbc8e8]Host Cache[/b #bbc8e8]\n"), "There are currently no hosts resolved"
+                )
 
         elif key == "question_mark":
             keys = {
