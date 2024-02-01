@@ -67,6 +67,12 @@ class Dolphie:
 
         # Set the graph switches to what they're currently selected to since we reset metric_manager
         if self.app:
+            # Set the default panels based on startup_panels to be visible
+            for panel in self.panels.all():
+                setattr(getattr(self.panels, panel), "visible", False)
+            for panel in self.startup_panels:
+                setattr(getattr(self.panels, panel), "visible", True)
+
             switches = self.app.query(f".switch_container_{self.tab_id} Switch")
             for switch in switches:
                 switch: Switch

@@ -507,6 +507,7 @@ class MetricManager:
         self.update_metrics_checkpoint()
         self.update_metrics_adaptive_hash_index_hit_ratio()
         self.update_metrics_locks()
+        self.update_metrics_with_last_value()
 
         self.metrics.redo_log.redo_log_size = self.redo_log_size
 

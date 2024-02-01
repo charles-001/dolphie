@@ -50,14 +50,16 @@ class Panel:
 
 
 class Panels:
-    dashboard = Panel("dashboard")
-    processlist = Panel("processlist")
-    graphs = Panel("graphs")
-    replication = Panel("replication")
-    locks = Panel("locks")
+    def __init__(self):
+        self.dashboard = Panel("dashboard")
+        self.processlist = Panel("processlist")
+        self.graphs = Panel("graphs")
+        self.replication = Panel("replication")
+        self.locks = Panel("locks")
 
-    @classmethod
-    def all(cls):
+    def all(self):
         return [
-            panel.name for name, panel in cls.__dict__.items() if not name.startswith("__") and isinstance(panel, Panel)
+            panel.name
+            for name, panel in self.__dict__.items()
+            if not name.startswith("__") and isinstance(panel, Panel)
         ]

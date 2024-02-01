@@ -143,12 +143,13 @@ class Tab:
                 dolphie.password = password
 
             self.disconnect()
+            dolphie.reset_runtime_variables()
 
             if not self.worker or self.worker.state == WorkerState.CANCELLED:
                 self.worker_cancel_error = ""
 
-                self.dolphie.app.worker_fetch_data(self.id)
-                self.dolphie.app.worker_fetch_replicas(self.id)
+                self.dolphie.app.run_worker_main(self.id)
+                self.dolphie.app.run_worker_replicas(self.id)
 
         self.loading_indicator.display = False
 

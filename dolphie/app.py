@@ -441,29 +441,24 @@ class DolphieApp(App):
         self.console.set_window_title(self.TITLE)
 
     @work(thread=True, group="main")
-    def worker_fetch_data(self, tab_id: int):
+    def run_worker_main(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
 
         # Get our worker thread
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
 
-        dolphie = tab.dolphie
-
         # We have to queue the tab for removal because if we don't do it in the worker thread it will
         # be removed while the worker thread is running which will error due to objects not existing
         if tab.queue_for_removal:
             tab.disconnect(update_topbar=False)
             self.tab_manager.tabs.pop(tab.id, None)
+
             return
 
-        if dolphie.metric_manager.worker_start_time:
-            dolphie.metric_manager.update_metrics_with_last_value()
-
+        dolphie = tab.dolphie
         try:
             if not dolphie.main_db_connection or not dolphie.main_db_connection.is_connected():
-                dolphie.reset_runtime_variables()
-
                 tab.update_topbar(f"[[white]CONNECTING[/white]] {dolphie.host}:{dolphie.port}")
                 tab.loading_indicator.display = True
 
@@ -517,6 +512,7 @@ class DolphieApp(App):
                         dolphie.is_group_replication_primary = True
                         break
 
+            print(f"Visible: {dolphie.panels.dashboard.visible}")
             if dolphie.panels.dashboard.visible:
                 dolphie.main_db_connection.execute(MySQLQueries.binlog_status)
                 dolphie.binlog_status = dolphie.main_db_connection.fetchone()
@@ -573,14 +569,14 @@ class DolphieApp(App):
                     or tab.id != self.tab.id
                 ):
                     tab.worker_timer = self.set_timer(
-                        tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id)
+                        tab.dolphie.refresh_interval, partial(self.run_worker_main, tab.id)
                     )
 
                     return
 
                 self.refresh_screen(tab)
 
-                tab.worker_timer = self.set_timer(tab.dolphie.refresh_interval, partial(self.worker_fetch_data, tab.id))
+                tab.worker_timer = self.set_timer(tab.dolphie.refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
@@ -602,7 +598,7 @@ class DolphieApp(App):
                 # Skip this if the conditions are right
                 if len(self.screen_stack) > 1 or dolphie.pause_refresh or tab.id != self.tab.id:
                     tab.replicas_worker_timer = self.set_timer(
-                        tab.dolphie.refresh_interval, partial(self.worker_fetch_replicas, tab.id)
+                        tab.dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
                     )
 
                     return
@@ -610,10 +606,10 @@ class DolphieApp(App):
                 if dolphie.panels.replication.visible and dolphie.replica_manager.available_replicas:
                     replication_panel.create_replica_panel(tab)
 
-                tab.replicas_worker_timer = self.set_timer(2, partial(self.worker_fetch_replicas, tab.id))
+                tab.replicas_worker_timer = self.set_timer(2, partial(self.run_worker_replicas, tab.id))
 
     @work(thread=True, group="replicas")
-    def worker_fetch_replicas(self, tab_id: int):
+    def run_worker_replicas(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
 
         # Get our worker thread
@@ -648,12 +644,10 @@ class DolphieApp(App):
                 # We only want to do this on startup
                 # Set panels to be visible for the ones the user specifies
                 for panel in dolphie.panels.all():
-                    self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
-                    setattr(getattr(dolphie.panels, panel), "visible", False)
+                    self.query_one(f"#panel_{panel}_{tab.id}").display = False
 
                 for panel in dolphie.startup_panels:
                     self.query_one(f"#panel_{panel}_{tab.id}").display = True
-                    setattr(getattr(dolphie.panels, panel), "visible", True)
 
                 loading_indicator.display = False
                 tab.main_container.display = True
@@ -723,8 +717,8 @@ class DolphieApp(App):
         dolphie.load_host_cache_file()
         dolphie.check_for_update()
 
-        self.worker_fetch_data(self.tab.id)
-        self.worker_fetch_replicas(self.tab.id)
+        self.run_worker_main(self.tab.id)
+        self.run_worker_replicas(self.tab.id)
 
     def _handle_exception(self, error: Exception) -> None:
         self.bell()
@@ -923,7 +917,7 @@ class DolphieApp(App):
         elif key == "space":
             if tab.worker.state != WorkerState.RUNNING:
                 tab.worker_timer.stop()
-                self.worker_fetch_data(tab.id)
+                self.run_worker_main(tab.id)
         elif key == "plus":
 
             async def command_get_input(tab_name):
