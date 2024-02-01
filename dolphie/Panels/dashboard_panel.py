@@ -128,8 +128,14 @@ def create_panel(tab: Tab) -> Table:
     ##############
     # Binary Log #
     ##############
-    if binlog_status:
-        table_primary = Table(show_header=False, box=None, title="Binary Log", title_style=table_title_style)
+    table_primary = Table(show_header=False, box=None, title="Binary Log", title_style=table_title_style)
+
+    if not binlog_status:
+        table_primary.add_column(justify="center")
+        table_primary.add_row("\n\n\n[b][highlight]Disabled")
+    else:
+        table_primary.add_column()
+        table_primary.add_column(max_width=40)
 
         if dolphie.previous_binlog_position == 0:
             diff_binlog_position = 0
@@ -147,8 +153,6 @@ def create_panel(tab: Tab) -> Table:
             elif binlog_cache_mem > binlog_cache_disk:
                 binlog_cache = round(100 - (binlog_cache_disk / binlog_cache_mem), 2)
 
-        table_primary.add_column()
-        table_primary.add_column(max_width=40)
         table_primary.add_row("[label]File name", binlog_status["File"])
         table_primary.add_row(
             "[label]Position",
@@ -182,11 +186,11 @@ def create_panel(tab: Tab) -> Table:
 
         table_primary.add_row("[label]Compression", binlog_compression)
 
-        tab.dashboard_binary_log.update(table_primary)
-
         # Save some global_variables to be used in next refresh
         if dolphie.binlog_status:
             dolphie.previous_binlog_position = dolphie.binlog_status["Position"]
+
+    tab.dashboard_binary_log.update(table_primary)
 
     ###############
     # Replication #
