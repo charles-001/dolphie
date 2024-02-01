@@ -512,7 +512,6 @@ class DolphieApp(App):
                         dolphie.is_group_replication_primary = True
                         break
 
-            print(f"Visible: {dolphie.panels.dashboard.visible}")
             if dolphie.panels.dashboard.visible:
                 dolphie.main_db_connection.execute(MySQLQueries.binlog_status)
                 dolphie.binlog_status = dolphie.main_db_connection.fetchone()
@@ -812,7 +811,7 @@ class DolphieApp(App):
 
             self.tab.dashboard_host_information.styles.max_width = "45"
             self.tab.dashboard_binary_log.styles.max_width = "38"
-            self.tab.dashboard_innodb.styles.max_width = "33"
+            self.tab.dashboard_innodb.styles.max_width = "32"
             self.tab.dashboard_replication.styles.max_width = "50"
             self.tab.dashboard_statistics.styles.max_width = "22"
 

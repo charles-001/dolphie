@@ -104,7 +104,6 @@ class Dolphie:
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
         self.replication_applier_status: dict = {}
-        self.replication_primary_server_uuid: str = None
         self.replica_lag_source: str = None
         self.replica_lag: int = None
         self.active_redo_logs: int = None
@@ -383,9 +382,6 @@ class Dolphie:
                 ):
                     self.main_db_connection.execute(MySQLQueries.replication_applier_status)
                     self.replication_applier_status = self.main_db_connection.fetchall()
-
-                # Save this for the errant TRX check
-                self.replication_primary_server_uuid = self.replication_status.get("Master_UUID")
 
         replica_lag = None
         if replica_lag_data and replica_lag_data["Seconds_Behind_Master"] is not None:

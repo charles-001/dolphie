@@ -408,8 +408,10 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
 
             table.add_row("[label]Auto Position", "%s" % data["Auto_Position"])
 
-            # We find errant transactions for replicas here
             if replica:
+                replica_primary_server_uuid = None
+                if dolphie.replication_status:
+                    replica_primary_server_uuid = dolphie.replication_status.get("Master_UUID")
 
                 def remove_primary_uuid_gtid_set(gtid_sets):
                     lines = gtid_sets.splitlines()
@@ -417,8 +419,8 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
                     # We ignore the GTID set that relates to the replica's primary UUID/host's UUID since
                     # we would always have errant transactions if not
                     server_uuid_set = {dolphie.server_uuid}
-                    if dolphie.replication_primary_server_uuid:
-                        server_uuid_set.add(dolphie.replication_primary_server_uuid)
+                    if replica_primary_server_uuid:
+                        server_uuid_set.add(replica_primary_server_uuid)
 
                     # Filter lines based on server_uuid_set
                     remaining_lines = [line for line in lines if not any(uuid in line for uuid in server_uuid_set)]
@@ -433,7 +435,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
                     return result
 
                 replica_gtid_set = remove_primary_uuid_gtid_set(executed_gtid_set)
-                primary_gtid_set = remove_primary_uuid_gtid_set(dolphie.global_variables["gtid_executed"])
+                primary_gtid_set = remove_primary_uuid_gtid_set(dolphie.global_variables.get("gtid_executed"))
 
                 replica.connection.execute(
                     f"SELECT GTID_SUBTRACT('{replica_gtid_set}', '{primary_gtid_set}') AS errant_trxs"
@@ -446,8 +448,11 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
 
                 table.add_row("[label]Errant TRX", "%s" % errant_trx)
 
-                # Since this is for the replica view, we use the host's UUID since its the primary
-                primary_uuid = dolphie.server_uuid
+                # If this replica has replicas, use its primary server UUID, else use its own server UUID
+                if replica_primary_server_uuid:
+                    primary_uuid = replica_primary_server_uuid
+                else:
+                    primary_uuid = dolphie.server_uuid
 
             def color_gtid_set(match):
                 source_id = match.group(1)
@@ -466,7 +471,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
             table.add_row("[label]Retrieved GTID", "%s" % retrieved_gtid_set)
             table.add_row("[label]Executed GTID", "%s" % executed_gtid_set)
         elif mariadb_gtid_enabled:
-            table.add_row("[label]GTID IO Pos", "%s" % data["Gtid_IO_Pos"])
+            table.add_row("[label]GTID IO Pos", "%s" % data.get("Gtid_IO_Pos"))
 
     return table
 

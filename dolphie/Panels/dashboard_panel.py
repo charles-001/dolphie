@@ -14,22 +14,12 @@ def create_panel(tab: Tab) -> Table:
     global_variables = dolphie.global_variables
     binlog_status = dolphie.binlog_status
 
-    uptime = str(timedelta(seconds=global_status["Uptime"]))
-
     table_title_style = Style(color="#bbc8e8", bold=True)
-    table_box = None
-    table_line_color = "table_border"
 
     ################
     # Information #
     ###############
-    table_information = Table(
-        show_header=False,
-        box=table_box,
-        title="Host Information",
-        title_style=table_title_style,
-        style=table_line_color,
-    )
+    table_information = Table(show_header=False, box=None, title="Host Information", title_style=table_title_style)
 
     if dolphie.replicaset:
         host_type = "InnoDB ReplicaSet"
@@ -57,7 +47,7 @@ def create_panel(tab: Tab) -> Table:
         "[label]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
     )
     table_information.add_row("[label]Type", host_type)
-    table_information.add_row("[label]Uptime", uptime)
+    table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
     table_information.add_row("[label]Runtime", f"{runtime} [label]latency:[/label] {dolphie.refresh_latency}s")
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
@@ -84,14 +74,7 @@ def create_panel(tab: Tab) -> Table:
     ###########
     # InnoDB  #
     ###########
-    table_innodb = Table(
-        show_header=False,
-        pad_edge=False,
-        box=None,
-        title="InnoDB",
-        title_style=table_title_style,
-        style=table_line_color,
-    )
+    table_innodb = Table(show_header=False, box=None, title="InnoDB", title_style=table_title_style)
 
     table_innodb.add_column()
     table_innodb.add_column(width=9)
@@ -145,16 +128,8 @@ def create_panel(tab: Tab) -> Table:
     ##############
     # Binary Log #
     ##############
-    table_primary = Table()
-
     if binlog_status:
-        table_primary = Table(
-            show_header=False,
-            box=table_box,
-            title="Binary Log",
-            title_style=table_title_style,
-            style=table_line_color,
-        )
+        table_primary = Table(show_header=False, box=None, title="Binary Log", title_style=table_title_style)
 
         if dolphie.previous_binlog_position == 0:
             diff_binlog_position = 0
@@ -224,13 +199,7 @@ def create_panel(tab: Tab) -> Table:
     ###############
     # Statistics #
     ###############
-    table_stats = Table(
-        show_header=False,
-        box=table_box,
-        title="Statistics/s",
-        title_style=table_title_style,
-        style=table_line_color,
-    )
+    table_stats = Table(show_header=False, box=None, title="Statistics/s", title_style=table_title_style)
 
     table_stats.add_column()
     table_stats.add_column(min_width=6)
