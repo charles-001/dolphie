@@ -14,9 +14,8 @@ class EventLog(Screen):
     CSS = """
         EventLog Horizontal {
             height: auto;
-            # padding-top: 1;
             align: center top;
-            background: #000718;
+            background: #0a0e1b;
             width: 100%;
         }
         EventLog Horizontal > Label {
@@ -25,7 +24,7 @@ class EventLog(Screen):
             margin-right: -1;
         }
         EventLog DataTable {
-            background: #000718;
+            background: #0a0e1b;
             border: none;
             overflow-x: hidden;
             max-height: 100%;
@@ -37,7 +36,7 @@ class EventLog(Screen):
             text-style: bold;
         }
         #search {
-            background: #030918;
+            background: #0a0e1b;
             content-align: right middle;
             padding-left: 1;
             margin: 0;

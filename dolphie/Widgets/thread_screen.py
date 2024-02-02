@@ -10,12 +10,12 @@ from textual.widgets import DataTable, Label, Rule, Static
 class ThreadScreen(Screen):
     CSS = """
     ThreadScreen {
-        background: #030918;
+        background: #0a0e1b;
     }
     ThreadScreen #explain_table {
         margin-top: 1;
-        background: #0b1221;
-        border: tall #1c2238;
+        background: #0f1625;
+        border: tall #1d2337;
         overflow-x: auto;
         min-height: 5;
         max-height: 15;
@@ -55,8 +55,8 @@ class ThreadScreen(Screen):
 
     ThreadScreen .table {
         content-align: center middle;
-        background: #0b1221;
-        border: tall #1c2238;
+        background: #0f1625;
+        border: tall #1d2337;
         padding-left: 1;
         padding-right: 1;
         height: auto;

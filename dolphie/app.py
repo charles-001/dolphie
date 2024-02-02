@@ -418,26 +418,24 @@ class DolphieApp(App):
         self.dolphie = dolphie
         self.tab: Tab = None
 
-        theme = Theme(
-            {
-                "white": "#e9e9e9",
-                "green": "#54efae",
-                "yellow": "#f6ff8f",
-                "red": "#fd8383",
-                "purple": "#b565f3",
-                "dark_gray": "#969aad",
-                "highlight": "#91abec",
-                "label": "#c5c7d2",
-                "b label": "b #c5c7d2",
-                "light_blue": "#bbc8e8",
-                "b white": "b #e9e9e9",
-                "b highlight": "b #91abec",
-                "b red": "b #fd8383",
-                "b light_blue": "b #bbc8e8",
-                "panel_border": "#6171a6",
-                "table_border": "#313C5F",
-            }
-        )
+        theme = Theme({
+            "white": "#e9e9e9",
+            "green": "#54efae",
+            "yellow": "#f6ff8f",
+            "red": "#fd8383",
+            "purple": "#b565f3",
+            "dark_gray": "#969aad",
+            "highlight": "#91abec",
+            "label": "#c5c7d2",
+            "b label": "b #c5c7d2",
+            "light_blue": "#bbc8e8",
+            "b white": "b #e9e9e9",
+            "b highlight": "b #91abec",
+            "b red": "b #fd8383",
+            "b light_blue": "b #bbc8e8",
+            "panel_border": "#6171a6",
+            "table_border": "#333f62",
+        })
         self.console.push_theme(theme)
         self.console.set_window_title(self.TITLE)
 
@@ -1601,7 +1599,7 @@ class DolphieApp(App):
                         line_numbers=False,
                         word_wrap=True,
                         theme="monokai",
-                        background_color="#0b1221",
+                        background_color="#0f1625",
                     )
 
                     if query_db:
@@ -1657,7 +1655,7 @@ class DolphieApp(App):
                                     line_numbers=False,
                                     word_wrap=True,
                                     theme="monokai",
-                                    background_color="#0b1221",
+                                    background_color="#0f1625",
                                 )
 
                             transaction_history_table.add_row(

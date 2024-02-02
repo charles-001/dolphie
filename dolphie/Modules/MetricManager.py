@@ -29,8 +29,8 @@ class Graph(Static):
 
         plt.clf()
         plt.date_form("d/m/y H:M:S")
-        plt.canvas_color((3, 9, 24))
-        plt.axes_color((3, 9, 24))
+        plt.canvas_color((10, 14, 27))
+        plt.axes_color((10, 14, 27))
         plt.ticks_color((144, 169, 223))
 
         plt.plotsize(self.size.width, self.size.height)
@@ -41,7 +41,7 @@ class Graph(Static):
             y = self.metric_instance.Innodb_checkpoint_age.values
 
             if y:
-                plt.hline(0, (3, 9, 24))
+                plt.hline(0, (10, 14, 27))
                 plt.hline(self.metric_instance.checkpoint_age_sync_flush, (241, 251, 130))
                 plt.hline(self.metric_instance.checkpoint_age_max, (252, 121, 121))
                 plt.text(
@@ -115,7 +115,7 @@ class Graph(Static):
             y = self.metric_instance.Active_redo_log_count.values
 
             if y:
-                plt.hline(1, (3, 9, 24))
+                plt.hline(1, (10, 14, 27))
                 plt.hline(34, (252, 121, 121))
                 plt.text(
                     "Max Count",

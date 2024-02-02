@@ -11,10 +11,10 @@
 }
 
 #_default, CommandScreen, EventLog { # screens
-    background: #030918;
+    background: #0a0e1b;
 }
 RichLog {
-    background: #030918;
+    background: #0a0e1b;
 }
 Graph {
     height: 16;
@@ -80,16 +80,16 @@ TopBar {
 }
 .dashboard > Center > * {
     content-align: center top;
-    background: #0c1323;
-    border: tall #1c2238;
+    background: #0f1625;
+    border: tall #1e243b;
     height: 11;
     width: auto;
 }
 
 .locks {
     height: auto;
-    background: #0c1323;
-    border: tall #1c2238;
+    background: #0f1625;
+    border: tall #1e243b;
     margin-bottom: 1;
 }
 .locks > Label {
@@ -105,8 +105,8 @@ TopBar {
 
 .processlist {
     height: auto;
-    background: #0c1323;
-    border: tall #1c2238;
+    background: #0f1625;
+    border: tall #1e243b;
 }
 .processlist > Label {
     width: 100%;
@@ -135,8 +135,8 @@ TopBar {
 }
 .replication > Center > ScrollableContainer {
     content-align: center top;
-    background: #0c1323;
-    border: tall #1c2238;
+    background: #0f1625;
+    border: tall #1e243b;
     height: auto;
     max-height: 18;
 }
@@ -161,8 +161,8 @@ TopBar {
     grid-gutter: 1 0;
 }
 .replicas > Container > ScrollableContainer  {
-    background: #0b1322;
-    border: tall #1c2238;
+    background: #0f1625;
+    border: tall #1e243b;
     height: auto;
     max-height: 18;
 }
@@ -182,8 +182,8 @@ TopBar {
     grid-gutter: 1 0;
 }
 .group_replication > Container > ScrollableContainer  {
-    background: hsl(221, 50%, 9%);
-    border: tall #1c2238;
+    background: #0f1625;
+    border: tall #1e243b;
     height: auto;
     max-height: 18;
 }
@@ -194,8 +194,8 @@ TopBar {
 
 .ddl {
     height: auto;
-    background: #0c1323;
-    border: tall #1c2238;
+    background: #0f1625;
+    border: tall #1e243b;
     margin-bottom: 1;
 }
 .ddl > Container {
@@ -244,12 +244,12 @@ Input {
     width: 40;
     margin: 0 2;
     margin-bottom: 1;
-    background: #101321;
+    background: #111422;
     border: tall #242c46;
 }
 Input:focus {
-    background: #101321;
-    border: tall #3d4a75;
+    background: #111422;
+    border: tall #414e7b;
 }
 Input>.input--placeholder {
     color: #7e8dac;
@@ -331,7 +331,7 @@ Button:focus {
 }
 
 Switch {
-    background: #030918;
+    background: #0a0e1b;
     border: none #364774;
 }
 Switch > .switch--slider {
