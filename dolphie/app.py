@@ -646,10 +646,10 @@ class DolphieApp(App):
                 # We only want to do this on startup
                 # Set panels to be visible for the ones the user specifies
                 for panel in dolphie.panels.all():
-                    self.query_one(f"#panel_{panel}_{tab.id}").display = False
+                    setattr(getattr(tab, f"panel_{panel}"), "display", False)
 
                 for panel in dolphie.startup_panels:
-                    self.query_one(f"#panel_{panel}_{tab.id}").display = True
+                    setattr(getattr(tab, f"panel_{panel}"), "display", True)
 
                 loading_indicator.display = False
                 tab.main_container.display = True

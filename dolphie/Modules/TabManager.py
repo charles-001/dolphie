@@ -139,7 +139,8 @@ class Tab:
                 # If there is no worker instance, we don't update the topbar
                 return
 
-        self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
+        if dolphie.read_only_status and dolphie.mysql_host:
+            self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
 
     def quick_switch_connection(self):
         dolphie = self.dolphie

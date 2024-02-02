@@ -244,11 +244,11 @@ Input {
     width: 40;
     margin: 0 2;
     margin-bottom: 1;
-    background: #111422;
-    border: tall #242c46;
+    background: #121522;
+    border: tall #272e47;
 }
 Input:focus {
-    background: #111422;
+    background: #121522;
     border: tall #414e7b;
 }
 Input>.input--placeholder {
@@ -298,35 +298,35 @@ Sparkline > .sparkline--min-color {
 }
 
 Button.-primary {
-    background: #1b2c5a;
-    border-top: tall #40558c;
-    border-bottom: tall #0d152b;
+    background: #232e4d;
+    border-top: tall #405284;
+    border-bottom: tall #151b2b;
 }
 Button.-primary:hover {
-    background: #263a70;
-    border-top: tall #4f69ac;
-    border-bottom: tall #162244;
+    background: #28355a;
+    border-top: tall #485b90;
+    border-bottom: tall #151b2b;
 }
 Button.-primary:focus {
-    background: #263a70;
-    border-top: tall #4f69ac;
-    border-bottom: tall #162244;
+    background: #28355a;
+    border-top: tall #485b90;
+    border-bottom: tall #151b2b;
     text-style: bold;
 }
 Button {
-    background: #282d3c;
-    border-top: tall #606577;
-    border-bottom: tall #151820;
+    background: #292d44;
+    border-top: tall #565c7e;
+    border-bottom: tall #171922;
 }
 Button:hover {
-    background: #363c50;
-    border-top: tall #757b91;
-    border-bottom: tall #222634;
+    background: #2f344e;
+    border-top: tall #5e6387;
+    border-bottom: tall #171922;
 }
 Button:focus {
-    background: #363c50;
-    border-top: tall #757b91;
-    border-bottom: tall #222634;
+    background: #313752;
+    border-top: tall #5e6387;
+    border-bottom: tall #171922;
     text-style: bold;
 }
 
@@ -381,7 +381,7 @@ RadioSet:focus RadioButton.-selected .toggle--label {
     color: #a5b8e7;
 }
 RadioSet > RadioButton.-selected > .toggle--label {
-    color: #91abec;
+    color: #9bb2eb;
 }
 
 Checkbox {

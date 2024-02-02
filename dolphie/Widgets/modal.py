@@ -19,8 +19,8 @@ from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
 class CommandModal(ModalScreen):
     CSS = """
         CommandModal > Vertical {
-            background: #121626;
-            border: thick #20263d;
+            background: #141726;
+            border: tall #252e48;
             height: auto;
             width: auto;
         }
