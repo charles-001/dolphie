@@ -19,7 +19,6 @@ from textual.widgets import (
     DataTable,
     Label,
     LoadingIndicator,
-    Rule,
     Sparkline,
     Static,
     Switch,
