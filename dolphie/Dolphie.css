@@ -26,7 +26,9 @@ Rule {
     color: #2e375a;
     margin: 0;
 }
-
+DataTable {
+    overflow-x: hidden;
+}
 LoadingIndicator {
     color: #8fb0ee;
     height: 20%;
@@ -99,9 +101,6 @@ TopBar {
     content-align: center middle;
     margin-bottom: 1;
 }
-.locks > DataTable {
-    overflow-x: hidden;
-}
 
 .processlist {
     height: auto;
@@ -115,9 +114,7 @@ TopBar {
     content-align: center middle;
     margin-bottom: 1;
 }
-.processlist > DataTable {
-    overflow-x: hidden;
-}
+
 
 .replication {
     height: auto;

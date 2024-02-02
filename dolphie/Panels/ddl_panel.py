@@ -1,4 +1,4 @@
-from dolphie.Modules.Functions import format_time
+from dolphie.Modules.Functions import format_bytes, format_time
 from dolphie.Modules.TabManager import Tab
 from textual.widgets import DataTable
 
@@ -7,12 +7,13 @@ def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
     columns = {
-        "processlist_id": {"name": "Thread ID", "width": 10, "format_time": False},
-        "percentage_completed": {"name": "Completed", "width": 9, "format_time": False},
-        "memory": {"name": "Memory", "width": 10, "format_time": False},
-        "started_ago": {"name": "Age", "width": 8, "format_time": True},
-        "estimated_remaining_time": {"name": "ETA", "width": 8, "format_time": True},
-        "state": {"name": "State", "width": 60, "format_time": False},
+        "processlist_id": {"name": "Thread ID", "width": 10, "format": None},
+        "percentage_completed": {"name": "Completed", "width": 9, "format": None},
+        "memory": {"name": "Memory", "width": 10, "format": "bytes"},
+        "started_ago": {"name": "Current Time", "width": 12, "format": "time"},
+        "estimated_remaining_time": {"name": "Remaining Time", "width": 14, "format": "time"},
+        "estimated_full_time": {"name": "Total Time", "width": 10, "format": "time"},
+        "state": {"name": "State", "width": None, "format": None},
     }
 
     ddl_datatable = tab.ddl_datatable
@@ -25,10 +26,12 @@ def create_panel(tab: Tab) -> DataTable:
         row_values = []
 
         for column_key, column_data in columns.items():
-            column_format_time = column_data["format_time"]
+            column_format = column_data["format"]
 
-            if column_format_time:
+            if column_format == "time":
                 value = format_time(ddl[column_key], picoseconds=True)
+            elif column_format == "bytes":
+                value = format_bytes(ddl[column_key])
             else:
                 value = ddl[column_key]
 

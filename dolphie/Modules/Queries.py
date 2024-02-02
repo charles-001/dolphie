@@ -211,12 +211,16 @@ class MySQLQueries:
                 AS estimated_full_time,
             CONVERT(( stmt.timer_wait / round( 100 * stage.work_completed / stage.work_estimated, 2 )* 100 )
                 - stmt.timer_wait, UNSIGNED) AS estimated_remaining_time,
-            current_allocated memory
+            CONVERT(SUM( `mt`.`CURRENT_NUMBER_OF_BYTES_USED` ), UNSIGNED) memory
         FROM
-            `performance_schema`.events_statements_current stmt JOIN
-            sys.memory_by_thread_by_current_bytes mt ON mt.thread_id = stmt.thread_id JOIN
-            `performance_schema`.events_stages_current stage ON stage.thread_id = stmt.thread_id LEFT JOIN
+            `performance_schema`.`events_statements_current` stmt JOIN
+            `performance_schema`.`events_stages_current` stage ON stage.nesting_event_id = stmt.event_id JOIN
+            `performance_schema`.`memory_summary_by_thread_by_event_name` `mt` ON mt.thread_id = stmt.thread_id JOIN
             `performance_schema`.`threads` t ON t.thread_id = stmt.thread_id
+        WHERE
+            stage.event_name LIKE 'stage/innodb/alter%'
+        GROUP BY
+            stmt.thread_id
     """
     error_log: str = """
         SELECT

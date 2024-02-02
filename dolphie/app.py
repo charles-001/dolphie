@@ -920,9 +920,17 @@ class DolphieApp(App):
             self.toggle_panel(dolphie.panels.locks.name)
             self.tab.locks_datatable.clear()
         elif key == "6":
-            if not dolphie.is_mysql_version_at_least("8.0"):
-                self.notify("DDL panel requires MySQL 8.0+")
+            if not dolphie.is_mysql_version_at_least("5.7"):
+                self.notify("DDL panel requires MySQL 5.7+")
                 return
+
+            query = "SELECT enabled FROM performance_schema.setup_instruments WHERE name LIKE 'stage/innodb/alter%';"
+            dolphie.secondary_db_connection.execute(query)
+            data = dolphie.secondary_db_connection.fetchall()
+            for row in data:
+                if row.get("enabled") == "NO":
+                    self.notify("DDL panel requires Performance Schema to have 'stage/innodb/alter%' enabled")
+                    return
 
             self.toggle_panel(dolphie.panels.ddl.name)
             self.tab.ddl_datatable.clear()
