@@ -234,14 +234,12 @@ class TabManager:
                                     classes="replication_thread_applier",
                                 ),
                             ),
-                            Rule(line_style="heavy"),
                             id=f"replication_container_{tab_id}",
                             classes="replication",
                         ),
                         Container(
                             Label(id=f"group_replication_title_{tab_id}"),
                             Label(id=f"group_replication_data_{tab_id}"),
-                            Rule(line_style="heavy"),
                             id=f"group_replication_container_{tab_id}",
                             classes="group_replication",
                         ),
@@ -249,7 +247,6 @@ class TabManager:
                         Container(
                             Label(id=f"replicas_title_{tab_id}"),
                             LoadingIndicator(id=f"replicas_loading_indicator_{tab_id}"),
-                            Label(""),
                             id=f"replicas_container_{tab_id}",
                             classes="replicas",
                         ),

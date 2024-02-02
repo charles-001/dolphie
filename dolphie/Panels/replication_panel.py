@@ -224,10 +224,9 @@ def create_replica_panel(tab: Tab):
                 if not is_last_row:
                     container_classes += " pad_bottom_1"
 
+                num_containers = len(dolphie.app.query(f".replica_container_{tab.id}"))
                 container = Container(id=container_id, classes=container_classes)
-                tab.replicas_container.mount(
-                    container, after=tab.dolphie.app.query_one(f"#replicas_loading_indicator_{tab.id}")
-                )
+                tab.replicas_container.mount(container, after=1 + num_containers)
 
             for replica in replica_pair:
                 replica_id = replica.thread_id

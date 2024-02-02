@@ -80,7 +80,7 @@ TopBar {
 }
 .dashboard > Center > * {
     content-align: center top;
-    background: #0b1221;
+    background: #0c1323;
     border: tall #1c2238;
     height: 11;
     width: auto;
@@ -88,7 +88,7 @@ TopBar {
 
 .locks {
     height: auto;
-    background: #0b1221;
+    background: #0c1323;
     border: tall #1c2238;
     margin-bottom: 1;
 }
@@ -105,7 +105,7 @@ TopBar {
 
 .processlist {
     height: auto;
-    background: #0b1221;
+    background: #0c1323;
     border: tall #1c2238;
 }
 .processlist > Label {
@@ -121,6 +121,8 @@ TopBar {
 
 .replication {
     height: auto;
+    width: auto;
+    margin-bottom: 1;
 }
 .replication > Label {
     width: 100%;
@@ -128,11 +130,12 @@ TopBar {
 }
 .replication > Center {
     layout: horizontal;
+    width: auto;
     content-align: center middle;
 }
 .replication > Center > ScrollableContainer {
     content-align: center top;
-    background: #0b1221;
+    background: #0c1323;
     border: tall #1c2238;
     height: auto;
     max-height: 18;
@@ -149,13 +152,14 @@ TopBar {
 
 .replicas {
     height: auto;
+    margin-bottom: 1;
 }
 .replicas > Container > Container {
     height: auto;
     width: auto;
 }
 .replicas > Container > Container > ScrollableContainer  {
-    background: #0b1221;
+    background: #0c1323;
     border: tall #1c2238;
     height: auto;
     max-height: 18;
@@ -180,6 +184,7 @@ TopBar {
 
 .group_replication {
     height: auto;
+    margin-bottom: 1;
 }
 .group_replication > Container > Container {
     height: auto;
@@ -196,7 +201,6 @@ TopBar {
 }
 .group_replication > Label {
     width: 100%;
-    color: #bbc8e8;
     content-align: center middle;
 }
 .group_replication_container {
@@ -207,7 +211,7 @@ TopBar {
 
 .ddl {
     height: auto;
-    background: #0b1221;
+    background: #0c1323;
     border: tall #1c2238;
     margin-bottom: 1;
 }
