@@ -12,7 +12,7 @@ from rich.align import Align
 from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
-from textual.containers import Container, ScrollableContainer
+from textual.containers import ScrollableContainer
 from textual.widgets import Static
 
 
@@ -30,7 +30,7 @@ def create_panel(tab: Tab):
     ):
         tab.replication_container_title.display = True
         tab.replication_container_title.update(
-            Align.center("[b][light_blue]Replication/Replicas panel has no data to display")
+            Align.center("[b][light_blue]Replication/Replicas panel has no data to display\n")
         )
     else:
         tab.replication_container_title.display = False
@@ -67,52 +67,38 @@ def create_panel(tab: Tab):
 
         group_replication_member_tables = create_group_replication_member_table(tab)
         sorted_replication_members = sorted(group_replication_member_tables.items(), key=lambda x: x[1]["host"])
-        if group_replication_member_tables:
-            # Quick & easy way to remove members that no longer exist
-            if len(dolphie.group_replication_members) != len(dolphie.app.query(f".group_member_{tab.id}")):
-                for member in dolphie.app.query(f".group_replication_container_{tab.id}"):
-                    member.remove()
+        existing_member_ids = set()
 
-            # Iterate over members in pairs of 3
-            for i in range(0, len(sorted_replication_members), 3):
-                member_pair = list(sorted_replication_members)[i : i + 3]
+        if sorted_replication_members:
+            for member in sorted_replication_members:
+                member_id = member[0]
+                member_table = member[1].get("table")
+                if not member_table:
+                    continue
 
-                # Create a container for each pair of members
-                container_id = f"group_replication_container_{i}_{tab.id}"
-                container = tab.dolphie.app.query(f"#{container_id}")
-                if container:
-                    container = container[0]
+                existing_member = tab.dolphie.app.query(f"#member_{member_id}_{tab.id}")
+                existing_member_ids.add(member_id)
+
+                if existing_member:
+                    existing_member[0].update(member_table)
                 else:
-                    is_last_row = i + 3 >= len(sorted_replication_members)
-
-                    container_classes = f"group_replication_container group_replication_container_{tab.id}"
-                    if not is_last_row:
-                        container_classes += " pad_bottom_1"
-
-                    num_containers = len(dolphie.app.query(f".group_replication_container_{tab.id}"))
-                    container = Container(id=container_id, classes=container_classes)
-                    tab.group_replication_container.mount(container, after=2 + num_containers)
-
-                for member_id, _ in member_pair:
-                    member_table = group_replication_member_tables.get(member_id).get("table")
-                    if not member_table:
-                        continue
-
-                    existing_member = tab.dolphie.app.query(f"#group_member_{member_id}_{tab.id}")
-                    if existing_member:
-                        existing_member[0].update(member_table)
-                    else:
-                        container.mount(
-                            Container(
-                                ScrollableContainer(
-                                    Static(
-                                        member_table,
-                                        id=f"group_member_{member_id}_{tab.id}",
-                                        classes=f"group_member_{tab.id}",
-                                    ),
-                                ),
+                    tab.group_replication_grid.mount(
+                        ScrollableContainer(
+                            Static(
+                                member_table,
+                                id=f"member_{member_id}_{tab.id}",
+                                classes=f"member_{tab.id}",
                             ),
+                            id=f"member_container_{member_id}_{tab.id}",
+                            classes=f"member_container_{tab.id}",
                         )
+                    )
+
+            # Unmount members that are no longer in sorted_replication_members
+            for existing_member in tab.dolphie.app.query(f".member_{tab.id}"):
+                member_id = existing_member.id.split("_")[1]
+                if member_id not in existing_member_ids:
+                    tab.dolphie.app.query_one(f"#{existing_member.parent.id}").remove()
 
     def create_cluster_panel():
         if not dolphie.galera_cluster:
@@ -201,51 +187,38 @@ def create_replica_panel(tab: Tab):
         tab.replicas_title.update(
             f"[b]Replicas ([highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight])\n"
         )
+
+        existing_replica_ids = set()
+
         sorted_replica_connections = dolphie.replica_manager.get_sorted_replicas()
-
-        # Quick & easy way to remove replicas that no longer exist
-        if len(sorted_replica_connections) != len(dolphie.app.query(f".replica_{tab.id}")):
-            for member in dolphie.app.query(f".replica_container_{tab.id}"):
-                member.remove()
-
-        # Iterate over replicas in pairs of 2
-        for i in range(0, len(sorted_replica_connections), 2):
-            replica_pair = list(sorted_replica_connections)[i : i + 2]
-
-            # Create a container for each pair of replicas
-            container_id = f"replica_container_{i}_{tab.id}"
-            container = tab.dolphie.app.query(f"#{container_id}")
-            if container:
-                container = container[0]
-            else:
-                is_last_row = i + 2 >= len(sorted_replica_connections)
-
-                container_classes = f"replica_container replica_container_{tab.id}"
-                if not is_last_row:
-                    container_classes += " pad_bottom_1"
-
-                num_containers = len(dolphie.app.query(f".replica_container_{tab.id}"))
-                container = Container(id=container_id, classes=container_classes)
-                tab.replicas_container.mount(container, after=1 + num_containers)
-
-            for replica in replica_pair:
-                replica_id = replica.thread_id
-                replica_table = replica.table
-
-                if not replica_table:
+        if sorted_replica_connections:
+            for replica in sorted_replica_connections:
+                if not replica.table:
                     continue
 
-                existing_replica = tab.dolphie.app.query(f"#replica_{replica_id}_{tab.id}")
+                existing_replica = tab.dolphie.app.query(f"#replica_{replica.thread_id}_{tab.id}")
+                existing_replica_ids.add(replica.thread_id)
+
                 if existing_replica:
-                    existing_replica[0].update(replica_table)
+                    existing_replica[0].update(replica.table)
                 else:
-                    container.mount(
-                        Container(
-                            ScrollableContainer(
-                                Static(replica_table, id=f"replica_{replica_id}_{tab.id}", classes=f"replica_{tab.id}"),
+                    tab.replicas_grid.mount(
+                        ScrollableContainer(
+                            Static(
+                                replica.table,
+                                id=f"replica_{replica.thread_id}_{tab.id}",
+                                classes=f"replica_{tab.id}",
                             ),
-                        ),
+                            id=f"replica_container_{replica.thread_id}_{tab.id}",
+                            classes=f"replica_container_{tab.id}",
+                        )
                     )
+
+            # Unmount replicas that are no longer in sorted_replica_connections
+            for existing_replica in tab.dolphie.app.query(f".replica_{tab.id}"):
+                replica_id = int(existing_replica.id.split("_")[1])
+                if replica_id not in existing_replica_ids:
+                    tab.dolphie.app.query_one(f"#{existing_replica.parent.id}").remove()
     else:
         tab.replicas_container.display = False
 

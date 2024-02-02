@@ -154,59 +154,42 @@ TopBar {
     height: auto;
     margin-bottom: 1;
 }
-.replicas > Container > Container {
+.replicas > Container {
     height: auto;
-    width: auto;
+    layout: grid;
+    grid-size: 2;
+    grid-gutter: 1 0;
 }
-.replicas > Container > Container > ScrollableContainer  {
-    background: #0c1323;
+.replicas > Container > ScrollableContainer  {
+    background: #0b1322;
     border: tall #1c2238;
     height: auto;
     max-height: 18;
-    width: 50vw;
 }
-.replicas > Container > Container > ScrollableContainer > Static {
-    width: auto;
-}
-.replicas > Container > Container > Label {
+.replicas > Label {
     width: 100%;
     content-align: center middle;
-    text-style: bold;
-}
-.replicas Label {
-    width: 100%;
-    content-align: center middle;
-}
-.replica_container {
-    height: auto;
-    layout: horizontal;
 }
 
 .group_replication {
     height: auto;
     margin-bottom: 1;
 }
-.group_replication > Container > Container {
+.group_replication > Container {
     height: auto;
-    width: auto;
+    layout: grid;
+    grid-size: 3;
+    grid-gutter: 1 0;
 }
-.group_replication > Container > Container > ScrollableContainer  {
+.group_replication > Container > ScrollableContainer  {
     background: hsl(221, 50%, 9%);
     border: tall #1c2238;
     height: auto;
     max-height: 18;
 }
-.group_replication > Container > Container > ScrollableContainer > Static {
-    width: auto;
-}
 .group_replication > Label {
     width: 100%;
     content-align: center middle;
-}
-.group_replication_container {
-    height: auto;
-    layout: grid;
-    grid-size: 3;
 }
 
 .ddl {

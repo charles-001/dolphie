@@ -77,12 +77,15 @@ class Tab:
     replication_thread_applier: Static = None
 
     group_replication_container: Container = None
-    replicas_container: Container = None
-
-    replicas_loading_indicator: LoadingIndicator = None
-    replicas_title: Label = None
+    group_replication_grid: Container = None
     group_replication_title: Label = None
     group_replication_data: Static = None
+
+    replicas_container: Container = None
+    replicas_grid: Container = None
+    replicas_loading_indicator: LoadingIndicator = None
+    replicas_title: Label = None
+
     cluster_data: Static = None
 
     queue_for_removal: bool = False
@@ -239,6 +242,7 @@ class TabManager:
                         Container(
                             Label(id=f"group_replication_title_{tab_id}"),
                             Label(id=f"group_replication_data_{tab_id}"),
+                            Container(id=f"group_replication_grid_{tab_id}"),
                             id=f"group_replication_container_{tab_id}",
                             classes="group_replication",
                         ),
@@ -246,6 +250,7 @@ class TabManager:
                         Container(
                             Label(id=f"replicas_title_{tab_id}"),
                             LoadingIndicator(id=f"replicas_loading_indicator_{tab_id}"),
+                            Container(id=f"replicas_grid_{tab_id}"),
                             id=f"replicas_container_{tab_id}",
                             classes="replicas",
                         ),
@@ -373,6 +378,9 @@ class TabManager:
         tab.dashboard_replication = self.app.query_one(f"#dashboard_replication_{tab.id}", Static)
 
         tab.group_replication_container = self.app.query_one(f"#group_replication_container_{tab.id}", Container)
+        tab.group_replication_grid = self.app.query_one(f"#group_replication_grid_{tab.id}", Container)
+
+        tab.replicas_grid = self.app.query_one(f"#replicas_grid_{tab.id}", Container)
         tab.replicas_container = self.app.query_one(f"#replicas_container_{tab.id}", Container)
 
         tab.group_replication_data = self.app.query_one(f"#group_replication_data_{tab.id}", Static)
