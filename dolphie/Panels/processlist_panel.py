@@ -53,7 +53,7 @@ def create_panel(tab: Tab) -> DataTable:
         ]
     )
 
-    processlist_datatable = tab.panel_processlist
+    processlist_datatable = tab.processlist_datatable
 
     # Clear table if columns change
     if len(processlist_datatable.columns) != len(columns):
@@ -113,6 +113,8 @@ def create_panel(tab: Tab) -> DataTable:
         processlist_datatable.remove_row(id)
 
     processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
+
+    tab.processlist_title.update(f"Processlist ([highlight]{len(dolphie.processlist_threads)}[/highlight])")
 
 
 def fetch_data(tab: Tab):

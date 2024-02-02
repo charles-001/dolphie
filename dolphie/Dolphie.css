@@ -16,12 +16,6 @@
 RichLog {
     background: #030918;
 }
-DataTable {
-    background: #0b1221;
-    border: tall #1c2238;
-    overflow-x: hidden;
-    max-height: 100%;
-}
 Graph {
     height: 16;
 }
@@ -46,6 +40,7 @@ ModalScreen {
 
 Sparkline {
     margin-top: 1;
+    margin-bottom: 1;
 }
 
 SpinnerWidget {
@@ -76,6 +71,9 @@ TopBar {
     color: #8f9fc1;
 }
 
+.dashboard {
+    padding-top: 1;
+}
 .dashboard > Center {
     layout: horizontal;
     content-align: center middle;
@@ -86,6 +84,39 @@ TopBar {
     border: tall #1c2238;
     height: 11;
     width: auto;
+}
+
+.locks {
+    height: auto;
+    background: #0b1221;
+    border: tall #1c2238;
+    margin-bottom: 1;
+}
+.locks > Label {
+    width: 100%;
+    text-style: bold;
+    color: #bbc8e8;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+.locks > DataTable {
+    overflow-x: hidden;
+}
+
+.processlist {
+    height: auto;
+    background: #0b1221;
+    border: tall #1c2238;
+}
+.processlist > Label {
+    width: 100%;
+    color: #bbc8e8;
+    text-style: bold;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+.processlist > DataTable {
+    overflow-x: hidden;
 }
 
 .replication {
@@ -136,7 +167,6 @@ TopBar {
 .replicas > Container > Container > Label {
     width: 100%;
     content-align: center middle;
-    color: #bbc8e8;
     text-style: bold;
 }
 .replicas Label {
@@ -166,6 +196,7 @@ TopBar {
 }
 .group_replication > Label {
     width: 100%;
+    color: #bbc8e8;
     content-align: center middle;
 }
 .group_replication_container {
@@ -173,6 +204,24 @@ TopBar {
     layout: grid;
     grid-size: 3;
 }
+
+.ddl {
+    height: auto;
+    background: #0b1221;
+    border: tall #1c2238;
+    margin-bottom: 1;
+}
+.ddl > Container {
+    height: auto;
+    width: auto;
+}
+.ddl > Label {
+    width: 100%;
+    color: #bbc8e8;
+    text-style: bold;
+    content-align: center middle;
+}
+
 
 .pad_bottom_1 {
     padding-bottom: 1;
@@ -222,12 +271,11 @@ Input>.input--placeholder {
 
 .datatable--header {
     background: #00000000;
-    color: #bbc8e8;
+    color: #c5c7d2;
     text-style: bold;
 }
 
 .panel_container {
-    margin-top: 1;
     height: auto;
 }
 .button_container {

@@ -2,13 +2,13 @@
 
 [[package]]
 name = "certifi"
-version = "2023.11.17"
+version = "2024.2.2"
 description = "Python package for providing Mozilla's CA Bundle."
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "certifi-2023.11.17-py3-none-any.whl", hash = "sha256:e036ab49d5b79556f99cfc2d9320b34cfbe5be05c5871b51de9329f0603b0474"},
-    {file = "certifi-2023.11.17.tar.gz", hash = "sha256:9b469f3a900bf28dc19b8cfbf8019bf47f7fdd1a65a1d4ffb98fc14166beb4d1"},
+    {file = "certifi-2024.2.2-py3-none-any.whl", hash = "sha256:dc383c07b76109f368f6106eee2b593b04a011ea4d55f652c6ca24a754d1cdd1"},
+    {file = "certifi-2024.2.2.tar.gz", hash = "sha256:0569859f95fc761b18b45ef421b1290a0f65f147e92a1e5eb3e635f9a5e4e66f"},
 ]
 
 [[package]]
@@ -455,13 +455,13 @@ test = ["pytest", "pytest-cov"]
 
 [[package]]
 name = "textual"
-version = "0.47.1"
+version = "0.48.1"
 description = "Modern Text User Interface framework"
 optional = false
 python-versions = ">=3.8,<4.0"
 files = [
-    {file = "textual-0.47.1-py3-none-any.whl", hash = "sha256:da79df2e138f6de51bda84a1ee1460936bb2ecf5527ca2d47b9b59c584323327"},
-    {file = "textual-0.47.1.tar.gz", hash = "sha256:4b82e317884bb1092f693f474c319ceb068b5a0b128b121f1aa53a2d48b4b80c"},
+    {file = "textual-0.48.1-py3-none-any.whl", hash = "sha256:caa12b0e2171c50b78171059cb8dd56df72e7e4fd3fd760215343b6c30e975d8"},
+    {file = "textual-0.48.1.tar.gz", hash = "sha256:df39371a0404a41dbb45ea0bc0c3e853ec5bc33236d71c9226a94192db0a637e"},
 ]
 
 [package.dependencies]
@@ -532,4 +532,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "5bc7a5cad04fc8422a1dff844fb22e659ab3bb73e949a28040253c7c65414757"
+content-hash = "1635cac178fda0f12707fbef2bc96c4c172da409b6adde81bef5ce4c1bf97c87"

@@ -56,6 +56,7 @@ class Panels:
         self.graphs = Panel("graphs")
         self.replication = Panel("replication")
         self.locks = Panel("locks")
+        self.ddl = Panel("ddl")
 
     def all(self):
         return [

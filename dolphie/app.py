@@ -23,6 +23,7 @@ from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab, TabManager
 from dolphie.Panels import (
     dashboard_panel,
+    ddl_panel,
     locks_panel,
     processlist_panel,
     replication_panel,
@@ -531,6 +532,10 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.locks_query)
                 dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
 
+                if dolphie.panels.ddl.visible:
+                    dolphie.main_db_connection.execute(MySQLQueries.ddls)
+                    dolphie.ddl = dolphie.main_db_connection.fetchall()
+
             dolphie.monitor_read_only_change()
 
             dolphie.metric_manager.refresh_data(
@@ -678,6 +683,9 @@ class DolphieApp(App):
             if dolphie.panels.locks.visible:
                 self.refresh_panel(dolphie.panels.locks.name)
 
+            if dolphie.panels.ddl.visible:
+                self.refresh_panel(dolphie.panels.ddl.name)
+
             if dolphie.panels.graphs.visible:
                 graph_panel = self.query_one(f"#tabbed_content_{tab.id}", TabbedContent)
 
@@ -792,6 +800,8 @@ class DolphieApp(App):
             processlist_panel.create_panel(self.tab)
         elif panel_name == self.tab.dolphie.panels.locks.name:
             locks_panel.create_panel(self.tab)
+        elif panel_name == self.tab.dolphie.panels.ddl.name:
+            ddl_panel.create_panel(self.tab)
 
         if toggled or not self.tab.dolphie.first_loop:  # Include this so we're not updating the sizes every loop
             # Update the sizes of the panels depending if replication container is visible or not
@@ -884,7 +894,7 @@ class DolphieApp(App):
             self.toggle_panel(dolphie.panels.dashboard.name)
         elif key == "2":
             self.toggle_panel(dolphie.panels.processlist.name)
-            self.app.query_one(f"#panel_processlist_{tab.id}").clear()
+            self.tab.processlist_datatable.clear()
         elif key == "3":
             self.toggle_panel(dolphie.panels.replication.name)
 
@@ -910,7 +920,14 @@ class DolphieApp(App):
                 return
 
             self.toggle_panel(dolphie.panels.locks.name)
-            self.app.query_one(f"#panel_locks_{tab.id}").clear()
+            self.tab.locks_datatable.clear()
+        elif key == "6":
+            if not dolphie.is_mysql_version_at_least("8.0"):
+                self.notify("DDL panel requires MySQL 8.0+")
+                return
+
+            self.toggle_panel(dolphie.panels.ddl.name)
+            self.tab.ddl_datatable.clear()
         elif key == "grave_accent":
             self.tab.quick_switch_connection()
         elif key == "space":
@@ -1245,6 +1262,7 @@ class DolphieApp(App):
                 "3": "Show/hide Replication/Replicas",
                 "4": "Show/hide Graph Metrics",
                 "5": "Show/hide Locks",
+                "6": "Show/hide DDLs",
                 "`": "Quickly connect to another host",
                 "+": "Create a new tab",
                 "-": "Remove the current tab",
@@ -1363,6 +1381,7 @@ class DolphieApp(App):
                     app_version=dolphie.app_version,
                     host=dolphie.mysql_host,
                     thread_table=thread_table,
+                    user_thread_attributes_table=user_thread_attributes_table,
                     query=formatted_query,
                     explain_data=explain_data,
                     explain_failure=explain_failure,
@@ -1593,6 +1612,25 @@ class DolphieApp(App):
                             explain_data = dolphie.secondary_db_connection.fetchall()
                         except ManualException as e:
                             explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.reason
+
+                user_thread_attributes_table = None
+                if dolphie.performance_schema_enabled:
+                    user_thread_attributes_table = Table(box=None, show_header=False)
+                    user_thread_attributes_table.add_column("")
+                    user_thread_attributes_table.add_column("", overflow="fold")
+
+                    dolphie.secondary_db_connection.execute(
+                        MySQLQueries.user_thread_attributes.replace("$1", str(thread_id))
+                    )
+
+                    user_thread_attributes = dolphie.secondary_db_connection.fetchall()
+                    if user_thread_attributes:
+                        for attribute in user_thread_attributes:
+                            user_thread_attributes_table.add_row(
+                                f"[label]{attribute['ATTR_NAME']}", attribute["ATTR_VALUE"]
+                            )
+                    else:
+                        user_thread_attributes_table.add_row("None found")
 
                 # Transaction history
                 transaction_history_table = None

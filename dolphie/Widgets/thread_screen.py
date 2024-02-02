@@ -2,48 +2,65 @@ from dolphie.Modules.Functions import format_number
 from dolphie.Widgets.topbar import TopBar
 from textual import events, on
 from textual.app import ComposeResult
-from textual.containers import Center, Container
+from textual.containers import Center, Container, ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import DataTable, Label, Rule, Static
 
 
 class ThreadScreen(Screen):
     CSS = """
-        ThreadScreen {
-            background: #030918;
-        }
-        ThreadScreen #explain_table {
-            margin-top: 1;
-            background: #0b1221;
-            border: tall #1c2238;
-            overflow-x: auto;
-            min-height: 5;
-            max-height: 15;
-        }
-        ThreadScreen #explain_failure {
-            margin-top: 1;
-        }
-        ThreadScreen .container {
-            height: auto;
-        }
-        ThreadScreen .container > Label {
-            width: 100%;
-            content-align: center middle;
-            color: #bbc8e8;
-            text-style: bold;
-            margin-bottom: 1;
-        }
-        ThreadScreen .container  > Center {
-            height: auto;
-        }
-        ThreadScreen .container  > Center > Static {
-            width: auto;
-            content-align: center middle;
-            background: #0b1221;
-            border: tall #1c2238;
-            padding-left: 1;
-            padding-right: 1;
-        }
+    ThreadScreen {
+        background: #030918;
+    }
+    ThreadScreen #explain_table {
+        margin-top: 1;
+        background: #0b1221;
+        border: tall #1c2238;
+        overflow-x: auto;
+        min-height: 5;
+        max-height: 15;
+        width: 100%;
+    }
+    ThreadScreen #explain_failure {
+        margin-top: 1;
+    }
+    ThreadScreen Container {
+        height: auto;
+    }
+    ThreadScreen #thread_container {
+        margin-top: 1;
+        height: auto;
+        layout: horizontal;
+    }
+    ThreadScreen Label {
+        width: 100%;
+        content-align: center middle;
+        color: #bbc8e8;
+        text-style: bold;
+    }
+    ThreadScreen Center {
+        height: auto;
+    }
+    ThreadScreen #query {
+        width: auto;
+    }
+    ThreadScreen .container > Center {
+        layout: horizontal;
+    }
+    ThreadScreen ScrollableContainer {
+        height: auto;
+        width: 50vw;
+        max-height: 16;
+    }
+
+    ThreadScreen .table {
+        content-align: center middle;
+        background: #0b1221;
+        border: tall #1c2238;
+        padding-left: 1;
+        padding-right: 1;
+        height: auto;
+    }
     """
 
     def __init__(
@@ -52,6 +69,7 @@ class ThreadScreen(Screen):
         app_version: str,
         host: str,
         thread_table: str,
+        user_thread_attributes_table: str,
         query: str,
         explain_data: str,
         explain_failure: str,
@@ -64,6 +82,7 @@ class ThreadScreen(Screen):
         self.host = host
 
         self.thread_table = thread_table
+        self.user_thread_attributes_table = user_thread_attributes_table
         self.formatted_query = query
         self.explain_data = explain_data
         self.explain_failure = explain_failure
@@ -77,6 +96,11 @@ class ThreadScreen(Screen):
             self.query_one("#transaction_history_table").update(self.transaction_history_table)
         else:
             self.query_one("#transaction_history_container").display = False
+
+        if self.user_thread_attributes_table:
+            self.query_one("#user_thread_attributes_table").update(self.user_thread_attributes_table)
+        else:
+            self.query_one("#user_thread_attributes_table").display = False
 
         if self.formatted_query:
             if self.explain_failure:
@@ -119,21 +143,25 @@ class ThreadScreen(Screen):
         yield TopBar(read_only=self.read_only, app_version=self.app_version, host=self.host)
 
         with Container(id="thread_container", classes="container"):
-            yield Label("Thread Details")
-            yield Center(Static(id="thread_table"))
+            with Container():
+                yield Label("Thread Details")
+                yield ScrollableContainer(Static(id="thread_table"), classes="table")
+            with Container():
+                yield Label("Thread Attributes")
+                yield ScrollableContainer(Static(id="user_thread_attributes_table"), classes="table")
 
         with Container(id="query_container", classes="container"):
             yield Rule(line_style="heavy")
             yield Label("Query Details")
-            yield Center(Static(id="query", shrink=True))
+            yield Center(Static(id="query", shrink=True, classes="table"))
 
-            yield DataTable(show_cursor=False, id="explain_table")
+            yield DataTable(show_cursor=False, id="explain_table", classes="table")
             yield Label("", id="explain_failure")
 
         with Container(id="transaction_history_container", classes="container"):
             yield Rule(line_style="heavy")
             yield Label("Transaction History", id="transaction_history_label")
-            yield Center(Static(id="transaction_history_table"))
+            yield Center(Static(id="transaction_history_table", classes="table"), id="transaction_history_table_center")
 
     @on(events.Key)
     def on_keypress(self, event: events.Key):

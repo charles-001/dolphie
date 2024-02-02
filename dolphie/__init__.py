@@ -93,6 +93,7 @@ class Dolphie:
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
         self.lock_transactions: dict = {}
+        self.ddl: list = []
         self.pause_refresh: bool = False
         self.previous_binlog_position: int = 0
         self.previous_replica_sbm: int = 0

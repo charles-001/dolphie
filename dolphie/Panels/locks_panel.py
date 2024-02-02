@@ -31,7 +31,7 @@ def create_panel(tab: Tab) -> DataTable:
     columns["waiting_query"]["width"] = query_characters
     columns["blocking_query"]["width"] = query_characters
 
-    locks_datatable = tab.panel_locks
+    locks_datatable = tab.locks_datatable
     locks_datatable.clear(columns=True)
 
     for column_key, column_data in columns.items():
@@ -56,3 +56,5 @@ def create_panel(tab: Tab) -> DataTable:
 
         lock_key = f"{lock['waiting_pid']}-{lock['blocking_pid']}"
         locks_datatable.add_row(*row_values, key=lock_key)
+
+    tab.locks_title.update(f"Locks ([highlight]{len(dolphie.lock_transactions)}[/highlight])")

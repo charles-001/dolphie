@@ -49,8 +49,9 @@ class Tab:
     panel_dashboard: Container = None
     panel_graphs: Container = None
     panel_replication: Container = None
-    panel_locks: DataTable = None
-    panel_processlist: DataTable = None
+    panel_locks: Container = None
+    panel_ddl: Container = None
+    panel_processlist: Container = None
 
     spinner: SpinnerWidget = None
 
@@ -59,6 +60,15 @@ class Tab:
     dashboard_binary_log: Static = None
     dashboard_statistics: Static = None
     dashboard_replication: Static = None
+
+    ddl_title: Label = None
+    ddl_datatable: DataTable = None
+
+    locks_title: Label = None
+    locks_datatable: DataTable = None
+
+    processlist_title: Label = None
+    processlist_datatable: DataTable = None
 
     replication_container_title: Static = None
     replication_container: Container = None
@@ -212,7 +222,6 @@ class TabManager:
                     Container(
                         Static(id=f"replication_container_title_{tab_id}", classes="replication_container_title"),
                         Container(
-                            Rule(line_style="heavy"),
                             Label("[b]Replication\n"),
                             Label(id=f"replication_variables_{tab_id}"),
                             Center(
@@ -230,7 +239,6 @@ class TabManager:
                             classes="replication",
                         ),
                         Container(
-                            Rule(line_style="heavy"),
                             Label(id=f"group_replication_title_{tab_id}"),
                             Label(id=f"group_replication_data_{tab_id}"),
                             Rule(line_style="heavy"),
@@ -239,18 +247,33 @@ class TabManager:
                         ),
                         Static(id=f"cluster_data_{tab_id}"),
                         Container(
-                            Rule(line_style="heavy"),
                             Label(id=f"replicas_title_{tab_id}"),
                             LoadingIndicator(id=f"replicas_loading_indicator_{tab_id}"),
-                            Rule(line_style="heavy"),
+                            Label(""),
                             id=f"replicas_container_{tab_id}",
                             classes="replicas",
                         ),
                         id=f"panel_replication_{tab_id}",
                         classes="panel_container replication_panel",
                     ),
-                    DataTable(id=f"panel_locks_{tab_id}", classes="panel_container pad_top_1", show_cursor=False),
-                    DataTable(id=f"panel_processlist_{tab_id}", classes="panel_container pad_top_1", show_cursor=False),
+                    Container(
+                        Label(id=f"locks_title_{tab_id}"),
+                        DataTable(id=f"locks_datatable_{tab_id}", show_cursor=False),
+                        id=f"panel_locks_{tab_id}",
+                        classes="locks",
+                    ),
+                    Container(
+                        Label(id=f"ddl_title_{tab_id}"),
+                        DataTable(id=f"ddl_datatable_{tab_id}", show_cursor=False),
+                        id=f"panel_ddl_{tab_id}",
+                        classes="ddl",
+                    ),
+                    Container(
+                        Label(id=f"processlist_title_{tab_id}"),
+                        DataTable(id=f"processlist_data_{tab_id}", show_cursor=False),
+                        id=f"panel_processlist_{tab_id}",
+                        classes="processlist",
+                    ),
                     classes="tab",
                     id=f"main_container_{tab_id}",
                 ),
@@ -333,11 +356,19 @@ class TabManager:
         tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)
         tab.panel_graphs = self.app.query_one(f"#panel_graphs_{tab.id}", Container)
         tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
-        tab.panel_locks = self.app.query_one(f"#panel_locks_{tab.id}", DataTable)
-        tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", DataTable)
+        tab.panel_locks = self.app.query_one(f"#panel_locks_{tab.id}", Container)
+        tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", Container)
+        tab.panel_ddl = self.app.query_one(f"#panel_ddl_{tab.id}", Container)
 
         tab.spinner = self.app.query_one(f"#spinner_{tab.id}", SpinnerWidget)
         tab.spinner.hide()
+
+        tab.ddl_title = self.app.query_one(f"#ddl_title_{tab.id}", Label)
+        tab.ddl_datatable = self.app.query_one(f"#ddl_datatable_{tab.id}", DataTable)
+        tab.processlist_title = self.app.query_one(f"#processlist_title_{tab.id}", Label)
+        tab.processlist_datatable = self.app.query_one(f"#processlist_data_{tab.id}", DataTable)
+        tab.locks_title = self.app.query_one(f"#locks_title_{tab.id}", Label)
+        tab.locks_datatable = self.app.query_one(f"#locks_datatable_{tab.id}", DataTable)
 
         tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
         tab.dashboard_innodb = self.app.query_one(f"#dashboard_innodb_{tab.id}", Static)

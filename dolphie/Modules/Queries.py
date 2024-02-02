@@ -190,6 +190,34 @@ class MySQLQueries:
         ORDER BY
             current_connections DESC
     """
+    user_thread_attributes: str = """
+        SELECT
+            ATTR_NAME,
+            ATTR_VALUE
+        FROM
+            `performance_schema`.session_connect_attrs sca
+            JOIN `performance_schema`.threads t ON sca.PROCESSLIST_ID = t.processlist_id
+        WHERE
+            t.processlist_id = $1
+    """
+    ddls: str = """
+        SELECT
+            t.processlist_id,
+            stmt.sql_text,
+            stage.event_name AS state,
+            CONCAT(ROUND(100 * stage.work_completed / stage.work_estimated, 2), "%") AS percentage_completed,
+            stmt.timer_wait AS started_ago,
+            CONVERT(stmt.timer_wait / round( 100 * stage.work_completed / stage.work_estimated, 2 )* 100, UNSIGNED)
+                AS estimated_full_time,
+            CONVERT(( stmt.timer_wait / round( 100 * stage.work_completed / stage.work_estimated, 2 )* 100 )
+                - stmt.timer_wait, UNSIGNED) AS estimated_remaining_time,
+            current_allocated memory
+        FROM
+            `performance_schema`.events_statements_current stmt JOIN
+            sys.memory_by_thread_by_current_bytes mt ON mt.thread_id = stmt.thread_id JOIN
+            `performance_schema`.events_stages_current stage ON stage.thread_id = stmt.thread_id LEFT JOIN
+            `performance_schema`.`threads` t ON t.thread_id = stmt.thread_id
+    """
     error_log: str = """
         SELECT
             logged AS timestamp,
