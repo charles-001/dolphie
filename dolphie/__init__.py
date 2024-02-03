@@ -165,12 +165,18 @@ class Dolphie:
         return parsed_source >= parsed_target
 
     def db_connect(self):
-        self.main_db_connection = Database(
-            self.app, self.tab_name, self.host, self.user, self.password, self.socket, self.port, self.ssl
-        )
-        self.secondary_db_connection = Database(
-            self.app, self.tab_name, self.host, self.user, self.password, self.socket, self.port, self.ssl, False
-        )
+        db_connection_args = {
+            "app": self.app,
+            "tab_name": self.tab_name,
+            "host": self.host,
+            "user": self.user,
+            "password": self.password,
+            "socket": self.socket,
+            "port": self.port,
+            "ssl": self.ssl,
+        }
+        self.main_db_connection = Database(**db_connection_args)
+        self.secondary_db_connection = Database(**db_connection_args, save_connection_id=False)
 
         global_variables = self.main_db_connection.fetch_status_and_variables("variables")
 
