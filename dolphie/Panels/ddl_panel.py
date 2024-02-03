@@ -7,12 +7,11 @@ def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
     columns = {
-        "processlist_id": {"name": "Thread ID", "width": 10, "format": None},
+        "processlist_id": {"name": "Thread ID", "width": 11, "format": None},
         "percentage_completed": {"name": "Completed", "width": 9, "format": None},
         "memory": {"name": "Memory", "width": 10, "format": "bytes"},
         "started_ago": {"name": "Current Time", "width": 12, "format": "time"},
         "estimated_remaining_time": {"name": "Remaining Time", "width": 14, "format": "time"},
-        "estimated_full_time": {"name": "Total Time", "width": 10, "format": "time"},
         "state": {"name": "State", "width": None, "format": None},
     }
 

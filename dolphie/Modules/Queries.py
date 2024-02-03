@@ -207,8 +207,6 @@ class MySQLQueries:
             stage.event_name AS state,
             CONCAT(ROUND(100 * stage.work_completed / stage.work_estimated, 2), "%") AS percentage_completed,
             stmt.timer_wait AS started_ago,
-            CONVERT(stmt.timer_wait / round( 100 * stage.work_completed / stage.work_estimated, 2 )* 100, UNSIGNED)
-                AS estimated_full_time,
             CONVERT(( stmt.timer_wait / round( 100 * stage.work_completed / stage.work_estimated, 2 )* 100 )
                 - stmt.timer_wait, UNSIGNED) AS estimated_remaining_time,
             CONVERT(SUM( `mt`.`CURRENT_NUMBER_OF_BYTES_USED` ), UNSIGNED) memory
