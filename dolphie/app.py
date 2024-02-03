@@ -1716,7 +1716,8 @@ class DolphieApp(App):
                     table.add_row(*row_values)
 
                 screen_data = Group(
-                    Align.center(f"[b light_blue]Users ([highlight]{len(users)}[/highlight])\n"), Align.center(table)
+                    Align.center(f"[b light_blue]Users Connected ([highlight]{len(users)}[/highlight])\n"),
+                    Align.center(table),
                 )
 
                 self.call_from_thread(show_command_screen)
