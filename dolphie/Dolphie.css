@@ -246,7 +246,7 @@ Input {
 }
 Input:focus {
     background: #121522;
-    border: tall #414e7b;
+    border: tall #475484;
 }
 Input>.input--placeholder {
     color: #7e8dac;
@@ -296,18 +296,18 @@ Sparkline > .sparkline--min-color {
 
 
 Button.-primary {
-    background: #222f51;
-    border-top: tall #405284;
+    background: #1e2f57;
+    border-top: tall #465d9c;
     border-bottom: tall #151b2b;
 }
 Button.-primary:hover {
-    background: #283861;
-    border-top: tall #4f649c;
+    background: #233663;
+    border-top: tall #4e67ad;
     border-bottom: tall #151b2b;
 }
 Button.-primary:focus {
-    background: #283861;
-    border-top: tall #4f649c;
+    background: #233663;
+    border-top: tall #4e67ad;
     border-bottom: tall #151b2b;
     text-style: bold;
 }
