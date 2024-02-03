@@ -1,7 +1,6 @@
 import ipaddress
 import os
 import socket
-from dataclasses import dataclass
 from datetime import datetime
 from importlib import metadata
 
@@ -22,29 +21,6 @@ try:
 except Exception:
     __package_name__ = "Dolphie"
     __version__ = "N/A"
-
-
-@dataclass
-class Panel:
-    name: str
-    visible: bool = False
-
-
-class Panels:
-    def __init__(self):
-        self.dashboard = Panel("dashboard")
-        self.processlist = Panel("processlist")
-        self.graphs = Panel("graphs")
-        self.replication = Panel("replication")
-        self.locks = Panel("locks")
-        self.ddl = Panel("ddl")
-
-    def all(self):
-        return [
-            panel.name
-            for name, panel in self.__dict__.items()
-            if not name.startswith("__") and isinstance(panel, Panel)
-        ]
 
 
 class Dolphie:
