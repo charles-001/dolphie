@@ -16,9 +16,11 @@
 <p></p>
 <img width="1347" alt="Screenshot 2024-02-03 at 6 26 35 AM" src="https://github.com/charles-001/dolphie/assets/13244625/37569169-a39b-4cc0-b831-b3fb2f1303f4">
 <p></p>
-<img width="1346" alt="Screenshot 2024-02-03 at 6 25 29 AM" src="https://github.com/charles-001/dolphie/assets/13244625/bb40797b-3d8e-409e-9b4a-a5865df50880">
-<p></p>
 <img width="1350" alt="Screenshot 2024-02-03 at 6 27 07 AM" src="https://github.com/charles-001/dolphie/assets/13244625/8348029c-b79b-4a1f-a360-cae02b5dec38">
+<p></p>
+<img width="1349" alt="Screenshot 2024-02-03 at 6 40 05 AM" src="https://github.com/charles-001/dolphie/assets/13244625/0faef424-e56e-4201-af82-241cc8e93067">
+<p></p>
+<img width="1346" alt="Screenshot 2024-02-03 at 6 25 29 AM" src="https://github.com/charles-001/dolphie/assets/13244625/bb40797b-3d8e-409e-9b4a-a5865df50880">
 <p></p>
 <img width="1347" alt="Screenshot 2024-02-03 at 6 28 16 AM" src="https://github.com/charles-001/dolphie/assets/13244625/21fde96c-e74b-4f20-a8ed-a43126f8f4cb">
 <p></p>
