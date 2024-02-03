@@ -336,21 +336,23 @@ Switch > .switch--slider {
     background: #192132;
 }
 Switch:focus > .switch--slider {
-    background: #95b5fd;
+    color: #fd8383;
+    background: #192132;
 }
 Switch:hover > .switch--slider {
-    background: #95b5fd;
+    color: #fd8383;
+    background: #192132;
 }
 Switch.-on > .switch--slider {
     color: #5c81d7;
     background: #192132;
 }
 Switch.-on:focus > .switch--slider {
-    color: #95b5fd;
+    color: #54efae;
     background: #192132;
 }
 Switch.-on:hover > .switch--slider {
-    color: #95b5fd;
+    color: #54efae;
     background: #192132;
 }
 
