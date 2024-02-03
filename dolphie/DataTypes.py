@@ -38,7 +38,8 @@ class ReplicaManager:
     def remove_all(self):
         if self.replicas:
             for replica in self.replicas.values():
-                replica.connection.close()
+                if replica.connection:
+                    replica.connection.close()
 
             self.replicas = {}
 

@@ -132,7 +132,7 @@ def create_panel(tab: Tab) -> Table:
 
     if not binlog_status:
         table_primary.add_column(justify="center")
-        table_primary.add_row("\n\n\n[b][highlight]Disabled")
+        table_primary.add_row("\n\n\n[b][label]Disabled")
     else:
         table_primary.add_column()
         table_primary.add_column(max_width=40)
