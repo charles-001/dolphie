@@ -294,35 +294,36 @@ Sparkline > .sparkline--min-color {
     padding-top: 1;
 }
 
+
 Button.-primary {
-    background: #232e4d;
+    background: #222f51;
     border-top: tall #405284;
     border-bottom: tall #151b2b;
 }
 Button.-primary:hover {
-    background: #28355a;
-    border-top: tall #485b90;
+    background: #283861;
+    border-top: tall #4f649c;
     border-bottom: tall #151b2b;
 }
 Button.-primary:focus {
-    background: #28355a;
-    border-top: tall #485b90;
+    background: #283861;
+    border-top: tall #4f649c;
     border-bottom: tall #151b2b;
     text-style: bold;
 }
 Button {
-    background: #292d44;
-    border-top: tall #565c7e;
+    background: #282c42;
+    border-top: tall #515676;
     border-bottom: tall #171922;
 }
 Button:hover {
-    background: #2f344e;
-    border-top: tall #5e6387;
+    background: #313752;
+    border-top: tall #5f668b;
     border-bottom: tall #171922;
 }
 Button:focus {
     background: #313752;
-    border-top: tall #5e6387;
+    border-top: tall #5f668b;
     border-bottom: tall #171922;
     text-style: bold;
 }

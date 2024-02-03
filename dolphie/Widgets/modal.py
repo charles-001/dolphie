@@ -63,7 +63,7 @@ class CommandModal(ModalScreen):
         self.dropdown_items = []
         if processlist_data:
             sorted_keys = sorted(processlist_data.keys(), key=lambda x: int(x))
-            self.dropdown_items = [DropdownItem(id) for id in sorted_keys]
+            self.dropdown_items = [DropdownItem(thread_id) for thread_id in sorted_keys]
 
     def compose(self) -> ComposeResult:
         with Vertical():
@@ -124,7 +124,7 @@ class CommandModal(ModalScreen):
         self.dropdown_items = []
 
         if field:
-            sorted_array = sorted(set(data.get(field) for _, data in self.processlist_data.items()))
+            sorted_array = sorted(set(getattr(thread, field) for thread in self.processlist_data.values()))
             self.dropdown_items = [DropdownItem(value) for value in sorted_array]
 
         self.query_one("#dropdown_items", Dropdown).items = self.dropdown_items
@@ -200,9 +200,9 @@ class CommandModal(ModalScreen):
                     else:
                         value = next(
                             (
-                                data[filter_id]
+                                getattr(data, filter_id)
                                 for data in self.processlist_data.values()
-                                if modal_input == data[filter_id]
+                                if modal_input == getattr(data, filter_id)
                             ),
                             None,
                         )

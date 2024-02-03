@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 import dolphie.Modules.MetricManager as MetricManager
 import myloginpath
 from dolphie import Dolphie
+from dolphie.DataTypes import ProcesslistThread
 from dolphie.Modules.Functions import format_number, format_sys_table_memory
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
@@ -1252,13 +1253,14 @@ class DolphieApp(App):
 
                 screen_data = Group(
                     Align.center(
-                        "[b #bbc8e8]Host Cache[/b #bbc8e8] ([b highlight]%s[/b highlight])\n" % len(dolphie.host_cache)
+                        "[b light_blue]Host Cache[/b light_blue] ([b highlight]%s[/b highlight])\n"
+                        % len(dolphie.host_cache)
                     ),
                     table,
                 )
             else:
                 screen_data = Group(
-                    Align.center("[b #bbc8e8]Host Cache[/b #bbc8e8]\n"), "There are currently no hosts resolved"
+                    Align.center("[b light_blue]Host Cache[/b light_blue]\n"), "There are currently no hosts resolved"
                 )
 
         elif key == "question_mark":
@@ -1440,7 +1442,7 @@ class DolphieApp(App):
                 table_grid.add_row(*all_tables)
 
                 screen_data = Group(
-                    Align.center("[b #bbc8e8]Databases[/b #bbc8e8] ([b highlight]%s[/b highlight])\n" % db_count),
+                    Align.center("[b light_blue]Databases[/b light_blue] ([b highlight]%s[/b highlight])\n" % db_count),
                     Align.center(table_grid),
                 )
 
@@ -1475,17 +1477,18 @@ class DolphieApp(App):
                 tab.spinner.show()
                 threads_killed = 0
                 for thread_id, thread in dolphie.processlist_threads_snapshot.items():
+                    thread: ProcesslistThread
                     try:
-                        if thread["command"] in commands_to_kill:
+                        if thread.command in commands_to_kill:
                             if kill_type == "time_range":
-                                if lower_limit <= thread["time"] <= upper_limit:
+                                if lower_limit <= thread.time <= upper_limit:
                                     execute_kill(thread_id)
                                     threads_killed += 1
-                            elif thread[db_field] == kill_value:
+                            elif getattr(thread, db_field) == kill_value:
                                 execute_kill(thread_id)
                                 threads_killed += 1
                     except ManualException as e:
-                        self.notify(e.reason, title="Error Killing Thread ID", severity="error")
+                        self.notify(e.reason, title=f"Error Killing Thread ID {thread_id}", severity="error")
 
                 if threads_killed:
                     self.notify(f"Killed [highlight]{threads_killed}[/highlight] threads")
@@ -1558,7 +1561,7 @@ class DolphieApp(App):
                         format_sys_table_memory(row["total_allocated"]),
                     )
 
-                table_grid.add_row("", Align.center("[b #bbc8e8]Memory Allocation"), "")
+                table_grid.add_row("", Align.center("[b light_blue]Memory Allocation"), "")
                 table_grid.add_row(table1, table3, table2)
 
                 screen_data = Align.center(table_grid)
@@ -1569,37 +1572,32 @@ class DolphieApp(App):
                 explain_failure = ""
                 explain_data = ""
 
-                thread_id = additional_data
-
-                thread_data = dolphie.processlist_threads_snapshot.get(thread_id)
-
                 thread_table = Table(box=None, show_header=False)
                 thread_table.add_column("")
                 thread_table.add_column("", overflow="fold")
 
-                thread_table.add_row("[label]Thread ID", str(thread_id))
-                thread_table.add_row("[label]User", thread_data["user"])
-                thread_table.add_row("[label]Host", thread_data["host"])
-                thread_table.add_row("[label]Database", thread_data["db"])
-                thread_table.add_row("[label]Command", thread_data["command"])
-                thread_table.add_row("[label]State", thread_data["state"])
-                thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data["time"])).zfill(8))
-                thread_table.add_row("[label]Rows Locked", thread_data["trx_rows_locked"])
-                thread_table.add_row("[label]Rows Modified", thread_data["trx_rows_modified"])
+                thread_id = additional_data
+                thread_data: ProcesslistThread = dolphie.processlist_threads_snapshot.get(thread_id)
+                thread_table.add_row("[label]Thread ID", thread_id)
+                thread_table.add_row("[label]User", thread_data.user)
+                thread_table.add_row("[label]Host", thread_data.host)
+                thread_table.add_row("[label]Database", thread_data.db)
+                thread_table.add_row("[label]Command", thread_data.command)
+                thread_table.add_row("[label]State", thread_data.state)
+                thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8))
+                thread_table.add_row("[label]Rows Locked", thread_data.trx_rows_locked)
+                thread_table.add_row("[label]Rows Modified", thread_data.trx_rows_modified)
 
-                if (
-                    "innodb_thread_concurrency" in dolphie.global_variables
-                    and dolphie.global_variables["innodb_thread_concurrency"]
-                ):
-                    thread_table.add_row("[label]Tickets", thread_data["trx_concurrency_tickets"])
+                if dolphie.global_variables.get("innodb_thread_concurrency"):
+                    thread_table.add_row("[label]Tickets", thread_data.trx_concurrency_tickets)
 
                 thread_table.add_row("", "")
-                thread_table.add_row("[label]TRX Time", thread_data["trx_time"])
-                thread_table.add_row("[label]TRX State", thread_data["trx_state"])
-                thread_table.add_row("[label]TRX Operation", thread_data["trx_operation_state"])
+                thread_table.add_row("[label]TRX Time", thread_data.trx_time)
+                thread_table.add_row("[label]TRX State", thread_data.trx_state)
+                thread_table.add_row("[label]TRX Operation", thread_data.trx_operation_state)
 
-                query = sqlformat(thread_data["query"], reindent_aligned=True)
-                query_db = thread_data["db"]
+                query = sqlformat(thread_data.query, reindent_aligned=True)
+                query_db = thread_data.db
                 if query:
                     formatted_query = Syntax(
                         query,
@@ -1621,31 +1619,33 @@ class DolphieApp(App):
 
                 user_thread_attributes_table = None
                 if dolphie.performance_schema_enabled:
-                    user_thread_attributes_table = Table(box=None, show_header=False)
-                    user_thread_attributes_table.add_column("")
-                    user_thread_attributes_table.add_column("", overflow="fold")
+                    user_thread_attributes_table = Table(box=None, show_header=False, expand=True)
 
                     dolphie.secondary_db_connection.execute(
-                        MySQLQueries.user_thread_attributes.replace("$1", str(thread_id))
+                        MySQLQueries.user_thread_attributes.replace("$1", thread_id)
                     )
 
                     user_thread_attributes = dolphie.secondary_db_connection.fetchall()
                     if user_thread_attributes:
+                        user_thread_attributes_table.add_column("")
+                        user_thread_attributes_table.add_column("", overflow="fold")
+
                         for attribute in user_thread_attributes:
                             user_thread_attributes_table.add_row(
                                 f"[label]{attribute['ATTR_NAME']}", attribute["ATTR_VALUE"]
                             )
                     else:
-                        user_thread_attributes_table.add_row("None found")
+                        user_thread_attributes_table.add_column(justify="center")
+                        user_thread_attributes_table.add_row("[b][label]None found")
 
                 # Transaction history
                 transaction_history_table = None
                 if (
                     dolphie.is_mysql_version_at_least("5.7")
                     and dolphie.performance_schema_enabled
-                    and thread_data["mysql_thread_id"]
+                    and thread_data.mysql_thread_id
                 ):
-                    query = MySQLQueries.thread_transaction_history.replace("$1", str(thread_data["mysql_thread_id"]))
+                    query = MySQLQueries.thread_transaction_history.replace("$1", str(thread_data.mysql_thread_id))
                     dolphie.secondary_db_connection.execute(query)
                     transaction_history = dolphie.secondary_db_connection.fetchall()
 
@@ -1716,7 +1716,7 @@ class DolphieApp(App):
                     table.add_row(*row_values)
 
                 screen_data = Group(
-                    Align.center(f"[b #bbc8e8]Users ([highlight]{len(users)}[/highlight])\n"), Align.center(table)
+                    Align.center(f"[b light_blue]Users ([highlight]{len(users)}[/highlight])\n"), Align.center(table)
                 )
 
                 self.call_from_thread(show_command_screen)
