@@ -141,22 +141,22 @@ class MySQLQueries:
     ps_user_statisitics: str = """
         SELECT
             u.user AS user,
-            total_connections,
-            current_connections,
+            ANY_VALUE(total_connections) AS total_connections,
+            ANY_VALUE(current_connections) AS current_connections,
             CONVERT(SUM(sum_rows_affected), UNSIGNED) AS rows_affected,
             CONVERT(SUM(sum_rows_sent), UNSIGNED) AS rows_sent,
             CONVERT(SUM(sum_rows_examined), UNSIGNED) AS rows_examined,
             CONVERT(SUM(sum_created_tmp_disk_tables), UNSIGNED) AS created_tmp_disk_tables,
             CONVERT(SUM(sum_created_tmp_tables), UNSIGNED) AS created_tmp_tables,
-            plugin,
-            CASE
+            ANY_VALUE(plugin) AS plugin,
+            ANY_VALUE(CASE
                 WHEN (password_lifetime IS NULL OR password_lifetime = 0) AND @@default_password_lifetime = 0 THEN "N/A"
                 ELSE CONCAT(
                     CAST(IFNULL(password_lifetime, @@default_password_lifetime) as signed) +
                     CAST(DATEDIFF(password_last_changed, NOW()) as signed),
                     " days"
                 )
-            END AS password_expires_in
+            END) AS password_expires_in
         FROM
             performance_schema.users u
             JOIN performance_schema.events_statements_summary_by_user_by_event_name ess ON u.user = ess.user
@@ -203,17 +203,19 @@ class MySQLQueries:
     ddls: str = """
         SELECT
             t.processlist_id,
-            stmt.sql_text,
-            stage.event_name AS state,
-            CONCAT(ROUND(100 * stage.work_completed / stage.work_estimated, 2), "%") AS percentage_completed,
-            stmt.timer_wait AS started_ago,
-            CONVERT(( stmt.timer_wait / round( 100 * stage.work_completed / stage.work_estimated, 2 )* 100 )
-                - stmt.timer_wait, UNSIGNED) AS estimated_remaining_time,
-            CONVERT(SUM( `mt`.`CURRENT_NUMBER_OF_BYTES_USED` ), UNSIGNED) memory
+            ANY_VALUE(stmt.sql_text) AS sql_text,
+            ANY_VALUE(stage.event_name) AS state,
+            ANY_VALUE(CONCAT(ROUND(100 * stage.work_completed / stage.work_estimated, 2), "%")) AS percentage_completed,
+            ANY_VALUE(stmt.timer_wait) AS started_ago,
+            ANY_VALUE(CONVERT(stmt.timer_wait / ROUND(100 * stage.work_completed / stage.work_estimated, 2) * 100,
+                UNSIGNED)) AS estimated_full_time,
+            ANY_VALUE(CONVERT((stmt.timer_wait / ROUND(100 * stage.work_completed / stage.work_estimated, 2) * 100)
+                - stmt.timer_wait, UNSIGNED)) AS estimated_remaining_time,
+            CONVERT(SUM(`mt`.`CURRENT_NUMBER_OF_BYTES_USED`), UNSIGNED) AS memory
         FROM
             `performance_schema`.`events_statements_current` stmt JOIN
             `performance_schema`.`events_stages_current` stage ON stage.nesting_event_id = stmt.event_id JOIN
-            `performance_schema`.`memory_summary_by_thread_by_event_name` `mt` ON mt.thread_id = stmt.thread_id JOIN
+            `performance_schema`.`memory_summary_by_thread_by_event_name` `mt` ON `mt`.thread_id = stmt.thread_id JOIN
             `performance_schema`.`threads` t ON t.thread_id = stmt.thread_id
         WHERE
             stage.event_name LIKE 'stage/innodb/alter%'
@@ -246,8 +248,7 @@ class MySQLQueries:
     memory_by_code_area: str = """
         SELECT
             SUBSTRING_INDEX( event_name, '/', 2 ) AS code_area,
-            sys.format_bytes (
-            SUM( current_alloc )) AS current_allocated
+            sys.format_bytes( SUM(current_alloc) ) AS current_allocated
         FROM
             sys.x$memory_global_by_current_bytes
         GROUP BY
@@ -322,11 +323,11 @@ class MySQLQueries:
     replication_applier_status: str = """
         SELECT
             worker_id,
-            FORMAT_PICO_TIME(
+            ANY_VALUE(FORMAT_PICO_TIME(
                 (applier_status.LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP -
                 applier_status.LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP) * 1000000000000
-            ) AS apply_time,
-            applier_status.LAST_APPLIED_TRANSACTION AS last_applied_transaction,
+            )) AS apply_time,
+            ANY_VALUE(applier_status.LAST_APPLIED_TRANSACTION) AS last_applied_transaction,
             CONVERT(SUM(thread_events.COUNT_STAR), UNSIGNED) AS total_thread_events
         FROM
             `performance_schema`.replication_applier_status_by_worker applier_status JOIN

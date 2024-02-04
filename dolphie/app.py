@@ -1722,7 +1722,7 @@ class DolphieApp(App):
 
                 self.call_from_thread(show_command_screen)
         except ManualException as e:
-            self.notify(e.reason, title=f"Error running hotkey '{key}'", severity="error", timeout=10)
+            self.notify(e.reason, title=f"Error running command '{key}'", severity="error", timeout=10)
 
         tab.spinner.hide()
 

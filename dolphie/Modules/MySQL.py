@@ -55,9 +55,6 @@ class Database:
             # Get connection ID for processlist filtering
             if self.save_connection_id:
                 self.connection_id = self.fetch_value_from_field("SELECT CONNECTION_ID()")
-
-            # Reduce any issues with the queries Dolphie runs (mostly targetting only_full_group_by)
-            self.execute("SET SESSION sql_mode = ''")
         except pymysql.Error as e:
             raise ManualException(e.args[1])
         except FileNotFoundError:  # Catch SSL file path errors
