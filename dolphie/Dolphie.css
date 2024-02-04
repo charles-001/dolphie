@@ -24,7 +24,7 @@ Horizontal {
     height: auto;
 }
 Rule {
-    color: #2e375a;
+    color: #28304e;
     margin: 0;
 }
 DataTable {
@@ -55,7 +55,7 @@ SpinnerWidget {
 
 TopBar {
     dock: top;
-    background: #172138;
+    background: #151e33;
     height: 1;
     layout: horizontal;
 }
@@ -222,7 +222,7 @@ Tabs:focus .underline--bar {
     color: #caddfe;
 }
 Underline > .underline--bar {
-    background: #2e375a;
+    background: #28304e;
     color: #82a5e1;
 }
 AutoComplete {
