@@ -7,38 +7,38 @@ from textual.widgets import Button, Input, Label, Static
 from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
 
 
-class QuickSwitchHostModal(ModalScreen):
+class HostSetupModal(ModalScreen):
     CSS = """
-        QuickSwitchHostModal > Vertical {
+        HostSetupModal > Vertical {
             background: #141726;
             border: tall #252e48;
             height: auto;
             width: 70;
         }
-        QuickSwitchHostModal > Vertical > * {
+        HostSetupModal > Vertical > * {
             width: auto;
             height: auto;
             align: center middle;
         }
-        QuickSwitchHostModal Label {
+        HostSetupModal Label {
             text-style: bold;
             width: 100%;
             content-align: center middle;
             padding-bottom: 1;
         }
-        QuickSwitchHostModal Input {
+        HostSetupModal Input {
             width: 100% !important;
             content-align: center middle;
         }
-        QuickSwitchHostModal .main_container {
+        HostSetupModal .main_container {
             width: 100%;
             content-align: center middle;
         }
-        QuickSwitchHostModal AutoComplete {
+        HostSetupModal AutoComplete {
             width: 100%;
             height: auto;
         }
-        QuickSwitchHostModal #modal_footer {
+        HostSetupModal #modal_footer {
             color: #d3565c;
             width: 100%;
             padding-bottom: 0;
@@ -50,7 +50,7 @@ class QuickSwitchHostModal(ModalScreen):
         Binding("escape", "app.pop_screen", "", show=False),
     ]
 
-    def __init__(self, host, port, quick_switch_hosts, error_message=None):
+    def __init__(self, host, port, available_hosts, error_message=None):
         super().__init__()
 
         self.host = host
@@ -60,8 +60,8 @@ class QuickSwitchHostModal(ModalScreen):
             self.host = f"{self.host}:{self.port}"
 
         self.dropdown_items = []
-        if quick_switch_hosts:
-            self.dropdown_items = [DropdownItem(id) for id in sorted(quick_switch_hosts)]
+        if available_hosts:
+            self.dropdown_items = [DropdownItem(id) for id in sorted(available_hosts)]
 
         self.error_message = error_message
 
@@ -76,7 +76,7 @@ class QuickSwitchHostModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical():
             with Vertical(classes="main_container"):
-                yield Label("Quick Switch Host")
+                yield Label("Host Setup")
                 yield AutoComplete(
                     Input(
                         value=self.host,

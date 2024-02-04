@@ -155,12 +155,12 @@ Environment variables support these options:
     )
     parser.add_argument(
         "-q",
-        "--quick-switch-hosts-file",
-        dest="quick_switch_hosts_file",
+        "--host-setup-file",
+        dest="host_setup_file",
         type=str,
         help=(
-            "Specify where the file is that stores the hosts you connect to for quick switching [default:"
-            " ~/dolphie_quick_switch_hosts]"
+            "Specify location of file that stores the available hosts to use in host setup modal [default:"
+            " ~/dolphie_hosts]"
         ),
     )
     parser.add_argument(
@@ -386,9 +386,9 @@ Environment variables support these options:
     if parameter_options["host_cache_file"]:
         dolphie.host_cache_file = parameter_options["host_cache_file"]
 
-    dolphie.quick_switch_hosts_file = f"{home_dir}/dolphie_quick_switch_hosts"
-    if parameter_options["quick_switch_hosts_file"]:
-        dolphie.quick_switch_hosts_file = parameter_options["quick_switch_hosts_file"]
+    dolphie.host_setup_file = f"{home_dir}/dolphie_hosts"
+    if parameter_options["host_setup_file"]:
+        dolphie.host_setup_file = parameter_options["host_setup_file"]
 
     dolphie.show_trxs_only = parameter_options["show_trxs_only"]
     dolphie.show_additional_query_columns = parameter_options["show_additional_query_columns"]
@@ -403,9 +403,9 @@ Environment variables support these options:
 
     dolphie.graph_marker = parameter_options["graph_marker"]
 
-    if os.path.exists(dolphie.quick_switch_hosts_file):
-        with open(dolphie.quick_switch_hosts_file, "r") as file:
-            dolphie.quick_switch_hosts = [line.strip() for line in file]
+    if os.path.exists(dolphie.host_setup_file):
+        with open(dolphie.host_setup_file, "r") as file:
+            dolphie.host_setup_available_hosts = [line.strip() for line in file]
 
 
 class DolphieApp(App):
@@ -550,7 +550,7 @@ class DolphieApp(App):
             )
         except ManualException as e:
             # This will set up the worker state change function below to trigger the
-            # quick switch connection modal with the error
+            # host setup modal with the error
             tab.worker_cancel_error = e.output()
 
             tab.disconnect()
@@ -594,7 +594,7 @@ class DolphieApp(App):
 
                     self.tab_manager.switch_tab(tab.id)
 
-                    tab.quick_switch_connection()
+                    tab.host_setup()
                     self.bell()
         elif event.worker.group == "replicas":
             if event.state == WorkerState.SUCCESS:
@@ -936,7 +936,7 @@ class DolphieApp(App):
             self.toggle_panel(dolphie.panels.ddl.name)
             self.tab.ddl_datatable.clear()
         elif key == "grave_accent":
-            self.tab.quick_switch_connection()
+            self.tab.host_setup()
         elif key == "space":
             if tab.worker.state != WorkerState.RUNNING:
                 tab.worker_timer.stop()
@@ -946,7 +946,7 @@ class DolphieApp(App):
             async def command_get_input(tab_name):
                 await self.tab_manager.create_tab(tab_name, dolphie)
                 self.tab.topbar.host = ""
-                self.tab.quick_switch_connection()
+                self.tab.host_setup()
 
             self.app.push_screen(
                 CommandModal(command="new_tab", message="What would you like to name the new tab?"),
@@ -1271,7 +1271,7 @@ class DolphieApp(App):
                 "4": "Show/hide Graph Metrics",
                 "5": "Show/hide Locks",
                 "6": "Show/hide DDLs",
-                "`": "Quickly connect to another host",
+                "`": "Open Host Setup",
                 "+": "Create a new tab",
                 "-": "Remove the current tab",
                 "a": "Toggle additional processlist columns",

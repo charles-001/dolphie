@@ -81,8 +81,8 @@ options:
                         Config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
   -f HOST_CACHE_FILE, --host-cache-file HOST_CACHE_FILE
                         Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format: ip=hostname [default: ~/dolphie_host_cache]
-  -q QUICK_SWITCH_HOSTS_FILE, --quick-switch-hosts-file QUICK_SWITCH_HOSTS_FILE
-                        Specify where the file is that stores the hosts you connect to for quick switching [default: ~/dolphie_quick_switch_hosts]
+  -q HOST_SETUP_FILE, --host-setup-file HOST_SETUP_FILE
+                        Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
   -l LOGIN_PATH, --login-path LOGIN_PATH
                         Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
   -r REFRESH_INTERVAL, --refresh_interval REFRESH_INTERVAL

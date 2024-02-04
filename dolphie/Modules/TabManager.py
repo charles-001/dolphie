@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
-from dolphie.Widgets.quick_switch import QuickSwitchHostModal
+from dolphie.Widgets.host_setup import HostSetupModal
 from dolphie.Widgets.spinner import SpinnerWidget
 from dolphie.Widgets.topbar import TopBar
 from textual.app import App
@@ -142,7 +142,7 @@ class Tab:
         if dolphie.read_only_status and dolphie.mysql_host:
             self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
 
-    def quick_switch_connection(self):
+    def host_setup(self):
         dolphie = self.dolphie
 
         def command_get_input(data):
@@ -177,10 +177,10 @@ class Tab:
             port = ""
 
         self.dolphie.app.push_screen(
-            QuickSwitchHostModal(
+            HostSetupModal(
                 host=host,
                 port=port,
-                quick_switch_hosts=dolphie.quick_switch_hosts,
+                available_hosts=dolphie.host_setup_available_hosts,
                 error_message=self.worker_cancel_error,
             ),
             command_get_input,

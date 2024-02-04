@@ -220,7 +220,7 @@ class MySQLQueries:
         WHERE
             stage.event_name LIKE 'stage/innodb/alter%'
         GROUP BY
-            stmt.thread_id
+            t.processlist_id
     """
     error_log: str = """
         SELECT

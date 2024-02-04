@@ -39,7 +39,7 @@ class Dolphie:
         self.ssl: dict = {}
         self.config_file: str = None
         self.host_cache_file: str = None
-        self.quick_switch_hosts_file: str = None
+        self.host_setup_file: str = None
         self.debug: bool = False
         self.refresh_interval: int = 1
         self.show_idle_threads: bool = False
@@ -52,7 +52,7 @@ class Dolphie:
         self.host_filter: str = None
         self.query_time_filter: str = 0
         self.query_filter: str = None
-        self.quick_switch_hosts: list = []
+        self.host_setup_available_hosts: list = []
         self.host_cache: dict = {}
         self.host_cache_from_file: dict = {}
         self.startup_panels: str = None
@@ -254,8 +254,8 @@ class Dolphie:
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
 
-        # Add host to quick switch hosts file if it doesn't exist
-        with open(self.quick_switch_hosts_file, "a+") as file:
+        # Add host to host setup file if it doesn't exist
+        with open(self.host_setup_file, "a+") as file:
             file.seek(0)
             lines = file.readlines()
 
@@ -266,7 +266,7 @@ class Dolphie:
 
             if host not in lines:
                 file.write(host)
-                self.quick_switch_hosts.append(host[:-1])  # remove the \n
+                self.host_setup_available_hosts.append(host[:-1])  # remove the \n
 
     def monitor_read_only_change(self):
         current_ro_status = self.global_variables.get("read_only")
