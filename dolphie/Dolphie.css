@@ -13,6 +13,7 @@
 #_default, CommandScreen, EventLog { # screens
     background: #0a0e1b;
 }
+
 RichLog {
     background: #0a0e1b;
 }
@@ -35,6 +36,7 @@ LoadingIndicator {
     content-align: center middle;
 }
 ModalScreen {
+    background: #0d1015 70%;
     align: center middle;
     height: 40;
     color: #4d5a85;
@@ -53,7 +55,7 @@ SpinnerWidget {
 
 TopBar {
     dock: top;
-    background: #192036;
+    background: #172138;
     height: 1;
     layout: horizontal;
 }
@@ -241,15 +243,15 @@ Input {
     width: 40;
     margin: 0 2;
     margin-bottom: 1;
-    background: #121522;
+    background: #121421;
     border: tall #272e47;
 }
 Input:focus {
-    background: #121522;
+    background: #121421;
     border: tall #475484;
 }
 Input>.input--placeholder {
-    color: #7e8dac;
+    color: #5e6b87;
 }
 
 .datatable--header {
@@ -400,7 +402,7 @@ ToggleButton.-on > .toggle--button {
 Toast {
     width: auto;
     max-width: 50%;
-    background: #192036;
+    background: #171d32;
 }
 Toast.-information {
     border-left: wide #788bc9;

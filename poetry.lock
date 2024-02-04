@@ -455,13 +455,13 @@ test = ["pytest", "pytest-cov"]
 
 [[package]]
 name = "textual"
-version = "0.48.1"
+version = "0.48.2"
 description = "Modern Text User Interface framework"
 optional = false
 python-versions = ">=3.8,<4.0"
 files = [
-    {file = "textual-0.48.1-py3-none-any.whl", hash = "sha256:caa12b0e2171c50b78171059cb8dd56df72e7e4fd3fd760215343b6c30e975d8"},
-    {file = "textual-0.48.1.tar.gz", hash = "sha256:df39371a0404a41dbb45ea0bc0c3e853ec5bc33236d71c9226a94192db0a637e"},
+    {file = "textual-0.48.2-py3-none-any.whl", hash = "sha256:a9d2f225584afb28a6c05b7f7d06d41b54cd02822020f11711d788e5098161db"},
+    {file = "textual-0.48.2.tar.gz", hash = "sha256:e092dffa5311f3381cb5f51d56c506143f5c1ee3b1c67f57bb1929cfa73fee07"},
 ]
 
 [package.dependencies]
@@ -532,4 +532,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "1635cac178fda0f12707fbef2bc96c4c172da409b6adde81bef5ce4c1bf97c87"
+content-hash = "0878fb1b4c2193f3da04fb0418172cebec3deb1e08825093cbacf7ae09d8b761"
