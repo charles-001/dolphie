@@ -1,11 +1,11 @@
 * {
-    scrollbar-background: #161c2f;
-    scrollbar-background-hover: #192036;
-    scrollbar-background-active: #192036;
+    scrollbar-background: #171f30;
+    scrollbar-background-hover: #171f30;
+    scrollbar-background-active: #171f30;
 
-    scrollbar-color: #33405c;
-    scrollbar-color-hover: #3c4b6b;
-    scrollbar-color-active: #526389;
+    scrollbar-color: #33405d;
+    scrollbar-color-hover: #404f71;
+    scrollbar-color-active: #4f608a;
 
     color: #e9e9e9;
 }

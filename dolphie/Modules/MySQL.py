@@ -75,20 +75,30 @@ class Database:
             return None
 
         error_message = None
-        self.running_query = True
 
         # Prefix all queries with dolphie so they can be identified in the processlist from other people
         query = "/* dolphie */ " + query
 
         for _ in range(self.max_reconnect_attempts):
+            self.running_query = True
+
             try:
                 rows = self.cursor.execute(query, values)
                 self.running_query = False
-                return rows
-            except pymysql.Error as e:
-                if ignore_error:
-                    self.running_query = False
 
+                return rows
+            except AttributeError:
+                # If the cursor is not defined, reconnect and try again
+                self.running_query = False
+
+                self.close()
+                self.connect()
+
+                time.sleep(1)
+            except pymysql.Error as e:
+                self.running_query = False
+
+                if ignore_error:
                     return None
                 else:
                     if len(e.args) == 1:
@@ -125,10 +135,7 @@ class Database:
 
                         time.sleep(1)
                     else:
-                        self.running_query = False
                         raise ManualException(error_message, query=query)
-
-        self.running_query = False
 
         if error_message is not None:
             raise ManualException(
