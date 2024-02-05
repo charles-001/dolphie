@@ -248,7 +248,7 @@ Input {
 }
 Input:focus {
     background: #111322;
-    border: tall #43508a;
+    border: tall #424e8b;
 }
 Input>.input--placeholder {
     color: #5e6b87;

@@ -11,7 +11,7 @@ class HostSetupModal(ModalScreen):
     CSS = """
         HostSetupModal > Vertical {
             background: #131626;
-            border: tall #2c3861;
+            border: tall #313d64;
             height: auto;
             width: 70;
         }

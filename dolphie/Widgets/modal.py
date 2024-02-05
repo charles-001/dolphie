@@ -20,7 +20,7 @@ class CommandModal(ModalScreen):
     CSS = """
         CommandModal > Vertical {
             background: #131626;
-            border: tall #2c3861;
+            border: tall #313d64;
             height: auto;
             width: auto;
         }
