@@ -244,11 +244,11 @@ Input {
     margin: 0 2;
     margin-bottom: 1;
     background: #111322;
-    border: tall #283052;
+    border: tall #252e49;
 }
 Input:focus {
     background: #111322;
-    border: tall #424e8b;
+    border: tall #384673;
 }
 Input>.input--placeholder {
     color: #5e6b87;
