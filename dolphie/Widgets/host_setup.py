@@ -10,8 +10,8 @@ from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
 class HostSetupModal(ModalScreen):
     CSS = """
         HostSetupModal > Vertical {
-            background: #141726;
-            border: tall #252e48;
+            background: #131626;
+            border: tall #2c3861;
             height: auto;
             width: 70;
         }

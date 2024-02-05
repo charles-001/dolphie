@@ -1,7 +1,7 @@
 * {
-    scrollbar-background: #171f30;
-    scrollbar-background-hover: #171f30;
-    scrollbar-background-active: #171f30;
+    scrollbar-background: #161e31;
+    scrollbar-background-hover: #161e31;
+    scrollbar-background-active: #161e31;
 
     scrollbar-color: #33405d;
     scrollbar-color-hover: #404f71;
@@ -24,7 +24,7 @@ Horizontal {
     height: auto;
 }
 Rule {
-    color: #28304e;
+    color: #32416a;
     margin: 0;
 }
 DataTable {
@@ -84,16 +84,16 @@ TopBar {
 }
 .dashboard > Center > * {
     content-align: center top;
-    background: #0f1625;
-    border: tall #1e243b;
+    background: #0f1525;
+    border: tall #1b233a;
     height: 11;
     width: auto;
 }
 
 .locks {
     height: auto;
-    background: #0f1625;
-    border: tall #1e243b;
+    background: #0f1525;
+    border: tall #1b233a;
     margin-bottom: 1;
 }
 .locks > Label {
@@ -106,8 +106,8 @@ TopBar {
 
 .processlist {
     height: auto;
-    background: #0f1625;
-    border: tall #1e243b;
+    background: #0f1525;
+    border: tall #1b233a;
 }
 .processlist > Label {
     width: 100%;
@@ -134,8 +134,8 @@ TopBar {
 }
 .replication > Center > ScrollableContainer {
     content-align: center top;
-    background: #0f1625;
-    border: tall #1e243b;
+    background: #0f1525;
+    border: tall #1b233a;
     height: auto;
     max-height: 18;
 }
@@ -160,8 +160,8 @@ TopBar {
     grid-gutter: 1 0;
 }
 .replicas > Container > ScrollableContainer  {
-    background: #0f1625;
-    border: tall #1e243b;
+    background: #0f1525;
+    border: tall #1b233a;
     height: auto;
     max-height: 18;
 }
@@ -181,8 +181,8 @@ TopBar {
     grid-gutter: 1 0;
 }
 .group_replication > Container > ScrollableContainer  {
-    background: #0f1625;
-    border: tall #1e243b;
+    background: #0f1525;
+    border: tall #1b233a;
     height: auto;
     max-height: 18;
 }
@@ -193,8 +193,8 @@ TopBar {
 
 .ddl {
     height: auto;
-    background: #0f1625;
-    border: tall #1e243b;
+    background: #0f1525;
+    border: tall #1b233a;
     margin-bottom: 1;
 }
 .ddl > Container {
@@ -222,7 +222,7 @@ Tabs:focus .underline--bar {
     color: #caddfe;
 }
 Underline > .underline--bar {
-    background: #28304e;
+    background: #283357;
     color: #82a5e1;
 }
 AutoComplete {
@@ -243,12 +243,12 @@ Input {
     width: 40;
     margin: 0 2;
     margin-bottom: 1;
-    background: #121421;
-    border: tall #272e47;
+    background: #111322;
+    border: tall #283052;
 }
 Input:focus {
-    background: #121421;
-    border: tall #475484;
+    background: #111322;
+    border: tall #43508a;
 }
 Input>.input--placeholder {
     color: #5e6b87;
@@ -298,34 +298,34 @@ Sparkline > .sparkline--min-color {
 
 
 Button.-primary {
-    background: #1e2f57;
-    border-top: tall #465d9c;
+    background: #192c5b;
+    border-top: tall #425894;
     border-bottom: tall #151b2b;
 }
 Button.-primary:hover {
-    background: #233663;
-    border-top: tall #4e67ad;
+    background: #1d336a;
+    border-top: tall #4a62a4;
     border-bottom: tall #151b2b;
 }
 Button.-primary:focus {
-    background: #233663;
-    border-top: tall #4e67ad;
+    background: #1d336a;
+    border-top: tall #4a62a4;
     border-bottom: tall #151b2b;
     text-style: bold;
 }
 Button {
     background: #282c42;
-    border-top: tall #515676;
+    border-top: tall #54597b;
     border-bottom: tall #171922;
 }
 Button:hover {
-    background: #313752;
-    border-top: tall #5f668b;
+    background: #303650;
+    border-top: tall #60678d;
     border-bottom: tall #171922;
 }
 Button:focus {
-    background: #313752;
-    border-top: tall #5f668b;
+    background: #303650;
+    border-top: tall #60678d;
     border-bottom: tall #171922;
     text-style: bold;
 }

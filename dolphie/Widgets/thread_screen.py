@@ -14,8 +14,8 @@ class ThreadScreen(Screen):
     }
     ThreadScreen #explain_table {
         margin-top: 1;
-        background: #0f1625;
-        border: tall #1d2337;
+        background: #101626;
+        border: tall #1d253e;
         overflow-x: auto;
         min-height: 5;
         max-height: 15;
@@ -55,8 +55,8 @@ class ThreadScreen(Screen):
 
     ThreadScreen .table {
         content-align: center middle;
-        background: #0f1625;
-        border: tall #1d2337;
+        background: #101626;
+        border: tall #1d253e;
         padding-left: 1;
         padding-right: 1;
         height: auto;

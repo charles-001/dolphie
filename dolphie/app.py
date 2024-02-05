@@ -1605,7 +1605,7 @@ class DolphieApp(App):
                         line_numbers=False,
                         word_wrap=True,
                         theme="monokai",
-                        background_color="#0f1625",
+                        background_color="#101626",
                     )
 
                     if query_db:
@@ -1663,7 +1663,7 @@ class DolphieApp(App):
                                     line_numbers=False,
                                     word_wrap=True,
                                     theme="monokai",
-                                    background_color="#0f1625",
+                                    background_color="#101626",
                                 )
 
                             transaction_history_table.add_row(
