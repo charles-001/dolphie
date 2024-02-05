@@ -3,9 +3,17 @@ from dataclasses import dataclass
 
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
-from dolphie.Widgets.quick_switch import QuickSwitchHostModal
+from dolphie.Widgets.host_setup import HostSetupModal
+from dolphie.Widgets.spinner import SpinnerWidget
+from dolphie.Widgets.topbar import TopBar
 from textual.app import App
-from textual.containers import Container, Horizontal, VerticalScroll
+from textual.containers import (
+    Center,
+    Container,
+    Horizontal,
+    ScrollableContainer,
+    VerticalScroll,
+)
 from textual.timer import Timer
 from textual.widgets import (
     DataTable,
@@ -30,36 +38,111 @@ class Tab:
     worker_timer: Timer = None
     worker_cancel_error: str = None
 
+    replicas_worker: worker = None
+    replicas_worker_timer: Timer = None
+
+    topbar: TopBar = None
     main_container: VerticalScroll = None
     loading_indicator: LoadingIndicator = None
     sparkline: Sparkline = None
     panel_dashboard: Container = None
     panel_graphs: Container = None
-    panel_replication: VerticalScroll = None
-    panel_locks: DataTable = None
-    panel_processlist: DataTable = None
+    panel_replication: Container = None
+    panel_locks: Container = None
+    panel_ddl: Container = None
+    panel_processlist: Container = None
 
-    panel_dashboard_data: Static = None
-    panel_replication_data: Static = None
+    spinner: SpinnerWidget = None
 
-    topbar_data: str = "Connecting to MySQL"
+    dashboard_host_information: Static = None
+    dashboard_innodb: Static = None
+    dashboard_binary_log: Static = None
+    dashboard_statistics: Static = None
+    dashboard_replication: Static = None
+
+    ddl_title: Label = None
+    ddl_datatable: DataTable = None
+
+    locks_title: Label = None
+    locks_datatable: DataTable = None
+
+    processlist_title: Label = None
+    processlist_datatable: DataTable = None
+
+    replication_container_title: Static = None
+    replication_container: Container = None
+    replication_variables: Label = None
+    replication_status: Static = None
+    replication_thread_applier_container: ScrollableContainer = None
+    replication_thread_applier: Static = None
+
+    group_replication_container: Container = None
+    group_replication_grid: Container = None
+    group_replication_title: Label = None
+    group_replication_data: Static = None
+
+    replicas_container: Container = None
+    replicas_grid: Container = None
+    replicas_loading_indicator: LoadingIndicator = None
+    replicas_title: Label = None
+
+    cluster_data: Static = None
 
     queue_for_removal: bool = False
 
-    def update_topbar(self):
+    def disconnect(self, update_topbar: bool = True):
+        if self.worker_timer:
+            self.worker_timer.stop()
+        if self.replicas_worker_timer:
+            self.replicas_worker_timer.stop()
+
+        if self.worker:
+            self.worker.cancel()
+        self.worker = None
+
+        if self.replicas_worker:
+            self.replicas_worker.cancel()
+        self.replicas_worker = None
+
+        if self.dolphie.main_db_connection:
+            self.dolphie.main_db_connection.close()
+
+        if self.dolphie.secondary_db_connection:
+            self.dolphie.secondary_db_connection.close()
+
+        self.dolphie.replica_manager.remove_all()
+
+        self.main_container.display = False
+        self.sparkline.display = False
+
+        self.replicas_title.update("")
+        for member in self.dolphie.app.query(f".replica_container_{self.id}"):
+            member.remove()
+
+        if update_topbar:
+            self.update_topbar()
+
+    def update_topbar(self, custom_text: str = None):
         dolphie = self.dolphie
 
-        if not dolphie.read_only_status:
-            if not self.loading_indicator.display:
-                self.topbar_data = ""
+        if custom_text:
+            self.topbar.host = custom_text
             return
 
-        if dolphie.main_db_connection and not dolphie.main_db_connection.connection.open:
+        if dolphie.main_db_connection and not dolphie.main_db_connection.is_connected():
             dolphie.read_only_status = "DISCONNECTED"
+        else:
+            if not self.worker:
+                if not self.loading_indicator.display:
+                    self.topbar.host = ""
 
-        self.topbar_data = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
+                # If there is no worker instance, we don't update the topbar
+                return
 
-    def quick_switch_connection(self):
+        if dolphie.read_only_status and dolphie.mysql_host:
+            self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
+
+    def host_setup(self):
         dolphie = self.dolphie
 
         def command_get_input(data):
@@ -72,17 +155,14 @@ class Tab:
             if password:
                 dolphie.password = password
 
-            # Trigger a quick switch connection for the worker thread
-            dolphie.quick_switched_connection = True
-
-            self.loading_indicator.display = True
-            self.main_container.display = False
-            self.sparkline.display = False
-            self.topbar_data = "Connecting to MySQL"
+            self.disconnect()
+            dolphie.reset_runtime_variables()
 
             if not self.worker or self.worker.state == WorkerState.CANCELLED:
                 self.worker_cancel_error = ""
-                self.dolphie.app.worker_fetch_data(self.id)
+
+                self.dolphie.app.run_worker_main(self.id)
+                self.dolphie.app.run_worker_replicas(self.id)
 
         self.loading_indicator.display = False
 
@@ -90,15 +170,17 @@ class Tab:
         if self.worker_cancel_error:
             host = dolphie.host
             port = dolphie.port
+
+            self.update_topbar()
         else:
             host = ""
             port = ""
 
         self.dolphie.app.push_screen(
-            QuickSwitchHostModal(
+            HostSetupModal(
                 host=host,
                 port=port,
-                quick_switch_hosts=dolphie.quick_switch_hosts,
+                available_hosts=dolphie.host_setup_available_hosts,
                 error_message=self.worker_cancel_error,
             ),
             command_get_input,
@@ -121,25 +203,79 @@ class TabManager:
             TabPane(
                 tab_name,
                 LoadingIndicator(id=f"loading_indicator_{tab_id}"),
+                SpinnerWidget(id=f"spinner_{tab_id}"),
                 VerticalScroll(
                     Container(
-                        Static(id=f"panel_dashboard_data_{tab_id}", classes="panel_data"),
+                        Center(
+                            Static(id=f"dashboard_host_information_{tab_id}", classes="dashboard_host_information"),
+                            Static(id=f"dashboard_innodb_{tab_id}", classes="dashboard_innodb_information"),
+                            Static(id=f"dashboard_binary_log_{tab_id}", classes="dashboard_binary_log"),
+                            Static(id=f"dashboard_replication_{tab_id}", classes="dashboard_replication"),
+                            Static(id=f"dashboard_statistics_{tab_id}", classes="dashboard_statistics"),
+                        ),
                         Sparkline([], id=f"panel_dashboard_queries_qps_{tab_id}"),
                         id=f"panel_dashboard_{tab_id}",
-                        classes="panel_container",
+                        classes="panel_container dashboard",
                     ),
                     Container(
                         TabbedContent(id=f"tabbed_content_{tab_id}", classes="metrics_tabbed_content"),
                         id=f"panel_graphs_{tab_id}",
                         classes="panel_container",
                     ),
-                    VerticalScroll(
-                        Static(id=f"panel_replication_data_{tab_id}", classes="panel_data"),
+                    Container(
+                        Static(id=f"replication_container_title_{tab_id}", classes="replication_container_title"),
+                        Container(
+                            Label("[b]Replication\n"),
+                            Label(id=f"replication_variables_{tab_id}"),
+                            Center(
+                                ScrollableContainer(
+                                    Static(id=f"replication_status_{tab_id}"), classes="replication_status"
+                                ),
+                                ScrollableContainer(
+                                    Static(id=f"replication_thread_applier_{tab_id}"),
+                                    id=f"replication_thread_applier_container_{tab_id}",
+                                    classes="replication_thread_applier",
+                                ),
+                            ),
+                            id=f"replication_container_{tab_id}",
+                            classes="replication",
+                        ),
+                        Container(
+                            Label(id=f"group_replication_title_{tab_id}"),
+                            Label(id=f"group_replication_data_{tab_id}"),
+                            Container(id=f"group_replication_grid_{tab_id}"),
+                            id=f"group_replication_container_{tab_id}",
+                            classes="group_replication",
+                        ),
+                        Static(id=f"cluster_data_{tab_id}"),
+                        Container(
+                            Label(id=f"replicas_title_{tab_id}"),
+                            LoadingIndicator(id=f"replicas_loading_indicator_{tab_id}"),
+                            Container(id=f"replicas_grid_{tab_id}"),
+                            id=f"replicas_container_{tab_id}",
+                            classes="replicas",
+                        ),
                         id=f"panel_replication_{tab_id}",
-                        classes="panel_container",
+                        classes="panel_container replication_panel",
                     ),
-                    DataTable(id=f"panel_locks_{tab_id}", classes="panel_data", show_cursor=False),
-                    DataTable(id=f"panel_processlist_{tab_id}", classes="panel_data", show_cursor=False),
+                    Container(
+                        Label(id=f"locks_title_{tab_id}"),
+                        DataTable(id=f"locks_datatable_{tab_id}", show_cursor=False),
+                        id=f"panel_locks_{tab_id}",
+                        classes="locks",
+                    ),
+                    Container(
+                        Label(id=f"ddl_title_{tab_id}"),
+                        DataTable(id=f"ddl_datatable_{tab_id}", show_cursor=False),
+                        id=f"panel_ddl_{tab_id}",
+                        classes="ddl",
+                    ),
+                    Container(
+                        Label(id=f"processlist_title_{tab_id}"),
+                        DataTable(id=f"processlist_data_{tab_id}", show_cursor=False),
+                        id=f"panel_processlist_{tab_id}",
+                        classes="processlist",
+                    ),
                     classes="tab",
                     id=f"main_container_{tab_id}",
                 ),
@@ -215,34 +351,65 @@ class TabManager:
         dolphie.tab_name = tab_name
 
         # Save references to the widgets in the tab
+        tab.topbar = self.app.query_one(TopBar)
         tab.main_container = self.app.query_one(f"#main_container_{tab.id}", VerticalScroll)
         tab.loading_indicator = self.app.query_one(f"#loading_indicator_{tab.id}", LoadingIndicator)
         tab.sparkline = self.app.query_one(f"#panel_dashboard_queries_qps_{tab.id}", Sparkline)
         tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)
         tab.panel_graphs = self.app.query_one(f"#panel_graphs_{tab.id}", Container)
-        tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", VerticalScroll)
-        tab.panel_locks = self.app.query_one(f"#panel_locks_{tab.id}", DataTable)
-        tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", DataTable)
+        tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
+        tab.panel_locks = self.app.query_one(f"#panel_locks_{tab.id}", Container)
+        tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", Container)
+        tab.panel_ddl = self.app.query_one(f"#panel_ddl_{tab.id}", Container)
 
-        tab.panel_dashboard_data = self.app.query_one(f"#panel_dashboard_data_{tab.id}", Static)
-        tab.panel_replication_data = self.app.query_one(f"#panel_replication_data_{tab.id}", Static)
+        tab.spinner = self.app.query_one(f"#spinner_{tab.id}", SpinnerWidget)
+        tab.spinner.hide()
 
-        tab.panel_processlist.classes = "panel_container pad_top_1"
-        tab.panel_locks.classes = "panel_container pad_top_1"
-        tab.panel_graphs.classes = "panel_container pad_top_0"
+        tab.ddl_title = self.app.query_one(f"#ddl_title_{tab.id}", Label)
+        tab.ddl_datatable = self.app.query_one(f"#ddl_datatable_{tab.id}", DataTable)
+        tab.processlist_title = self.app.query_one(f"#processlist_title_{tab.id}", Label)
+        tab.processlist_datatable = self.app.query_one(f"#processlist_data_{tab.id}", DataTable)
+        tab.locks_title = self.app.query_one(f"#locks_title_{tab.id}", Label)
+        tab.locks_datatable = self.app.query_one(f"#locks_datatable_{tab.id}", DataTable)
+
+        tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
+        tab.dashboard_innodb = self.app.query_one(f"#dashboard_innodb_{tab.id}", Static)
+        tab.dashboard_binary_log = self.app.query_one(f"#dashboard_binary_log_{tab.id}", Static)
+        tab.dashboard_statistics = self.app.query_one(f"#dashboard_statistics_{tab.id}", Static)
+        tab.dashboard_replication = self.app.query_one(f"#dashboard_replication_{tab.id}", Static)
+
+        tab.group_replication_container = self.app.query_one(f"#group_replication_container_{tab.id}", Container)
+        tab.group_replication_grid = self.app.query_one(f"#group_replication_grid_{tab.id}", Container)
+
+        tab.replicas_grid = self.app.query_one(f"#replicas_grid_{tab.id}", Container)
+        tab.replicas_container = self.app.query_one(f"#replicas_container_{tab.id}", Container)
+
+        tab.group_replication_data = self.app.query_one(f"#group_replication_data_{tab.id}", Static)
+        tab.group_replication_title = self.app.query_one(f"#group_replication_title_{tab.id}", Label)
+        tab.replicas_title = self.app.query_one(f"#replicas_title_{tab.id}", Label)
+        tab.replicas_loading_indicator = self.app.query_one(f"#replicas_loading_indicator_{tab.id}", LoadingIndicator)
+
+        tab.cluster_data = self.app.query_one(f"#cluster_data_{tab.id}", Static)
+
+        tab.replication_container_title = self.app.query_one(f"#replication_container_title_{tab.id}", Static)
+        tab.replication_container = self.app.query_one(f"#replication_container_{tab.id}", Container)
+        tab.replication_variables = self.app.query_one(f"#replication_variables_{tab.id}", Label)
+        tab.replication_status = self.app.query_one(f"#replication_status_{tab.id}", Static)
+        tab.replication_thread_applier_container = self.app.query_one(
+            f"#replication_thread_applier_container_{tab.id}", ScrollableContainer
+        )
+        tab.replication_thread_applier = self.app.query_one(f"#replication_thread_applier_{tab.id}", Static)
 
         # By default, hide all the panels
-        tab.panel_dashboard.display = False
-        tab.panel_graphs.display = False
-        tab.panel_replication.display = False
-        tab.panel_locks.display = False
-        tab.panel_processlist.display = False
         tab.sparkline.display = False
+        for panel in tab.dolphie.panels.all():
+            self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
 
         # Set panels to be visible for the ones the user specifies
         for panel in dolphie.startup_panels:
-            setattr(dolphie, f"display_{panel}_panel", True)
+            setattr(getattr(dolphie.panels, panel), "visible", True)
 
+        # Set what marker we use for graphs
         graphs = self.app.query(MetricManager.Graph)
         for graph in graphs:
             graph.marker = dolphie.graph_marker
@@ -276,9 +443,6 @@ class TabManager:
         self.tabbed_content.active = f"tab_{tab.id}"
 
         tab.update_topbar()
-
-        # Update the topbar
-        self.app.topbar.host = tab.topbar_data
 
     def get_tab(self, id: int) -> Tab:
         if id in self.tabs:

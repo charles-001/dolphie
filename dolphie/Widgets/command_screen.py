@@ -1,15 +1,22 @@
 from dolphie.Widgets.topbar import TopBar
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import VerticalScroll
+from textual.containers import Center
 from textual.screen import Screen
 from textual.widgets import Static
 
 
 class CommandScreen(Screen):
     CSS = """
-        CommandScreen VerticalScroll {
+        CommandScreen Center {
             padding: 1;
+        }
+        CommandScreen Center > Static {
+            padding-left: 1;
+            padding-right: 1;
+            background: #101626;
+            border: tall #1d253e;
+            width: auto;
         }
     """
 
@@ -26,4 +33,4 @@ class CommandScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield TopBar(read_only=self.read_only, app_version=self.app_version, host=self.host)
-        yield VerticalScroll(Static(self.data))
+        yield Center(Static(self.data, shrink=True))

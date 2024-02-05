@@ -1,25 +1,33 @@
+import textwrap
+
+from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Widgets.topbar import TopBar
 from textual import events, on
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
-from textual.widgets import DataTable, Input, Label, Switch
+from textual.widgets import DataTable, Input, Label, LoadingIndicator, Switch
 
 
 class EventLog(Screen):
     CSS = """
         EventLog Horizontal {
             height: auto;
-            # padding-top: 1;
             align: center top;
-            background: #000718;
+            background: #0a0e1b;
             width: 100%;
         }
         EventLog Horizontal > Label {
             color: #bbc8e8;
             text-style: bold;
             margin-right: -1;
+        }
+        EventLog DataTable {
+            background: #0a0e1b;
+            border: none;
+            overflow-x: hidden;
+            max-height: 100%;
         }
         #info {
             padding-top: 1;
@@ -28,7 +36,7 @@ class EventLog(Screen):
             text-style: bold;
         }
         #search {
-            background: #030918;
+            background: #0a0e1b;
             content-align: right middle;
             padding-left: 1;
             margin: 0;
@@ -41,13 +49,13 @@ class EventLog(Screen):
         }
     """
 
-    def __init__(self, read_only, app_version, host, db):
+    def __init__(self, read_only, app_version, host, db_connection: Database):
         super().__init__()
 
         self.read_only = read_only
         self.app_version = app_version
         self.host = host
-        self.db = db
+        self.db_connection = db_connection
 
         self.levels = {
             "system": {"active": True, "sql": "prio = 'System'"},
@@ -76,6 +84,8 @@ class EventLog(Screen):
 
     def compose(self) -> ComposeResult:
         yield TopBar(read_only=self.read_only, app_version=self.app_version, host=self.host)
+
+        yield LoadingIndicator()
 
         yield Label("[b white]1[/b white] = top of events/[b white]2[/b white] = bottom of events", id="help")
         with Horizontal():
@@ -116,8 +126,8 @@ class EventLog(Screen):
 
         if where_clause:
             query = MySQLQueries.error_log.replace("$1", f"AND ({where_clause})")
-            event_count = self.db.execute(query)
-            data = self.db.fetchall()
+            event_count = self.db_connection.execute(query)
+            data = self.db_connection.fetchall()
 
             if data:
                 table.add_column(f"Event ({event_count})")
@@ -139,7 +149,14 @@ class EventLog(Screen):
 
                     timestamp = f"[#858A97]{row['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}[/#858A97]"
 
-                    table.add_row(timestamp, level, row["message"])
+                    # Wrap the message to 78% of console width so hopefully we don't get a scrollbar
+                    wrapped_message = textwrap.wrap(row["message"], width=round(self.app.console.width * 0.78))
+                    wrapped_message = "\n".join(wrapped_message)
+
+                    line_counts = [cell.count("\n") + 1 for cell in wrapped_message]
+                    height = max(line_counts)
+
+                    table.add_row(timestamp, level, wrapped_message, height=height)
             else:
                 table.display = False
                 info.display = True
@@ -149,3 +166,5 @@ class EventLog(Screen):
             search_text.display = False
             info.display = True
             info.update("Toggle the switches above to filter what events you'd like to see")
+
+        self.query_one(LoadingIndicator).display = False

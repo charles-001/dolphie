@@ -22,11 +22,16 @@ def format_bytes(bytes_value, color=True):
         return f"{formatted_value}{units[unit_index]}"
 
 
-def format_time(seconds):
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    seconds = int(seconds % 60)
-    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+def format_time(time: int, picoseconds=False):
+    if time is None:
+        return "N/A"
+
+    seconds = time / 1e12 if picoseconds else time
+
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 
 def detect_encoding(text):

@@ -4,17 +4,16 @@ import socket
 from datetime import datetime
 from importlib import metadata
 
+import dolphie.DataTypes as DataTypes
+import dolphie.Modules.MetricManager as MetricManager
 import requests
-from dolphie.Modules.Functions import format_number
 from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.MetricManager import MetricManager
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Widgets.new_version_modal import NewVersionModal
 from packaging.version import parse as parse_version
-from rich import box
-from rich.table import Table
 from textual.app import App
+from textual.widgets import Switch
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -40,7 +39,7 @@ class Dolphie:
         self.ssl: dict = {}
         self.config_file: str = None
         self.host_cache_file: str = None
-        self.quick_switch_hosts_file: str = None
+        self.host_setup_file: str = None
         self.debug: bool = False
         self.refresh_interval: int = 1
         self.show_idle_threads: bool = False
@@ -53,7 +52,7 @@ class Dolphie:
         self.host_filter: str = None
         self.query_time_filter: str = 0
         self.query_filter: str = None
-        self.quick_switch_hosts: list = []
+        self.host_setup_available_hosts: list = []
         self.host_cache: dict = {}
         self.host_cache_from_file: dict = {}
         self.startup_panels: str = None
@@ -61,15 +60,28 @@ class Dolphie:
 
         self.reset_runtime_variables()
 
-    def reset_runtime_variables(self, include_panels=True):
-        self.metric_manager = MetricManager()
+    def reset_runtime_variables(self):
+        self.metric_manager = MetricManager.MetricManager()
+        self.replica_manager = DataTypes.ReplicaManager()
+        self.panels = DataTypes.Panels()
 
-        if include_panels:
-            self.display_dashboard_panel: bool = False
-            self.display_processlist_panel: bool = False
-            self.display_replication_panel: bool = False
-            self.display_graphs_panel: bool = False
-            self.display_locks_panel: bool = False
+        # Set the graph switches to what they're currently selected to since we reset metric_manager
+        if self.app:
+            # Set the default panels based on startup_panels to be visible
+            for panel in self.panels.all():
+                setattr(getattr(self.panels, panel), "visible", False)
+            for panel in self.startup_panels:
+                setattr(getattr(self.panels, panel), "visible", True)
+
+            switches = self.app.query(f".switch_container_{self.tab_id} Switch")
+            for switch in switches:
+                switch: Switch
+                metric_instance_name = switch.name
+                metric = switch.id
+
+                metric_instance = getattr(self.metric_manager.metrics, metric_instance_name)
+                metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+                metric_data.visible = switch.value
 
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
@@ -81,6 +93,7 @@ class Dolphie:
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
         self.lock_transactions: dict = {}
+        self.ddl: list = []
         self.pause_refresh: bool = False
         self.previous_binlog_position: int = 0
         self.previous_replica_sbm: int = 0
@@ -92,19 +105,11 @@ class Dolphie:
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
         self.replication_applier_status: dict = {}
-        self.replication_primary_server_uuid: str = None
         self.replica_lag_source: str = None
         self.replica_lag: int = None
         self.active_redo_logs: int = None
         self.mysql_host: str = None
-        self.quick_switched_connection: bool = False
         self.binlog_transaction_compression_percentage: int = None
-
-        # These are for replicas in replication panel
-        self.replica_data: dict = {}
-        self.replica_connections: dict = {}
-        self.replica_tables: dict = {}
-        self.replica_ports: dict = {}
 
         # Types of hosts
         self.galera_cluster: bool = False
@@ -160,12 +165,18 @@ class Dolphie:
         return parsed_source >= parsed_target
 
     def db_connect(self):
-        self.main_db_connection = Database(
-            self.app, self.tab_name, self.host, self.user, self.password, self.socket, self.port, self.ssl
-        )
-        self.secondary_db_connection = Database(
-            self.app, self.tab_name, self.host, self.user, self.password, self.socket, self.port, self.ssl
-        )
+        db_connection_args = {
+            "app": self.app,
+            "tab_name": self.tab_name,
+            "host": self.host,
+            "user": self.user,
+            "password": self.password,
+            "socket": self.socket,
+            "port": self.port,
+            "ssl": self.ssl,
+        }
+        self.main_db_connection = Database(**db_connection_args)
+        self.secondary_db_connection = Database(**db_connection_args, save_connection_id=False)
 
         global_variables = self.main_db_connection.fetch_status_and_variables("variables")
 
@@ -243,8 +254,8 @@ class Dolphie:
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
 
-        # Add host to quick switch hosts file if it doesn't exist
-        with open(self.quick_switch_hosts_file, "a+") as file:
+        # Add host to host setup file if it doesn't exist
+        with open(self.host_setup_file, "a+") as file:
             file.seek(0)
             lines = file.readlines()
 
@@ -255,7 +266,7 @@ class Dolphie:
 
             if host not in lines:
                 file.write(host)
-                self.quick_switch_hosts.append(host[:-1])  # remove the \n
+                self.host_setup_available_hosts.append(host[:-1])  # remove the \n
 
     def monitor_read_only_change(self):
         current_ro_status = self.global_variables.get("read_only")
@@ -279,48 +290,6 @@ class Dolphie:
         value = return_data[1]
         if value:
             setattr(self, variable, value)
-
-    def create_user_stats_table(self):
-        if not self.performance_schema_enabled:
-            return False
-
-        columns = {
-            "User": {"field": "user", "format_number": False},
-            "Active": {"field": "current_connections", "format_number": True},
-            "Total": {"field": "total_connections", "format_number": True},
-            "Rows Read": {"field": "rows_examined", "format_number": True},
-            "Rows Sent": {"field": "rows_sent", "format_number": True},
-            "Rows Updated": {"field": "rows_affected", "format_number": True},
-            "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
-            "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
-            "Plugin": {"field": "plugin", "format_number": False},
-            "Password Expire": {"field": "password_expires_in", "format_number": False},
-        }
-
-        table = Table(header_style="bold white", box=box.ROUNDED, style="table_border")
-        for column, data in columns.items():
-            table.add_column(column, no_wrap=True)
-
-        if self.is_mysql_version_at_least("5.7"):
-            self.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
-        else:
-            self.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics_56)
-
-        users = self.secondary_db_connection.fetchall()
-        for user in users:
-            row_values = []
-
-            for column, data in columns.items():
-                value = user.get(data["field"], "N/A")
-
-                if data["format_number"]:
-                    row_values.append(format_number(value) if value else "0")
-                else:
-                    row_values.append(value or "")
-
-            table.add_row(*row_values)
-
-        return table
 
     def load_host_cache_file(self):
         if os.path.exists(self.host_cache_file):
@@ -379,10 +348,10 @@ class Dolphie:
         if not self.global_status.get("Innodb_lsn_current"):
             self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
 
-    def fetch_replication_data(self, replica_object=None):
+    def fetch_replication_data(self, replica: DataTypes.Replica = None):
         use_version = self.mysql_version
-        if replica_object:
-            use_version = replica_object["mysql_version"]
+        if replica:
+            use_version = replica.mysql_version
 
         if self.heartbeat_table:
             query = MySQLQueries.heartbeat_replica_lag
@@ -397,9 +366,9 @@ class Dolphie:
             replica_lag_source = None
 
         replica_lag_data = None
-        if replica_object:
-            replica_object["cursor"].execute(query)
-            replica_lag_data = replica_object["cursor"].fetchone()
+        if replica:
+            replica.connection.execute(query)
+            replica_lag_data = replica.connection.fetchone()
         else:
             self.main_db_connection.execute(MySQLQueries.replication_status)
             replica_lag_data = self.main_db_connection.fetchone()
@@ -415,20 +384,17 @@ class Dolphie:
                 self.replication_applier_status = None
                 if (
                     self.is_mysql_version_at_least("8.0")
-                    and self.display_replication_panel
+                    and self.panels.replication.visible
                     and self.global_variables.get("slave_parallel_workers", 0) > 1
                 ):
                     self.main_db_connection.execute(MySQLQueries.replication_applier_status)
                     self.replication_applier_status = self.main_db_connection.fetchall()
 
-                # Save this for the errant TRX check
-                self.replication_primary_server_uuid = self.replication_status.get("Master_UUID")
-
         replica_lag = None
         if replica_lag_data and replica_lag_data["Seconds_Behind_Master"] is not None:
             replica_lag = int(replica_lag_data["Seconds_Behind_Master"])
 
-        if replica_object:
+        if replica:
             return replica_lag_source, replica_lag
         else:
             # Save the previous replica lag for to determine Speed data point

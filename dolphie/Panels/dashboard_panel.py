@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.TabManager import Tab
 from dolphie.Panels import replication_panel
-from rich import box
 from rich.style import Style
 from rich.table import Table
 
@@ -15,28 +14,12 @@ def create_panel(tab: Tab) -> Table:
     global_variables = dolphie.global_variables
     binlog_status = dolphie.binlog_status
 
-    tables_to_add = []
-    uptime = str(timedelta(seconds=global_status["Uptime"]))
-
-    dashboard_grid = Table.grid()
-    dashboard_grid.add_column()
-    dashboard_grid.add_column()
-    dashboard_grid.add_column()
-
-    table_title_style = Style(bold=True)
-    table_box = box.ROUNDED
-    table_line_color = "table_border"
+    table_title_style = Style(color="#bbc8e8", bold=True)
 
     ################
     # Information #
     ###############
-    table_information = Table(
-        show_header=False,
-        box=table_box,
-        title="Host Information",
-        title_style=table_title_style,
-        style=table_line_color,
-    )
+    table_information = Table(show_header=False, box=None, title="Host Information", title_style=table_title_style)
 
     if dolphie.replicaset:
         host_type = "InnoDB ReplicaSet"
@@ -54,8 +37,8 @@ def create_panel(tab: Tab) -> Table:
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
     replicas = 0
-    if dolphie.replica_data:
-        replicas = len(dolphie.replica_data)
+    if dolphie.replica_manager.available_replicas:
+        replicas = len(dolphie.replica_manager.available_replicas)
 
     table_information.add_column()
     table_information.add_column(min_width=25, max_width=27)
@@ -64,7 +47,7 @@ def create_panel(tab: Tab) -> Table:
         "[label]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
     )
     table_information.add_row("[label]Type", host_type)
-    table_information.add_row("[label]Uptime", uptime)
+    table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
     table_information.add_row("[label]Runtime", f"{runtime} [label]latency:[/label] {dolphie.refresh_latency}s")
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
@@ -86,18 +69,12 @@ def create_panel(tab: Tab) -> Table:
         ),
     )
 
-    tables_to_add.append(table_information)
+    tab.dashboard_host_information.update(table_information)
 
     ###########
     # InnoDB  #
     ###########
-    table_innodb = Table(
-        show_header=False,
-        box=table_box,
-        title="InnoDB",
-        title_style=table_title_style,
-        style=table_line_color,
-    )
+    table_innodb = Table(show_header=False, box=None, title="InnoDB", title_style=table_title_style)
 
     table_innodb.add_column()
     table_innodb.add_column(width=9)
@@ -146,21 +123,19 @@ def create_panel(tab: Tab) -> Table:
     table_innodb.add_row("[label]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
     table_innodb.add_row("[label]History List", format_number(history_list_length))
 
-    tables_to_add.append(table_innodb)
+    tab.dashboard_innodb.update(table_innodb)
 
     ##############
     # Binary Log #
     ##############
-    table_primary = Table()
+    table_primary = Table(show_header=False, box=None, title="Binary Log", title_style=table_title_style)
 
-    if binlog_status:
-        table_primary = Table(
-            show_header=False,
-            box=table_box,
-            title="Binary Log",
-            title_style=table_title_style,
-            style=table_line_color,
-        )
+    if not binlog_status:
+        table_primary.add_column(justify="center")
+        table_primary.add_row("\n\n\n[b][label]Disabled")
+    else:
+        table_primary.add_column()
+        table_primary.add_column(max_width=40)
 
         if dolphie.previous_binlog_position == 0:
             diff_binlog_position = 0
@@ -178,8 +153,6 @@ def create_panel(tab: Tab) -> Table:
             elif binlog_cache_mem > binlog_cache_disk:
                 binlog_cache = round(100 - (binlog_cache_disk / binlog_cache_mem), 2)
 
-        table_primary.add_column()
-        table_primary.add_column(max_width=40)
         table_primary.add_row("[label]File name", binlog_status["File"])
         table_primary.add_row(
             "[label]Position",
@@ -213,31 +186,27 @@ def create_panel(tab: Tab) -> Table:
 
         table_primary.add_row("[label]Compression", binlog_compression)
 
-        tables_to_add.append(table_primary)
-
         # Save some global_variables to be used in next refresh
         if dolphie.binlog_status:
             dolphie.previous_binlog_position = dolphie.binlog_status["Position"]
 
+    tab.dashboard_binary_log.update(table_primary)
+
     ###############
     # Replication #
     ###############
-    if dolphie.replication_status and not dolphie.display_replication_panel:
-        tables_to_add.append(replication_panel.create_replication_table(tab, dashboard_table=True))
-
+    if dolphie.replication_status and not dolphie.panels.replication.visible:
+        tab.dashboard_replication.display = True
+        tab.dashboard_replication.update(replication_panel.create_replication_table(tab, dashboard_table=True))
+    else:
+        tab.dashboard_replication.display = False
     ###############
     # Statistics #
     ###############
-    table_stats = Table(
-        show_header=False,
-        box=table_box,
-        title="Statistics/s",
-        title_style=table_title_style,
-        style=table_line_color,
-    )
+    table_stats = Table(show_header=False, box=None, title="Statistics/s", title_style=table_title_style)
 
     table_stats.add_column()
-    table_stats.add_column(min_width=7)
+    table_stats.add_column(min_width=6)
 
     # Add DML statistics
     metrics = dolphie.metric_manager.metrics.dml
@@ -259,8 +228,4 @@ def create_panel(tab: Tab) -> Table:
         else:
             table_stats.add_row(f"[label]{label}", "0")
 
-    tables_to_add.append(table_stats)
-
-    dashboard_grid.add_row(*tables_to_add)
-
-    return dashboard_grid
+    tab.dashboard_statistics.update(table_stats)

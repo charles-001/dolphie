@@ -12,25 +12,23 @@
   </a>
 </p>
 
-<img width="1429" alt="Screenshot 2023-08-22 at 12 11 04 AM" src="https://github.com/charles-001/dolphie/assets/13244625/3030f08d-2b85-449a-8438-12a54101c58a">
+![Untitled](https://github.com/charles-001/dolphie/assets/13244625/d1292ddc-146c-413c-8a15-9d0cc928ab50)
 <p></p>
-<img width="1427" alt="Screenshot 2023-08-22 at 12 05 29 AM" src="https://github.com/charles-001/dolphie/assets/13244625/41c7b1db-e404-42ee-9721-e0d73cfa14f7">
+<img width="1498" alt="Screenshot 2024-02-05 at 6 05 46 AM" src="https://github.com/charles-001/dolphie/assets/13244625/d35ab166-dc80-4911-ab78-66b4085c01de">
 <p></p>
-<img width="1383" src="https://github.com/charles-001/dolphie/assets/13244625/93021d46-6e72-4f6c-aabd-afc48ec0d71b">
+<img width="1498" alt="Screenshot 2024-02-05 at 6 06 06 AM" src="https://github.com/charles-001/dolphie/assets/13244625/3afca5ce-f8e0-44a9-96a4-a5b27fb5d29b">
 <p></p>
-<img width="1428" alt="Screenshot 2023-08-22 at 12 45 19 AM" src="https://github.com/charles-001/dolphie/assets/13244625/3265e19d-bdd7-461d-b7fa-a72a061d3563">
+<img width="1500" alt="Screenshot 2024-02-05 at 6 07 41 AM" src="https://github.com/charles-001/dolphie/assets/13244625/5fbb21e2-a442-4d5d-8b40-f33546fb8b2e">
 <p></p>
-<img width="1429" alt="Screenshot 2023-08-22 at 12 54 32 AM" src="https://github.com/charles-001/dolphie/assets/13244625/73582b19-81ad-4cfe-a814-f9b20afc6903">
+<img width="1496" alt="Screenshot 2024-02-05 at 6 08 17 AM" src="https://github.com/charles-001/dolphie/assets/13244625/afea5a1f-5b3e-454c-8b81-ba177c61dd56">
 <p></p>
-<img width="1430" alt="Screenshot 2023-08-22 at 12 42 23 AM" src="https://github.com/charles-001/dolphie/assets/13244625/20545496-f6fa-4b41-8cbf-91ec7f370249">
+<img width="1500" alt="Screenshot 2024-02-05 at 6 14 14 AM" src="https://github.com/charles-001/dolphie/assets/13244625/27b57485-a6ad-44a6-8f9d-cfeed6a5dc65">
 <p></p>
-<img width="1428" alt="Screenshot 2023-08-22 at 12 08 33 AM" src="https://github.com/charles-001/dolphie/assets/13244625/fca0bfc6-a000-4719-8908-02cbfdf2e476">
+<img width="1503" alt="Screenshot 2024-02-05 at 6 08 36 AM" src="https://github.com/charles-001/dolphie/assets/13244625/89a02467-869c-45ca-9863-aaed333397f5">
 <p></p>
-<img width="1636" alt="Screenshot 2023-08-17 at 6 38 00 AM" src="https://github.com/charles-001/dolphie/assets/13244625/657cd4b0-0ff7-49df-a176-e23bf6fa7f9b">
+<img width="1496" alt="Screenshot 2024-02-05 at 6 08 55 AM" src="https://github.com/charles-001/dolphie/assets/13244625/c707bfcd-f7d9-4868-a907-e7fb72929bd7">
 <p></p>
-<img width="1428" alt="Screenshot 2023-08-22 at 12 20 37 AM" src="https://github.com/charles-001/dolphie/assets/13244625/d7625991-8960-4451-9167-99e6f24f3367">
-<p></p>
-<img width="1427" alt="Screenshot 2023-08-22 at 12 44 35 AM" src="https://github.com/charles-001/dolphie/assets/13244625/47141444-5827-495c-84a6-d810be672711">
+<img width="1500" alt="Screenshot 2024-02-05 at 6 09 18 AM" src="https://github.com/charles-001/dolphie/assets/13244625/0164cac3-c55d-412f-841a-9b1ff0ea21c0">
 
 
 ## Installation
@@ -83,8 +81,8 @@ options:
                         Config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
   -f HOST_CACHE_FILE, --host-cache-file HOST_CACHE_FILE
                         Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format: ip=hostname [default: ~/dolphie_host_cache]
-  -q QUICK_SWITCH_HOSTS_FILE, --quick-switch-hosts-file QUICK_SWITCH_HOSTS_FILE
-                        Specify where the file is that stores the hosts you connect to for quick switching [default: ~/dolphie_quick_switch_hosts]
+  -q HOST_SETUP_FILE, --host-setup-file HOST_SETUP_FILE
+                        Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
   -l LOGIN_PATH, --login-path LOGIN_PATH
                         Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
   -r REFRESH_INTERVAL, --refresh_interval REFRESH_INTERVAL
@@ -96,7 +94,7 @@ options:
   --ssl-cert SSL_CERT   Path to the file that contains a PEM-formatted client certificate
   --ssl-key SSL_KEY     Path to the file that contains a PEM-formatted private key for the client certificate
   --panels STARTUP_PANELS
-                        What panels to display on startup separated by a comma. Supports: dashboard/replication/processlist/graphs [default: dashboard,processlist]
+                        What panels to display on startup separated by a comma. Supports: dashboard/replication/processlist/graphs/locks [default: dashboard,processlist]
   --graph-marker GRAPH_MARKER
                         What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --show-trxs-only      Start with only showing threads that have an active transaction

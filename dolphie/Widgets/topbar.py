@@ -5,31 +5,22 @@ from textual.widgets import Label
 
 
 class TopBar(Container):
-    app_version = reactive("", init=False)
     host = reactive("", init=False)
 
-    def __init__(self, read_only="", app_version="", host="", help=""):
+    def __init__(self, read_only="", app_version="", host="", help="press [b highlight]q[/b highlight] to return"):
         super().__init__()
-
-        self.help = "press [b]q[/b] to return"
-        if help:
-            self.help = help
 
         self.topbar_title = Label(
             f" [b light_blue]dolphie[/b light_blue] :dolphin: [light_blue]v{app_version}", id="topbar_title"
         )
         self.topbar_host = Label(self.host, id="topbar_host")
-        self.topbar_help = Label(self.help, id="topbar_help")
+        self.topbar_help = Label(help, id="topbar_help")
 
         self.read_only = read_only
-        self.app_version = app_version
 
-        if not host:
+        if host is None:
             host = ""
         self.host = host
-
-    def watch_app_version(self):
-        self.topbar_title.update(f" [b light_blue]dolphie[/b light_blue] :dolphin: [light_blue]v{self.app_version}")
 
     def watch_host(self):
         if self.read_only:

@@ -8,8 +8,8 @@ from textual.widgets import Button, Label
 class NewVersionModal(ModalScreen):
     CSS = """
         NewVersionModal > Vertical {
-            background: #121626;
-            border: thick #20263d;
+            background: #131626;
+            border: tall #384673;
             height: auto;
             width: auto;
         }
@@ -47,7 +47,7 @@ class NewVersionModal(ModalScreen):
             yield Label(f"Current version: [highlight]{self.current_version}")
             yield Label(f"Latest version:  [highlight]{self.latest_version}")
             yield Label("Please update to the latest version at your convenience")
-            yield Label("Find more details at [light_blue]https://github.com/charles-001/dolphie")
+            yield Label("[dark_gray]Find more details at https://github.com/charles-001/dolphie")
             with Horizontal():
                 yield Button("OK", variant="primary")
 
