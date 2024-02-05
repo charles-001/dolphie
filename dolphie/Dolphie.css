@@ -303,12 +303,12 @@ Button.-primary {
     border-bottom: tall #151b2b;
 }
 Button.-primary:hover {
-    background: #1d336a;
+    background: #203875;
     border-top: tall #4a62a4;
     border-bottom: tall #151b2b;
 }
 Button.-primary:focus {
-    background: #1d336a;
+    background: #203875;
     border-top: tall #4a62a4;
     border-bottom: tall #151b2b;
     text-style: bold;
@@ -319,13 +319,13 @@ Button {
     border-bottom: tall #171922;
 }
 Button:hover {
-    background: #303650;
-    border-top: tall #60678d;
+    background: #383e5c;
+    border-top: tall #69709a;
     border-bottom: tall #171922;
 }
 Button:focus {
-    background: #303650;
-    border-top: tall #60678d;
+    background: #383e5c;
+    border-top: tall #69709a;
     border-bottom: tall #171922;
     text-style: bold;
 }
