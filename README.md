@@ -12,7 +12,7 @@
   </a>
 </p>
 
-<img width="1498" alt="Screenshot 2024-02-05 at 6 05 30 AM" src="https://github.com/charles-001/dolphie/assets/13244625/203d6c6a-a8a2-432f-8e9f-a408bbb8326c">
+![Untitled](https://github.com/charles-001/dolphie/assets/13244625/d1292ddc-146c-413c-8a15-9d0cc928ab50)
 <p></p>
 <img width="1498" alt="Screenshot 2024-02-05 at 6 05 46 AM" src="https://github.com/charles-001/dolphie/assets/13244625/d35ab166-dc80-4911-ab78-66b4085c01de">
 <p></p>
