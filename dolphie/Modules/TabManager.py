@@ -443,7 +443,7 @@ class TabManager:
             tab.manual_tab_name = new_name
         else:
             if not tab.manual_tab_name:
-                new_name = f"{tab.dolphie.host[:25]}:{tab.dolphie.port}"
+                new_name = f"{tab.dolphie.host[:24]}:{tab.dolphie.port}"
 
         if new_name:
             tab_content = self.tabbed_content.get_tab(f"tab_{tab_id}")
