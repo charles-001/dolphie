@@ -114,6 +114,10 @@ class CommandModal(ModalScreen):
             kill_radio_buttons.focus()
 
             input.placeholder = "Select an option from above"
+        elif self.command == "rename_tab":
+            input.placeholder = "Colors can be added by wrapping them in []"
+            input.styles.width = 50
+            input.focus()
         else:
             input.focus()
 

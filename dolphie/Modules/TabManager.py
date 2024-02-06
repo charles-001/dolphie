@@ -33,6 +33,7 @@ class Tab:
     id: int
     name: str
     dolphie: Dolphie
+    manual_tab_name: bool = False
 
     worker: Worker = None
     worker_timer: Timer = None
@@ -434,6 +435,19 @@ class TabManager:
 
         tab = self.get_tab(tab_id)
         tab.queue_for_removal = True
+
+    def rename_tab(self, tab_id: int, new_name: str = None):
+        tab = self.get_tab(tab_id)
+
+        if new_name:
+            tab.manual_tab_name = new_name
+        else:
+            if not tab.manual_tab_name:
+                new_name = f"{tab.dolphie.host[:25]}:{tab.dolphie.port}"
+
+        if new_name:
+            tab_content = self.tabbed_content.get_tab(f"tab_{tab_id}")
+            tab_content.update(new_name)
 
     def switch_tab(self, tab_id: int):
         tab = self.get_tab(tab_id)

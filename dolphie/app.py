@@ -463,6 +463,7 @@ class DolphieApp(App):
                 tab.loading_indicator.display = True
 
                 dolphie.db_connect()
+                self.tab_manager.rename_tab(tab.id)
 
             dolphie.worker_start_time = datetime.now()
             dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -731,7 +732,7 @@ class DolphieApp(App):
         dolphie = self.dolphie
 
         self.tab_manager = TabManager(self)
-        await self.tab_manager.create_tab("Main", dolphie)
+        await self.tab_manager.create_tab(tab_name="Initial Tab", dolphie=dolphie)
 
         dolphie.load_host_cache_file()
         dolphie.check_for_update()
@@ -955,19 +956,21 @@ class DolphieApp(App):
                 tab.worker_timer.stop()
                 self.run_worker_main(tab.id)
         elif key == "plus":
+            await self.tab_manager.create_tab(tab_name="New Tab", dolphie=dolphie)
+            self.tab.topbar.host = ""
+            self.tab.host_setup()
+        elif key == "equals_sign":
 
-            async def command_get_input(tab_name):
-                await self.tab_manager.create_tab(tab_name, dolphie)
-                self.tab.topbar.host = ""
-                self.tab.host_setup()
+            def command_get_input(tab_name):
+                self.tab_manager.rename_tab(tab.id, tab_name)
 
             self.app.push_screen(
-                CommandModal(command="new_tab", message="What would you like to name the new tab?"),
+                CommandModal(command="rename_tab", message="What would you like to rename the tab to?"),
                 command_get_input,
             )
         elif key == "minus":
             if tab.id == 1:
-                self.notify("Main tab cannot be removed")
+                self.notify("Removing all tabs is not permitted", severity="error")
                 return
             else:
                 await self.tab_manager.remove_tab(tab.id)
@@ -1287,6 +1290,7 @@ class DolphieApp(App):
                 "`": "Open Host Setup",
                 "+": "Create a new tab",
                 "-": "Remove the current tab",
+                "=": "Rename the current tab",
                 "a": "Toggle additional processlist columns",
                 "c": "Clear all filters set",
                 "d": "Display all databases",
