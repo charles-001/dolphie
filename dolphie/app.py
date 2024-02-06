@@ -494,7 +494,20 @@ class DolphieApp(App):
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
             dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
 
-            dolphie.fetch_replication_data()
+            dolphie.previous_replica_sbm = dolphie.replica_lag
+            dolphie.replica_lag_source, dolphie.replica_lag, dolphie.replication_status = (
+                replication_panel.fetch_replication_data(tab)
+            )
+
+            # If using MySQL 8, fetch the replication applier status data
+            if (
+                dolphie.is_mysql_version_at_least("8.0")
+                and dolphie.panels.replication.visible
+                and dolphie.global_variables.get("slave_parallel_workers", 0) > 1
+            ):
+                dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
+                dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
+
             dolphie.massage_metrics_data()
 
             if dolphie.group_replication or dolphie.innodb_cluster:
@@ -1297,7 +1310,7 @@ class DolphieApp(App):
                 "u": "List active connected users and their statistics",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
                 "z": "Display all entries in the host cache",
-                "space": "Force a manual refresh of all panels",
+                "space": "Force a manual refresh of all panels except replicas",
                 "ctrl+a": "Switch to the previous tab",
                 "ctrl+d": "Switch to the next tab",
             }
@@ -1319,10 +1332,7 @@ class DolphieApp(App):
             datapoints = {
                 "Read Only": "If the host is in read-only mode",
                 "Read Hit": "The percentage of how many reads are from InnoDB buffer pool compared to from disk",
-                "Lag": (
-                    "Retrieves metric from: Default -> SHOW SLAVE STATUS, HB -> Heartbeat table, PS -> Performance"
-                    " Schema"
-                ),
+                "Lag": ("Retrieves metric from: Default -> SHOW SLAVE STATUS, HB -> Heartbeat table"),
                 "Chkpt Age": (
                     "This depicts how close InnoDB is before it starts to furiously flush dirty data to disk "
                     "(Lower is better)"

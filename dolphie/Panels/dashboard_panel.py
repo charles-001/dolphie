@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from dolphie.Modules.Functions import format_bytes, format_number
+from dolphie.Modules.MetricManager import MetricData
 from dolphie.Modules.TabManager import Tab
 from dolphie.Panels import replication_panel
 from rich.style import Style
@@ -222,9 +223,10 @@ def create_panel(tab: Tab) -> Table:
     }
 
     for label, metric_name in metric_labels.items():
-        if getattr(metrics, metric_name).values:
-            metric_value = getattr(metrics, metric_name).values[-1]
-            table_stats.add_row(f"[label]{label}", format_number(metric_value))
+        metric_data: MetricData = getattr(metrics, metric_name)
+
+        if metric_data.values:
+            table_stats.add_row(f"[label]{label}", format_number(metric_data.values[-1]))
         else:
             table_stats.add_row(f"[label]{label}", "0")
 

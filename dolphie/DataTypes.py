@@ -14,6 +14,9 @@ class Replica:
     host: str
     connection: Database = None
     table: Table = None
+    replication_status: Dict[str, str] = None
+    lag_source: str = None
+    lag: int = None
     previous_sbm: int = 0
     mysql_version: str = None
 

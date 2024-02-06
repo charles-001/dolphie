@@ -55,7 +55,7 @@ class MySQLQueries:
             $1
     """
     locks_query: str = """
-        SELECT
+        SELECT /*+ MAX_EXECUTION_TIME(10000) */
             wait_age,
             locked_type,
             waiting_pid,

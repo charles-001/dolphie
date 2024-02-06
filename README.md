@@ -147,15 +147,14 @@ Environment variables support these options:
 6. BACKUP_ADMIN (MySQL 8 only)
 
 ## Features
+- Tabs at the top for multiple connections
 - Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer (see Help screenshot for panels available)
 - Graphs for many metrics that can give you great insight into how your database is performing
 - Sparkline to show queries per second in a live view
-- Quick switch host for connecting to different hosts instead of reloading the application. It keeps a history of the servers you connect to that provides autocompletion for hostnames
-- Prefers Performance Schema over Processlist if it's turned on for listing queries. Can be switched to use Processlist by pressing key "1" (or using parameter) since P_S can truncate query length for explaining queries
-- 3 options for finding replica lag in this order of precedence:
+- 2 options for finding replica lag in this order of precedence:
   - `pt-heartbeat table` (specified by `--heartbeat-table`)
-  - `Performance Schema` (MySQL 8 only)
   - `SHOW SLAVE STATUS`
+- Keeps a history of the servers you connect to that provides autocompletion for hostnames in the Host Setup modal
 - Host cache file. This provides users a way to specify hostnames for IPs when their network's DNS can't resolve them. An example use case for this is when you connect to your work's VPN and DNS isn't available to resolve IPs. In my opinion, it's a lot easier to look at hostnames than IPs!
 - Supports encrypted login credentials via `mysql_config_editor`
 - Automatic conversion of large numbers & bytes to human-readable

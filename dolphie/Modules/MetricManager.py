@@ -502,12 +502,14 @@ class MetricManager:
         )
         self.redo_log_size = max(innodb_redo_log_capacity, innodb_log_file_size)
 
-        self.update_metrics_with_per_second_values()
+        self.update_metrics_per_second_values()
+
         self.update_metrics_replication_lag()
         self.update_metrics_checkpoint()
         self.update_metrics_adaptive_hash_index_hit_ratio()
         self.update_metrics_locks()
-        self.update_metrics_with_last_value()
+
+        self.update_metrics_last_value()
 
         self.metrics.redo_log.redo_log_size = self.redo_log_size
 
@@ -515,7 +517,7 @@ class MetricManager:
         if metric_data.save_history:
             metric_data.values.append(value)
 
-    def update_metrics_with_per_second_values(self):
+    def update_metrics_per_second_values(self):
         for metric_instance in self.metrics.__dict__.values():
             added = False
 
@@ -583,8 +585,7 @@ class MetricManager:
             if hasattr(metric_instance, metric_name):
                 metric_data: MetricData = getattr(metric_instance, metric_name)
 
-                last_value = metric_data.last_value
-                metric_diff = metric_source.get(metric_name, 0) - last_value
+                metric_diff = metric_source.get(metric_name, 0) - metric_data.last_value
                 metric_per_sec = round(metric_diff / self.polling_latency)
 
                 if format:
@@ -615,10 +616,19 @@ class MetricManager:
             return max_checkpoint_age_bytes, checkpoint_age_sync_flush_bytes, checkpoint_age_bytes
 
     def get_metric_adaptive_hash_index(self, format=True):
-        ahi_status = self.global_variables.get("innodb_adaptive_hash_index")
-
-        if ahi_status == "OFF":
+        if self.global_variables.get("innodb_adaptive_hash_index") == "OFF":
             return "OFF" if format else None
+        elif format:
+            smoothed_hit_ratio = self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio
+            if smoothed_hit_ratio is None:
+                return "N/A"
+            else:
+                if smoothed_hit_ratio <= 0.01:
+                    return "Inactive"
+
+                color_code = "green" if smoothed_hit_ratio > 70 else "yellow" if smoothed_hit_ratio > 50 else "red"
+
+                return f"[{color_code}]{smoothed_hit_ratio:.2f}%[/{color_code}]"
 
         current_hits = self.innodb_metrics.get("adaptive_hash_searches", 0)
         current_misses = self.innodb_metrics.get("adaptive_hash_searches_btree", 0)
@@ -626,33 +636,23 @@ class MetricManager:
         hits = current_hits - self.metrics.adaptive_hash_index.adaptive_hash_searches.last_value
         misses = current_misses - self.metrics.adaptive_hash_index.adaptive_hash_searches_btree.last_value
         total_hits_misses = hits + misses
-
         if total_hits_misses <= 0:
-            return "Inactive" if format else None
+            return None
 
         hit_ratio = (hits / total_hits_misses) * 100
 
-        if format:
-            color_code = (
-                "green"
-                if self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio > 70
-                else "yellow" if self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio > 50 else "red"
-            )
+        smoothing_factor = 0.5
+        smoothed_hit_ratio = self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio
 
-            return f"[{color_code}]{self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio:.2f}%[/{color_code}]"
+        if smoothed_hit_ratio is None:
+            smoothed_hit_ratio = hit_ratio
         else:
-            smoothing_factor = 0.5
-            smoothed_hit_ratio = self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio
+            smoothed_hit_ratio = (1 - smoothing_factor) * smoothed_hit_ratio + smoothing_factor * hit_ratio
+        self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio = smoothed_hit_ratio
 
-            if smoothed_hit_ratio is None:
-                smoothed_hit_ratio = hit_ratio
-            else:
-                smoothed_hit_ratio = (1 - smoothing_factor) * smoothed_hit_ratio + smoothing_factor * hit_ratio
-            self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio = smoothed_hit_ratio
+        return smoothed_hit_ratio
 
-            return smoothed_hit_ratio
-
-    def update_metrics_with_last_value(self):
+    def update_metrics_last_value(self):
         # We set the last value for specific metrics that need it so they can get per second values
         for metric_instance in self.metrics.__dict__.values():
             if metric_instance.metric_source == MetricSource.global_status:

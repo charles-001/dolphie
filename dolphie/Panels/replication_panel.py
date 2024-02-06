@@ -223,29 +223,25 @@ def create_replica_panel(tab: Tab):
         tab.replicas_container.display = False
 
 
-def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica: Replica = None) -> Table:
+def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica = None) -> Table:
     dolphie = tab.dolphie
 
-    # When replica_thread_id is specified, that means we're creating a table for a replica and not replication
+    # When replica is specified, that means we're creating a table for a replica and not replication
     if replica:
-        if replica.previous_sbm is not None:
-            replica_previous_replica_sbm = replica.previous_sbm
+        data = replica.replication_status
+        replica_previous_replica_sbm = replica.previous_sbm
 
-        sbm_source, data["Seconds_Behind_Master"] = dolphie.fetch_replication_data(replica=replica)
+        replica_sbm_source = replica.lag_source
+        replica_sbm = replica.lag
     else:
         data = dolphie.replication_status
         replica_previous_replica_sbm = dolphie.previous_replica_sbm
 
-        sbm_source = dolphie.replica_lag_source
-        data["Seconds_Behind_Master"] = dolphie.replica_lag
+        replica_sbm_source = dolphie.replica_lag_source
+        replica_sbm = dolphie.replica_lag
 
     speed = 0
-    if data["Seconds_Behind_Master"] is not None:
-        replica_sbm = data["Seconds_Behind_Master"]
-
-        if replica:
-            replica.previous_sbm = replica_sbm
-
+    if replica_sbm is not None:
         if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
             speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.polling_latency)
 
@@ -309,10 +305,10 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
     )
 
     lag_source = "Lag"
-    if sbm_source:
-        lag_source = f"Lag ({sbm_source})"
+    if replica_sbm_source:
+        lag_source = f"Lag ({replica_sbm_source})"
 
-    if data["Seconds_Behind_Master"] is None or data["Slave_SQL_Running"].lower() == "no":
+    if replica_sbm is None or data["Slave_SQL_Running"].lower() == "no":
         table.add_row(f"[label]{lag_source}", "")
     else:
         table.add_row(
@@ -355,10 +351,7 @@ def create_replication_table(tab: Tab, data=None, dashboard_table=False, replica
         ]
 
         for status_filter in replication_status_filtering:
-            if replica:
-                value = data.get(status_filter)
-            else:
-                value = dolphie.replication_status.get(status_filter)
+            value = data.get(status_filter)
 
             status_filter_formatted = f"Filter: {status_filter.split('Replicate_')[1]}"
             if value:
@@ -512,6 +505,35 @@ def create_group_replication_member_table(tab: Tab):
     return group_replica_tables
 
 
+def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
+    dolphie = tab.dolphie
+
+    connection = dolphie.main_db_connection if not replica else replica.connection
+
+    # Determine which replication lag source and query to use
+    if dolphie.heartbeat_table:
+        replica_lag_source = "HB"
+        replica_lag_query = MySQLQueries.heartbeat_replica_lag
+    else:
+        replica_lag_source = None
+        replica_lag_query = MySQLQueries.replication_status
+
+    connection.execute(MySQLQueries.replication_status)
+    replica_lag_data = connection.fetchone()
+    replication_status = replica_lag_data
+
+    # Use an alternative method to detect replication lag if available
+    if replication_status and replica_lag_source:
+        connection.execute(replica_lag_query)
+        replica_lag_data = connection.fetchone()
+
+    # Extract lag value from fetched data
+    replica_lag = replica_lag_data.get("Seconds_Behind_Master") if replica_lag_data else None
+    replica_lag = int(replica_lag) if replica_lag is not None else None
+
+    return replica_lag_source, replica_lag, replication_status
+
+
 def fetch_replicas(tab: Tab):
     dolphie = tab.dolphie
 
@@ -568,11 +590,10 @@ def fetch_replicas(tab: Tab):
         # If we have a replica connection, we fetch its replication status
         if replica.connection:
             try:
-                replica.connection.execute(MySQLQueries.replication_status)
-
-                replica_data = replica.connection.fetchone()
-                if replica_data:
-                    replica.table = create_replication_table(tab, data=replica_data, replica=replica)
+                replica.previous_sbm = replica.lag
+                replica.lag_source, replica.lag, replica.replication_status = fetch_replication_data(tab, replica)
+                if replica.replication_status:
+                    replica.table = create_replication_table(tab, replica=replica)
             except ManualException as e:
                 replica_error = e.reason
 
