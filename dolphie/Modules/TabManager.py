@@ -89,8 +89,6 @@ class Tab:
 
     cluster_data: Static = None
 
-    queue_for_removal: bool = False
-
     def disconnect(self, update_topbar: bool = True):
         if self.worker_timer:
             self.worker_timer.stop()
@@ -433,9 +431,6 @@ class TabManager:
     async def remove_tab(self, tab_id: int):
         await self.tabbed_content.remove_pane(f"tab_{self.get_tab(tab_id).id}")
 
-        tab = self.get_tab(tab_id)
-        tab.queue_for_removal = True
-
     def rename_tab(self, tab_id: int, new_name: str = None):
         tab = self.get_tab(tab_id)
 
@@ -443,7 +438,13 @@ class TabManager:
             tab.manual_tab_name = new_name
         else:
             if not tab.manual_tab_name:
-                new_name = f"{tab.dolphie.host[:24]}:{tab.dolphie.port}"
+                # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
+                host = tab.dolphie.mysql_host.split(":")[0][:24]
+                # If the last character isn't a letter or number, remove it
+                if not host[-1].isalnum():
+                    host = host[:-1]
+
+                new_name = f"{host}:[dark_gray]{tab.dolphie.port}"
 
         if new_name:
             tab_content = self.tabbed_content.get_tab(f"tab_{tab_id}")
@@ -467,7 +468,6 @@ class TabManager:
 
         for tab in self.tabs.values():
             tab: Tab
-            if not tab.queue_for_removal:
-                all_tabs.append(tab.id)
+            all_tabs.append(tab.id)
 
         return all_tabs

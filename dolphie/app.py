@@ -448,14 +448,6 @@ class DolphieApp(App):
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
 
-        # We have to queue the tab for removal because if we don't do it in the worker thread it will
-        # be removed while the worker thread is running which will error due to objects not existing
-        if tab.queue_for_removal:
-            tab.disconnect(update_topbar=False)
-            self.tab_manager.tabs.pop(tab.id, None)
-
-            return
-
         dolphie = tab.dolphie
         try:
             if not dolphie.main_db_connection or not dolphie.main_db_connection.is_connected():
@@ -716,7 +708,7 @@ class DolphieApp(App):
             dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
             # This denotes that we've gone through the first loop of the worker thread
-            dolphie.first_loop = True
+            dolphie.completed_first_loop = True
         except NoMatches:
             # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
             # with worker thread/state change due to asynchronous nature of the worker thread
@@ -735,7 +727,7 @@ class DolphieApp(App):
         await self.tab_manager.create_tab(tab_name="Initial Tab", dolphie=dolphie)
 
         dolphie.load_host_cache_file()
-        dolphie.check_for_update()
+        dolphie.check_for_new_version()
 
         self.run_worker_main(self.tab.id)
         self.run_worker_replicas(self.tab.id)
@@ -816,21 +808,24 @@ class DolphieApp(App):
         elif panel_name == self.tab.dolphie.panels.ddl.name:
             ddl_panel.create_panel(self.tab)
 
-        if toggled or not self.tab.dolphie.first_loop:  # Include this so we're not updating the sizes every loop
+        if toggled or not self.tab.dolphie.completed_first_loop:
             # Update the sizes of the panels depending if replication container is visible or not
             if self.tab.dolphie.replication_status and not self.tab.dolphie.panels.replication.visible:
                 self.tab.dashboard_host_information.styles.width = "25vw"
                 self.tab.dashboard_binary_log.styles.width = "21vw"
-
                 self.tab.dashboard_innodb.styles.width = "17vw"
                 self.tab.dashboard_replication.styles.width = "25vw"
                 self.tab.dashboard_statistics.styles.width = "12vw"
+
+                self.tab.dashboard_replication.display = True
             else:
                 self.tab.dashboard_host_information.styles.width = "32vw"
                 self.tab.dashboard_binary_log.styles.width = "27vw"
                 self.tab.dashboard_innodb.styles.width = "24vw"
                 self.tab.dashboard_replication.styles.width = "0"
                 self.tab.dashboard_statistics.styles.width = "17vw"
+
+                self.tab.dashboard_replication.display = False
 
             self.tab.dashboard_host_information.styles.max_width = "45"
             self.tab.dashboard_binary_log.styles.max_width = "38"
@@ -886,6 +881,7 @@ class DolphieApp(App):
             "question_mark",
             "plus",
             "minus",
+            "equals_sign",
             "ctrl+a",
             "ctrl+d",
         ]
@@ -969,11 +965,15 @@ class DolphieApp(App):
                 command_get_input,
             )
         elif key == "minus":
-            if tab.id == 1:
+            if len(self.tab_manager.tabs) == 1:
                 self.notify("Removing all tabs is not permitted", severity="error")
                 return
             else:
                 await self.tab_manager.remove_tab(tab.id)
+
+                tab.disconnect(update_topbar=False)
+                self.tab_manager.tabs.pop(tab.id, None)
+
         elif key == "ctrl+a" or key == "ctrl+d":
             all_tabs = self.tab_manager.get_all_tabs()
 

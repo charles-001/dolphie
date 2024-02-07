@@ -86,7 +86,7 @@ class Dolphie:
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
-        self.first_loop: bool = False
+        self.completed_first_loop: bool = False
         self.polling_latency: float = 0
         self.refresh_latency: str = "0"
         self.read_only_status: str = None
@@ -136,7 +136,7 @@ class Dolphie:
         self.mysql_version: str = None
         self.host_distro: str = None
 
-    def check_for_update(self):
+    def check_for_new_version(self):
         # Query PyPI API to get the latest version
         try:
             url = f"https://pypi.org/pypi/{__package_name__}/json"
@@ -269,6 +269,9 @@ class Dolphie:
                 self.host_setup_available_hosts.append(host[:-1])  # remove the \n
 
     def monitor_read_only_change(self):
+        if not self.main_db_connection.is_connected():
+            return
+
         current_ro_status = self.global_variables.get("read_only")
         formatted_ro_status = "RO" if current_ro_status == "ON" else "R/W"
         status = "read-only" if current_ro_status == "ON" else "read/write"
@@ -280,7 +283,11 @@ class Dolphie:
         elif current_ro_status == "ON" and self.group_replication and self.is_group_replication_primary:
             message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
 
-        if self.read_only_status != formatted_ro_status and self.first_loop:
+        self.app.notify(
+            title=self.host,
+            message=f"Saved status: {self.read_only_status}, Current status: {formatted_ro_status}, Raw: {current_ro_status}",
+        )
+        if self.read_only_status is not None and self.read_only_status != formatted_ro_status:
             self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
         self.read_only_status = formatted_ro_status

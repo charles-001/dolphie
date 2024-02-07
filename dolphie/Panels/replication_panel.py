@@ -529,7 +529,7 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
 
     # Extract lag value from fetched data
     replica_lag = replica_lag_data.get("Seconds_Behind_Master") if replica_lag_data else None
-    replica_lag = int(replica_lag) if replica_lag is not None else None
+    replica_lag = int(replica_lag) if replica_lag is not None else 0
 
     return replica_lag_source, replica_lag, replication_status
 
