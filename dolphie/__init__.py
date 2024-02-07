@@ -1,87 +1,75 @@
 import ipaddress
-import os
 import socket
 from datetime import datetime
-from importlib import metadata
 
 import dolphie.DataTypes as DataTypes
 import dolphie.Modules.MetricManager as MetricManager
-import requests
-from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.ArgumentParser import Config
+from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
-from dolphie.Widgets.new_version_modal import NewVersionModal
 from packaging.version import parse as parse_version
 from textual.app import App
 from textual.widgets import Switch
 
-try:
-    __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
-    __version__ = metadata.version(__package__ or __name__)
-except Exception:
-    __package_name__ = "Dolphie"
-    __version__ = "N/A"
-
 
 class Dolphie:
-    def __init__(self):
-        self.app: App = None
-        self.app_version = __version__
-        self.tab_name = None
-        self.tab_id = None
+    def __init__(self, config: Config, app: App) -> None:
+        self.config = config
+        self.app = app
+        self.app_version = config.app_version
+
+        self.tab_id: int = None
+        self.tab_name: str = None
 
         # Config options
-        self.user: str = None
-        self.password: str = None
-        self.host: str = None
-        self.port: int = 3306
-        self.socket: str = None
-        self.ssl: dict = {}
-        self.config_file: str = None
-        self.host_cache_file: str = None
-        self.host_setup_file: str = None
-        self.debug: bool = False
-        self.refresh_interval: int = 1
-        self.show_idle_threads: bool = False
-        self.show_trxs_only: bool = False
-        self.show_additional_query_columns: bool = False
-        self.sort_by_time_descending: bool = True
-        self.heartbeat_table: str = None
-        self.user_filter: str = None
-        self.db_filter: str = None
-        self.host_filter: str = None
-        self.query_time_filter: str = 0
-        self.query_filter: str = None
-        self.host_setup_available_hosts: list = []
-        self.host_cache: dict = {}
-        self.host_cache_from_file: dict = {}
-        self.startup_panels: str = None
-        self.graph_marker: str = None
+        self.user = config.user
+        self.password = config.password
+        self.host = config.host
+        self.port = config.port
+        self.socket = config.socket
+        self.ssl = config.ssl
+        self.config_file = config.config_file
+        self.host_cache_file = config.host_cache_file
+        self.host_setup_file = config.host_setup_file
+        self.refresh_interval = config.refresh_interval
+        self.show_idle_threads = config.show_idle_threads
+        self.show_trxs_only = config.show_trxs_only
+        self.show_additional_query_columns = config.show_additional_query_columns
+        self.sort_by_time_descending = config.sort_by_time_descending
+        self.heartbeat_table = config.heartbeat_table
+        self.user_filter = config.user_filter
+        self.db_filter = config.db_filter
+        self.host_filter = config.host_filter
+        self.query_time_filter = config.query_time_filter
+        self.query_filter = config.query_filter
+        self.host_setup_available_hosts = config.host_setup_available_hosts
+        self.startup_panels = config.startup_panels
+        self.graph_marker = config.graph_marker
 
         self.reset_runtime_variables()
+
+        # Set the default panels based on startup_panels to be visible
+        self.panels = DataTypes.Panels()
+        for panel in self.panels.all():
+            setattr(getattr(self.panels, panel), "visible", False)
+        for panel in self.startup_panels:
+            setattr(getattr(self.panels, panel), "visible", True)
 
     def reset_runtime_variables(self):
         self.metric_manager = MetricManager.MetricManager()
         self.replica_manager = DataTypes.ReplicaManager()
-        self.panels = DataTypes.Panels()
 
         # Set the graph switches to what they're currently selected to since we reset metric_manager
-        if self.app:
-            # Set the default panels based on startup_panels to be visible
-            for panel in self.panels.all():
-                setattr(getattr(self.panels, panel), "visible", False)
-            for panel in self.startup_panels:
-                setattr(getattr(self.panels, panel), "visible", True)
+        switches = self.app.query(f".switch_container_{self.tab_id} Switch")
+        for switch in switches:
+            switch: Switch
+            metric_instance_name = switch.name
+            metric = switch.id
 
-            switches = self.app.query(f".switch_container_{self.tab_id} Switch")
-            for switch in switches:
-                switch: Switch
-                metric_instance_name = switch.name
-                metric = switch.id
-
-                metric_instance = getattr(self.metric_manager.metrics, metric_instance_name)
-                metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
-                metric_data.visible = switch.value
+            metric_instance = getattr(self.metric_manager.metrics, metric_instance_name)
+            metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+            metric_data.visible = switch.value
 
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
@@ -110,6 +98,7 @@ class Dolphie:
         self.active_redo_logs: int = None
         self.mysql_host: str = None
         self.binlog_transaction_compression_percentage: int = None
+        self.host_cache: dict = {}
 
         # Types of hosts
         self.galera_cluster: bool = False
@@ -136,33 +125,10 @@ class Dolphie:
         self.mysql_version: str = None
         self.host_distro: str = None
 
-    def check_for_new_version(self):
-        # Query PyPI API to get the latest version
-        try:
-            url = f"https://pypi.org/pypi/{__package_name__}/json"
-            response = requests.get(url, timeout=3)
+        if self.config.use_processlist:
+            self.use_performance_schema = False
 
-            if response.status_code == 200:
-                data = response.json()
-
-                # Extract the latest version from the response
-                latest_version = data["info"]["version"]
-
-                # Compare the current version with the latest version
-                if parse_version(latest_version) > parse_version(__version__):
-                    self.app.push_screen(NewVersionModal(current_version=__version__, latest_version=latest_version))
-        except Exception:
-            pass
-
-    def is_mysql_version_at_least(self, target, use_version=None):
-        version = self.mysql_version
-        if use_version:
-            version = use_version
-
-        parsed_source = parse_version(version)
-        parsed_target = parse_version(target)
-
-        return parsed_source >= parsed_target
+        self.host_cache_from_file = load_host_cache_file(self.host_cache_file)
 
     def db_connect(self):
         db_connection_args = {
@@ -268,8 +234,18 @@ class Dolphie:
                 file.write(host)
                 self.host_setup_available_hosts.append(host[:-1])  # remove the \n
 
+    def is_mysql_version_at_least(self, target, use_version=None):
+        version = self.mysql_version
+        if use_version:
+            version = use_version
+
+        parsed_source = parse_version(version)
+        parsed_target = parse_version(target)
+
+        return parsed_source >= parsed_target
+
     def monitor_read_only_change(self):
-        if not self.main_db_connection.is_connected():
+        if self.read_only_status == "DISCONNECTED":
             return
 
         current_ro_status = self.global_variables.get("read_only")
@@ -283,39 +259,10 @@ class Dolphie:
         elif current_ro_status == "ON" and self.group_replication and self.is_group_replication_primary:
             message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
 
-        self.app.notify(
-            title=self.host,
-            message=f"Saved status: {self.read_only_status}, Current status: {formatted_ro_status}, Raw: {current_ro_status}",
-        )
         if self.read_only_status is not None and self.read_only_status != formatted_ro_status:
             self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
         self.read_only_status = formatted_ro_status
-
-    def command_input_to_variable(self, return_data):
-        variable = return_data[0]
-        value = return_data[1]
-        if value:
-            setattr(self, variable, value)
-
-    def load_host_cache_file(self):
-        if os.path.exists(self.host_cache_file):
-            with open(self.host_cache_file) as file:
-                for line in file:
-                    line = line.strip()
-                    error_message = f"Host cache entry '{line}' is not properly formatted! Format: ip=hostname"
-
-                    if "=" not in line:
-                        raise ManualException(error_message)
-
-                    host, hostname = line.split("=", maxsplit=1)
-                    host = host.strip()
-                    hostname = hostname.strip()
-
-                    if not host or not hostname:
-                        raise ManualException(error_message)
-
-                    self.host_cache_from_file[host] = hostname
 
     def get_hostname(self, host):
         if host in self.host_cache:

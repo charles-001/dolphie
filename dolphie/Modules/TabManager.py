@@ -1,8 +1,8 @@
-import copy
 from dataclasses import dataclass
 
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
+from dolphie.Modules.ArgumentParser import Config
 from dolphie.Widgets.host_setup import HostSetupModal
 from dolphie.Widgets.spinner import SpinnerWidget
 from dolphie.Widgets.topbar import TopBar
@@ -187,15 +187,16 @@ class Tab:
 
 
 class TabManager:
-    def __init__(self, app: App):
+    def __init__(self, app: App, config: Config):
         self.app = app
+        self.config = config
 
         self.tabs: dict = {}
         self.tab_id_counter: int = 1
 
         self.tabbed_content = self.app.query_one("#tabbed_content", TabbedContent)
 
-    async def create_tab(self, tab_name: str, dolphie: Dolphie):
+    async def create_tab(self, tab_name: str):
         tab_id = self.tab_id_counter
 
         await self.tabbed_content.add_pane(
@@ -283,7 +284,7 @@ class TabManager:
             ),
         )
 
-        metrics = dolphie.metric_manager.metrics
+        metrics = MetricManager.MetricManager().metrics
         metric_tab_labels = [
             ("DML", metrics.dml, True),
             ("Locks", metrics.locks, False),
@@ -338,16 +339,11 @@ class TabManager:
                         )
 
         # Create a new tab instance
-        dolphie = copy.copy(dolphie)
-        dolphie.reset_runtime_variables()
-        if tab_id != 1:
-            dolphie.host = ""
-            dolphie.port = ""
-
-        tab = Tab(id=tab_id, name=tab_name, dolphie=dolphie)
-
+        dolphie = Dolphie(config=self.config, app=self.app)
         dolphie.tab_id = tab_id
         dolphie.tab_name = tab_name
+
+        tab = Tab(id=tab_id, name=tab_name, dolphie=dolphie)
 
         # Save references to the widgets in the tab
         tab.topbar = self.app.query_one(TopBar)
@@ -401,11 +397,13 @@ class TabManager:
 
         # By default, hide all the panels
         tab.sparkline.display = False
+        tab.main_container.display = False
         for panel in tab.dolphie.panels.all():
             self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
 
         # Set panels to be visible for the ones the user specifies
         for panel in dolphie.startup_panels:
+            self.app.query_one(f"#panel_{panel}_{tab.id}").display = True
             setattr(getattr(dolphie.panels, panel), "visible", True)
 
         # Set what marker we use for graphs
@@ -471,3 +469,18 @@ class TabManager:
             all_tabs.append(tab.id)
 
         return all_tabs
+
+    def layout_graphs(self, tab: Tab):
+        if tab.dolphie.is_mysql_version_at_least("8.0.30"):
+            self.app.query_one(f"#graph_redo_log_{tab.id}").styles.width = "55%"
+            self.app.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
+            self.app.query_one(f"#graph_redo_log_active_count_{tab.id}").styles.width = "33%"
+            tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+            self.app.query_one(f"#graph_redo_log_active_count_{tab.id}").display = True
+        else:
+            self.app.query_one(f"#graph_redo_log_{tab.id}").styles.width = "88%"
+            self.app.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
+            self.app.query_one(f"#graph_redo_log_active_count_{tab.id}").display = False
+
+        self.app.query_one(f"#graph_adaptive_hash_index_{tab.id}").styles.width = "50%"
+        self.app.query_one(f"#graph_adaptive_hash_index_hit_ratio_{tab.id}").styles.width = "50%"

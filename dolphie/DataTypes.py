@@ -120,3 +120,13 @@ class ProcesslistThread:
 
     def _get_formatted_query(self, query: str) -> str:
         return markup_escape(re.sub(r"\s+", " ", query)) if query else ""
+
+
+class HotkeyCommands:
+    show_thread = "show_thread"
+    thread_filter = "thread_filter"
+    thread_kill_by_id = "thread_kill_by_id"
+    thread_kill_by_parameter = "thread_kill_by_parameter"
+    variable_search = "variable_search"
+    rename_tab = "rename_tab"
+    refresh_interval = "refresh_interval"
