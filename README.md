@@ -82,7 +82,7 @@ options:
                         Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
   -l , --login-path     Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
   -r , --refresh_interval
-                        How much time to wait in seconds between each refresh [default: 10]
+                        How much time to wait in seconds between each refresh [default: 1]
   -H , --heartbeat-table
                         If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW SLAVE STATUS
   --ssl-mode            Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
@@ -94,8 +94,7 @@ options:
   --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
   --show-trxs-only      Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
-  --historical-locks
-                        Always run the locks query so it can save historical data to its graph instead of only when the Locks panel is open. This query can be expensive in some environments
+  --historical-locks    Always run the locks query so it can save historical data to its graph instead of only when the Locks panel is open. This query can be expensive in some environments
   -V, --version         Display version and exit
 
 MySQL my.cnf file supports these options under [client] section:
@@ -142,9 +141,9 @@ Dolphie config file supports these options under [dolphie] section:
 	(str) startup_panels
 	(str) graph_marker
 	(str) pypi_repository
-	(bool) use_processlist
 	(bool) show_trxs_only
 	(bool) show_additional_query_columns
+	(bool) historical_locks
 ```
 
 ## Supported MySQL versions
@@ -167,7 +166,7 @@ Dolphie config file supports these options under [dolphie] section:
 
 ## Features
 - Tabs at the top for multiple connections
-- Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer (see Help screenshot for panels available)
+- Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer
 - Graphs for many metrics that can give you great insight into how your database is performing
 - Sparkline to show queries per second in a live view
 - 2 options for finding replica lag in this order of precedence:

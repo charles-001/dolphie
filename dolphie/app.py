@@ -194,6 +194,8 @@ class DolphieApp(App):
                     dolphie.main_db_connection.execute(MySQLQueries.ddls)
                     dolphie.ddl = dolphie.main_db_connection.fetchall()
 
+            dolphie.monitor_read_only_change()
+
             dolphie.metric_manager.refresh_data(
                 worker_start_time=dolphie.worker_start_time,
                 polling_latency=dolphie.polling_latency,
@@ -224,9 +226,9 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if event.worker.group == "main":
-            if event.state == WorkerState.SUCCESS:
-                dolphie.monitor_read_only_change()
+            tab.worker_running = False
 
+            if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right
                 if (
                     len(self.screen_stack) > 1
@@ -259,6 +261,8 @@ class DolphieApp(App):
                     tab.host_setup()
                     self.bell()
         elif event.worker.group == "replicas":
+            tab.replicas_worker_running = False
+
             if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right
                 if len(self.screen_stack) > 1 or dolphie.pause_refresh:
