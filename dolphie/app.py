@@ -391,7 +391,11 @@ class DolphieApp(App):
     def tab_changed(self, event: TabbedContent.TabActivated):
         self.tab_manager.switch_tab(event.pane.name)
 
-        if self.tab.dolphie.main_db_connection:
+        if (
+            self.tab.dolphie.main_db_connection
+            and self.tab.dolphie.main_db_connection.is_connected()
+            and self.tab.dolphie.completed_first_loop
+        ):
             self.refresh_screen(self.tab)
 
     @on(TabbedContent.TabActivated, ".metrics_tabbed_content")
@@ -1390,11 +1394,7 @@ class DolphieApp(App):
     def check_for_new_version(self):
         # Query PyPI API to get the latest version
         try:
-            if self.config.pypi_repository:
-                url = self.config.pypi_repository
-            else:
-                url = f"https://pypi.org/pypi/{__package_name__}/json"
-
+            url = self.config.pypi_repository
             response = requests.get(url, timeout=3)
 
             if response.status_code == 200:
