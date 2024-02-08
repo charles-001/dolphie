@@ -1,5 +1,6 @@
 import re
 
+from dolphie.DataTypes import HotkeyCommands
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -99,12 +100,12 @@ class CommandModal(ModalScreen):
         filter_radio_buttons.display = False
         kill_container.display = False
 
-        if self.command == "thread_filter":
+        if self.command == HotkeyCommands.thread_filter:
             filter_radio_buttons.display = True
             filter_radio_buttons.focus()
 
             input.placeholder = "Select an option from above"
-        elif self.command == "thread_kill_by_parameter":
+        elif self.command == HotkeyCommands.thread_kill_by_parameter:
             sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
             sleeping_queries_checkbox.toggle()
 
@@ -114,6 +115,13 @@ class CommandModal(ModalScreen):
             kill_radio_buttons.focus()
 
             input.placeholder = "Select an option from above"
+        elif self.command == HotkeyCommands.rename_tab:
+            input.placeholder = "Colors can be added by wrapping them in []"
+            input.styles.width = 50
+            input.focus()
+        elif self.command == HotkeyCommands.variable_search:
+            input.placeholder = "Input 'all' to show everything"
+            input.focus()
         else:
             input.focus()
 
@@ -134,7 +142,7 @@ class CommandModal(ModalScreen):
 
         self.create_dropdown_items(None)  # empty string to clear dropdown items
 
-        if self.command == "thread_filter":
+        if self.command == HotkeyCommands.thread_filter:
             if event.pressed.id == "db":
                 self.create_dropdown_items("db")
                 modal_input.placeholder = "Database name"
@@ -148,7 +156,7 @@ class CommandModal(ModalScreen):
             elif event.pressed.id == "user":
                 self.create_dropdown_items("user")
                 modal_input.placeholder = "Username"
-        elif self.command == "thread_kill_by_parameter":
+        elif self.command == HotkeyCommands.thread_kill_by_parameter:
             if event.pressed.id == "username":
                 self.create_dropdown_items("user")
                 modal_input.placeholder = "Username"
@@ -170,7 +178,7 @@ class CommandModal(ModalScreen):
             self.update_error_response("Input cannot be empty")
             return
 
-        if self.command == "thread_filter":
+        if self.command == HotkeyCommands.thread_filter:
             filter_options = {
                 "user": "User",
                 "db": "Database",
@@ -213,7 +221,7 @@ class CommandModal(ModalScreen):
                         self.dismiss([filter_label, modal_input])
             else:
                 self.update_error_response("Please select a filter option")
-        elif self.command == "thread_kill_by_parameter":
+        elif self.command == HotkeyCommands.thread_kill_by_parameter:
             kill_type = None
             lower_limit = None
             upper_limit = None
@@ -241,14 +249,14 @@ class CommandModal(ModalScreen):
                 self.dismiss([rb.id, modal_input, checkbox_sleeping_queries, lower_limit, upper_limit])
             else:
                 self.update_error_response("Please select a kill option")
-        elif self.command == "thread_kill_by_id" or self.command == "show_thread":
+        elif self.command in [HotkeyCommands.thread_kill_by_id, HotkeyCommands.show_thread]:
             value = next((thread_id for thread_id in self.processlist_data.keys() if modal_input == thread_id), None)
 
             if not value:
                 self.update_error_response(f"Thread ID [b red]{modal_input}[/b red] does not exist")
             else:
                 self.dismiss(modal_input)
-        elif self.command == "refresh_interval":
+        elif self.command == HotkeyCommands.refresh_interval:
             if not modal_input.isnumeric():
                 self.update_error_response("Input must be an integer")
                 return

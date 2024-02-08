@@ -7,17 +7,15 @@
 
 import os
 import re
-import sys
-from argparse import ArgumentParser, RawTextHelpFormatter
-from configparser import ConfigParser
 from datetime import datetime, timedelta
 from functools import partial
-from urllib.parse import urlparse
+from importlib import metadata
 
 import dolphie.Modules.MetricManager as MetricManager
-import myloginpath
+import requests
 from dolphie import Dolphie
-from dolphie.DataTypes import ProcesslistThread
+from dolphie.DataTypes import HotkeyCommands, ProcesslistThread
+from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.Functions import format_number, format_sys_table_memory
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
@@ -32,12 +30,13 @@ from dolphie.Panels import (
 from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.modal import CommandModal
+from dolphie.Widgets.new_version_modal import NewVersionModal
 from dolphie.Widgets.thread_screen import ThreadScreen
 from dolphie.Widgets.topbar import TopBar
+from packaging.version import parse as parse_version
 from rich import box
 from rich.align import Align
-from rich.console import Console, Group
-from rich.prompt import Prompt
+from rich.console import Group
 from rich.style import Style
 from rich.syntax import Syntax
 from rich.table import Table
@@ -50,373 +49,24 @@ from textual.css.query import NoMatches
 from textual.widgets import Switch, TabbedContent
 from textual.worker import Worker, WorkerState, get_current_worker
 
-
-def parse_args(dolphie: Dolphie):
-    epilog = """
-Config file with [client] section supports these options:
-    host
-    user
-    password
-    port
-    socket
-    ssl_mode REQUIRED/VERIFY_CA/VERIFY_IDENTITY
-    ssl_ca
-    ssl_cert
-    ssl_key
-
-Login path file supports these options:
-    host
-    user
-    password
-    port
-    socket
-
-Environment variables support these options:
-    DOLPHIE_USER
-    DOLPHIE_PASSWORD
-    DOLPHIE_HOST
-    DOLPHIE_PORT
-    DOLPHIE_SOCKET
-
-"""
-    parser = ArgumentParser(
-        conflict_handler="resolve",
-        description="Dolphie, an intuitive feature-rich top tool for monitoring MySQL in real time",
-        epilog=epilog,
-        formatter_class=RawTextHelpFormatter,
-    )
-
-    parser.add_argument(
-        "uri",
-        metavar="uri",
-        type=str,
-        nargs="?",
-        help=(
-            "Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with"
-            " default 3306)"
-        ),
-    )
-
-    parser.add_argument(
-        "-u",
-        "--user",
-        dest="user",
-        type=str,
-        help="Username for MySQL",
-    )
-    parser.add_argument("-p", "--password", dest="password", type=str, help="Password for MySQL")
-    parser.add_argument(
-        "--ask-pass",
-        dest="ask_password",
-        action="store_true",
-        default=False,
-        help="Ask for password (hidden text)",
-    )
-    parser.add_argument(
-        "-h",
-        "--host",
-        dest="host",
-        type=str,
-        help="Hostname/IP address for MySQL",
-    )
-    parser.add_argument(
-        "-P",
-        "--port",
-        dest="port",
-        type=int,
-        help="Port for MySQL (Socket has precendence)",
-    )
-    parser.add_argument(
-        "-S",
-        "--socket",
-        dest="socket",
-        type=str,
-        help="Socket file for MySQL",
-    )
-    parser.add_argument(
-        "-c",
-        "--config-file",
-        dest="config_file",
-        type=str,
-        help=(
-            "Config file path to use. This should use [client] section. "
-            "See below for options support [default: ~/.my.cnf]"
-        ),
-    )
-    parser.add_argument(
-        "-f",
-        "--host-cache-file",
-        dest="host_cache_file",
-        type=str,
-        help=(
-            "Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line "
-            "using format: ip=hostname [default: ~/dolphie_host_cache]"
-        ),
-    )
-    parser.add_argument(
-        "-q",
-        "--host-setup-file",
-        dest="host_setup_file",
-        type=str,
-        help=(
-            "Specify location of file that stores the available hosts to use in host setup modal [default:"
-            " ~/dolphie_hosts]"
-        ),
-    )
-    parser.add_argument(
-        "-l",
-        "--login-path",
-        dest="login_path",
-        default="client",
-        type=str,
-        help=(
-            "Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. "
-            "Supercedes config file [default: %(default)s]"
-        ),
-    )
-    parser.add_argument(
-        "-r",
-        "--refresh_interval",
-        dest="refresh_interval",
-        default=1,
-        type=int,
-        help="How much time to wait in seconds between each refresh [default: %(default)s]",
-    )
-    parser.add_argument(
-        "-H",
-        "--heartbeat-table",
-        dest="heartbeat_table",
-        type=str,
-        help=(
-            "If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it "
-            "has for replication lag instead of Seconds_Behind_Master from SHOW SLAVE STATUS"
-        ),
-    )
-    parser.add_argument(
-        "--ssl-mode",
-        dest="ssl_mode",
-        type=str,
-        help=(
-            "Desired security state of the connection to the host. Supports: "
-            "REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]"
-        ),
-    )
-    parser.add_argument(
-        "--ssl-ca",
-        dest="ssl_ca",
-        type=str,
-        help="Path to the file that contains a PEM-formatted CA certificate",
-    )
-    parser.add_argument(
-        "--ssl-cert",
-        dest="ssl_cert",
-        type=str,
-        help="Path to the file that contains a PEM-formatted client certificate",
-    )
-    parser.add_argument(
-        "--ssl-key",
-        dest="ssl_key",
-        type=str,
-        help="Path to the file that contains a PEM-formatted private key for the client certificate",
-    )
-    parser.add_argument(
-        "--panels",
-        dest="startup_panels",
-        default="dashboard,processlist",
-        type=str,
-        help=(
-            "What panels to display on startup separated by a comma. Supports:"
-            f" {'/'.join(dolphie.panels.all())} [default: %(default)s]"
-        ),
-    )
-    parser.add_argument(
-        "--graph-marker",
-        dest="graph_marker",
-        default="braille",
-        type=str,
-        help=(
-            "What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default:"
-            " %(default)s]"
-        ),
-    )
-    parser.add_argument(
-        "--show-trxs-only",
-        dest="show_trxs_only",
-        action="store_true",
-        default=False,
-        help="Start with only showing threads that have an active transaction",
-    )
-    parser.add_argument(
-        "--additional-columns",
-        dest="show_additional_query_columns",
-        action="store_true",
-        default=False,
-        help="Start with additional columns in Processlist panel",
-    )
-    parser.add_argument(
-        "--use-processlist",
-        dest="use_processlist",
-        action="store_true",
-        default=False,
-        help="Start with using Information Schema instead of Performance Schema for processlist panel",
-    )
-    parser.add_argument(
-        "-V", "--version", action="version", version=dolphie.app_version, help="Display version and exit"
-    )
-
-    console = Console(style="indian_red", highlight=False)
-
-    home_dir = os.path.expanduser("~")
-
-    parameter_options = vars(parser.parse_args())  # Convert object to dict
-    basic_options = ["user", "password", "host", "port", "socket"]
-
-    dolphie.config_file = f"{home_dir}/.my.cnf"
-    if parameter_options["config_file"]:
-        dolphie.config_file = parameter_options["config_file"]
-
-    # Use config file for login credentials
-    if os.path.isfile(dolphie.config_file):
-        cfg = ConfigParser()
-        cfg.read(dolphie.config_file)
-
-        for option in basic_options:
-            if cfg.has_option("client", option):
-                setattr(dolphie, option, cfg.get("client", option))
-
-        if cfg.has_option("client", "ssl_mode"):
-            ssl_mode = cfg.get("client", "ssl_mode").upper()
-
-            if ssl_mode == "REQUIRED":
-                dolphie.ssl[""] = True
-            elif ssl_mode == "VERIFY_CA":
-                dolphie.ssl["check_hostname"] = False
-            elif ssl_mode == "VERIFY_IDENTITY":
-                dolphie.ssl["check_hostname"] = True
-            else:
-                sys.exit(console.print(f"Unsupported SSL mode [b]{ssl_mode}[/b]"))
-
-        if cfg.has_option("client", "ssl_ca"):
-            dolphie.ssl["ca"] = cfg.get("client", "ssl_ca")
-        if cfg.has_option("client", "ssl_cert"):
-            dolphie.ssl["cert"] = cfg.get("client", "ssl_cert")
-        if cfg.has_option("client", "ssl_key"):
-            dolphie.ssl["key"] = cfg.get("client", "ssl_key")
-
-    # Use login path for login credentials
-    if parameter_options["login_path"]:
-        try:
-            login_path_data = myloginpath.parse(parameter_options["login_path"])
-
-            for option in basic_options:
-                if option in login_path_data:
-                    setattr(dolphie, option, login_path_data[option])
-        except Exception as e:
-            # Don't error out for default login path
-            if parameter_options["login_path"] != "client":
-                sys.exit(console.print(f"Problem reading login path file: {e}"))
-
-    # Use environment variables for basic options if specified
-    for option in basic_options:
-        environment_var = "DOLPHIE_%s" % option.upper()
-        if environment_var in os.environ and os.environ[environment_var]:
-            setattr(dolphie, option, os.environ[environment_var])
-
-    # Use parameter options if specified
-    for option in basic_options:
-        if parameter_options[option]:
-            setattr(dolphie, option, parameter_options[option])
-
-    # Lastly, parse URI if specified
-    if parameter_options["uri"]:
-        try:
-            parsed = urlparse(parameter_options["uri"])
-
-            if parsed.scheme != "mysql":
-                sys.exit(
-                    console.print("Invalid URI scheme: Only 'mysql' is supported (see --help for more information)")
-                )
-
-            dolphie.user = parsed.username
-            dolphie.password = parsed.password
-            dolphie.host = parsed.hostname
-            dolphie.port = parsed.port or 3306
-        except Exception as e:
-            sys.exit(console.print(f"Invalid URI: {e} (see --help for more information)"))
-
-    if parameter_options["ask_password"]:
-        dolphie.password = Prompt.ask("[b #91abec]Password", password=True)
-
-    if not dolphie.host:
-        dolphie.host = "localhost"
-
-    if parameter_options["refresh_interval"]:
-        dolphie.refresh_interval = parameter_options["refresh_interval"]
-
-    if parameter_options["heartbeat_table"]:
-        pattern_match = re.search(r"^(\w+\.\w+)$", parameter_options["heartbeat_table"])
-        if pattern_match:
-            dolphie.heartbeat_table = parameter_options["heartbeat_table"]
-            MySQLQueries.heartbeat_replica_lag = MySQLQueries.heartbeat_replica_lag.replace(
-                "$1", dolphie.heartbeat_table
-            )
-        else:
-            sys.exit(console.print("Your heartbeat table did not conform to the proper format: db.table"))
-
-    if parameter_options["ssl_mode"]:
-        ssl_mode = parameter_options["ssl_mode"].upper()
-
-        if ssl_mode == "REQUIRED":
-            dolphie.ssl[""] = True
-        elif ssl_mode == "VERIFY_CA":
-            dolphie.ssl["check_hostame"] = False
-        elif ssl_mode == "VERIFY_IDENTITY":
-            dolphie.ssl["check_hostame"] = True
-        else:
-            sys.exit(console.print(f"Unsupported SSL mode [b]{ssl_mode}[/b]"))
-
-    if parameter_options["ssl_ca"]:
-        dolphie.ssl["ca"] = parameter_options["ssl_ca"]
-    if parameter_options["ssl_cert"]:
-        dolphie.ssl["cert"] = parameter_options["ssl_cert"]
-    if parameter_options["ssl_key"]:
-        dolphie.ssl["key"] = parameter_options["ssl_key"]
-
-    dolphie.host_cache_file = f"{home_dir}/dolphie_host_cache"
-    if parameter_options["host_cache_file"]:
-        dolphie.host_cache_file = parameter_options["host_cache_file"]
-
-    dolphie.host_setup_file = f"{home_dir}/dolphie_hosts"
-    if parameter_options["host_setup_file"]:
-        dolphie.host_setup_file = parameter_options["host_setup_file"]
-
-    dolphie.show_trxs_only = parameter_options["show_trxs_only"]
-    dolphie.show_additional_query_columns = parameter_options["show_additional_query_columns"]
-
-    if parameter_options["use_processlist"]:
-        dolphie.use_performance_schema = False
-
-    dolphie.startup_panels = parameter_options["startup_panels"].split(",")
-    for panel in dolphie.startup_panels:
-        if panel not in dolphie.panels.all():
-            sys.exit(console.print(f"Panel '{panel}' is not valid (see --help for more information)"))
-
-    dolphie.graph_marker = parameter_options["graph_marker"]
-
-    if os.path.exists(dolphie.host_setup_file):
-        with open(dolphie.host_setup_file, "r") as file:
-            dolphie.host_setup_available_hosts = [line.strip() for line in file]
+try:
+    __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
+    __version__ = metadata.version(__package__ or __name__)
+except Exception:
+    __package_name__ = "Dolphie"
+    __version__ = "N/A"
 
 
 class DolphieApp(App):
     TITLE = "Dolphie"
     CSS_PATH = "Dolphie.css"
 
-    def __init__(self, dolphie: Dolphie):
+    def __init__(self, config: Config):
         super().__init__()
 
-        dolphie.app = self
-        self.dolphie = dolphie
+        self.config = config
+
+        # This will be the currently selected tab
         self.tab: Tab = None
 
         theme = Theme({
@@ -441,28 +91,24 @@ class DolphieApp(App):
         self.console.set_window_title(self.TITLE)
 
     @work(thread=True, group="main")
-    def run_worker_main(self, tab_id: int):
+    async def run_worker_main(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
 
         # Get our worker thread
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
 
-        # We have to queue the tab for removal because if we don't do it in the worker thread it will
-        # be removed while the worker thread is running which will error due to objects not existing
-        if tab.queue_for_removal:
-            tab.disconnect(update_topbar=False)
-            self.tab_manager.tabs.pop(tab.id, None)
-
-            return
-
         dolphie = tab.dolphie
         try:
+            tab.worker_running = True
+
             if not dolphie.main_db_connection or not dolphie.main_db_connection.is_connected():
+                self.tab_manager.rename_tab(tab_id)  # this will use dolphie.host instead of mysql_host
                 tab.update_topbar(f"[[white]CONNECTING[/white]] {dolphie.host}:{dolphie.port}")
                 tab.loading_indicator.display = True
 
                 dolphie.db_connect()
+                self.tab_manager.rename_tab(tab_id)
 
             dolphie.worker_start_time = datetime.now()
             dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -494,7 +140,20 @@ class DolphieApp(App):
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
             dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
 
-            dolphie.fetch_replication_data()
+            dolphie.previous_replica_sbm = dolphie.replica_lag
+            dolphie.replica_lag_source, dolphie.replica_lag, dolphie.replication_status = (
+                replication_panel.fetch_replication_data(tab)
+            )
+
+            # If using MySQL 8, fetch the replication applier status data
+            if (
+                dolphie.is_mysql_version_at_least("8.0")
+                and dolphie.panels.replication.visible
+                and dolphie.global_variables.get("slave_parallel_workers", 0) > 1
+            ):
+                dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
+                dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
+
             dolphie.massage_metrics_data()
 
             if dolphie.group_replication or dolphie.innodb_cluster:
@@ -527,9 +186,9 @@ class DolphieApp(App):
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
             if dolphie.is_mysql_version_at_least("5.7"):
-                # We don't check if panel is visible or not since we use this data for Locks graph
-                dolphie.main_db_connection.execute(MySQLQueries.locks_query)
-                dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
+                if dolphie.panels.locks.visible or dolphie.config.historical_locks:
+                    dolphie.main_db_connection.execute(MySQLQueries.locks_query)
+                    dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
 
                 if dolphie.panels.ddl.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.ddls)
@@ -548,12 +207,16 @@ class DolphieApp(App):
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
+
+            tab.worker_running = False
         except ManualException as e:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
+            tab.worker_running = False
+
             tab.worker_cancel_error = e.output()
 
-            tab.disconnect()
+            await tab.disconnect()
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
@@ -563,13 +226,14 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if event.worker.group == "main":
+            tab.worker_running = False
+
             if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right
                 if (
                     len(self.screen_stack) > 1
                     or dolphie.pause_refresh
                     or not tab.dolphie.main_db_connection.is_connected()
-                    or tab.id != self.tab.id
                 ):
                     tab.worker_timer = self.set_timer(
                         tab.dolphie.refresh_interval, partial(self.run_worker_main, tab.id)
@@ -597,9 +261,11 @@ class DolphieApp(App):
                     tab.host_setup()
                     self.bell()
         elif event.worker.group == "replicas":
+            tab.replicas_worker_running = False
+
             if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right
-                if len(self.screen_stack) > 1 or dolphie.pause_refresh or tab.id != self.tab.id:
+                if len(self.screen_stack) > 1 or dolphie.pause_refresh:
                     tab.replicas_worker_timer = self.set_timer(
                         tab.dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
                     )
@@ -631,7 +297,9 @@ class DolphieApp(App):
                         " replicas...\n"
                     )
 
+                tab.replicas_worker_running = True
                 replication_panel.fetch_replicas(tab)
+                tab.replicas_worker_running = False
             else:
                 tab.replicas_container.display = False
         else:
@@ -644,24 +312,16 @@ class DolphieApp(App):
         try:
             loading_indicator = tab.loading_indicator
             if loading_indicator.display:
-                # We only want to do this on startup
-                # Set panels to be visible for the ones the user specifies
-                for panel in dolphie.panels.all():
-                    setattr(getattr(tab, f"panel_{panel}"), "display", False)
-
-                for panel in dolphie.startup_panels:
-                    setattr(getattr(tab, f"panel_{panel}"), "display", True)
-
                 loading_indicator.display = False
                 tab.main_container.display = True
 
-                self.layout_graphs()
+                self.layout_graphs(tab)
 
             if self.tab.id == tab.id:
                 tab.update_topbar()
 
             if dolphie.panels.dashboard.visible:
-                self.refresh_panel(dolphie.panels.dashboard.name)
+                self.refresh_panel(tab, dolphie.panels.dashboard.name)
 
                 # Update the sparkline for queries per second
                 sparkline = tab.sparkline
@@ -674,16 +334,16 @@ class DolphieApp(App):
                 sparkline.refresh()
 
             if dolphie.panels.processlist.visible:
-                self.refresh_panel(dolphie.panels.processlist.name)
+                self.refresh_panel(tab, dolphie.panels.processlist.name)
 
             if dolphie.panels.replication.visible:
-                self.refresh_panel(dolphie.panels.replication.name)
+                self.refresh_panel(tab, dolphie.panels.replication.name)
 
             if dolphie.panels.locks.visible:
-                self.refresh_panel(dolphie.panels.locks.name)
+                self.refresh_panel(tab, dolphie.panels.locks.name)
 
             if dolphie.panels.ddl.visible:
-                self.refresh_panel(dolphie.panels.ddl.name)
+                self.refresh_panel(tab, dolphie.panels.ddl.name)
 
             if dolphie.panels.graphs.visible:
                 graph_panel = self.query_one(f"#tabbed_content_{tab.id}", TabbedContent)
@@ -702,7 +362,7 @@ class DolphieApp(App):
             dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
             # This denotes that we've gone through the first loop of the worker thread
-            dolphie.first_loop = True
+            dolphie.completed_first_loop = True
         except NoMatches:
             # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
             # with worker thread/state change due to asynchronous nature of the worker thread
@@ -715,13 +375,10 @@ class DolphieApp(App):
         await self.capture_key(event.key)
 
     async def on_mount(self):
-        dolphie = self.dolphie
+        self.tab_manager = TabManager(app=self.app, config=self.config)
+        await self.tab_manager.create_tab(tab_name="Initial Tab")
 
-        self.tab_manager = TabManager(self)
-        await self.tab_manager.create_tab("Main", dolphie)
-
-        dolphie.load_host_cache_file()
-        dolphie.check_for_update()
+        self.check_for_new_version()
 
         self.run_worker_main(self.tab.id)
         self.run_worker_replicas(self.tab.id)
@@ -779,65 +436,68 @@ class DolphieApp(App):
         setattr(getattr(self.tab.dolphie.panels, panel_name), "visible", new_display)
 
         if panel_name not in [self.tab.dolphie.panels.graphs.name]:
-            self.app.refresh_panel(panel_name, toggled=True)
+            self.app.refresh_panel(self.tab, panel_name, toggled=True)
 
-    def refresh_panel(self, panel_name, toggled=False):
+    def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         # If loading indicator is displaying, don't refresh
-        if self.tab.loading_indicator.display:
+        if tab.loading_indicator.display:
             return
 
-        if panel_name == self.tab.dolphie.panels.replication.name:
+        if panel_name == tab.dolphie.panels.replication.name:
             # When replication panel status is changed, we need to refresh the dashboard panel as well since
             # it adds/removes it from there
-            replication_panel.create_panel(self.tab)
+            replication_panel.create_panel(tab)
 
-            if toggled and self.tab.dolphie.replication_status:
-                dashboard_panel.create_panel(self.tab)
-        elif panel_name == self.tab.dolphie.panels.dashboard.name:
-            dashboard_panel.create_panel(self.tab)
-        elif panel_name == self.tab.dolphie.panels.processlist.name:
-            processlist_panel.create_panel(self.tab)
-        elif panel_name == self.tab.dolphie.panels.locks.name:
-            locks_panel.create_panel(self.tab)
-        elif panel_name == self.tab.dolphie.panels.ddl.name:
-            ddl_panel.create_panel(self.tab)
+            if toggled and tab.dolphie.replication_status:
+                dashboard_panel.create_panel(tab)
+        elif panel_name == tab.dolphie.panels.dashboard.name:
+            dashboard_panel.create_panel(tab)
+        elif panel_name == tab.dolphie.panels.processlist.name:
+            processlist_panel.create_panel(tab)
+        elif panel_name == tab.dolphie.panels.locks.name:
+            locks_panel.create_panel(tab)
+        elif panel_name == tab.dolphie.panels.ddl.name:
+            ddl_panel.create_panel(tab)
 
-        if toggled or not self.tab.dolphie.first_loop:  # Include this so we're not updating the sizes every loop
+        if toggled or not tab.dolphie.completed_first_loop:
             # Update the sizes of the panels depending if replication container is visible or not
-            if self.tab.dolphie.replication_status and not self.tab.dolphie.panels.replication.visible:
-                self.tab.dashboard_host_information.styles.width = "25vw"
-                self.tab.dashboard_binary_log.styles.width = "21vw"
+            if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
+                tab.dashboard_host_information.styles.width = "25vw"
+                tab.dashboard_binary_log.styles.width = "21vw"
+                tab.dashboard_innodb.styles.width = "17vw"
+                tab.dashboard_replication.styles.width = "25vw"
+                tab.dashboard_statistics.styles.width = "12vw"
 
-                self.tab.dashboard_innodb.styles.width = "17vw"
-                self.tab.dashboard_replication.styles.width = "25vw"
-                self.tab.dashboard_statistics.styles.width = "12vw"
+                tab.dashboard_replication.display = True
             else:
-                self.tab.dashboard_host_information.styles.width = "32vw"
-                self.tab.dashboard_binary_log.styles.width = "27vw"
-                self.tab.dashboard_innodb.styles.width = "24vw"
-                self.tab.dashboard_replication.styles.width = "0"
-                self.tab.dashboard_statistics.styles.width = "17vw"
+                tab.dashboard_host_information.styles.width = "32vw"
+                tab.dashboard_binary_log.styles.width = "27vw"
+                tab.dashboard_innodb.styles.width = "24vw"
+                tab.dashboard_replication.styles.width = "0"
+                tab.dashboard_statistics.styles.width = "17vw"
 
-            self.tab.dashboard_host_information.styles.max_width = "45"
-            self.tab.dashboard_binary_log.styles.max_width = "38"
-            self.tab.dashboard_innodb.styles.max_width = "32"
-            self.tab.dashboard_replication.styles.max_width = "50"
-            self.tab.dashboard_statistics.styles.max_width = "22"
+                tab.dashboard_replication.display = False
 
-    def layout_graphs(self):
-        if self.tab.dolphie.is_mysql_version_at_least("8.0.30"):
-            self.query_one(f"#graph_redo_log_{self.tab.id}").styles.width = "55%"
-            self.query_one(f"#graph_redo_log_bar_{self.tab.id}").styles.width = "12%"
-            self.query_one(f"#graph_redo_log_active_count_{self.tab.id}").styles.width = "33%"
-            self.tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
-            self.query_one(f"#graph_redo_log_active_count_{self.tab.id}").display = True
+            tab.dashboard_host_information.styles.max_width = "45"
+            tab.dashboard_binary_log.styles.max_width = "38"
+            tab.dashboard_innodb.styles.max_width = "32"
+            tab.dashboard_replication.styles.max_width = "50"
+            tab.dashboard_statistics.styles.max_width = "22"
+
+    def layout_graphs(self, tab: Tab):
+        if tab.dolphie.is_mysql_version_at_least("8.0.30"):
+            self.query_one(f"#graph_redo_log_{tab.id}").styles.width = "55%"
+            self.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
+            self.query_one(f"#graph_redo_log_active_count_{tab.id}").styles.width = "33%"
+            tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+            self.query_one(f"#graph_redo_log_active_count_{tab.id}").display = True
         else:
-            self.query_one(f"#graph_redo_log_{self.tab.id}").styles.width = "88%"
-            self.query_one(f"#graph_redo_log_bar_{self.tab.id}").styles.width = "12%"
-            self.query_one(f"#graph_redo_log_active_count_{self.tab.id}").display = False
+            self.query_one(f"#graph_redo_log_{tab.id}").styles.width = "88%"
+            self.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
+            self.query_one(f"#graph_redo_log_active_count_{tab.id}").display = False
 
-        self.query_one(f"#graph_adaptive_hash_index_{self.tab.id}").styles.width = "50%"
-        self.query_one(f"#graph_adaptive_hash_index_hit_ratio_{self.tab.id}").styles.width = "50%"
+        self.query_one(f"#graph_adaptive_hash_index_{tab.id}").styles.width = "50%"
+        self.query_one(f"#graph_adaptive_hash_index_hit_ratio_{tab.id}").styles.width = "50%"
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):
@@ -872,6 +532,7 @@ class DolphieApp(App):
             "question_mark",
             "plus",
             "minus",
+            "equals_sign",
             "ctrl+a",
             "ctrl+d",
         ]
@@ -942,22 +603,27 @@ class DolphieApp(App):
                 tab.worker_timer.stop()
                 self.run_worker_main(tab.id)
         elif key == "plus":
+            await self.tab_manager.create_tab(tab_name="New Tab")
+            self.tab.topbar.host = ""
+            self.tab.host_setup()
+        elif key == "equals_sign":
 
-            async def command_get_input(tab_name):
-                await self.tab_manager.create_tab(tab_name, dolphie)
-                self.tab.topbar.host = ""
-                self.tab.host_setup()
+            def command_get_input(tab_name):
+                self.tab_manager.rename_tab(tab.id, tab_name)
 
             self.app.push_screen(
-                CommandModal(command="new_tab", message="What would you like to name the new tab?"),
+                CommandModal(command=HotkeyCommands.rename_tab, message="What would you like to rename the tab to?"),
                 command_get_input,
             )
         elif key == "minus":
-            if tab.id == 1:
-                self.notify("Main tab cannot be removed")
+            if len(self.tab_manager.tabs) == 1:
+                self.notify("Removing all tabs is not permitted", severity="error")
                 return
             else:
                 await self.tab_manager.remove_tab(tab.id)
+                await tab.disconnect(update_topbar=False)
+                self.tab_manager.tabs.pop(tab.id, None)
+
         elif key == "ctrl+a" or key == "ctrl+d":
             all_tabs = self.tab_manager.get_all_tabs()
 
@@ -989,7 +655,7 @@ class DolphieApp(App):
             self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "D":
-            tab.disconnect()
+            await tab.disconnect()
 
         elif key == "e":
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
@@ -1028,7 +694,7 @@ class DolphieApp(App):
 
             self.app.push_screen(
                 CommandModal(
-                    command="thread_filter",
+                    command=HotkeyCommands.thread_filter,
                     message="Select which field you'd like to filter by",
                     processlist_data=dolphie.processlist_threads_snapshot,
                     host_cache_data=dolphie.host_cache,
@@ -1055,7 +721,7 @@ class DolphieApp(App):
 
             self.app.push_screen(
                 CommandModal(
-                    command="thread_kill_by_id",
+                    command=HotkeyCommands.thread_kill_by_id,
                     message="Specify a Thread ID to kill",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
@@ -1069,7 +735,7 @@ class DolphieApp(App):
 
             self.app.push_screen(
                 CommandModal(
-                    command="thread_kill_by_parameter",
+                    command=HotkeyCommands.thread_kill_by_parameter,
                     message="Kill threads based around parameters",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
@@ -1121,7 +787,7 @@ class DolphieApp(App):
                 )
 
             self.app.push_screen(
-                CommandModal(command="refresh_interval", message="Specify refresh interval (in seconds)"),
+                CommandModal(HotkeyCommands.refresh_interval, message="Specify refresh interval (in seconds)"),
                 command_get_input,
             )
 
@@ -1147,7 +813,7 @@ class DolphieApp(App):
 
             self.app.push_screen(
                 CommandModal(
-                    command="show_thread",
+                    command=HotkeyCommands.show_thread,
                     message="Specify a Thread ID to display its details",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
@@ -1230,10 +896,7 @@ class DolphieApp(App):
                         self.notify("No variable(s) found that match [b highlight]%s[/b highlight]" % input_variable)
 
             self.app.push_screen(
-                CommandModal(
-                    command="variable_search",
-                    message="Specify a variable to wildcard search\n[dim](input all to show everything)[/dim]",
-                ),
+                CommandModal(HotkeyCommands.variable_search, message="Specify a variable to wildcard search"),
                 command_get_input,
             )
 
@@ -1274,6 +937,7 @@ class DolphieApp(App):
                 "`": "Open Host Setup",
                 "+": "Create a new tab",
                 "-": "Remove the current tab",
+                "=": "Rename the current tab",
                 "a": "Toggle additional processlist columns",
                 "c": "Clear all filters set",
                 "d": "Display all databases",
@@ -1297,7 +961,7 @@ class DolphieApp(App):
                 "u": "List active connected users and their statistics",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
                 "z": "Display all entries in the host cache",
-                "space": "Force a manual refresh of all panels",
+                "space": "Force a manual refresh of all panels except replicas",
                 "ctrl+a": "Switch to the previous tab",
                 "ctrl+d": "Switch to the next tab",
             }
@@ -1319,10 +983,7 @@ class DolphieApp(App):
             datapoints = {
                 "Read Only": "If the host is in read-only mode",
                 "Read Hit": "The percentage of how many reads are from InnoDB buffer pool compared to from disk",
-                "Lag": (
-                    "Retrieves metric from: Default -> SHOW SLAVE STATUS, HB -> Heartbeat table, PS -> Performance"
-                    " Schema"
-                ),
+                "Lag": ("Retrieves metric from: Default -> SHOW SLAVE STATUS, HB -> Heartbeat table"),
                 "Chkpt Age": (
                     "This depicts how close InnoDB is before it starts to furiously flush dirty data to disk "
                     "(Lower is better)"
@@ -1726,8 +1387,30 @@ class DolphieApp(App):
 
         tab.spinner.hide()
 
+    def check_for_new_version(self):
+        # Query PyPI API to get the latest version
+        try:
+            if self.config.pypi_repository:
+                url = self.config.pypi_repository
+            else:
+                url = f"https://pypi.org/pypi/{__package_name__}/json"
+
+            response = requests.get(url, timeout=3)
+
+            if response.status_code == 200:
+                data = response.json()
+
+                # Extract the latest version from the response
+                latest_version = data["info"]["version"]
+
+                # Compare the current version with the latest version
+                if parse_version(latest_version) > parse_version(__version__):
+                    self.app.push_screen(NewVersionModal(current_version=__version__, latest_version=latest_version))
+        except Exception:
+            pass
+
     def compose(self) -> ComposeResult:
-        yield TopBar(host="", app_version=self.dolphie.app_version, help="press [b highlight]?[/b highlight] for help")
+        yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for help")
         yield TabbedContent(id="tabbed_content")
 
 
@@ -1736,10 +1419,9 @@ def main():
     os.environ["TERM"] = "xterm-256color"
     os.environ["COLORTERM"] = "truecolor"
 
-    dolphie = Dolphie()
-    parse_args(dolphie)
+    parser = ArgumentParser(__version__)
 
-    app = DolphieApp(dolphie)
+    app = DolphieApp(parser.config)
     app.run()
 
 

@@ -1,6 +1,30 @@
+import os
 from decimal import Decimal
 
 import charset_normalizer
+
+
+def load_host_cache_file(host_cache_file: str):
+    host_cache = {}
+    if os.path.exists(host_cache_file):
+        with open(host_cache_file) as file:
+            for line in file:
+                line = line.strip()
+                error_message = f"Host cache entry '{line}' is not properly formatted! Format: ip=hostname"
+
+                if "=" not in line:
+                    raise Exception(error_message)
+
+                host, hostname = line.split("=", maxsplit=1)
+                host = host.strip()
+                hostname = hostname.strip()
+
+                if not host or not hostname:
+                    raise Exception(error_message)
+
+                host_cache[host] = hostname
+
+    return host_cache
 
 
 def format_bytes(bytes_value, color=True):
