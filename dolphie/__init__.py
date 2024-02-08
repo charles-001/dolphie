@@ -39,6 +39,7 @@ class Dolphie:
         self.host_setup_available_hosts = config.host_setup_available_hosts
         self.startup_panels = config.startup_panels
         self.graph_marker = config.graph_marker
+        self.historical_locks = config.historical_locks
 
         self.reset_runtime_variables()
 
@@ -126,9 +127,6 @@ class Dolphie:
         self.server_uuid: str = None
         self.mysql_version: str = None
         self.host_distro: str = None
-
-        if self.config.use_processlist:
-            self.use_performance_schema = False
 
         self.host_cache_from_file = load_host_cache_file(self.host_cache_file)
 
@@ -247,9 +245,6 @@ class Dolphie:
         return parsed_source >= parsed_target
 
     def monitor_read_only_change(self):
-        if self.read_only_status == "DISCONNECTED":
-            return
-
         current_ro_status = self.global_variables.get("read_only")
         formatted_ro_status = "RO" if current_ro_status == "ON" else "R/W"
         status = "read-only" if current_ro_status == "ON" else "read/write"

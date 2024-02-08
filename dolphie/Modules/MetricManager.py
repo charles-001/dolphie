@@ -396,7 +396,7 @@ class MetricManager:
                     label="REPLACE", color=MetricColor.red, visible=False, save_history=False, graphable=False
                 ),
                 Com_commit=MetricData(
-                    label="COMMIT", color=MetricColor.green, visible=False, save_history=False, graphable=False
+                    label="COMMIT", color=MetricColor.green, visible=False, save_history=True, graphable=False
                 ),
                 Com_rollback=MetricData(
                     label="ROLLBACK", color=MetricColor.red, visible=False, save_history=False, graphable=False
@@ -516,6 +516,8 @@ class MetricManager:
     def add_metric(self, metric_data: MetricData, value: int):
         if metric_data.save_history:
             metric_data.values.append(value)
+        else:
+            metric_data.values = [value]
 
     def update_metrics_per_second_values(self):
         for metric_instance in self.metrics.__dict__.values():

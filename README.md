@@ -94,7 +94,6 @@ options:
   --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
   --show-trxs-only      Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
-  --use-processlist     Start with using Information Schema instead of Performance Schema for processlist panel
   --historical-locks
                         Always run the locks query so it can save historical data to its graph instead of only when the Locks panel is open. This query can be expensive in some environments
   -V, --version         Display version and exit

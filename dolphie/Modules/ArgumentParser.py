@@ -37,7 +37,6 @@ class Config:
     startup_panels: str = "dashboard,processlist"
     graph_marker: str = "braille"
     pypi_repository: str = "https://pypi.org/pypi/dolphie/json"
-    use_processlist: bool = False
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
     historical_locks: bool = False
@@ -276,12 +275,6 @@ Dolphie config file supports these options under [dolphie] section:
             help="Start with additional columns in Processlist panel",
         )
         self.parser.add_argument(
-            "--use-processlist",
-            dest="use_processlist",
-            action="store_true",
-            help="Start with using Information Schema instead of Performance Schema for processlist panel",
-        )
-        self.parser.add_argument(
             "--historical-locks",
             dest="historical_locks",
             action="store_true",
@@ -424,7 +417,6 @@ Dolphie config file supports these options under [dolphie] section:
 
         self.config.show_trxs_only = options["show_trxs_only"]
         self.config.show_additional_query_columns = options["show_additional_query_columns"]
-        self.config.use_processlist = options["use_processlist"]
 
         self.config.pypi_repository = options["pypi_repository"]
         self.config.historical_locks = options["historical_locks"]
