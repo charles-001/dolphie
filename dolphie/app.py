@@ -91,7 +91,7 @@ class DolphieApp(App):
         self.console.set_window_title(self.TITLE)
 
     @work(thread=True, group="main")
-    def run_worker_main(self, tab_id: int):
+    async def run_worker_main(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
 
         # Get our worker thread
@@ -100,12 +100,15 @@ class DolphieApp(App):
 
         dolphie = tab.dolphie
         try:
+            tab.worker_running = True
+
             if not dolphie.main_db_connection or not dolphie.main_db_connection.is_connected():
+                self.tab_manager.rename_tab(tab_id)  # this will use dolphie.host instead of mysql_host
                 tab.update_topbar(f"[[white]CONNECTING[/white]] {dolphie.host}:{dolphie.port}")
                 tab.loading_indicator.display = True
 
                 dolphie.db_connect()
-                self.tab_manager.rename_tab(tab.id)
+                self.tab_manager.rename_tab(tab_id)
 
             dolphie.worker_start_time = datetime.now()
             dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -184,7 +187,6 @@ class DolphieApp(App):
 
             if dolphie.is_mysql_version_at_least("5.7"):
                 if dolphie.panels.locks.visible or dolphie.config.historical_locks:
-                    self.notify("ding")
                     dolphie.main_db_connection.execute(MySQLQueries.locks_query)
                     dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
 
@@ -203,12 +205,16 @@ class DolphieApp(App):
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
+
+            tab.worker_running = False
         except ManualException as e:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
+            tab.worker_running = False
+
             tab.worker_cancel_error = e.output()
 
-            tab.disconnect()
+            await tab.disconnect()
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
@@ -287,7 +293,9 @@ class DolphieApp(App):
                         " replicas...\n"
                     )
 
+                tab.replicas_worker_running = True
                 replication_panel.fetch_replicas(tab)
+                tab.replicas_worker_running = False
             else:
                 tab.replicas_container.display = False
         else:
@@ -609,8 +617,7 @@ class DolphieApp(App):
                 return
             else:
                 await self.tab_manager.remove_tab(tab.id)
-
-                tab.disconnect(update_topbar=False)
+                await tab.disconnect(update_topbar=False)
                 self.tab_manager.tabs.pop(tab.id, None)
 
         elif key == "ctrl+a" or key == "ctrl+d":
@@ -644,7 +651,7 @@ class DolphieApp(App):
             self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "D":
-            tab.disconnect()
+            await tab.disconnect()
 
         elif key == "e":
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:

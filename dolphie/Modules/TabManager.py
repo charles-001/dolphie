@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 
 import dolphie.Modules.MetricManager as MetricManager
@@ -25,7 +26,7 @@ from textual.widgets import (
     TabbedContent,
     TabPane,
 )
-from textual.worker import Worker, WorkerState
+from textual.worker import Worker
 
 
 @dataclass
@@ -38,9 +39,11 @@ class Tab:
     worker: Worker = None
     worker_timer: Timer = None
     worker_cancel_error: str = None
+    worker_running: bool = False
 
-    replicas_worker: worker = None
+    replicas_worker: Worker = None
     replicas_worker_timer: Timer = None
+    replicas_worker_running: bool = False
 
     topbar: TopBar = None
     main_container: VerticalScroll = None
@@ -89,7 +92,7 @@ class Tab:
 
     cluster_data: Static = None
 
-    def disconnect(self, update_topbar: bool = True):
+    async def disconnect(self, update_topbar: bool = True):
         if self.worker_timer:
             self.worker_timer.stop()
         if self.replicas_worker_timer:
@@ -97,11 +100,9 @@ class Tab:
 
         if self.worker:
             self.worker.cancel()
-        self.worker = None
 
         if self.replicas_worker:
             self.replicas_worker.cancel()
-        self.replicas_worker = None
 
         if self.dolphie.main_db_connection:
             self.dolphie.main_db_connection.close()
@@ -116,10 +117,10 @@ class Tab:
 
         self.replicas_title.update("")
         for member in self.dolphie.app.query(f".replica_container_{self.id}"):
-            member.remove()
+            await member.remove()
 
         if update_topbar:
-            self.update_topbar()
+            self.update_topbar(f"[[white]DISCONNECTED[/white]] {self.dolphie.host}:{self.dolphie.port}")
 
     def update_topbar(self, custom_text: str = None):
         dolphie = self.dolphie
@@ -128,8 +129,9 @@ class Tab:
             self.topbar.host = custom_text
             return
 
+        read_only_status = dolphie.read_only_status
         if dolphie.main_db_connection and not dolphie.main_db_connection.is_connected():
-            dolphie.read_only_status = "DISCONNECTED"
+            read_only_status = "DISCONNECTED"
         else:
             if not self.worker:
                 if not self.loading_indicator.display:
@@ -138,13 +140,13 @@ class Tab:
                 # If there is no worker instance, we don't update the topbar
                 return
 
-        if dolphie.read_only_status and dolphie.mysql_host:
-            self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
+        if read_only_status and dolphie.mysql_host:
+            self.topbar.host = f"[[white]{read_only_status}[/white]] {dolphie.mysql_host}"
 
     def host_setup(self):
         dolphie = self.dolphie
 
-        def command_get_input(data):
+        async def command_get_input(data):
             host_port = data["host"].split(":")
 
             dolphie.host = host_port[0]
@@ -152,14 +154,21 @@ class Tab:
             dolphie.user = data.get("username")
             dolphie.password = data.get("password")
 
-            self.disconnect()
-            dolphie.reset_runtime_variables()
+            await self.disconnect()
 
-            if not self.worker or self.worker.state == WorkerState.CANCELLED:
-                self.worker_cancel_error = ""
+            self.loading_indicator.display = True
+            while True:
+                if not self.worker_running and not self.replicas_worker_running:
+                    dolphie.reset_runtime_variables()
 
-                self.dolphie.app.run_worker_main(self.id)
-                self.dolphie.app.run_worker_replicas(self.id)
+                    self.worker_cancel_error = ""
+
+                    self.dolphie.app.run_worker_main(self.id)
+                    self.dolphie.app.run_worker_replicas(self.id)
+
+                    break
+
+                await asyncio.sleep(0.25)
 
         self.loading_indicator.display = False
 
@@ -167,8 +176,6 @@ class Tab:
         if self.worker_cancel_error or dolphie.read_only_status == "DISCONNECTED":
             host = dolphie.host
             port = dolphie.port
-
-            self.update_topbar()
         else:
             host = ""
             port = ""
@@ -436,8 +443,12 @@ class TabManager:
             tab.manual_tab_name = new_name
         else:
             if not tab.manual_tab_name:
-                # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
-                host = tab.dolphie.mysql_host.split(":")[0][:24]
+                if tab.dolphie.mysql_host:
+                    # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
+                    host = tab.dolphie.mysql_host.split(":")[0][:24]
+                else:
+                    host = tab.dolphie.host[:24]
+
                 # If the last character isn't a letter or number, remove it
                 if not host[-1].isalnum():
                     host = host[:-1]
