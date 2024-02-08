@@ -149,10 +149,8 @@ class Tab:
 
             dolphie.host = host_port[0]
             dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
-
-            password = data.get("password")
-            if password:
-                dolphie.password = password
+            dolphie.user = data.get("username")
+            dolphie.password = data.get("password")
 
             self.disconnect()
             dolphie.reset_runtime_variables()
@@ -166,7 +164,7 @@ class Tab:
         self.loading_indicator.display = False
 
         # If we're here because of a worker cancel error, we want to pre-populate the host/port
-        if self.worker_cancel_error:
+        if self.worker_cancel_error or dolphie.read_only_status == "DISCONNECTED":
             host = dolphie.host
             port = dolphie.port
 
@@ -179,6 +177,8 @@ class Tab:
             HostSetupModal(
                 host=host,
                 port=port,
+                username=dolphie.user,
+                password=dolphie.password,
                 available_hosts=dolphie.host_setup_available_hosts,
                 error_message=self.worker_cancel_error,
             ),

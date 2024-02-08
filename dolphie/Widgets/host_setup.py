@@ -27,7 +27,7 @@ class HostSetupModal(ModalScreen):
             padding-bottom: 1;
         }
         HostSetupModal Input {
-            width: 100% !important;
+            width: 100%;
             content-align: center middle;
         }
         HostSetupModal .main_container {
@@ -37,6 +37,22 @@ class HostSetupModal(ModalScreen):
         HostSetupModal AutoComplete {
             width: 100%;
             height: auto;
+        }
+        HostSetupModal #password {
+            width: 84%;
+        }
+        HostSetupModal #show_password {
+            max-width: 12%;
+            background:  #262c4b;
+            border: blank #344063;
+        }
+        HostSetupModal #show_password:hover {
+            background:  #313960;
+            border: blank #344063;
+        }
+        HostSetupModal #show_password:focus {
+            background:  #313960;
+            border: blank #344063;
         }
         HostSetupModal #modal_footer {
             color: #d3565c;
@@ -50,11 +66,13 @@ class HostSetupModal(ModalScreen):
         Binding("escape", "app.pop_screen", "", show=False),
     ]
 
-    def __init__(self, host, port, available_hosts, error_message=None):
+    def __init__(self, host, port, username, password, available_hosts, error_message=None):
         super().__init__()
 
         self.host = host
         self.port = port
+        self.username = username
+        self.password = password
 
         if self.host and self.port:
             self.host = f"{self.host}:{self.port}"
@@ -85,17 +103,34 @@ class HostSetupModal(ModalScreen):
                     ),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
                 )
-                yield Input(id="password", placeholder="Password (empty for current)", password=True)
+                yield Input(id="username", value=self.username, placeholder="Username")
+                with Horizontal():
+                    yield Input(id="password", value=self.password, placeholder="Password", password=True)
+                    yield Button("Show", id="show_password")
             with Horizontal(classes="button_container"):
                 yield Button("Submit", id="submit", variant="primary")
                 yield Button("Cancel", id="cancel")
             yield Label(id="modal_footer")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    @on(Button.Pressed, "#show_password")
+    def on_show_password_pressed(self, event: Button.Pressed) -> None:
+        password = self.query_one("#password", Input)
+        show_password_button = self.query_one("#show_password", Button)
+
+        if password.password:
+            show_password_button.label = "Hide"
+        else:
+            show_password_button.label = "Show"
+
+        password.password = not password.password
+
+    @on(Button.Pressed, "#submit")
+    def on_submit_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "submit":
             error_message = None
 
             host = self.query_one("#host", Input)
+            username = self.query_one("#username", Input)
             password = self.query_one("#password", Input)
 
             modal_footer = self.query_one("#modal_footer", Label)
@@ -116,10 +151,14 @@ class HostSetupModal(ModalScreen):
                 modal_footer.display = True
                 return
 
-            self.dismiss({"host": host.value, "password": password.value})
+            self.dismiss({"host": host.value, "username": username.value, "password": password.value})
         else:
             self.app.pop_screen()
 
     @on(Input.Submitted, "#password")
     def on_input_submitted(self):
         self.query_one("#submit", Button).press()
+
+    @on(Button.Pressed, "#cancel")
+    def on_cancel_pressed(self, event: Button.Pressed) -> None:
+        self.app.pop_screen()

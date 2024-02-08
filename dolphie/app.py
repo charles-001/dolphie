@@ -183,9 +183,10 @@ class DolphieApp(App):
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
             if dolphie.is_mysql_version_at_least("5.7"):
-                # We don't check if panel is visible or not since we use this data for Locks graph
-                dolphie.main_db_connection.execute(MySQLQueries.locks_query)
-                dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
+                if dolphie.panels.locks.visible or dolphie.config.historical_locks:
+                    self.notify("ding")
+                    dolphie.main_db_connection.execute(MySQLQueries.locks_query)
+                    dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
 
                 if dolphie.panels.ddl.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.ddls)
@@ -225,7 +226,6 @@ class DolphieApp(App):
                     len(self.screen_stack) > 1
                     or dolphie.pause_refresh
                     or not tab.dolphie.main_db_connection.is_connected()
-                    or tab.id != self.tab.id
                 ):
                     tab.worker_timer = self.set_timer(
                         tab.dolphie.refresh_interval, partial(self.run_worker_main, tab.id)
@@ -255,7 +255,7 @@ class DolphieApp(App):
         elif event.worker.group == "replicas":
             if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right
-                if len(self.screen_stack) > 1 or dolphie.pause_refresh or tab.id != self.tab.id:
+                if len(self.screen_stack) > 1 or dolphie.pause_refresh:
                     tab.replicas_worker_timer = self.set_timer(
                         tab.dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
                     )
@@ -303,13 +303,13 @@ class DolphieApp(App):
                 loading_indicator.display = False
                 tab.main_container.display = True
 
-                self.layout_graphs()
+                self.layout_graphs(tab)
 
             if self.tab.id == tab.id:
                 tab.update_topbar()
 
             if dolphie.panels.dashboard.visible:
-                self.refresh_panel(dolphie.panels.dashboard.name)
+                self.refresh_panel(tab, dolphie.panels.dashboard.name)
 
                 # Update the sparkline for queries per second
                 sparkline = tab.sparkline
@@ -322,16 +322,16 @@ class DolphieApp(App):
                 sparkline.refresh()
 
             if dolphie.panels.processlist.visible:
-                self.refresh_panel(dolphie.panels.processlist.name)
+                self.refresh_panel(tab, dolphie.panels.processlist.name)
 
             if dolphie.panels.replication.visible:
-                self.refresh_panel(dolphie.panels.replication.name)
+                self.refresh_panel(tab, dolphie.panels.replication.name)
 
             if dolphie.panels.locks.visible:
-                self.refresh_panel(dolphie.panels.locks.name)
+                self.refresh_panel(tab, dolphie.panels.locks.name)
 
             if dolphie.panels.ddl.visible:
-                self.refresh_panel(dolphie.panels.ddl.name)
+                self.refresh_panel(tab, dolphie.panels.ddl.name)
 
             if dolphie.panels.graphs.visible:
                 graph_panel = self.query_one(f"#tabbed_content_{tab.id}", TabbedContent)
@@ -424,68 +424,68 @@ class DolphieApp(App):
         setattr(getattr(self.tab.dolphie.panels, panel_name), "visible", new_display)
 
         if panel_name not in [self.tab.dolphie.panels.graphs.name]:
-            self.app.refresh_panel(panel_name, toggled=True)
+            self.app.refresh_panel(self.tab, panel_name, toggled=True)
 
-    def refresh_panel(self, panel_name, toggled=False):
+    def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         # If loading indicator is displaying, don't refresh
-        if self.tab.loading_indicator.display:
+        if tab.loading_indicator.display:
             return
 
-        if panel_name == self.tab.dolphie.panels.replication.name:
+        if panel_name == tab.dolphie.panels.replication.name:
             # When replication panel status is changed, we need to refresh the dashboard panel as well since
             # it adds/removes it from there
-            replication_panel.create_panel(self.tab)
+            replication_panel.create_panel(tab)
 
-            if toggled and self.tab.dolphie.replication_status:
-                dashboard_panel.create_panel(self.tab)
-        elif panel_name == self.tab.dolphie.panels.dashboard.name:
-            dashboard_panel.create_panel(self.tab)
-        elif panel_name == self.tab.dolphie.panels.processlist.name:
-            processlist_panel.create_panel(self.tab)
-        elif panel_name == self.tab.dolphie.panels.locks.name:
-            locks_panel.create_panel(self.tab)
-        elif panel_name == self.tab.dolphie.panels.ddl.name:
-            ddl_panel.create_panel(self.tab)
+            if toggled and tab.dolphie.replication_status:
+                dashboard_panel.create_panel(tab)
+        elif panel_name == tab.dolphie.panels.dashboard.name:
+            dashboard_panel.create_panel(tab)
+        elif panel_name == tab.dolphie.panels.processlist.name:
+            processlist_panel.create_panel(tab)
+        elif panel_name == tab.dolphie.panels.locks.name:
+            locks_panel.create_panel(tab)
+        elif panel_name == tab.dolphie.panels.ddl.name:
+            ddl_panel.create_panel(tab)
 
-        if toggled or not self.tab.dolphie.completed_first_loop:
+        if toggled or not tab.dolphie.completed_first_loop:
             # Update the sizes of the panels depending if replication container is visible or not
-            if self.tab.dolphie.replication_status and not self.tab.dolphie.panels.replication.visible:
-                self.tab.dashboard_host_information.styles.width = "25vw"
-                self.tab.dashboard_binary_log.styles.width = "21vw"
-                self.tab.dashboard_innodb.styles.width = "17vw"
-                self.tab.dashboard_replication.styles.width = "25vw"
-                self.tab.dashboard_statistics.styles.width = "12vw"
+            if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
+                tab.dashboard_host_information.styles.width = "25vw"
+                tab.dashboard_binary_log.styles.width = "21vw"
+                tab.dashboard_innodb.styles.width = "17vw"
+                tab.dashboard_replication.styles.width = "25vw"
+                tab.dashboard_statistics.styles.width = "12vw"
 
-                self.tab.dashboard_replication.display = True
+                tab.dashboard_replication.display = True
             else:
-                self.tab.dashboard_host_information.styles.width = "32vw"
-                self.tab.dashboard_binary_log.styles.width = "27vw"
-                self.tab.dashboard_innodb.styles.width = "24vw"
-                self.tab.dashboard_replication.styles.width = "0"
-                self.tab.dashboard_statistics.styles.width = "17vw"
+                tab.dashboard_host_information.styles.width = "32vw"
+                tab.dashboard_binary_log.styles.width = "27vw"
+                tab.dashboard_innodb.styles.width = "24vw"
+                tab.dashboard_replication.styles.width = "0"
+                tab.dashboard_statistics.styles.width = "17vw"
 
-                self.tab.dashboard_replication.display = False
+                tab.dashboard_replication.display = False
 
-            self.tab.dashboard_host_information.styles.max_width = "45"
-            self.tab.dashboard_binary_log.styles.max_width = "38"
-            self.tab.dashboard_innodb.styles.max_width = "32"
-            self.tab.dashboard_replication.styles.max_width = "50"
-            self.tab.dashboard_statistics.styles.max_width = "22"
+            tab.dashboard_host_information.styles.max_width = "45"
+            tab.dashboard_binary_log.styles.max_width = "38"
+            tab.dashboard_innodb.styles.max_width = "32"
+            tab.dashboard_replication.styles.max_width = "50"
+            tab.dashboard_statistics.styles.max_width = "22"
 
-    def layout_graphs(self):
-        if self.tab.dolphie.is_mysql_version_at_least("8.0.30"):
-            self.query_one(f"#graph_redo_log_{self.tab.id}").styles.width = "55%"
-            self.query_one(f"#graph_redo_log_bar_{self.tab.id}").styles.width = "12%"
-            self.query_one(f"#graph_redo_log_active_count_{self.tab.id}").styles.width = "33%"
-            self.tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
-            self.query_one(f"#graph_redo_log_active_count_{self.tab.id}").display = True
+    def layout_graphs(self, tab: Tab):
+        if tab.dolphie.is_mysql_version_at_least("8.0.30"):
+            self.query_one(f"#graph_redo_log_{tab.id}").styles.width = "55%"
+            self.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
+            self.query_one(f"#graph_redo_log_active_count_{tab.id}").styles.width = "33%"
+            tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+            self.query_one(f"#graph_redo_log_active_count_{tab.id}").display = True
         else:
-            self.query_one(f"#graph_redo_log_{self.tab.id}").styles.width = "88%"
-            self.query_one(f"#graph_redo_log_bar_{self.tab.id}").styles.width = "12%"
-            self.query_one(f"#graph_redo_log_active_count_{self.tab.id}").display = False
+            self.query_one(f"#graph_redo_log_{tab.id}").styles.width = "88%"
+            self.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
+            self.query_one(f"#graph_redo_log_active_count_{tab.id}").display = False
 
-        self.query_one(f"#graph_adaptive_hash_index_{self.tab.id}").styles.width = "50%"
-        self.query_one(f"#graph_adaptive_hash_index_hit_ratio_{self.tab.id}").styles.width = "50%"
+        self.query_one(f"#graph_adaptive_hash_index_{tab.id}").styles.width = "50%"
+        self.query_one(f"#graph_adaptive_hash_index_hit_ratio_{tab.id}").styles.width = "50%"
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):
@@ -1379,7 +1379,11 @@ class DolphieApp(App):
     def check_for_new_version(self):
         # Query PyPI API to get the latest version
         try:
-            url = f"https://pypi.org/pypi/{__package_name__}/json"
+            if self.config.pypi_repository:
+                url = self.config.pypi_repository
+            else:
+                url = f"https://pypi.org/pypi/{__package_name__}/json"
+
             response = requests.get(url, timeout=3)
 
             if response.status_code == 200:

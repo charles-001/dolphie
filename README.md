@@ -69,63 +69,83 @@ positional arguments:
 
 options:
   --help                show this help message and exit
-  -u USER, --user USER  Username for MySQL
-  -p PASSWORD, --password PASSWORD
-                        Password for MySQL
-  --ask-pass            Ask for password (hidden text)
-  -h HOST, --host HOST  Hostname/IP address for MySQL
-  -P PORT, --port PORT  Port for MySQL (Socket has precendence)
-  -S SOCKET, --socket SOCKET
-                        Socket file for MySQL
-  -c CONFIG_FILE, --config-file CONFIG_FILE
-                        Config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
-  -f HOST_CACHE_FILE, --host-cache-file HOST_CACHE_FILE
+  -u , --user           Username for MySQL
+  -p , --password       Password for MySQL
+  -h , --host           Hostname/IP address for MySQL
+  -P , --port           Port for MySQL (Socket has precendence)
+  -S , --socket         Socket file for MySQL
+  --config-file         Dolphie's config file to use [default: ~/.dolphie]
+  --mycnf-file          MySQL config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
+  -f , --host-cache-file
                         Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format: ip=hostname [default: ~/dolphie_host_cache]
-  -q HOST_SETUP_FILE, --host-setup-file HOST_SETUP_FILE
+  -q , --host-setup-file
                         Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
-  -l LOGIN_PATH, --login-path LOGIN_PATH
-                        Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
-  -r REFRESH_INTERVAL, --refresh_interval REFRESH_INTERVAL
-                        How much time to wait in seconds between each refresh [default: 1]
-  -H HEARTBEAT_TABLE, --heartbeat-table HEARTBEAT_TABLE
+  -l , --login-path     Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
+  -r , --refresh_interval
+                        How much time to wait in seconds between each refresh [default: 10]
+  -H , --heartbeat-table
                         If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW SLAVE STATUS
-  --ssl-mode SSL_MODE   Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
-  --ssl-ca SSL_CA       Path to the file that contains a PEM-formatted CA certificate
-  --ssl-cert SSL_CERT   Path to the file that contains a PEM-formatted client certificate
-  --ssl-key SSL_KEY     Path to the file that contains a PEM-formatted private key for the client certificate
-  --panels STARTUP_PANELS
-                        What panels to display on startup separated by a comma. Supports: dashboard/replication/processlist/graphs/locks [default: dashboard,processlist]
-  --graph-marker GRAPH_MARKER
-                        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
+  --ssl-mode            Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
+  --ssl-ca              Path to the file that contains a PEM-formatted CA certificate
+  --ssl-cert            Path to the file that contains a PEM-formatted client certificate
+  --ssl-key             Path to the file that contains a PEM-formatted private key for the client certificate
+  --panels              What panels to display on startup separated by a comma. Supports: dashboard/processlist/graphs/replication/locks/ddl [default: dashboard,processlist]
+  --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
+  --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
   --show-trxs-only      Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
   --use-processlist     Start with using Information Schema instead of Performance Schema for processlist panel
+  --historical-locks
+                        Always run the locks query so it can save historical data to its graph instead of only when the Locks panel is open. This query can be expensive in some environments
   -V, --version         Display version and exit
 
-Config file with [client] section supports these options:
-    host
-    user
-    password
-    port
-    socket
-    ssl_mode REQUIRED/VERIFY_CA/VERIFY_IDENTITY
-    ssl_ca
-    ssl_cert
-    ssl_key
+MySQL my.cnf file supports these options under [client] section:
+	host
+	user
+	password
+	port
+	socket
+	ssl_mode REQUIRED/VERIFY_CA/VERIFY_IDENTITY
+	ssl_ca
+	ssl_cert
+	ssl_key
 
 Login path file supports these options:
-    host
-    user
-    password
-    port
-    socket
+	host
+	user
+	password
+	port
+	socket
 
 Environment variables support these options:
-    DOLPHIE_USER
-    DOLPHIE_PASSWORD
-    DOLPHIE_HOST
-    DOLPHIE_PORT
-    DOLPHIE_SOCKET
+	DOLPHIE_USER
+	DOLPHIE_PASSWORD
+	DOLPHIE_HOST
+	DOLPHIE_PORT
+	DOLPHIE_SOCKET
+
+Dolphie config file supports these options under [dolphie] section:
+	(str) user
+	(str) password
+	(str) host
+	(int) port
+	(str) socket
+	(str) ssl_mode
+	(str) ssl_ca
+	(str) ssl_cert
+	(str) ssl_key
+	(str) mycnf_file
+	(str) login_path
+	(str) host_cache_file
+	(str) host_setup_file
+	(int) refresh_interval
+	(str) heartbeat_table
+	(str) startup_panels
+	(str) graph_marker
+	(str) pypi_repository
+	(bool) use_processlist
+	(bool) show_trxs_only
+	(bool) show_additional_query_columns
 ```
 
 ## Supported MySQL versions
@@ -166,8 +186,9 @@ Environment variables support these options:
 Order of precedence for variables passed to Dolphie:
 1. Command-line
 2. Environment variables
-3. ~/.mylogin.cnf (`mysql_config_editor`)
-4. ~/.my.cnf
+3. Dolphie's config file
+4. ~/.mylogin.cnf (`mysql_config_editor`)
+5. ~/.my.cnf
 
 ## Feedback
 I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please let me know! I'd love to hear from you :smiley:

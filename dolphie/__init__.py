@@ -33,16 +33,9 @@ class Dolphie:
         self.host_cache_file = config.host_cache_file
         self.host_setup_file = config.host_setup_file
         self.refresh_interval = config.refresh_interval
-        self.show_idle_threads = config.show_idle_threads
         self.show_trxs_only = config.show_trxs_only
         self.show_additional_query_columns = config.show_additional_query_columns
-        self.sort_by_time_descending = config.sort_by_time_descending
         self.heartbeat_table = config.heartbeat_table
-        self.user_filter = config.user_filter
-        self.db_filter = config.db_filter
-        self.host_filter = config.host_filter
-        self.query_time_filter = config.query_time_filter
-        self.query_filter = config.query_filter
         self.host_setup_available_hosts = config.host_setup_available_hosts
         self.startup_panels = config.startup_panels
         self.graph_marker = config.graph_marker
@@ -55,6 +48,9 @@ class Dolphie:
             setattr(getattr(self.panels, panel), "visible", False)
         for panel in self.startup_panels:
             setattr(getattr(self.panels, panel), "visible", True)
+
+        self.show_idle_threads: bool = False
+        self.sort_by_time_descending: bool = True
 
     def reset_runtime_variables(self):
         self.metric_manager = MetricManager.MetricManager()
@@ -99,6 +95,12 @@ class Dolphie:
         self.mysql_host: str = None
         self.binlog_transaction_compression_percentage: int = None
         self.host_cache: dict = {}
+
+        self.user_filter = None
+        self.db_filter = None
+        self.host_filter = None
+        self.query_time_filter = None
+        self.query_filter = None
 
         # Types of hosts
         self.galera_cluster: bool = False
