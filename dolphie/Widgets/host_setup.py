@@ -1,3 +1,4 @@
+from dolphie.Modules.ManualException import ManualException
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -66,7 +67,15 @@ class HostSetupModal(ModalScreen):
         Binding("escape", "app.pop_screen", "", show=False),
     ]
 
-    def __init__(self, host, port, username, password, available_hosts, error_message=None):
+    def __init__(
+        self,
+        host: str,
+        port: str,
+        username: str,
+        password: str,
+        available_hosts: list,
+        error_message: ManualException = None,
+    ):
         super().__init__()
 
         self.host = host
@@ -88,7 +97,7 @@ class HostSetupModal(ModalScreen):
 
         footer.display = False
         if self.error_message:
-            footer.update(self.error_message)
+            footer.update(self.error_message.output())
             footer.display = True
 
     def compose(self) -> ComposeResult:

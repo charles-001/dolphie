@@ -5,6 +5,7 @@
 # * Author: Charles Thompson *
 # ****************************
 
+
 import os
 import re
 from datetime import datetime, timedelta
@@ -102,13 +103,14 @@ class DolphieApp(App):
         try:
             tab.worker_running = True
 
-            if not dolphie.main_db_connection or not dolphie.main_db_connection.is_connected():
+            if not dolphie.main_db_connection.is_connected():
                 self.tab_manager.rename_tab(tab_id)  # this will use dolphie.host instead of mysql_host
                 tab.update_topbar(f"[[white]CONNECTING[/white]] {dolphie.host}:{dolphie.port}")
                 tab.loading_indicator.display = True
 
                 dolphie.db_connect()
                 self.tab_manager.rename_tab(tab_id)
+                tab.connecting_as_hostgroup = False
 
             dolphie.worker_start_time = datetime.now()
             dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -194,8 +196,6 @@ class DolphieApp(App):
                     dolphie.main_db_connection.execute(MySQLQueries.ddls)
                     dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-            dolphie.monitor_read_only_change()
-
             dolphie.metric_manager.refresh_data(
                 worker_start_time=dolphie.worker_start_time,
                 polling_latency=dolphie.polling_latency,
@@ -209,16 +209,16 @@ class DolphieApp(App):
             )
 
             tab.worker_running = False
-        except ManualException as e:
+        except ManualException as exception:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
             tab.worker_running = False
 
-            tab.worker_cancel_error = e.output()
+            tab.worker_cancel_error = exception
 
             await tab.disconnect()
 
-    def on_worker_state_changed(self, event: Worker.StateChanged):
+    async def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
         if not tab:
             return
@@ -229,37 +229,43 @@ class DolphieApp(App):
             tab.worker_running = False
 
             if event.state == WorkerState.SUCCESS:
+                dolphie.monitor_read_only_change()
+
                 # Skip this if the conditions are right
-                if (
-                    len(self.screen_stack) > 1
-                    or dolphie.pause_refresh
-                    or not tab.dolphie.main_db_connection.is_connected()
-                ):
-                    tab.worker_timer = self.set_timer(
-                        tab.dolphie.refresh_interval, partial(self.run_worker_main, tab.id)
-                    )
+                if len(self.screen_stack) > 1 or dolphie.pause_refresh or not dolphie.main_db_connection.is_connected():
+                    tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_main, tab.id))
 
                     return
 
                 self.refresh_screen(tab)
 
-                tab.worker_timer = self.set_timer(tab.dolphie.refresh_interval, partial(self.run_worker_main, tab.id))
+                tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
-                    if self.tab.id != tab.id:
+                    error_reason = ""
+                    if tab.connecting_as_hostgroup:
+                        error_reason = f": [red]{tab.worker_cancel_error.reason}[/red]"
+
+                        tab.loading_indicator.display = False
+
+                    if self.tab.id != tab.id or tab.connecting_as_hostgroup:
                         self.notify(
-                            f"Host [light_blue]{tab.dolphie.host}:{tab.dolphie.port}[/light_blue] has been"
-                            " disconnected",
-                            title="Error",
+                            f"Host [light_blue]{dolphie.host}:{dolphie.port}[/light_blue] has"
+                            f" encountered a fatal error{error_reason}",
+                            title="MySQL Connection Error",
                             severity="error",
                             timeout=10,
                         )
 
-                    self.tab_manager.switch_tab(tab.id)
+                    if not tab.connecting_as_hostgroup:
+                        self.tab_manager.switch_tab(tab.id)
 
-                    tab.host_setup()
-                    self.bell()
+                        tab.host_setup()
+                        self.bell()
+
+                    # Reset this variable
+                    tab.connecting_as_hostgroup = False
         elif event.worker.group == "replicas":
             tab.replicas_worker_running = False
 
@@ -374,14 +380,25 @@ class DolphieApp(App):
 
         await self.capture_key(event.key)
 
+    @work()
+    async def load_hostgroup(self):
+        for host in self.config.hostgroup_hosts:
+            tab = await self.tab_manager.create_tab(tab_name=host, use_hostgroup=True)
+            tab.connecting_as_hostgroup = True
+            self.run_worker_main(tab.id)
+            self.run_worker_replicas(tab.id)
+
     async def on_mount(self):
         self.tab_manager = TabManager(app=self.app, config=self.config)
-        await self.tab_manager.create_tab(tab_name="Initial Tab")
+
+        if self.config.hostgroup_hosts:
+            self.load_hostgroup()
+        else:
+            await self.tab_manager.create_tab(tab_name="Initial Tab")
+            self.run_worker_main(self.tab.id)
+            self.run_worker_replicas(self.tab.id)
 
         self.check_for_new_version()
-
-        self.run_worker_main(self.tab.id)
-        self.run_worker_replicas(self.tab.id)
 
     def _handle_exception(self, error: Exception) -> None:
         self.bell()
@@ -391,13 +408,6 @@ class DolphieApp(App):
     def tab_changed(self, event: TabbedContent.TabActivated):
         self.tab_manager.switch_tab(event.pane.name)
 
-        if (
-            self.tab.dolphie.main_db_connection
-            and self.tab.dolphie.main_db_connection.is_connected()
-            and self.tab.dolphie.completed_first_loop
-        ):
-            self.refresh_screen(self.tab)
-
     @on(TabbedContent.TabActivated, ".metrics_tabbed_content")
     def metric_tab_changed(self, event: TabbedContent.TabActivated):
         metric_instance_name = event.pane.name
@@ -406,7 +416,7 @@ class DolphieApp(App):
             self.update_graphs(metric_instance_name)
 
     def update_graphs(self, tab_metric_instance_name):
-        if not self.tab.panel_graphs.display:
+        if not self.tab or not self.tab.panel_graphs.display:
             return
 
         for metric_instance in self.tab.dolphie.metric_manager.metrics.__dict__.values():

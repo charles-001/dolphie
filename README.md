@@ -77,14 +77,14 @@ options:
   --config-file         Dolphie's config file to use [default: ~/.dolphie]
   --mycnf-file          MySQL config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
   -f , --host-cache-file
-                        Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format: ip=hostname [default: ~/dolphie_host_cache]
+                        Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format ip=hostname [default: ~/dolphie_host_cache]
   -q , --host-setup-file
                         Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
-  -l , --login-path     Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
+  -l , --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
   -r , --refresh_interval
                         How much time to wait in seconds between each refresh [default: 1]
   -H , --heartbeat-table
-                        If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW SLAVE STATUS
+                        If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW REPLICA STATUS
   --ssl-mode            Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
   --ssl-ca              Path to the file that contains a PEM-formatted CA certificate
   --ssl-cert            Path to the file that contains a PEM-formatted client certificate
@@ -92,6 +92,7 @@ options:
   --panels              What panels to display on startup separated by a comma. Supports: dashboard/processlist/graphs/replication/locks/ddl [default: dashboard,processlist]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
+  --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it will be listed each host on a new line in the format key=host where key can be anything you want
   --show-trxs-only      Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
   --historical-locks    Always run the locks query so it can save historical data to its graph instead of only when the Locks panel is open. This query can be expensive in some environments

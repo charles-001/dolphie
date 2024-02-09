@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import Config
+from dolphie.Modules.ManualException import ManualException
 from dolphie.Widgets.host_setup import HostSetupModal
 from dolphie.Widgets.spinner import SpinnerWidget
 from dolphie.Widgets.topbar import TopBar
@@ -35,10 +36,11 @@ class Tab:
     name: str
     dolphie: Dolphie
     manual_tab_name: bool = False
+    connecting_as_hostgroup: bool = False
 
     worker: Worker = None
     worker_timer: Timer = None
-    worker_cancel_error: str = None
+    worker_cancel_error: ManualException = None
     worker_running: bool = False
 
     replicas_worker: Worker = None
@@ -119,8 +121,9 @@ class Tab:
         for member in self.dolphie.app.query(f".replica_container_{self.id}"):
             await member.remove()
 
+        self.dolphie.read_only_status = "DISCONNECTED"
         if update_topbar:
-            self.update_topbar(f"[[white]DISCONNECTED[/white]] {self.dolphie.host}:{self.dolphie.port}")
+            self.update_topbar()
 
     def update_topbar(self, custom_text: str = None):
         dolphie = self.dolphie
@@ -129,19 +132,10 @@ class Tab:
             self.topbar.host = custom_text
             return
 
-        read_only_status = dolphie.read_only_status
-        if dolphie.main_db_connection and not dolphie.main_db_connection.is_connected():
-            read_only_status = "DISCONNECTED"
+        if dolphie.read_only_status:
+            self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
         else:
-            if not self.worker:
-                if not self.loading_indicator.display:
-                    self.topbar.host = ""
-
-                # If there is no worker instance, we don't update the topbar
-                return
-
-        if read_only_status and dolphie.mysql_host:
-            self.topbar.host = f"[[white]{read_only_status}[/white]] {dolphie.mysql_host}"
+            self.topbar.host = ""
 
     def host_setup(self):
         dolphie = self.dolphie
@@ -202,13 +196,17 @@ class TabManager:
         self.tab_id_counter: int = 1
 
         self.tabbed_content = self.app.query_one("#tabbed_content", TabbedContent)
+        self.tabbed_content.display = False
 
-    async def create_tab(self, tab_name: str):
+    async def create_tab(self, tab_name: str, use_hostgroup: bool = False) -> Tab:
         tab_id = self.tab_id_counter
+
+        if len(self.app.screen_stack) > 1:
+            return
 
         await self.tabbed_content.add_pane(
             TabPane(
-                tab_name,
+                "",
                 LoadingIndicator(id=f"loading_indicator_{tab_id}"),
                 SpinnerWidget(id=f"spinner_{tab_id}"),
                 VerticalScroll(
@@ -345,8 +343,20 @@ class TabManager:
                             Switch(animate=False, id=metric, name=metric_tab_name)
                         )
 
+        # If we're using hostgroups, we want to split the tab name into the host and port
+        if use_hostgroup and self.config.hostgroup_hosts:
+            tab_host_split = tab_name.split(":")
+
+            if len(tab_host_split) == 1:
+                self.config.host = tab_host_split[0]
+                self.config.port = self.config.port
+            else:
+                self.config.host = tab_host_split[0]
+                self.config.port = tab_host_split[1]
+
         # Create a new tab instance
         dolphie = Dolphie(config=self.config, app=self.app)
+
         dolphie.tab_id = tab_id
         dolphie.tab_name = tab_name
 
@@ -433,6 +443,9 @@ class TabManager:
         # Increment the tab id counter
         self.tab_id_counter += 1
 
+        self.tabbed_content.display = True
+        return tab
+
     async def remove_tab(self, tab_id: int):
         await self.tabbed_content.remove_pane(f"tab_{self.get_tab(tab_id).id}")
 
@@ -443,11 +456,10 @@ class TabManager:
             tab.manual_tab_name = new_name
         else:
             if not tab.manual_tab_name:
-                if tab.dolphie.mysql_host:
-                    # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
-                    host = tab.dolphie.mysql_host.split(":")[0][:24]
-                else:
-                    host = tab.dolphie.host[:24]
+                # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
+                host = tab.dolphie.mysql_host.split(":")[0][:24]
+                if not host:
+                    return
 
                 # If the last character isn't a letter or number, remove it
                 if not host[-1].isalnum():
@@ -461,6 +473,8 @@ class TabManager:
 
     def switch_tab(self, tab_id: int):
         tab = self.get_tab(tab_id)
+        if not tab:
+            return
 
         self.app.tab = tab  # Update the current tab variable for the app
 
@@ -480,18 +494,3 @@ class TabManager:
             all_tabs.append(tab.id)
 
         return all_tabs
-
-    def layout_graphs(self, tab: Tab):
-        if tab.dolphie.is_mysql_version_at_least("8.0.30"):
-            self.app.query_one(f"#graph_redo_log_{tab.id}").styles.width = "55%"
-            self.app.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
-            self.app.query_one(f"#graph_redo_log_active_count_{tab.id}").styles.width = "33%"
-            tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
-            self.app.query_one(f"#graph_redo_log_active_count_{tab.id}").display = True
-        else:
-            self.app.query_one(f"#graph_redo_log_{tab.id}").styles.width = "88%"
-            self.app.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
-            self.app.query_one(f"#graph_redo_log_active_count_{tab.id}").display = False
-
-        self.app.query_one(f"#graph_adaptive_hash_index_{tab.id}").styles.width = "50%"
-        self.app.query_one(f"#graph_adaptive_hash_index_hit_ratio_{tab.id}").styles.width = "50%"

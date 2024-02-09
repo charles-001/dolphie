@@ -18,6 +18,7 @@ class Database:
         port: int,
         ssl: str,
         save_connection_id: bool = True,
+        auto_connect: bool = True,
     ):
         self.connection: pymysql.Connection = None
         self.connection_id: int = None
@@ -35,7 +36,8 @@ class Database:
         self.max_reconnect_attempts = 3
         self.running_query = False
 
-        self.connect()
+        if auto_connect:
+            self.connect()
 
     def connect(self):
         try:

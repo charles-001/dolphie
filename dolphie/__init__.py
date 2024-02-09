@@ -93,7 +93,7 @@ class Dolphie:
         self.replica_lag_source: str = None
         self.replica_lag: int = None
         self.active_redo_logs: int = None
-        self.mysql_host: str = None
+        self.mysql_host: str = f"{self.host}:{self.port}"
         self.binlog_transaction_compression_percentage: int = None
         self.host_cache: dict = {}
 
@@ -117,20 +117,7 @@ class Dolphie:
         self.group_replication_members: dict = {}
         self.group_replication_data: dict = {}
 
-        # Database connection global_variables
         # Main connection is used for Textual's worker thread so it can run asynchronous
-        self.main_db_connection: Database = None
-        # Secondary connection is for ad-hoc commands that are not a part of the worker thread
-        self.secondary_db_connection: Database = None
-        self.performance_schema_enabled: bool = False
-        self.use_performance_schema: bool = True
-        self.server_uuid: str = None
-        self.mysql_version: str = None
-        self.host_distro: str = None
-
-        self.host_cache_from_file = load_host_cache_file(self.host_cache_file)
-
-    def db_connect(self):
         db_connection_args = {
             "app": self.app,
             "tab_name": self.tab_name,
@@ -140,9 +127,23 @@ class Dolphie:
             "socket": self.socket,
             "port": self.port,
             "ssl": self.ssl,
+            "auto_connect": False,
         }
         self.main_db_connection = Database(**db_connection_args)
+        # Secondary connection is for ad-hoc commands that are not a part of the worker thread
         self.secondary_db_connection = Database(**db_connection_args, save_connection_id=False)
+
+        self.performance_schema_enabled: bool = False
+        self.use_performance_schema: bool = True
+        self.server_uuid: str = None
+        self.mysql_version: str = None
+        self.host_distro: str = None
+
+        self.host_cache_from_file = load_host_cache_file(self.host_cache_file)
+
+    def db_connect(self):
+        self.main_db_connection.connect()
+        self.secondary_db_connection.connect()
 
         global_variables = self.main_db_connection.fetch_status_and_variables("variables")
 

@@ -40,13 +40,21 @@ class Config:
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
     historical_locks: bool = False
+    hostgroup_hosts: List[str] = field(default_factory=list)
 
 
 class ArgumentParser:
     def __init__(self, app_version: str):
         self.config_options = {}
         for variable in fields(Config):
-            if variable.name not in ["app_version", "config_file", "host_setup_available_hosts", "ssl"]:
+            # Exclude these options since they are manually configured
+            if variable.name not in [
+                "app_version",
+                "config_file",
+                "host_setup_available_hosts",
+                "ssl",
+                "hostgroup_hosts",
+            ]:
                 self.config_options[variable.name] = variable.type
 
         self.formatted_options = "\n\t".join(
@@ -156,7 +164,7 @@ Dolphie config file supports these options under [dolphie] section:
             type=str,
             help=(
                 "Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line "
-                f"using format: ip=hostname [default: {self.config.host_cache_file}]"
+                f"using format ip=hostname [default: {self.config.host_cache_file}]"
             ),
             metavar="",
         )
@@ -177,8 +185,8 @@ Dolphie config file supports these options under [dolphie] section:
             dest="login_path",
             type=str,
             help=(
-                "Specify login path to use mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. "
-                f"Supercedes config file [default: {self.config.login_path}]"
+                "Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login"
+                f" credentials. Supercedes config file [default: {self.config.login_path}]"
             ),
             metavar="",
         )
@@ -197,7 +205,7 @@ Dolphie config file supports these options under [dolphie] section:
             type=str,
             help=(
                 "If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it "
-                "has for replication lag instead of Seconds_Behind_Master from SHOW SLAVE STATUS"
+                "has for replication lag instead of Seconds_Behind_Master from SHOW REPLICA STATUS"
             ),
             metavar="",
         )
@@ -259,6 +267,18 @@ Dolphie config file supports these options under [dolphie] section:
             help=(
                 "What PyPi repository to use when checking for a new version."
                 " If not specified, it will use Dolphie's PyPi repository"
+            ),
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--hostgroup",
+            dest="hostgroup",
+            type=str,
+            help=(
+                "This is used for creating tabs and connecting to them for hosts you specify in"
+                " Dolphie's config file under a hostgroup section. As an example, you'll have a section"
+                " called [cluster1] then below it will be listed each host on a new line in the format"
+                " key=host where key can be anything you want"
             ),
             metavar="",
         )
@@ -420,6 +440,25 @@ Dolphie config file supports these options under [dolphie] section:
 
         self.config.pypi_repository = options["pypi_repository"]
         self.config.historical_locks = options["historical_locks"]
+
+        hostgroup = options["hostgroup"]
+        if hostgroup:
+            if os.path.isfile(self.config.config_file):
+                cfg = ConfigParser()
+                cfg.read(self.config.config_file)
+
+                if cfg.has_section(hostgroup):
+                    for key in cfg.options(hostgroup):
+                        value = cfg.get(hostgroup, key).strip()
+                        if value:
+                            self.config.hostgroup_hosts.append(value)
+                        else:
+                            sys.exit(self.console.print(f"Hostgroup '{hostgroup}' has an empty host for key '{key}'"))
+
+                else:
+                    sys.exit(self.console.print(f"Hostgroup '{hostgroup}' was not found in Dolphie's config file"))
+            else:
+                sys.exit(self.console.print(f"Dolphie's config file was not found at {self.config.config_file}"))
 
         self.config.startup_panels = options["startup_panels"].split(",")
         for panel in self.config.startup_panels:
