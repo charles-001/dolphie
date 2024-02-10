@@ -1,8 +1,7 @@
 import re
-from datetime import timedelta
 
 from dolphie.DataTypes import Replica
-from dolphie.Modules.Functions import format_number
+from dolphie.Modules.Functions import format_number, format_time
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
@@ -256,7 +255,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         elif replica_lag >= 10:
             lag_color = "yellow"
 
-        lag = f"[{lag_color}]{str(timedelta(seconds=replica_lag)).zfill(8)}[/{lag_color}]"
+        lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
 
     data["Master_Host"] = dolphie.get_hostname(data["Master_Host"])
     mysql_gtid_enabled = False
@@ -264,7 +263,8 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     gtid_status = "OFF"
     if "Executed_Gtid_Set" in data and data["Executed_Gtid_Set"]:
         mysql_gtid_enabled = True
-        gtid_status = "ON"
+        auto_position = "ON" if data["Auto_Position"] == 1 else "OFF"
+        gtid_status = f"ON [label]Auto Position[/label]: {auto_position}"
     if "Using_Gtid" in data and data["Using_Gtid"] != "No":
         mariadb_gtid_enabled = True
         gtid_status = data["Using_Gtid"]
@@ -299,13 +299,15 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     sql_thread_running = "[green]Yes[/green]" if data.get("Slave_SQL_Running").lower() == "yes" else "[red]NO[/red]"
     table.add_row(
         "[label]Thread",
-        f"[label]IO {io_thread_running} [label]SQL {sql_thread_running}",
+        f"[label]IO[/label]: {io_thread_running} [label]SQL[/label]: {sql_thread_running}",
     )
 
     replication_delay = ""
     if data["SQL_Delay"]:
-        delay_formatted = str(timedelta(seconds=data["SQL_Delay"])).zfill(8)
-        replication_delay = f"([dark_yellow]delayed by {delay_formatted}[/dark_yellow])"
+        if dashboard_table:
+            replication_delay = "[dark_yellow](delayed)"
+        else:
+            replication_delay = f"[dark_yellow]Delay[/dark_yellow]: {format_time(data['SQL_Delay'])}"
 
     lag_source = f"Lag ({replica_sbm_source})" if replica_sbm_source else "Lag"
     if lag is None or data["Slave_SQL_Running"].lower() == "no":
@@ -313,7 +315,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     else:
         table.add_row(
             "[label]%s" % lag_source,
-            "%s [label]Speed[/label] %s %s" % (lag, speed, replication_delay),
+            "%s [label]Speed[/label]: %s %s" % (lag, speed, replication_delay),
         )
 
     if dashboard_table:
@@ -340,6 +342,10 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             "%s ([dark_gray]%s[/dark_gray])" % (data["Relay_Log_File"], data["Relay_Log_Pos"]),
         )
 
+    if dashboard_table:
+        table.add_row("[label]GTID", "%s" % gtid_status)
+        table.add_row("[label]State", "%s" % data["Slave_SQL_Running_State"])
+    else:
         replication_status_filtering = [
             "Replicate_Do_DB",
             "Replicate_Ignore_Table",
@@ -372,7 +378,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             executed_gtid_set = data["Executed_Gtid_Set"]
             retrieved_gtid_set = data["Retrieved_Gtid_Set"]
 
-            table.add_row("[label]Auto Position", "%s" % data["Auto_Position"])
+            table.add_row("[label]GTID", "%s" % gtid_status)
 
             if replica:
                 replica_primary_server_uuid = None
@@ -567,7 +573,6 @@ def fetch_replicas(tab: Tab):
                 replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port)
                 replica.connection = Database(
                     app=dolphie.app,
-                    tab_name=dolphie.tab_name,
                     host=host,
                     user=dolphie.user,
                     password=dolphie.password,

@@ -36,7 +36,6 @@ class Tab:
     name: str
     dolphie: Dolphie
     manual_tab_name: bool = False
-    connecting_as_hostgroup: bool = False
 
     worker: Worker = None
     worker_timer: Timer = None
@@ -210,6 +209,37 @@ class TabManager:
         if len(self.app.screen_stack) > 1:
             return
 
+        # If we're using hostgroups
+        if use_hostgroup and self.config.hostgroup_hosts:
+            temp_tab_name = tab_name
+            # Splitting tab name by "~" to handle potential renaming
+            tab_name_split_rename = tab_name.split("~")
+
+            if len(tab_name_split_rename) == 2:
+                # If manual tab name is provided, update the host tab
+                temp_tab_name = tab_name_split_rename[0]
+                tab_name = tab_name_split_rename[1]
+
+            # Splitting tab name by ":" to extract host and port
+            tab_host_split = temp_tab_name.split(":")
+
+            # Extract host and port information
+            original_config_port = self.config.port
+            self.config.host = tab_host_split[0]
+            self.config.port = tab_host_split[1] if len(tab_host_split) > 1 else self.config.port
+
+        # Create a new Dolphie instance
+        dolphie = Dolphie(config=self.config, app=self.app)
+        dolphie.tab_id = tab_id
+        dolphie.tab_name = tab_name
+
+        # Create our new tab instance
+        tab = Tab(id=tab_id, name=tab_name, dolphie=dolphie)
+
+        # Revert the port back to its original value
+        if use_hostgroup and len(tab_host_split) > 1:
+            self.config.port = original_config_port
+
         intial_tab_name = "" if use_hostgroup else tab_name
         await self.host_tabs.add_pane(
             TabPane(
@@ -329,6 +359,8 @@ class TabManager:
                     name=metric_tab_name,
                 )
             )
+            # Save references to the labels
+            setattr(tab, metric_tab_name, self.app.query_one(f"#stats_{metric_tab_name}_{tab_id}"))
 
             if metric_tab_name == "redo_log":
                 graph_names = ["graph_redo_log", "graph_redo_log_active_count", "graph_redo_log_bar"]
@@ -339,6 +371,8 @@ class TabManager:
                 await self.app.query_one(f"#graph_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
                     MetricManager.Graph(id=f"{graph_name}_{tab_id}", classes="panel_data")
                 )
+                # Save references to the graphs
+                setattr(tab, graph_name, self.app.query_one(f"#{graph_name}_{tab_id}"))
 
             if create_switches:
                 for metric, metric_data in metric_instance.__dict__.items():
@@ -350,24 +384,8 @@ class TabManager:
                             Switch(animate=False, id=metric, name=metric_tab_name)
                         )
 
-        # If we're using hostgroups, we want to split the tab name into the host and port
-        if use_hostgroup and self.config.hostgroup_hosts:
-            tab_host_split = tab_name.split(":")
-
-            # If there's no port specified, default to config port
-            if len(tab_host_split) == 1:
-                self.config.host = tab_host_split[0]
-                self.config.port = self.config.port
-            else:
-                self.config.host = tab_host_split[0]
-                self.config.port = tab_host_split[1]
-
-        # Create a new tab instance
-        dolphie = Dolphie(config=self.config, app=self.app)
-        dolphie.tab_id = tab_id
-        dolphie.tab_name = tab_name
-
-        tab = Tab(id=tab_id, name=tab_name, dolphie=dolphie)
+        # Save the tab instance to the tabs dictionary
+        self.tabs[tab_id] = tab
 
         # Save references to the widgets in the tab
         tab.topbar = self.app.query_one(TopBar)
@@ -442,9 +460,6 @@ class TabManager:
         for switch in switches_to_toggle:
             switch.toggle()
 
-        # Save the tab instance to the tab manager
-        self.tabs[tab_id] = tab
-
         # Switch to the new tab
         self.switch_tab(tab_id)
 
@@ -452,6 +467,7 @@ class TabManager:
         self.tab_id_counter += 1
 
         self.host_tabs.display = True
+
         return tab
 
     async def remove_tab(self, tab_id: int):
@@ -476,8 +492,8 @@ class TabManager:
                 new_name = f"{host}:[dark_gray]{tab.dolphie.port}"
 
         if new_name:
-            tab_content = self.host_tabs.get_tab(f"tab_{tab_id}")
-            tab_content.update(new_name)
+            host_tab = self.host_tabs.get_tab(f"tab_{tab_id}")
+            host_tab.update(new_name)
 
     def switch_tab(self, tab_id: int):
         tab = self.get_tab(tab_id)
@@ -494,11 +510,10 @@ class TabManager:
         if id in self.tabs:
             return self.tabs[id]
 
-    def get_all_tabs(self) -> list:
+    def get_all_tabs(self) -> list[Tab]:
         all_tabs = []
 
         for tab in self.tabs.values():
-            tab: Tab
-            all_tabs.append(tab.id)
+            all_tabs.append(tab)
 
         return all_tabs

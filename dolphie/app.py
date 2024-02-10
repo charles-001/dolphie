@@ -68,6 +68,7 @@ class DolphieApp(App):
 
         # This will be the currently selected tab
         self.tab: Tab = None
+        self.loading_hostgroups: bool = False
 
         theme = Theme({
             "white": "#e9e9e9",
@@ -109,7 +110,6 @@ class DolphieApp(App):
 
                 dolphie.db_connect()
                 self.tab_manager.rename_tab(tab_id)
-                tab.connecting_as_hostgroup = False
 
             dolphie.worker_start_time = datetime.now()
             dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -241,10 +241,10 @@ class DolphieApp(App):
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
-                    if tab.connecting_as_hostgroup:
+                    if self.loading_hostgroups:
                         tab.loading_indicator.display = False
 
-                    if self.tab.id != tab.id or tab.connecting_as_hostgroup:
+                    if self.tab.id != tab.id or self.loading_hostgroups:
                         self.notify(
                             (
                                 f"[b light_blue]{dolphie.host}:{dolphie.port}[/b light_blue]: "
@@ -255,14 +255,11 @@ class DolphieApp(App):
                             timeout=10,
                         )
 
-                    if not tab.connecting_as_hostgroup:
+                    if not self.loading_hostgroups:
                         self.tab_manager.switch_tab(tab.id)
 
                         tab.host_setup()
                         self.bell()
-
-                    # Reset this variable
-                    tab.connecting_as_hostgroup = False
         elif event.worker.group == "replicas":
             tab.replicas_worker_running = False
 
@@ -376,11 +373,15 @@ class DolphieApp(App):
 
     @work()
     async def connect_as_hostgroup(self, hostgroup: str):
+        self.loading_hostgroups = True
+
         for host in self.config.hostgroup_hosts.get(hostgroup, []):
             tab = await self.tab_manager.create_tab(tab_name=host, use_hostgroup=True)
-            tab.connecting_as_hostgroup = True
+
             self.run_worker_main(tab.id)
             self.run_worker_replicas(tab.id)
+
+        self.loading_hostgroups = False
 
     async def on_mount(self):
         self.tab_manager = TabManager(app=self.app, config=self.config)
@@ -416,7 +417,7 @@ class DolphieApp(App):
         for metric_instance in self.tab.dolphie.metric_manager.metrics.__dict__.values():
             if tab_metric_instance_name == metric_instance.tab_name:
                 for graph_name in metric_instance.graphs:
-                    self.query_one(f"#{graph_name}_{self.tab.id}").render_graph(metric_instance)
+                    getattr(self.tab, graph_name).render_graph(metric_instance)
 
         self.update_stats_label(tab_metric_instance_name)
 
@@ -433,7 +434,7 @@ class DolphieApp(App):
         formatted_stat_data = "  ".join(
             f"[b light_blue]{label}[/b light_blue] {value}" for label, value in stat_data.items()
         )
-        self.query_one(f"#stats_{tab_metric_instance_name}_{self.tab.id}").update(formatted_stat_data)
+        getattr(self.tab, tab_metric_instance_name).update(formatted_stat_data)
 
     def toggle_panel(self, panel_name):
         panel = self.app.query_one(f"#panel_{panel_name}_{self.tab.id}")
@@ -489,23 +490,24 @@ class DolphieApp(App):
             tab.dashboard_host_information.styles.max_width = "45"
             tab.dashboard_binary_log.styles.max_width = "38"
             tab.dashboard_innodb.styles.max_width = "32"
-            tab.dashboard_replication.styles.max_width = "50"
+            tab.dashboard_replication.styles.max_width = "55"
             tab.dashboard_statistics.styles.max_width = "22"
 
     def layout_graphs(self, tab: Tab):
+        # These variables are dynamically created
         if tab.dolphie.is_mysql_version_at_least("8.0.30"):
-            self.query_one(f"#graph_redo_log_{tab.id}").styles.width = "55%"
-            self.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
-            self.query_one(f"#graph_redo_log_active_count_{tab.id}").styles.width = "33%"
+            tab.graph_redo_log.styles.width = "55%"
+            tab.graph_redo_log_bar.styles.width = "12%"
+            tab.graph_redo_log_active_count.styles.width = "33%"
+            tab.graph_redo_log_active_count.display = True
             tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
-            self.query_one(f"#graph_redo_log_active_count_{tab.id}").display = True
         else:
-            self.query_one(f"#graph_redo_log_{tab.id}").styles.width = "88%"
-            self.query_one(f"#graph_redo_log_bar_{tab.id}").styles.width = "12%"
-            self.query_one(f"#graph_redo_log_active_count_{tab.id}").display = False
+            tab.graph_redo_log.styles.width = "88%"
+            tab.graph_redo_log_bar.styles.width = "12%"
+            tab.graph_redo_log_active_count.display = False
 
-        self.query_one(f"#graph_adaptive_hash_index_{tab.id}").styles.width = "50%"
-        self.query_one(f"#graph_adaptive_hash_index_hit_ratio_{tab.id}").styles.width = "50%"
+        tab.graph_adaptive_hash_index.styles.width = "50%"
+        tab.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):
@@ -559,6 +561,10 @@ class DolphieApp(App):
             if not tab.worker:
                 self.notify("You must be connected to a host to use commands")
                 return
+
+        if self.loading_hostgroups:
+            self.notify("You can't run commands while hosts are connecting as a hostgroup")
+            return
 
         if key == "1":
             self.toggle_panel(dolphie.panels.dashboard.name)
@@ -635,7 +641,7 @@ class DolphieApp(App):
                 self.tab_manager.tabs.pop(tab.id, None)
 
         elif key == "ctrl+a" or key == "ctrl+d":
-            all_tabs = self.tab_manager.get_all_tabs()
+            all_tabs = [tab.id for tab in self.tab_manager.get_all_tabs()]
 
             if key == "ctrl+a":
                 switch_to_tab = all_tabs[(all_tabs.index(tab.id) - 1) % len(all_tabs)]

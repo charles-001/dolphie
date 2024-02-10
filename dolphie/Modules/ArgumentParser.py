@@ -278,8 +278,9 @@ Dolphie config file supports these options under [dolphie] section:
             help=(
                 "This is used for creating tabs and connecting to them for hosts you specify in"
                 " Dolphie's config file under a hostgroup section. As an example, you'll have a section"
-                " called [cluster1] then below it will be listed each host on a new line in the format"
-                " key=host where key can be anything you want. Hosts support optional port in the format host:port"
+                " called [cluster1] then below it you will list each host on a new line in the format"
+                " key=host where key can be anything you want. Hosts support optional port in the format host:port."
+                " You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)"
             ),
             metavar="",
         )
