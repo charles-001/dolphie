@@ -92,7 +92,7 @@ options:
   --panels              What panels to display on startup separated by a comma. Supports: dashboard/processlist/graphs/replication/locks/ddl [default: dashboard,processlist]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
-  --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it will be listed each host on a new line in the format key=host where key can be anything you want
+  --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it will be listed each host on a new line in the format key=host where key can be anything you want. Hosts support optional port in the format host:port
   --show-trxs-only      Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
   --historical-locks    Always run the locks query so it can save historical data to its graph instead of only when the Locks panel is open. This query can be expensive in some environments

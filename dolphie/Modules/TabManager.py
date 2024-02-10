@@ -49,6 +49,7 @@ class Tab:
 
     topbar: TopBar = None
     main_container: VerticalScroll = None
+    metric_graph_tabs: TabbedContent = None
     loading_indicator: LoadingIndicator = None
     sparkline: Sparkline = None
     panel_dashboard: Container = None
@@ -223,7 +224,7 @@ class TabManager:
                         classes="panel_container dashboard",
                     ),
                     Container(
-                        TabbedContent(id=f"tabbed_content_{tab_id}", classes="metrics_tabbed_content"),
+                        TabbedContent(id=f"metric_graph_tabs_{tab_id}", classes="metrics_tabbed_content"),
                         id=f"panel_graphs_{tab_id}",
                         classes="panel_container",
                     ),
@@ -309,7 +310,7 @@ class TabManager:
             metric_tab_name = metric_instance.tab_name
             graph_names = metric_instance.graphs
 
-            await self.app.query_one(f"#tabbed_content_{tab_id}", TabbedContent).add_pane(
+            await self.app.query_one(f"#metric_graph_tabs_{tab_id}", TabbedContent).add_pane(
                 TabPane(
                     tab_formatted_name,
                     Label(id=f"stats_{metric_tab_name}_{tab_id}", classes="stats_data"),
@@ -365,6 +366,7 @@ class TabManager:
         # Save references to the widgets in the tab
         tab.topbar = self.app.query_one(TopBar)
         tab.main_container = self.app.query_one(f"#main_container_{tab.id}", VerticalScroll)
+        tab.metric_graph_tabs = self.app.query_one(f"#metric_graph_tabs_{tab.id}", TabbedContent)
         tab.loading_indicator = self.app.query_one(f"#loading_indicator_{tab.id}", LoadingIndicator)
         tab.sparkline = self.app.query_one(f"#panel_dashboard_queries_qps_{tab.id}", Sparkline)
         tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)

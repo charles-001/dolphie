@@ -46,7 +46,6 @@ from rich.traceback import Traceback
 from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App, ComposeResult
-from textual.css.query import NoMatches
 from textual.widgets import Switch, TabbedContent
 from textual.worker import Worker, WorkerState, get_current_worker
 
@@ -74,6 +73,7 @@ class DolphieApp(App):
             "white": "#e9e9e9",
             "green": "#54efae",
             "yellow": "#f6ff8f",
+            "dark_yellow": "#cad45f",
             "red": "#fd8383",
             "purple": "#b565f3",
             "dark_gray": "#969aad",
@@ -98,11 +98,10 @@ class DolphieApp(App):
         # Get our worker thread
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
+        tab.worker_running = True
 
         dolphie = tab.dolphie
         try:
-            tab.worker_running = True
-
             if not dolphie.main_db_connection.is_connected():
                 self.tab_manager.rename_tab(tab_id)  # this will use dolphie.host instead of mysql_host
                 tab.update_topbar(f"[[white]CONNECTING[/white]] {dolphie.host}:{dolphie.port}")
@@ -208,15 +207,14 @@ class DolphieApp(App):
                 replication_lag=dolphie.replica_lag,
             )
 
-            tab.worker_running = False
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
-            tab.worker_running = False
-
             tab.worker_cancel_error = exception
 
             await tab.disconnect()
+
+        tab.worker_running = False
 
     async def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
@@ -273,7 +271,7 @@ class DolphieApp(App):
                 # Skip this if the conditions are right
                 if len(self.screen_stack) > 1 or dolphie.pause_refresh:
                     tab.replicas_worker_timer = self.set_timer(
-                        tab.dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
+                        dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
                     )
 
                     return
@@ -281,7 +279,9 @@ class DolphieApp(App):
                 if dolphie.panels.replication.visible and dolphie.replica_manager.available_replicas:
                     replication_panel.create_replica_panel(tab)
 
-                tab.replicas_worker_timer = self.set_timer(2, partial(self.run_worker_replicas, tab.id))
+                tab.replicas_worker_timer = self.set_timer(
+                    dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
+                )
 
     @work(thread=True, group="replicas")
     def run_worker_replicas(self, tab_id: int):
@@ -315,64 +315,57 @@ class DolphieApp(App):
     def refresh_screen(self, tab: Tab):
         dolphie = tab.dolphie
 
-        try:
-            loading_indicator = tab.loading_indicator
-            if loading_indicator.display:
-                loading_indicator.display = False
-                tab.main_container.display = True
+        loading_indicator = tab.loading_indicator
+        if loading_indicator.display:
+            loading_indicator.display = False
+            tab.main_container.display = True
 
-                self.layout_graphs(tab)
+            self.layout_graphs(tab)
 
-            if self.tab.id == tab.id:
-                tab.update_topbar()
+        if self.tab.id == tab.id:
+            tab.update_topbar()
 
-            if dolphie.panels.dashboard.visible:
-                self.refresh_panel(tab, dolphie.panels.dashboard.name)
+        if dolphie.panels.dashboard.visible:
+            self.refresh_panel(tab, dolphie.panels.dashboard.name)
 
-                # Update the sparkline for queries per second
-                sparkline = tab.sparkline
-                sparkline_data = dolphie.metric_manager.metrics.dml.Queries.values
-                if not sparkline.display:
-                    sparkline_data = [0]
-                    sparkline.display = True
+            # Update the sparkline for queries per second
+            sparkline = tab.sparkline
+            sparkline_data = dolphie.metric_manager.metrics.dml.Queries.values
+            if not sparkline.display:
+                sparkline_data = [0]
+                sparkline.display = True
 
-                sparkline.data = sparkline_data
-                sparkline.refresh()
+            sparkline.data = sparkline_data
+            sparkline.refresh()
 
-            if dolphie.panels.processlist.visible:
-                self.refresh_panel(tab, dolphie.panels.processlist.name)
+        if dolphie.panels.processlist.visible:
+            self.refresh_panel(tab, dolphie.panels.processlist.name)
 
-            if dolphie.panels.replication.visible:
-                self.refresh_panel(tab, dolphie.panels.replication.name)
+        if dolphie.panels.replication.visible:
+            self.refresh_panel(tab, dolphie.panels.replication.name)
 
-            if dolphie.panels.locks.visible:
-                self.refresh_panel(tab, dolphie.panels.locks.name)
+        if dolphie.panels.locks.visible:
+            self.refresh_panel(tab, dolphie.panels.locks.name)
 
-            if dolphie.panels.ddl.visible:
-                self.refresh_panel(tab, dolphie.panels.ddl.name)
+        if dolphie.panels.ddl.visible:
+            self.refresh_panel(tab, dolphie.panels.ddl.name)
 
-            if dolphie.panels.graphs.visible:
-                graph_panel = self.query_one(f"#tabbed_content_{tab.id}", TabbedContent)
+        if dolphie.panels.graphs.visible:
+            # Hide/show replication tab based on replication status
+            if dolphie.replication_status:
+                tab.metric_graph_tabs.show_tab(f"graph_tab_replication_lag_{tab.id}")
+            else:
+                tab.metric_graph_tabs.hide_tab(f"graph_tab_replication_lag_{tab.id}")
 
-                # Hide/show replication tab based on replication status
-                if dolphie.replication_status:
-                    graph_panel.show_tab(f"graph_tab_replication_lag_{tab.id}")
-                else:
-                    graph_panel.hide_tab(f"graph_tab_replication_lag_{tab.id}")
+            # Refresh the graph(s) for the selected tab
+            self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
-                # Refresh the graph(s) for the selected tab
-                self.update_graphs(graph_panel.get_pane(graph_panel.active).name)
+        # We take a snapshot of the processlist to be used for commands
+        # since the data can change after a key is pressed
+        dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
-            # We take a snapshot of the processlist to be used for commands
-            # since the data can change after a key is pressed
-            dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
-
-            # This denotes that we've gone through the first loop of the worker thread
-            dolphie.completed_first_loop = True
-        except NoMatches:
-            # This is thrown if a user toggles panels on and off and the display_* states aren't 1:1
-            # with worker thread/state change due to asynchronous nature of the worker thread
-            pass
+        # This denotes that we've gone through the first loop of the worker thread
+        dolphie.completed_first_loop = True
 
     async def on_key(self, event: events.Key):
         if len(self.screen_stack) > 1:

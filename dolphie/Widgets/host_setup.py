@@ -70,7 +70,7 @@ class HostSetupModal(ModalScreen):
     def __init__(
         self,
         host: str,
-        port: str,
+        port: int,
         username: str,
         password: str,
         available_hosts: list,

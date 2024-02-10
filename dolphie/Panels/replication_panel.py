@@ -241,16 +241,22 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         replica_sbm = dolphie.replica_lag
 
     speed = 0
+    lag = None
     if replica_sbm is not None:
         if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
             speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.polling_latency)
 
-        if replica_sbm >= 20:
-            lag = "[red]%s" % "{:0>8}[/red]".format(str(timedelta(seconds=replica_sbm)))
-        elif replica_sbm >= 10:
-            lag = "[yellow]%s[/yellow]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
-        else:
-            lag = "[green]%s[/green]" % "{:0>8}".format(str(timedelta(seconds=replica_sbm)))
+        replica_lag = replica_sbm
+        if data.get("SQL_Delay"):
+            replica_lag -= data["SQL_Delay"]
+
+        lag_color = "green"
+        if replica_lag >= 20:
+            lag_color = "red"
+        elif replica_lag >= 10:
+            lag_color = "yellow"
+
+        lag = f"[{lag_color}]{str(timedelta(seconds=replica_lag)).zfill(8)}[/{lag_color}]"
 
     data["Master_Host"] = dolphie.get_hostname(data["Master_Host"])
     mysql_gtid_enabled = False
@@ -289,31 +295,25 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     if not dashboard_table:
         table.add_row("[label]User", "%s" % data["Master_User"])
 
-    if data["Slave_IO_Running"].lower() == "yes":
-        io_thread_running = "[green]Yes[/green]"
-    else:
-        io_thread_running = "[red]NO[/red]"
-
-    if data["Slave_SQL_Running"].lower() == "yes":
-        sql_thread_running = "[green]Yes[/green]"
-    else:
-        sql_thread_running = "[red]NO[/red]"
-
+    io_thread_running = "[green]Yes[/green]" if data.get("Slave_IO_Running").lower() == "yes" else "[red]NO[/red]"
+    sql_thread_running = "[green]Yes[/green]" if data.get("Slave_SQL_Running").lower() == "yes" else "[red]NO[/red]"
     table.add_row(
         "[label]Thread",
-        "[label]IO %s [label]SQL %s" % (io_thread_running, sql_thread_running),
+        f"[label]IO {io_thread_running} [label]SQL {sql_thread_running}",
     )
 
-    lag_source = "Lag"
-    if replica_sbm_source:
-        lag_source = f"Lag ({replica_sbm_source})"
+    replication_delay = ""
+    if data["SQL_Delay"]:
+        delay_formatted = str(timedelta(seconds=data["SQL_Delay"])).zfill(8)
+        replication_delay = f"([dark_yellow]delayed by {delay_formatted}[/dark_yellow])"
 
-    if replica_sbm is None or data["Slave_SQL_Running"].lower() == "no":
+    lag_source = f"Lag ({replica_sbm_source})" if replica_sbm_source else "Lag"
+    if lag is None or data["Slave_SQL_Running"].lower() == "no":
         table.add_row(f"[label]{lag_source}", "")
     else:
         table.add_row(
             "[label]%s" % lag_source,
-            "%s [label]Speed[/label] %s" % (lag, speed),
+            "%s [label]Speed[/label] %s %s" % (lag, speed, replication_delay),
         )
 
     if dashboard_table:
