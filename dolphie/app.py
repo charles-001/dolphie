@@ -45,7 +45,7 @@ from rich.theme import Theme
 from rich.traceback import Traceback
 from sqlparse import format as sqlformat
 from textual import events, on, work
-from textual.app import App, ComposeResult
+from textual.app import App
 from textual.widgets import Switch, TabbedContent
 from textual.worker import Worker, WorkerState, get_current_worker
 
@@ -241,16 +241,15 @@ class DolphieApp(App):
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
-                    error_reason = ""
                     if tab.connecting_as_hostgroup:
-                        error_reason = f": [red]{tab.worker_cancel_error.reason}[/red]"
-
                         tab.loading_indicator.display = False
 
                     if self.tab.id != tab.id or tab.connecting_as_hostgroup:
                         self.notify(
-                            f"Host [light_blue]{dolphie.host}:{dolphie.port}[/light_blue] has"
-                            f" encountered a fatal error{error_reason}",
+                            (
+                                f"[b light_blue]{dolphie.host}:{dolphie.port}[/b light_blue]: "
+                                f"{tab.worker_cancel_error.reason}"
+                            ),
                             title="MySQL Connection Error",
                             severity="error",
                             timeout=10,
@@ -318,9 +317,11 @@ class DolphieApp(App):
         loading_indicator = tab.loading_indicator
         if loading_indicator.display:
             loading_indicator.display = False
-            tab.main_container.display = True
 
             self.layout_graphs(tab)
+
+        if not tab.main_container.display:
+            tab.main_container.display = True
 
         if self.tab.id == tab.id:
             tab.update_topbar()
@@ -374,8 +375,8 @@ class DolphieApp(App):
         await self.capture_key(event.key)
 
     @work()
-    async def load_hostgroup(self):
-        for host in self.config.hostgroup_hosts:
+    async def connect_as_hostgroup(self, hostgroup: str):
+        for host in self.config.hostgroup_hosts.get(hostgroup, []):
             tab = await self.tab_manager.create_tab(tab_name=host, use_hostgroup=True)
             tab.connecting_as_hostgroup = True
             self.run_worker_main(tab.id)
@@ -384,8 +385,8 @@ class DolphieApp(App):
     async def on_mount(self):
         self.tab_manager = TabManager(app=self.app, config=self.config)
 
-        if self.config.hostgroup_hosts:
-            self.load_hostgroup()
+        if self.config.hostgroup:
+            self.connect_as_hostgroup(self.config.hostgroup)
         else:
             await self.tab_manager.create_tab(tab_name="Initial Tab")
             self.run_worker_main(self.tab.id)
@@ -397,11 +398,11 @@ class DolphieApp(App):
         self.bell()
         self.exit(message=Traceback(show_locals=True, width=None, locals_max_length=5))
 
-    @on(TabbedContent.TabActivated, "#tabbed_content")
+    @on(TabbedContent.TabActivated, "#host_tabs")
     def tab_changed(self, event: TabbedContent.TabActivated):
         self.tab_manager.switch_tab(event.pane.name)
 
-    @on(TabbedContent.TabActivated, ".metrics_tabbed_content")
+    @on(TabbedContent.TabActivated, ".metrics_host_tabs")
     def metric_tab_changed(self, event: TabbedContent.TabActivated):
         metric_instance_name = event.pane.name
 
@@ -522,6 +523,8 @@ class DolphieApp(App):
 
     async def capture_key(self, key):
         tab = self.tab_manager.get_tab(self.tab.id)
+        if not tab:
+            return
 
         exclude_keys = [
             "up",
@@ -801,8 +804,7 @@ class DolphieApp(App):
         elif key == "R":
             dolphie.metric_manager.reset()
 
-            active_graph = self.app.query_one(f"#tabbed_content_{tab.id}", TabbedContent)
-            self.update_graphs(active_graph.get_pane(active_graph.active).name)
+            self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
             self.notify("Metrics have been reset", severity="success")
 
         elif key == "s":
@@ -1412,9 +1414,9 @@ class DolphieApp(App):
         except Exception:
             pass
 
-    def compose(self) -> ComposeResult:
+    def compose(self):
         yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for help")
-        yield TabbedContent(id="tabbed_content")
+        yield TabbedContent(id="host_tabs")
 
 
 def main():

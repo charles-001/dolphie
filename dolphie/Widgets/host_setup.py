@@ -4,7 +4,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Input, Label, Static
+from textual.widgets import Button, Input, Label, Select, Static
 from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
 
 
@@ -62,6 +62,58 @@ class HostSetupModal(ModalScreen):
             padding-top: 1;
             margin: 0 2;
         }
+        HostSetupModal Select {
+            width: 100%;
+            margin: 0 2;
+            margin-bottom: 1;
+        }
+        HostSetupModal SelectCurrent Static#label {
+            color: #606e88;
+        }
+        HostSetupModal SelectCurrent.-has-value Static#label {
+            color: #e9e9e9;
+        }
+        HostSetupModal Select:focus > SelectCurrent {
+            border: tall #384673;
+        }
+        HostSetupModal SelectCurrent {
+            background: #111322;
+            border: tall #252e49;
+        }
+        HostSetupModal Select > OptionList:focus {
+            margin: 0 0 0 0;
+            height: auto;
+            max-height: 15;
+            border: tall #3c476b;
+        }
+        HostSetupModal OptionList {
+            background: #111322;
+            border: tall #252e49;
+            width: 100%;
+            height: 15;
+            margin: 0 1 0 1;
+        }
+        HostSetupModal OptionList:focus {
+            border: tall #475484;
+        }
+        HostSetupModal OptionList > .option-list--option-highlighted {
+            text-style: none;
+            background: #131626;
+        }
+        HostSetupModal OptionList:focus > .option-list--option-highlighted {
+            background: #283048;
+        }
+        HostSetupModal OptionList > .option-list--option-hover {
+            background: #283048;
+        }
+        HostSetupModal OptionList > .option-list--option-hover-highlighted {
+            background: #283048;
+            text-style: none;
+        }
+        HostSetupModal OptionList:focus > .option-list--option-hover-highlighted {
+            background: #283048;
+            text-style: none;
+        }
     """
     BINDINGS = [
         Binding("escape", "app.pop_screen", "", show=False),
@@ -74,6 +126,7 @@ class HostSetupModal(ModalScreen):
         username: str,
         password: str,
         available_hosts: list,
+        hostgroups: dict,
         error_message: ManualException = None,
     ):
         super().__init__()
@@ -89,6 +142,10 @@ class HostSetupModal(ModalScreen):
         self.dropdown_items = []
         if available_hosts:
             self.dropdown_items = [DropdownItem(id) for id in sorted(available_hosts)]
+
+        self.hostgroups = []
+        if hostgroups:
+            self.hostgroups = [(host, host) for host in hostgroups]
 
         self.error_message = error_message
 
@@ -111,6 +168,11 @@ class HostSetupModal(ModalScreen):
                         placeholder="Start typing to search for a host - format is host:port",
                     ),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
+                )
+                yield Select(
+                    options=self.hostgroups,
+                    id="hostgroup",
+                    prompt="Select a hostgroup (optional)",
                 )
                 yield Input(id="username", value=self.username, placeholder="Username")
                 with Horizontal():
@@ -139,8 +201,13 @@ class HostSetupModal(ModalScreen):
             error_message = None
 
             host = self.query_one("#host", Input)
+            hostgroup = self.query_one("#hostgroup", Select)
             username = self.query_one("#username", Input)
             password = self.query_one("#password", Input)
+
+            hostgroup_value = hostgroup.value
+            if hostgroup_value == Select.BLANK:
+                hostgroup_value = None
 
             modal_footer = self.query_one("#modal_footer", Label)
             host_split = host.value.split(":")
@@ -152,15 +219,20 @@ class HostSetupModal(ModalScreen):
             elif len(host_split) > 2:
                 error_message = "Host cannot contain more than one colon"
 
-            if not host.value:
-                error_message = "Host cannot be empty"
+            if not host.value and not hostgroup_value:
+                error_message = "You must specify either a host or hostgroup"
 
             if error_message:
                 modal_footer.update(error_message)
                 modal_footer.display = True
                 return
 
-            self.dismiss({"host": host.value, "username": username.value, "password": password.value})
+            self.dismiss({
+                "host": host.value,
+                "hostgroup": hostgroup_value,
+                "username": username.value,
+                "password": password.value,
+            })
         else:
             self.app.pop_screen()
 

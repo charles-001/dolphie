@@ -40,7 +40,8 @@ class Config:
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
     historical_locks: bool = False
-    hostgroup_hosts: List[str] = field(default_factory=list)
+    hostgroup: str = None
+    hostgroup_hosts: Dict[str, List[str]] = field(default_factory=dict)
 
 
 class ArgumentParser:
@@ -441,24 +442,35 @@ Dolphie config file supports these options under [dolphie] section:
         self.config.pypi_repository = options["pypi_repository"]
         self.config.historical_locks = options["historical_locks"]
 
-        hostgroup = options["hostgroup"]
-        if hostgroup:
-            if os.path.isfile(self.config.config_file):
-                cfg = ConfigParser()
-                cfg.read(self.config.config_file)
+        # Save all hostgroups found to the config object so we can use it in the app
+        self.config.hostgroup = options["hostgroup"]
+        if os.path.isfile(self.config.config_file):
+            cfg = ConfigParser()
+            cfg.read(self.config.config_file)
 
-                if cfg.has_section(hostgroup):
-                    for key in cfg.options(hostgroup):
-                        value = cfg.get(hostgroup, key).strip()
-                        if value:
-                            self.config.hostgroup_hosts.append(value)
-                        else:
-                            sys.exit(self.console.print(f"Hostgroup '{hostgroup}' has an empty host for key '{key}'"))
+            hostgroups = {}
+            for hostgroup in cfg.sections():
+                hosts = []
+                if hostgroup == "dolphie":
+                    continue
 
-                else:
-                    sys.exit(self.console.print(f"Hostgroup '{hostgroup}' was not found in Dolphie's config file"))
-            else:
-                sys.exit(self.console.print(f"Dolphie's config file was not found at {self.config.config_file}"))
+                for key in cfg.options(hostgroup):
+                    host = cfg.get(hostgroup, key).strip()
+                    if host:
+                        hosts.append(host)
+                    else:
+                        sys.exit(self.console.print(f"Hostgroup '{hostgroup}' has an empty host for key '{key}'"))
+
+                hostgroups[hostgroup] = hosts
+
+            if self.config.hostgroup and self.config.hostgroup not in hostgroups:
+                sys.exit(
+                    self.console.print(f"Hostgroup '{options['hostgroup']}' was not found in Dolphie's config file")
+                )
+
+            self.config.hostgroup_hosts = hostgroups
+        else:
+            sys.exit(self.console.print(f"Dolphie's config file was not found at {self.config.config_file}"))
 
         self.config.startup_panels = options["startup_panels"].split(",")
         for panel in self.config.startup_panels:

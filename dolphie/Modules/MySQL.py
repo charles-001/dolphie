@@ -10,7 +10,6 @@ class Database:
     def __init__(
         self,
         app: App,
-        tab_name: str,
         host: str,
         user: str,
         password: str,
@@ -24,7 +23,6 @@ class Database:
         self.connection_id: int = None
 
         self.app = app
-        self.tab_name = tab_name
         self.host = host
         self.user = user
         self.password = password
@@ -117,8 +115,7 @@ class Database:
                         # 2055: Lost connection to MySQL server at hostname
 
                         self.app.notify(
-                            f"Tab [highlight]{self.tab_name}[/highlight]"
-                            f" ([light_blue]{self.host}:{self.port}[/light_blue]): {error_message}",
+                            f"[b light_blue]{self.host}:{self.port}[/b light_blue]: {error_message}",
                             title="MySQL Connection Lost",
                             severity="error",
                             timeout=10,
@@ -128,8 +125,7 @@ class Database:
                         self.connect()
 
                         self.app.notify(
-                            f"Tab [highlight]{self.tab_name}[/highlight]"
-                            f" ([light_blue]{self.host}:{self.port}[/light_blue]): Successfully reconnected",
+                            f"[b light_blue]{self.host}:{self.port}[/b light_blue]: Successfully reconnected",
                             title="MySQL Connection Created",
                             severity="success",
                             timeout=10,

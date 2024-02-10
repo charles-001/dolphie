@@ -40,6 +40,8 @@ class Dolphie:
         self.startup_panels = config.startup_panels
         self.graph_marker = config.graph_marker
         self.historical_locks = config.historical_locks
+        self.hostgroup = config.hostgroup
+        self.hostgroup_hosts = config.hostgroup_hosts
 
         self.reset_runtime_variables()
 
@@ -120,7 +122,6 @@ class Dolphie:
         # Main connection is used for Textual's worker thread so it can run asynchronous
         db_connection_args = {
             "app": self.app,
-            "tab_name": self.tab_name,
             "host": self.host,
             "user": self.user,
             "password": self.password,

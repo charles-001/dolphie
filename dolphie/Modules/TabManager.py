@@ -148,22 +148,26 @@ class Tab:
             dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
             dolphie.user = data.get("username")
             dolphie.password = data.get("password")
+            hostgroup = data.get("hostgroup")
 
-            await self.disconnect()
+            if hostgroup:
+                self.dolphie.app.connect_as_hostgroup(hostgroup)
+            else:
+                await self.disconnect()
 
-            self.loading_indicator.display = True
-            while True:
-                if not self.worker_running and not self.replicas_worker_running:
-                    dolphie.reset_runtime_variables()
+                self.loading_indicator.display = True
+                while True:
+                    if not self.worker_running and not self.replicas_worker_running:
+                        dolphie.reset_runtime_variables()
 
-                    self.worker_cancel_error = ""
+                        self.worker_cancel_error = ""
 
-                    self.dolphie.app.run_worker_main(self.id)
-                    self.dolphie.app.run_worker_replicas(self.id)
+                        self.dolphie.app.run_worker_main(self.id)
+                        self.dolphie.app.run_worker_replicas(self.id)
 
-                    break
+                        break
 
-                await asyncio.sleep(0.25)
+                    await asyncio.sleep(0.25)
 
         self.loading_indicator.display = False
 
@@ -181,6 +185,7 @@ class Tab:
                 port=port,
                 username=dolphie.user,
                 password=dolphie.password,
+                hostgroups=dolphie.hostgroup_hosts.keys(),
                 available_hosts=dolphie.host_setup_available_hosts,
                 error_message=self.worker_cancel_error,
             ),
@@ -196,8 +201,8 @@ class TabManager:
         self.tabs: dict = {}
         self.tab_id_counter: int = 1
 
-        self.tabbed_content = self.app.query_one("#tabbed_content", TabbedContent)
-        self.tabbed_content.display = False
+        self.host_tabs = self.app.query_one("#host_tabs", TabbedContent)
+        self.host_tabs.display = False
 
     async def create_tab(self, tab_name: str, use_hostgroup: bool = False) -> Tab:
         tab_id = self.tab_id_counter
@@ -205,9 +210,10 @@ class TabManager:
         if len(self.app.screen_stack) > 1:
             return
 
-        await self.tabbed_content.add_pane(
+        intial_tab_name = "" if use_hostgroup else tab_name
+        await self.host_tabs.add_pane(
             TabPane(
-                "",
+                intial_tab_name,
                 LoadingIndicator(id=f"loading_indicator_{tab_id}"),
                 SpinnerWidget(id=f"spinner_{tab_id}"),
                 VerticalScroll(
@@ -224,7 +230,7 @@ class TabManager:
                         classes="panel_container dashboard",
                     ),
                     Container(
-                        TabbedContent(id=f"metric_graph_tabs_{tab_id}", classes="metrics_tabbed_content"),
+                        TabbedContent(id=f"metric_graph_tabs_{tab_id}", classes="metrics_host_tabs"),
                         id=f"panel_graphs_{tab_id}",
                         classes="panel_container",
                     ),
@@ -348,6 +354,7 @@ class TabManager:
         if use_hostgroup and self.config.hostgroup_hosts:
             tab_host_split = tab_name.split(":")
 
+            # If there's no port specified, default to config port
             if len(tab_host_split) == 1:
                 self.config.host = tab_host_split[0]
                 self.config.port = self.config.port
@@ -357,7 +364,6 @@ class TabManager:
 
         # Create a new tab instance
         dolphie = Dolphie(config=self.config, app=self.app)
-
         dolphie.tab_id = tab_id
         dolphie.tab_name = tab_name
 
@@ -445,11 +451,11 @@ class TabManager:
         # Increment the tab id counter
         self.tab_id_counter += 1
 
-        self.tabbed_content.display = True
+        self.host_tabs.display = True
         return tab
 
     async def remove_tab(self, tab_id: int):
-        await self.tabbed_content.remove_pane(f"tab_{self.get_tab(tab_id).id}")
+        await self.host_tabs.remove_pane(f"tab_{self.get_tab(tab_id).id}")
 
     def rename_tab(self, tab_id: int, new_name: str = None):
         tab = self.get_tab(tab_id)
@@ -470,7 +476,7 @@ class TabManager:
                 new_name = f"{host}:[dark_gray]{tab.dolphie.port}"
 
         if new_name:
-            tab_content = self.tabbed_content.get_tab(f"tab_{tab_id}")
+            tab_content = self.host_tabs.get_tab(f"tab_{tab_id}")
             tab_content.update(new_name)
 
     def switch_tab(self, tab_id: int):
@@ -480,7 +486,7 @@ class TabManager:
 
         self.app.tab = tab  # Update the current tab variable for the app
 
-        self.tabbed_content.active = f"tab_{tab.id}"
+        self.host_tabs.active = f"tab_{tab.id}"
 
         tab.update_topbar()
 
