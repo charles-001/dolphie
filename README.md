@@ -153,20 +153,21 @@ Dolphie config file supports these options under [dolphie] section:
 
 ## Grants required
 #### Least privilege
-1. PROCESS (if you don't use `performance_schema`)
-2. SELECT to `performance_schema` (if used) + `pt-heartbeat table` (if used)
+1. PROCESS (only if you switch to using processlist via `P` command)
+2. SELECT to `performance_schema` + `pt-heartbeat table` (if used)
 3. REPLICATION CLIENT/REPLICATION SLAVE
 4. BACKUP_ADMIN (MySQL 8 only)
 
 #### Recommended
-1. PROCESS (if you don't use `performance_schema`)
+1. PROCESS (only if you switch to using processlist via `P` command)
 2. Global SELECT access (good for explaining queries, listing all databases, etc)
 4. REPLICATION CLIENT/REPLICATION SLAVE
 5. SUPER (required if you want to kill queries)
 6. BACKUP_ADMIN (MySQL 8 only)
 
 ## Features
-- Tabs at the top for multiple connections
+- Tabs docked at the top to seamlessly switch between connected hosts
+- Hostgroups to make it easy for connecting to multiple hosts at once
 - Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer
 - Graphs for many metrics that can give you great insight into how your database is performing
 - Sparkline to show queries per second in a live view
