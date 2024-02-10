@@ -31,7 +31,6 @@ from dolphie.Panels import (
 from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.modal import CommandModal
-from dolphie.Widgets.new_version_modal import NewVersionModal
 from dolphie.Widgets.thread_screen import ThreadScreen
 from dolphie.Widgets.topbar import TopBar
 from packaging.version import parse as parse_version
@@ -1416,7 +1415,14 @@ class DolphieApp(App):
 
                 # Compare the current version with the latest version
                 if parse_version(latest_version) > parse_version(__version__):
-                    self.app.push_screen(NewVersionModal(current_version=__version__, latest_version=latest_version))
+                    self.notify(
+                        f":tada: [b]New version [highlight]v{latest_version}[/highlight] is available!"
+                        f"[/b]:tada:\n\nPlease update at your earliest convenience"
+                        f"\n[dark_gray]Find more details at https://github.com/charles-001/dolphie",
+                        title="",
+                        severity="information",
+                        timeout=20,
+                    )
         except Exception:
             pass
 

@@ -92,7 +92,7 @@ options:
   --panels              What panels to display on startup separated by a comma. Supports: dashboard/processlist/graphs/replication/locks/ddl [default: dashboard,processlist]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
-  --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host where key can be anything you want. Hosts support optional port in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
+  --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
   --show-trxs-only      Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
   --historical-locks    Always run the locks query so it can save historical data to its graph instead of only when the Locks panel is open. This query can be expensive in some environments
@@ -142,6 +142,7 @@ Dolphie config file supports these options under [dolphie] section:
 	(str) startup_panels
 	(str) graph_marker
 	(str) pypi_repository
+  (str) hostgroup
 	(bool) show_trxs_only
 	(bool) show_additional_query_columns
 	(bool) historical_locks
@@ -181,6 +182,16 @@ Dolphie config file supports these options under [dolphie] section:
 - Notifies when new version is available
 - Many commands at your fingertips with autocompletion for their input
 
+## Hostgroups
+Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port in the format host:port. You can also name the tabs by suffixing ~tab_name to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
+
+Example:
+```ini
+[cluster1]
+1=host
+2=host:3307
+3=host:3308~[red]production[/red] :ghost:
+```
 
 ## Things to note
 Order of precedence for variables passed to Dolphie:

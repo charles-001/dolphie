@@ -497,6 +497,7 @@ class TabManager:
             tab.manual_tab_name = new_name
 
         if new_name:
+            tab.dolphie.tab_name = new_name
             self.host_tabs.get_tab(f"tab_{tab_id}").update(new_name)
 
     def switch_tab(self, tab_id: int):
