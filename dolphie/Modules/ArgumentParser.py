@@ -381,7 +381,7 @@ Dolphie config file supports these options under [dolphie] section:
             except Exception as e:
                 # Don't error out for default login path
                 if options["login_path"] != "client":
-                    sys.exit(self.console.print(f"Problem reading login path file: {e}"))
+                    self.exit(f"Problem reading login path file: {e}")
 
         # Update config object with Dolphie config for all options at this point
         for option, value in dolphie_config_login_options_used.items():
@@ -406,8 +406,8 @@ Dolphie config file supports these options under [dolphie] section:
                 parsed = urlparse(options["uri"])
 
                 if parsed.scheme != "mysql":
-                    sys.exit(
-                        self.console.print(
+                    sys.self.exit(
+                        self.console.self.exit(
                             "Invalid URI scheme: Only 'mysql' is supported (see --help for more information)"
                         )
                     )
@@ -417,7 +417,7 @@ Dolphie config file supports these options under [dolphie] section:
                 self.config.host = parsed.hostname
                 self.config.port = parsed.port or 3306
             except Exception as e:
-                sys.exit(self.console.print(f"Invalid URI: {e} (see --help for more information)"))
+                self.exit(f"Invalid URI: {e} (see --help for more information)")
 
         if not self.config.host:
             self.config.host = "localhost"
@@ -430,7 +430,7 @@ Dolphie config file supports these options under [dolphie] section:
                     "$1", self.config.heartbeat_table
                 )
             else:
-                sys.exit(self.console.print("Your heartbeat table did not conform to the proper format: db.table"))
+                self.exit("Your heartbeat table did not conform to the proper format: db.table")
 
         self.parse_ssl_options(options)
 
@@ -460,23 +460,25 @@ Dolphie config file supports these options under [dolphie] section:
                     if host:
                         hosts.append(host)
                     else:
-                        sys.exit(self.console.print(f"Hostgroup '{hostgroup}' has an empty host for key '{key}'"))
+                        self.exit(f"Hostgroup '{hostgroup}' has an empty host for key '{key}'")
 
                 hostgroups[hostgroup] = hosts
 
             if self.config.hostgroup and self.config.hostgroup not in hostgroups:
-                sys.exit(
-                    self.console.print(f"Hostgroup '{options['hostgroup']}' was not found in Dolphie's config file")
-                )
+                self.exit(f"Hostgroup '{options['hostgroup']}' was not found in Dolphie's config file")
 
             self.config.hostgroup_hosts = hostgroups
         else:
-            sys.exit(self.console.print(f"Dolphie's config file was not found at {self.config.config_file}"))
+            if self.config.hostgroup:
+                self.exit(
+                    f"Hostgroup '{options['hostgroup']}' cannot be used because Dolphie's config file"
+                    f" doesn't exist at {self.config.config_file}"
+                )
 
         self.config.startup_panels = options["startup_panels"].split(",")
         for panel in self.config.startup_panels:
             if panel not in self.panels.all():
-                sys.exit(self.console.print(f"Panel '{panel}' is not valid (see --help for more information)"))
+                self.exit(f"Panel '{panel}' is not valid (see --help for more information)")
 
         self.config.graph_marker = options["graph_marker"]
 
@@ -506,7 +508,7 @@ Dolphie config file supports these options under [dolphie] section:
             elif ssl_mode == "VERIFY_IDENTITY":
                 self.config.ssl["check_hostname"] = True
             else:
-                sys.exit(self.console.print(f"Unsupported SSL mode [b]{ssl_mode}[/b]"))
+                self.exit(f"Unsupported SSL mode [b]{ssl_mode}[/b]")
 
         if ssl_ca:
             self.config.ssl["ca"] = ssl_ca
@@ -522,15 +524,16 @@ Dolphie config file supports these options under [dolphie] section:
             elif value.lower() == "false":
                 return False
             else:
-                sys.exit(
-                    self.console.print(
-                        f"Error with dolphie config: {option} is a boolean and must either be true/false"
-                    )
-                )
+                self.exit(f"Error with dolphie config: {option} is a boolean and must either be true/false")
+
         elif data_type == int:
             try:
                 return int(value)
             except ValueError:
-                sys.exit(self.console.print(f"Error with dolphie config: {option} is an integer and must be a number"))
+                self.exit(f"Error with dolphie config: {option} is an integer and must be a number")
         else:
             return value
+
+    def exit(self, message):
+        self.console.print(message)
+        sys.exit()

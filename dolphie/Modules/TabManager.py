@@ -35,7 +35,7 @@ class Tab:
     id: int
     name: str
     dolphie: Dolphie
-    manual_tab_name: bool = False
+    manual_tab_name: str = None
 
     worker: Worker = None
     worker_timer: Timer = None
@@ -209,22 +209,26 @@ class TabManager:
         if len(self.app.screen_stack) > 1:
             return
 
+        # Create our new tab instance
+        tab = Tab(id=tab_id, name=tab_name, dolphie=None)
+
         # If we're using hostgroups
         if use_hostgroup and self.config.hostgroup_hosts:
-            temp_tab_name = tab_name
-            # Splitting tab name by "~" to handle potential renaming
+            host = tab_name
+            # Split entry by "~" to get custom tab name if there is one
             tab_name_split_rename = tab_name.split("~")
 
             if len(tab_name_split_rename) == 2:
-                # If manual tab name is provided, update the host tab
-                temp_tab_name = tab_name_split_rename[0]
-                tab_name = tab_name_split_rename[1]
+                # Get the hostname from the first part of the split
+                host = tab_name_split_rename[0]
+                tab.manual_tab_name = tab_name_split_rename[1]
 
-            # Splitting tab name by ":" to extract host and port
-            tab_host_split = temp_tab_name.split(":")
+            # Split tab name by ":" to extract host and port
+            tab_host_split = host.split(":")
 
             # Extract host and port information
             original_config_port = self.config.port
+
             self.config.host = tab_host_split[0]
             self.config.port = tab_host_split[1] if len(tab_host_split) > 1 else self.config.port
 
@@ -233,11 +237,10 @@ class TabManager:
         dolphie.tab_id = tab_id
         dolphie.tab_name = tab_name
 
-        # Create our new tab instance
-        tab = Tab(id=tab_id, name=tab_name, dolphie=dolphie)
+        tab.dolphie = dolphie
 
         # Revert the port back to its original value
-        if use_hostgroup and len(tab_host_split) > 1:
+        if use_hostgroup and self.config.hostgroup_hosts and len(tab_host_split) > 1:
             self.config.port = original_config_port
 
         intial_tab_name = "" if use_hostgroup else tab_name
@@ -387,6 +390,9 @@ class TabManager:
         # Save the tab instance to the tabs dictionary
         self.tabs[tab_id] = tab
 
+        if tab.manual_tab_name:
+            self.rename_tab(tab_id, tab.manual_tab_name)
+
         # Save references to the widgets in the tab
         tab.topbar = self.app.query_one(TopBar)
         tab.main_container = self.app.query_one(f"#main_container_{tab.id}", VerticalScroll)
@@ -476,24 +482,22 @@ class TabManager:
     def rename_tab(self, tab_id: int, new_name: str = None):
         tab = self.get_tab(tab_id)
 
-        if new_name:
+        if not new_name and not tab.manual_tab_name:
+            # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
+            host = tab.dolphie.mysql_host.split(":")[0][:24]
+            if not host:
+                return
+
+            # If the last character isn't a letter or number, remove it
+            if not host[-1].isalnum():
+                host = host[:-1]
+
+            new_name = f"{host}:[dark_gray]{tab.dolphie.port}"
+        elif new_name:
             tab.manual_tab_name = new_name
-        else:
-            if not tab.manual_tab_name:
-                # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
-                host = tab.dolphie.mysql_host.split(":")[0][:24]
-                if not host:
-                    return
-
-                # If the last character isn't a letter or number, remove it
-                if not host[-1].isalnum():
-                    host = host[:-1]
-
-                new_name = f"{host}:[dark_gray]{tab.dolphie.port}"
 
         if new_name:
-            host_tab = self.host_tabs.get_tab(f"tab_{tab_id}")
-            host_tab.update(new_name)
+            self.host_tabs.get_tab(f"tab_{tab_id}").update(new_name)
 
     def switch_tab(self, tab_id: int):
         tab = self.get_tab(tab_id)
