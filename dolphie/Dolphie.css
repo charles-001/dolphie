@@ -32,7 +32,7 @@ DataTable {
 }
 LoadingIndicator {
     color: #8fb0ee;
-    height: 20%;
+    height: auto;
     content-align: center middle;
 }
 ModalScreen {
@@ -75,6 +75,9 @@ TopBar {
     color: #8f9fc1;
 }
 
+.connection_loading_indicator {
+    margin-top: 3;
+}
 .dashboard {
     padding-top: 1;
 }
@@ -211,6 +214,7 @@ TopBar {
 .pad_bottom_1 {
     padding-bottom: 1;
 }
+
 
 TabPane {
     padding: 0;

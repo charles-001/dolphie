@@ -9,9 +9,9 @@ class ManualException(Exception):
         self.query = query
 
     def output(self):
-        table_exception = Table(box=box.ROUNDED, show_header=True, style="#ec8888")
+        table_exception = Table(box=box.SQUARE, show_header=True, style="#ec8888")
 
-        table_exception.add_column("Error")
+        table_exception.add_column("MySQL Connection Error")
         if self.query:
             self.query = Syntax(
                 self.query.strip(),
@@ -19,9 +19,9 @@ class ManualException(Exception):
                 line_numbers=False,
                 word_wrap=True,
                 theme="monokai",
-                background_color="#121626",
+                background_color="#131626",
             )
-            table_exception.add_row("[white]Failed to execute query:[/white]")
+            table_exception.add_row("[red]Failed to execute query:[/red]")
             table_exception.add_row(self.query)
             table_exception.add_row("")
 

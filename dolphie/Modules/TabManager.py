@@ -247,7 +247,7 @@ class TabManager:
         await self.host_tabs.add_pane(
             TabPane(
                 intial_tab_name,
-                LoadingIndicator(id=f"loading_indicator_{tab_id}"),
+                LoadingIndicator(id=f"loading_indicator_{tab_id}", classes="connection_loading_indicator"),
                 SpinnerWidget(id=f"spinner_{tab_id}"),
                 VerticalScroll(
                     Container(
