@@ -11,7 +11,7 @@ class TopBar(Container):
         super().__init__()
 
         self.topbar_title = Label(
-            f" [b light_blue]dolphie[/b light_blue] :dolphin: [light_blue]v{app_version}", id="topbar_title"
+            f" [b light_blue]Dolphie[/b light_blue] :dolphin: [light_blue]v{app_version}", id="topbar_title"
         )
         self.topbar_host = Label(self.host, id="topbar_host")
         self.topbar_help = Label(help, id="topbar_help")
