@@ -65,7 +65,7 @@ class ThreadScreen(Screen):
 
     def __init__(
         self,
-        read_only: bool,
+        connection_status: str,
         app_version: str,
         host: str,
         thread_table: str,
@@ -77,7 +77,7 @@ class ThreadScreen(Screen):
     ):
         super().__init__()
 
-        self.read_only = read_only
+        self.connection_status = connection_status
         self.app_version = app_version
         self.host = host
 
@@ -140,7 +140,7 @@ class ThreadScreen(Screen):
             self.query_one("#query_container").display = False
 
     def compose(self) -> ComposeResult:
-        yield TopBar(read_only=self.read_only, app_version=self.app_version, host=self.host)
+        yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
 
         with Container(id="thread_container", classes="container"):
             with Container():

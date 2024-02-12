@@ -15,7 +15,7 @@ from importlib import metadata
 import dolphie.Modules.MetricManager as MetricManager
 import requests
 from dolphie import Dolphie
-from dolphie.DataTypes import HotkeyCommands, ProcesslistThread
+from dolphie.DataTypes import ConnectionStatus, HotkeyCommands, ProcesslistThread
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.Functions import format_number, format_sys_table_memory
 from dolphie.Modules.ManualException import ManualException
@@ -104,7 +104,7 @@ class DolphieApp(App):
         try:
             if not dolphie.main_db_connection.is_connected():
                 self.tab_manager.rename_tab(tab_id)  # this will use dolphie.host instead of mysql_host
-                tab.update_topbar(f"[[white]CONNECTING[/white]] {dolphie.host}:{dolphie.port}")
+                tab.update_topbar(connection_status=ConnectionStatus.connecting)
                 tab.loading_indicator.display = True
 
                 dolphie.db_connect()
@@ -226,7 +226,7 @@ class DolphieApp(App):
             tab.worker_running = False
 
             if event.state == WorkerState.SUCCESS:
-                dolphie.monitor_read_only_change()
+                self.monitor_read_only_change(tab)
 
                 # Skip this if the conditions are right
                 if len(self.screen_stack) > 1 or dolphie.pause_refresh or not dolphie.main_db_connection.is_connected():
@@ -315,12 +315,10 @@ class DolphieApp(App):
             loading_indicator.display = False
 
             self.layout_graphs(tab)
+            tab.update_topbar(connection_status=dolphie.connection_status)
 
         if not tab.main_container.display:
             tab.main_container.display = True
-
-        if self.tab.id == tab.id:
-            tab.update_topbar()
 
         if dolphie.panels.dashboard.visible:
             self.refresh_panel(tab, dolphie.panels.dashboard.name)
@@ -364,11 +362,30 @@ class DolphieApp(App):
         # This denotes that we've gone through the first loop of the worker thread
         dolphie.completed_first_loop = True
 
-    async def on_key(self, event: events.Key):
-        if len(self.screen_stack) > 1:
-            return
+    def monitor_read_only_change(self, tab: Tab):
+        dolphie = tab.dolphie
 
-        await self.capture_key(event.key)
+        current_ro_status = dolphie.global_variables.get("read_only")
+        formatted_ro_status = ConnectionStatus.read_only if current_ro_status == "ON" else ConnectionStatus.read_write
+        status = "read-only" if current_ro_status == "ON" else "read/write"
+
+        message = f"Host [light_blue]{dolphie.mysql_host}[/light_blue] is now [b highlight]{status}[/b highlight]"
+
+        if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
+            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+        elif current_ro_status == "ON" and dolphie.group_replication and dolphie.is_group_replication_primary:
+            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+
+        if (
+            dolphie.connection_status in [ConnectionStatus.read_write, ConnectionStatus.read_only]
+            and dolphie.connection_status != formatted_ro_status
+        ):
+            self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
+
+            if self.tab.id == tab.id:
+                tab.update_topbar(connection_status=formatted_ro_status)
+
+        dolphie.connection_status = formatted_ro_status
 
     @work()
     async def connect_as_hostgroup(self, hostgroup: str):
@@ -522,6 +539,12 @@ class DolphieApp(App):
 
         self.update_graphs(metric_instance_name)
 
+    async def on_key(self, event: events.Key):
+        if len(self.screen_stack) > 1:
+            return
+
+        await self.capture_key(event.key)
+
     async def capture_key(self, key):
         tab = self.tab_manager.get_tab(self.tab.id)
         if not tab:
@@ -557,7 +580,7 @@ class DolphieApp(App):
                 self.notify("There's already a command running - please wait for it to finish")
                 return
 
-            if not tab.worker:
+            if not dolphie.main_db_connection.is_connected():
                 self.notify("You must be connected to a host to use commands")
                 return
 
@@ -633,10 +656,11 @@ class DolphieApp(App):
         elif key == "minus":
             if len(self.tab_manager.tabs) == 1:
                 self.notify("Removing all tabs is not permitted", severity="error")
-                return
             else:
                 await self.tab_manager.remove_tab(tab.id)
                 await tab.disconnect(update_topbar=False)
+
+                self.notify(f"Tab [highlight]{tab.name}[/highlight] [white]has been removed", severity="success")
                 self.tab_manager.tabs.pop(tab.id, None)
 
         elif key == "ctrl+a" or key == "ctrl+d":
@@ -676,7 +700,7 @@ class DolphieApp(App):
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
                 self.app.push_screen(
                     EventLog(
-                        dolphie.read_only_status,
+                        dolphie.connection_status,
                         dolphie.app_version,
                         dolphie.mysql_host,
                         dolphie.secondary_db_connection,
@@ -903,7 +927,7 @@ class DolphieApp(App):
                     screen_data = Align.center(table_grid)
 
                     self.app.push_screen(
-                        CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
+                        CommandScreen(dolphie.connection_status, dolphie.app_version, dolphie.mysql_host, screen_data)
                     )
                 else:
                     if input_variable:
@@ -1044,7 +1068,7 @@ class DolphieApp(App):
 
         if screen_data:
             self.app.push_screen(
-                CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
+                CommandScreen(dolphie.connection_status, dolphie.app_version, dolphie.mysql_host, screen_data)
             )
 
     @work(thread=True)
@@ -1054,13 +1078,13 @@ class DolphieApp(App):
         # These are the screens to display we use for the commands
         def show_command_screen():
             self.app.push_screen(
-                CommandScreen(dolphie.read_only_status, dolphie.app_version, dolphie.mysql_host, screen_data)
+                CommandScreen(dolphie.connection_status, dolphie.app_version, dolphie.mysql_host, screen_data)
             )
 
         def show_thread_screen():
             self.app.push_screen(
                 ThreadScreen(
-                    read_only=dolphie.read_only_status,
+                    connection_status=dolphie.connection_status,
                     app_version=dolphie.app_version,
                     host=dolphie.mysql_host,
                     thread_table=thread_table,

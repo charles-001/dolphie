@@ -5,9 +5,11 @@ from textual.widgets import Label
 
 
 class TopBar(Container):
-    host = reactive("", init=False)
+    host = reactive("", init=False, always_update=True)
 
-    def __init__(self, read_only="", app_version="", host="", help="press [b highlight]q[/b highlight] to return"):
+    def __init__(
+        self, connection_status="", app_version="", host="", help="press [b highlight]q[/b highlight] to return"
+    ):
         super().__init__()
 
         self.topbar_title = Label(
@@ -16,17 +18,15 @@ class TopBar(Container):
         self.topbar_host = Label(self.host, id="topbar_host")
         self.topbar_help = Label(help, id="topbar_help")
 
-        self.read_only = read_only
+        self.connection_status = connection_status
 
-        if host is None:
-            host = ""
-        self.host = host
+        self.host = host if host is not None else ""
 
     def watch_host(self):
-        if self.read_only:
-            self.topbar_host.update(f"[[white]{self.read_only}[/white]] {self.host}")
+        if self.connection_status:
+            self.topbar_host.update(f"[[white]{self.connection_status}[/white]] {self.host}")
         else:
-            self.topbar_host.update(self.host)
+            self.topbar_host.update("")
 
     def compose(self) -> ComposeResult:
         yield self.topbar_title

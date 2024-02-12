@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
+from dolphie.DataTypes import ConnectionStatus
 from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Widgets.host_setup import HostSetupModal
@@ -121,20 +122,19 @@ class Tab:
         for member in self.dolphie.app.query(f".replica_container_{self.id}"):
             await member.remove()
 
-        self.dolphie.read_only_status = "DISCONNECTED"
         if update_topbar:
-            self.update_topbar()
+            self.update_topbar(connection_status=ConnectionStatus.disconnected)
 
-    def update_topbar(self, custom_text: str = None):
+    def update_topbar(self, connection_status: ConnectionStatus):
         dolphie = self.dolphie
 
-        if custom_text:
-            self.topbar.host = custom_text
-            return
+        dolphie.connection_status = connection_status
 
-        if dolphie.read_only_status:
-            self.topbar.host = f"[[white]{dolphie.read_only_status}[/white]] {dolphie.mysql_host}"
+        if dolphie.connection_status:
+            self.topbar.connection_status = dolphie.connection_status
+            self.topbar.host = dolphie.mysql_host
         else:
+            self.topbar.connection_status = None
             self.topbar.host = ""
 
     def host_setup(self):
@@ -170,8 +170,9 @@ class Tab:
 
         self.loading_indicator.display = False
 
-        # If we're here because of a worker cancel error, we want to pre-populate the host/port
-        if self.worker_cancel_error or dolphie.read_only_status == "DISCONNECTED":
+        # If we're here because of a worker cancel error or manually disconnected,
+        # we want to pre-populate the host/port
+        if self.worker_cancel_error or dolphie.connection_status == ConnectionStatus.disconnected:
             host = dolphie.host
             port = dolphie.port
         else:
@@ -498,7 +499,8 @@ class TabManager:
 
         if new_name:
             tab.dolphie.tab_name = new_name
-            self.host_tabs.get_tab(f"tab_{tab_id}").update(new_name)
+            tab.name = new_name
+            self.host_tabs.get_tab(f"tab_{tab_id}").label = new_name
 
     def switch_tab(self, tab_id: int):
         tab = self.get_tab(tab_id)
@@ -509,7 +511,7 @@ class TabManager:
 
         self.host_tabs.active = f"tab_{tab.id}"
 
-        tab.update_topbar()
+        tab.update_topbar(connection_status=tab.dolphie.connection_status)
 
     def get_tab(self, id: int) -> Tab:
         if id in self.tabs:

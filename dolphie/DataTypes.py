@@ -9,6 +9,14 @@ from rich.table import Table
 
 
 @dataclass
+class ConnectionStatus:
+    connecting = "CONNECTING"
+    disconnected = "DISCONNECTED"
+    read_write = "R/W"
+    read_only = "RO"
+
+
+@dataclass
 class Replica:
     thread_id: int
     host: str

@@ -13,16 +13,17 @@ class ManualException(Exception):
 
         table_exception.add_column("MySQL Connection Error")
         if self.query:
-            self.query = Syntax(
-                self.query.strip(),
-                "sql",
-                line_numbers=False,
-                word_wrap=True,
-                theme="monokai",
-                background_color="#131626",
-            )
             table_exception.add_row("[red]Failed to execute query:[/red]")
-            table_exception.add_row(self.query)
+            table_exception.add_row(
+                Syntax(
+                    self.query.strip(),
+                    "sql",
+                    line_numbers=False,
+                    word_wrap=True,
+                    theme="monokai",
+                    background_color="#131626",
+                )
+            )
             table_exception.add_row("")
 
         if self.reason:
