@@ -183,7 +183,7 @@ Dolphie config file supports these options under [dolphie] section:
 - Many commands at your fingertips with autocompletion for their input
 
 ## Hostgroups
-Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port in the format host:port. You can also name the tabs by suffixing `~tab_name` to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
+Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format `key=host` (keys have no meaning). Hosts support optional port in the format `host:port`. You can also name the tabs by suffixing `~tab_name` to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
 
 Example:
 ```ini
