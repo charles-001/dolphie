@@ -204,7 +204,7 @@ class TabManager:
         self.host_tabs = self.app.query_one("#host_tabs", TabbedContent)
         self.host_tabs.display = False
 
-    async def create_tab(self, tab_name: str, use_hostgroup: bool = False) -> Tab:
+    async def create_tab(self, tab_name: str, use_hostgroup: bool = False, switch_tab: bool = True) -> Tab:
         tab_id = self.tab_id_counter
 
         if len(self.app.screen_stack) > 1:
@@ -468,7 +468,8 @@ class TabManager:
             switch.toggle()
 
         # Switch to the new tab
-        self.switch_tab(tab_id)
+        if switch_tab:
+            self.switch_tab(tab_id)
 
         # Increment the tab id counter
         self.tab_id_counter += 1

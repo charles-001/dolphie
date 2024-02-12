@@ -391,8 +391,11 @@ class DolphieApp(App):
     async def connect_as_hostgroup(self, hostgroup: str):
         self.loading_hostgroups = True
 
-        for host in self.config.hostgroup_hosts.get(hostgroup, []):
-            tab = await self.tab_manager.create_tab(tab_name=host, use_hostgroup=True)
+        for counter, host in enumerate(self.config.hostgroup_hosts.get(hostgroup, [])):
+            # We only want to switch to the first tab created
+            switch_tab = True if counter == 0 else False
+
+            tab = await self.tab_manager.create_tab(tab_name=host, use_hostgroup=True, switch_tab=switch_tab)
 
             self.run_worker_main(tab.id)
             self.run_worker_replicas(tab.id)
