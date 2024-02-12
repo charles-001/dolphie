@@ -237,9 +237,6 @@ class DolphieApp(App):
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
-                    if self.loading_hostgroups:
-                        tab.loading_indicator.display = False
-
                     if self.tab_manager.active_tab.id != tab.id or self.loading_hostgroups:
                         self.notify(
                             (
