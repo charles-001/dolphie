@@ -142,7 +142,7 @@ Dolphie config file supports these options under [dolphie] section:
 	(str) startup_panels
 	(str) graph_marker
 	(str) pypi_repository
-  (str) hostgroup
+	(str) hostgroup
 	(bool) show_trxs_only
 	(bool) show_additional_query_columns
 	(bool) historical_locks
@@ -183,14 +183,14 @@ Dolphie config file supports these options under [dolphie] section:
 - Many commands at your fingertips with autocompletion for their input
 
 ## Hostgroups
-Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port in the format host:port. You can also name the tabs by suffixing ~tab_name to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
+Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port in the format host:port. You can also name the tabs by suffixing `~tab_name` to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
 
 Example:
 ```ini
 [cluster1]
-1=host
-2=host:3307
-3=host:3308~[red]production[/red] :ghost:
+1=host1
+2=host2:3307
+3=host3:3308~[red]production[/red] :ghost:
 ```
 
 ## Things to note
