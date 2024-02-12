@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dolphie"
-version = "4.2.1"
+version = "4.2.2"
 license = "GPL-3.0-or-later"
 description = "An intuitive feature-rich terminal tool for monitoring MySQL in real-time"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]

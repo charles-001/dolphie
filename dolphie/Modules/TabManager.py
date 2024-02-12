@@ -130,12 +130,14 @@ class Tab:
 
         dolphie.connection_status = connection_status
 
-        if dolphie.connection_status:
-            self.topbar.connection_status = dolphie.connection_status
-            self.topbar.host = dolphie.mysql_host
-        else:
-            self.topbar.connection_status = None
-            self.topbar.host = ""
+        # Only update the topbar if we're on the active tab
+        if self.id == self.dolphie.app.tab.id:
+            if dolphie.connection_status:
+                self.topbar.connection_status = dolphie.connection_status
+                self.topbar.host = dolphie.mysql_host
+            else:
+                self.topbar.connection_status = None
+                self.topbar.host = ""
 
     def host_setup(self):
         dolphie = self.dolphie

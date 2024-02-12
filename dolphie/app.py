@@ -382,8 +382,7 @@ class DolphieApp(App):
         ):
             self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
-            if self.tab.id == tab.id:
-                tab.update_topbar(connection_status=formatted_ro_status)
+            tab.update_topbar(connection_status=formatted_ro_status)
 
         dolphie.connection_status = formatted_ro_status
 
