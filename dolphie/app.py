@@ -65,8 +65,6 @@ class DolphieApp(App):
 
         self.config = config
 
-        # This will be the currently selected tab
-        self.tab: Tab = None
         self.loading_hostgroups: bool = False
 
         theme = Theme({
@@ -103,12 +101,12 @@ class DolphieApp(App):
         dolphie = tab.dolphie
         try:
             if not dolphie.main_db_connection.is_connected():
-                self.tab_manager.rename_tab(tab_id)  # this will use dolphie.host instead of mysql_host
-                tab.update_topbar(connection_status=ConnectionStatus.connecting)
+                self.tab_manager.rename_tab(tab)  # this will use dolphie.host instead of mysql_host
+                self.tab_manager.update_topbar(tab=tab, connection_status=ConnectionStatus.connecting)
                 tab.loading_indicator.display = True
 
                 dolphie.db_connect()
-                self.tab_manager.rename_tab(tab_id)
+                self.tab_manager.rename_tab(tab)
 
             dolphie.worker_start_time = datetime.now()
             dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -205,7 +203,6 @@ class DolphieApp(App):
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
-
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
@@ -243,7 +240,7 @@ class DolphieApp(App):
                     if self.loading_hostgroups:
                         tab.loading_indicator.display = False
 
-                    if self.tab.id != tab.id or self.loading_hostgroups:
+                    if self.tab_manager.active_tab.id != tab.id or self.loading_hostgroups:
                         self.notify(
                             (
                                 f"[b light_blue]{dolphie.host}:{dolphie.port}[/b light_blue]: "
@@ -315,7 +312,7 @@ class DolphieApp(App):
             loading_indicator.display = False
 
             self.layout_graphs(tab)
-            tab.update_topbar(connection_status=dolphie.connection_status)
+            self.tab_manager.update_topbar(tab=tab, connection_status=dolphie.connection_status)
 
         if not tab.main_container.display:
             tab.main_container.display = True
@@ -382,7 +379,7 @@ class DolphieApp(App):
         ):
             self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
-            tab.update_topbar(connection_status=formatted_ro_status)
+            self.tab_manager.update_topbar(tab=tab, connection_status=formatted_ro_status)
 
         dolphie.connection_status = formatted_ro_status
 
@@ -408,8 +405,8 @@ class DolphieApp(App):
             self.connect_as_hostgroup(self.config.hostgroup)
         else:
             await self.tab_manager.create_tab(tab_name="Initial Tab")
-            self.run_worker_main(self.tab.id)
-            self.run_worker_replicas(self.tab.id)
+            self.run_worker_main(self.tab_manager.active_tab.id)
+            self.run_worker_replicas(self.tab_manager.active_tab.id)
 
         self.check_for_new_version()
 
@@ -429,20 +426,20 @@ class DolphieApp(App):
             self.update_graphs(metric_instance_name)
 
     def update_graphs(self, tab_metric_instance_name):
-        if not self.tab or not self.tab.panel_graphs.display:
+        if not self.tab_manager.active_tab or not self.tab_manager.active_tab.panel_graphs.display:
             return
 
-        for metric_instance in self.tab.dolphie.metric_manager.metrics.__dict__.values():
+        for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
             if tab_metric_instance_name == metric_instance.tab_name:
                 for graph_name in metric_instance.graphs:
-                    getattr(self.tab, graph_name).render_graph(metric_instance)
+                    getattr(self.tab_manager.active_tab, graph_name).render_graph(metric_instance)
 
         self.update_stats_label(tab_metric_instance_name)
 
     def update_stats_label(self, tab_metric_instance_name):
         stat_data = {}
 
-        for metric_instance in self.tab.dolphie.metric_manager.metrics.__dict__.values():
+        for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
             if hasattr(metric_instance, "tab_name") and metric_instance.tab_name == tab_metric_instance_name:
                 number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
                 for metric_data in metric_instance.__dict__.values():
@@ -452,18 +449,18 @@ class DolphieApp(App):
         formatted_stat_data = "  ".join(
             f"[b light_blue]{label}[/b light_blue] {value}" for label, value in stat_data.items()
         )
-        getattr(self.tab, tab_metric_instance_name).update(formatted_stat_data)
+        getattr(self.tab_manager.active_tab, tab_metric_instance_name).update(formatted_stat_data)
 
     def toggle_panel(self, panel_name):
-        panel = self.app.query_one(f"#panel_{panel_name}_{self.tab.id}")
+        panel = self.app.query_one(f"#panel_{panel_name}_{self.tab_manager.active_tab.id}")
 
         new_display = not panel.display
         panel.display = new_display
 
-        setattr(getattr(self.tab.dolphie.panels, panel_name), "visible", new_display)
+        setattr(getattr(self.tab_manager.active_tab.dolphie.panels, panel_name), "visible", new_display)
 
-        if panel_name not in [self.tab.dolphie.panels.graphs.name]:
-            self.app.refresh_panel(self.tab, panel_name, toggled=True)
+        if panel_name not in [self.tab_manager.active_tab.dolphie.panels.graphs.name]:
+            self.app.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         # If loading indicator is displaying, don't refresh
@@ -535,7 +532,7 @@ class DolphieApp(App):
         metric_instance_name = event.switch.name
         metric = event.switch.id
 
-        metric_instance = getattr(self.tab.dolphie.metric_manager.metrics, metric_instance_name)
+        metric_instance = getattr(self.tab_manager.active_tab.dolphie.metric_manager.metrics, metric_instance_name)
         metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
         metric_data.visible = event.value
 
@@ -548,7 +545,7 @@ class DolphieApp(App):
         await self.capture_key(event.key)
 
     async def capture_key(self, key):
-        tab = self.tab_manager.get_tab(self.tab.id)
+        tab = self.tab_manager.active_tab
         if not tab:
             return
 
@@ -594,7 +591,7 @@ class DolphieApp(App):
             self.toggle_panel(dolphie.panels.dashboard.name)
         elif key == "2":
             self.toggle_panel(dolphie.panels.processlist.name)
-            self.tab.processlist_datatable.clear()
+            self.tab_manager.active_tab.processlist_datatable.clear()
         elif key == "3":
             self.toggle_panel(dolphie.panels.replication.name)
 
@@ -620,7 +617,7 @@ class DolphieApp(App):
                 return
 
             self.toggle_panel(dolphie.panels.locks.name)
-            self.tab.locks_datatable.clear()
+            self.tab_manager.active_tab.locks_datatable.clear()
         elif key == "6":
             if not dolphie.is_mysql_version_at_least("5.7"):
                 self.notify("DDL panel requires MySQL 5.7+")
@@ -635,21 +632,21 @@ class DolphieApp(App):
                     return
 
             self.toggle_panel(dolphie.panels.ddl.name)
-            self.tab.ddl_datatable.clear()
+            self.tab_manager.active_tab.ddl_datatable.clear()
         elif key == "grave_accent":
-            self.tab.host_setup()
+            self.tab_manager.active_tab.host_setup()
         elif key == "space":
             if tab.worker.state != WorkerState.RUNNING:
                 tab.worker_timer.stop()
                 self.run_worker_main(tab.id)
         elif key == "plus":
             await self.tab_manager.create_tab(tab_name="New Tab")
-            self.tab.topbar.host = ""
-            self.tab.host_setup()
+            self.tab_manager.topbar.host = ""
+            self.tab_manager.active_tab.host_setup()
         elif key == "equals_sign":
 
             def command_get_input(tab_name):
-                self.tab_manager.rename_tab(tab.id, tab_name)
+                self.tab_manager.rename_tab(tab, tab_name)
 
             self.app.push_screen(
                 CommandModal(command=HotkeyCommands.rename_tab, message="What would you like to rename the tab to?"),
@@ -659,7 +656,7 @@ class DolphieApp(App):
             if len(self.tab_manager.tabs) == 1:
                 self.notify("Removing all tabs is not permitted", severity="error")
             else:
-                await self.tab_manager.remove_tab(tab.id)
+                await self.tab_manager.remove_tab(tab)
                 await tab.disconnect(update_topbar=False)
 
                 self.notify(f"Tab [highlight]{tab.name}[/highlight] [white]has been removed", severity="success")
@@ -1075,7 +1072,7 @@ class DolphieApp(App):
 
     @work(thread=True)
     def run_command_in_worker(self, key: str, dolphie: Dolphie, additional_data=None):
-        tab = self.tab_manager.get_tab(self.tab.id)
+        tab = self.tab_manager.active_tab
 
         # These are the screens to display we use for the commands
         def show_command_screen():

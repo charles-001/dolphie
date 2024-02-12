@@ -47,7 +47,6 @@ class Tab:
     replicas_worker_timer: Timer = None
     replicas_worker_running: bool = False
 
-    topbar: TopBar = None
     main_container: VerticalScroll = None
     metric_graph_tabs: TabbedContent = None
     loading_indicator: LoadingIndicator = None
@@ -117,27 +116,14 @@ class Tab:
 
         self.main_container.display = False
         self.sparkline.display = False
+        self.loading_indicator.display = False
 
         self.replicas_title.update("")
         for member in self.dolphie.app.query(f".replica_container_{self.id}"):
             await member.remove()
 
         if update_topbar:
-            self.update_topbar(connection_status=ConnectionStatus.disconnected)
-
-    def update_topbar(self, connection_status: ConnectionStatus):
-        dolphie = self.dolphie
-
-        dolphie.connection_status = connection_status
-
-        # Only update the topbar if we're on the active tab
-        if self.id == self.dolphie.app.tab.id:
-            if dolphie.connection_status:
-                self.topbar.connection_status = dolphie.connection_status
-                self.topbar.host = dolphie.mysql_host
-            else:
-                self.topbar.connection_status = None
-                self.topbar.host = ""
+            self.dolphie.app.tab_manager.update_topbar(tab=self, connection_status=ConnectionStatus.disconnected)
 
     def host_setup(self):
         dolphie = self.dolphie
@@ -170,8 +156,6 @@ class Tab:
 
                     await asyncio.sleep(0.25)
 
-        self.loading_indicator.display = False
-
         # If we're here because of a worker cancel error or manually disconnected,
         # we want to pre-populate the host/port
         if self.worker_cancel_error or dolphie.connection_status == ConnectionStatus.disconnected:
@@ -200,11 +184,14 @@ class TabManager:
         self.app = app
         self.config = config
 
+        self.active_tab: Tab = None
         self.tabs: dict = {}
         self.tab_id_counter: int = 1
 
         self.host_tabs = self.app.query_one("#host_tabs", TabbedContent)
         self.host_tabs.display = False
+
+        self.topbar = self.app.query_one(TopBar)
 
     async def create_tab(self, tab_name: str, use_hostgroup: bool = False, switch_tab: bool = True) -> Tab:
         tab_id = self.tab_id_counter
@@ -394,10 +381,9 @@ class TabManager:
         self.tabs[tab_id] = tab
 
         if tab.manual_tab_name:
-            self.rename_tab(tab_id, tab.manual_tab_name)
+            self.rename_tab(tab, tab.manual_tab_name)
 
         # Save references to the widgets in the tab
-        tab.topbar = self.app.query_one(TopBar)
         tab.main_container = self.app.query_one(f"#main_container_{tab.id}", VerticalScroll)
         tab.metric_graph_tabs = self.app.query_one(f"#metric_graph_tabs_{tab.id}", TabbedContent)
         tab.loading_indicator = self.app.query_one(f"#loading_indicator_{tab.id}", LoadingIndicator)
@@ -450,6 +436,8 @@ class TabManager:
         # By default, hide all the panels
         tab.sparkline.display = False
         tab.main_container.display = False
+        tab.loading_indicator.display = False
+
         for panel in tab.dolphie.panels.all():
             self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
 
@@ -469,7 +457,6 @@ class TabManager:
         for switch in switches_to_toggle:
             switch.toggle()
 
-        # Switch to the new tab
         if switch_tab:
             self.switch_tab(tab_id)
 
@@ -480,12 +467,10 @@ class TabManager:
 
         return tab
 
-    async def remove_tab(self, tab_id: int):
-        await self.host_tabs.remove_pane(f"tab_{self.get_tab(tab_id).id}")
+    async def remove_tab(self, tab: Tab):
+        await self.host_tabs.remove_pane(f"tab_{tab.id}")
 
-    def rename_tab(self, tab_id: int, new_name: str = None):
-        tab = self.get_tab(tab_id)
-
+    def rename_tab(self, tab: Tab, new_name: str = None):
         if not new_name and not tab.manual_tab_name:
             # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
             host = tab.dolphie.mysql_host.split(":")[0][:24]
@@ -503,18 +488,20 @@ class TabManager:
         if new_name:
             tab.dolphie.tab_name = new_name
             tab.name = new_name
-            self.host_tabs.get_tab(f"tab_{tab_id}").label = new_name
+            self.host_tabs.get_tab(f"tab_{tab.id}").label = new_name
 
     def switch_tab(self, tab_id: int):
         tab = self.get_tab(tab_id)
         if not tab:
             return
 
-        self.app.tab = tab  # Update the current tab variable for the app
+        # Update the active/current tab
+        self.active_tab = tab
 
+        # Switch to the new tab in the UI
         self.host_tabs.active = f"tab_{tab.id}"
 
-        tab.update_topbar(connection_status=tab.dolphie.connection_status)
+        self.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
 
     def get_tab(self, id: int) -> Tab:
         if id in self.tabs:
@@ -527,3 +514,17 @@ class TabManager:
             all_tabs.append(tab)
 
         return all_tabs
+
+    def update_topbar(self, tab: Tab, connection_status: ConnectionStatus):
+        dolphie = tab.dolphie
+
+        dolphie.connection_status = connection_status
+
+        # Only update the topbar if we're on the active tab
+        if tab.id == self.active_tab.id:
+            if dolphie.connection_status:
+                self.topbar.connection_status = dolphie.connection_status
+                self.topbar.host = dolphie.mysql_host
+            else:
+                self.topbar.connection_status = None
+                self.topbar.host = ""

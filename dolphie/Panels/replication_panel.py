@@ -307,7 +307,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         if dashboard_table:
             replication_delay = "[dark_yellow](delayed)"
         else:
-            replication_delay = f"[dark_yellow]Delay[/dark_yellow]: {format_time(data['SQL_Delay'])}"
+            replication_delay = f"[dark_yellow]Delay[/dark_yellow] {format_time(data['SQL_Delay'])}"
 
     lag_source = f"Lag ({replica_sbm_source})" if replica_sbm_source else "Lag"
     if lag is None or data["Slave_SQL_Running"].lower() == "no":
