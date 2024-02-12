@@ -49,10 +49,10 @@ class EventLog(Screen):
         }
     """
 
-    def __init__(self, read_only, app_version, host, db_connection: Database):
+    def __init__(self, connection_status, app_version, host, db_connection: Database):
         super().__init__()
 
-        self.read_only = read_only
+        self.connection_status = connection_status
         self.app_version = app_version
         self.host = host
         self.db_connection = db_connection
@@ -83,7 +83,7 @@ class EventLog(Screen):
             table.move_cursor(row=table.row_count - 1)
 
     def compose(self) -> ComposeResult:
-        yield TopBar(read_only=self.read_only, app_version=self.app_version, host=self.host)
+        yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
 
         yield LoadingIndicator()
 

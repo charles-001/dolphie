@@ -76,7 +76,7 @@ class Dolphie:
         self.completed_first_loop: bool = False
         self.polling_latency: float = 0
         self.refresh_latency: str = "0"
-        self.read_only_status: str = None
+        self.connection_status: DataTypes.ConnectionStatus = None
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
         self.lock_transactions: dict = {}
@@ -245,23 +245,6 @@ class Dolphie:
         parsed_target = parse_version(target)
 
         return parsed_source >= parsed_target
-
-    def monitor_read_only_change(self):
-        current_ro_status = self.global_variables.get("read_only")
-        formatted_ro_status = "RO" if current_ro_status == "ON" else "R/W"
-        status = "read-only" if current_ro_status == "ON" else "read/write"
-
-        message = f"Host [light_blue]{self.host}:{self.port}[/light_blue] is now [b highlight]{status}[/b highlight]"
-
-        if current_ro_status == "ON" and not self.replication_status and not self.group_replication:
-            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
-        elif current_ro_status == "ON" and self.group_replication and self.is_group_replication_primary:
-            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
-
-        if self.read_only_status is not None and self.read_only_status != formatted_ro_status:
-            self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
-
-        self.read_only_status = formatted_ro_status
 
     def get_hostname(self, host):
         if host in self.host_cache:

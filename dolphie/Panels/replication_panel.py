@@ -264,7 +264,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     if "Executed_Gtid_Set" in data and data["Executed_Gtid_Set"]:
         mysql_gtid_enabled = True
         auto_position = "ON" if data["Auto_Position"] == 1 else "OFF"
-        gtid_status = f"ON [label]Auto Position[/label]: {auto_position}"
+        gtid_status = f"ON [label]Auto Position[/label] {auto_position}"
     if "Using_Gtid" in data and data["Using_Gtid"] != "No":
         mariadb_gtid_enabled = True
         gtid_status = data["Using_Gtid"]
@@ -299,7 +299,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     sql_thread_running = "[green]Yes[/green]" if data.get("Slave_SQL_Running").lower() == "yes" else "[red]NO[/red]"
     table.add_row(
         "[label]Thread",
-        f"[label]IO[/label]: {io_thread_running} [label]SQL[/label]: {sql_thread_running}",
+        f"[label]IO[/label] {io_thread_running} [label]SQL[/label] {sql_thread_running}",
     )
 
     replication_delay = ""
@@ -315,7 +315,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     else:
         table.add_row(
             "[label]%s" % lag_source,
-            "%s [label]Speed[/label]: %s %s" % (lag, speed, replication_delay),
+            "%s [label]Speed[/label] %s %s" % (lag, speed, replication_delay),
         )
 
     if dashboard_table:

@@ -137,7 +137,7 @@ class Database:
 
         if error_message is not None:
             raise ManualException(
-                f"{self.host}: Failed to execute query after"
+                f"{self.host}:{self.port}: Failed to execute query after"
                 f" {self.max_reconnect_attempts} reconnection attempts - error: {error_message}",
                 query=query,
             )

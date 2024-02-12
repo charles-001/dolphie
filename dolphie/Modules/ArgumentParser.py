@@ -11,6 +11,7 @@ import myloginpath
 from dolphie.DataTypes import Panels
 from dolphie.Modules.Queries import MySQLQueries
 from rich.console import Console
+from rich.theme import Theme
 
 
 @dataclass
@@ -37,11 +38,11 @@ class Config:
     startup_panels: str = "dashboard,processlist"
     graph_marker: str = "braille"
     pypi_repository: str = "https://pypi.org/pypi/dolphie/json"
+    hostgroup: str = None
+    hostgroup_hosts: Dict[str, List[str]] = field(default_factory=dict)
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
     historical_locks: bool = False
-    hostgroup: str = None
-    hostgroup_hosts: Dict[str, List[str]] = field(default_factory=dict)
 
 
 class ArgumentParser:
@@ -99,6 +100,10 @@ Dolphie config file supports these options under [dolphie] section:
         self.config = Config(app_version)
         self.panels = Panels()
         self.console = Console(style="indian_red", highlight=False)
+        theme = Theme({
+            "red2": "b #fb9a9a",
+        })
+        self.console.push_theme(theme)
 
         self._add_options()
         self._parse()
@@ -279,7 +284,7 @@ Dolphie config file supports these options under [dolphie] section:
                 "This is used for creating tabs and connecting to them for hosts you specify in"
                 " Dolphie's config file under a hostgroup section. As an example, you'll have a section"
                 " called [cluster1] then below it you will list each host on a new line in the format"
-                " key=host where key can be anything you want. Hosts support optional port in the format host:port."
+                " key=host (keys have no meaning). Hosts support optional port in the format host:port."
                 " You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)"
             ),
             metavar="",
@@ -406,11 +411,7 @@ Dolphie config file supports these options under [dolphie] section:
                 parsed = urlparse(options["uri"])
 
                 if parsed.scheme != "mysql":
-                    sys.self.exit(
-                        self.console.self.exit(
-                            "Invalid URI scheme: Only 'mysql' is supported (see --help for more information)"
-                        )
-                    )
+                    self.exit("Invalid URI scheme: Only 'mysql' is supported (see --help for more information)")
 
                 self.config.user = parsed.username
                 self.config.password = parsed.password
@@ -460,25 +461,25 @@ Dolphie config file supports these options under [dolphie] section:
                     if host:
                         hosts.append(host)
                     else:
-                        self.exit(f"Hostgroup '{hostgroup}' has an empty host for key '{key}'")
+                        self.exit(f"Hostgroup [red2]{hostgroup}[/red2] has an empty host for key [red2]{key}[/red2]")
 
                 hostgroups[hostgroup] = hosts
 
             if self.config.hostgroup and self.config.hostgroup not in hostgroups:
-                self.exit(f"Hostgroup '{options['hostgroup']}' was not found in Dolphie's config file")
+                self.exit(f"Hostgroup [red2]{options['hostgroup']}[/red2] was not found in Dolphie's config file")
 
             self.config.hostgroup_hosts = hostgroups
         else:
             if self.config.hostgroup:
                 self.exit(
-                    f"Hostgroup '{options['hostgroup']}' cannot be used because Dolphie's config file"
+                    f"Hostgroup [red2]{options['hostgroup']}[/red2] cannot be used because Dolphie's config file"
                     f" doesn't exist at {self.config.config_file}"
                 )
 
         self.config.startup_panels = options["startup_panels"].split(",")
         for panel in self.config.startup_panels:
             if panel not in self.panels.all():
-                self.exit(f"Panel '{panel}' is not valid (see --help for more information)")
+                self.exit(f"Panel [red2]{panel}[/red2] is not valid (see --help for more information)")
 
         self.config.graph_marker = options["graph_marker"]
 
@@ -508,7 +509,7 @@ Dolphie config file supports these options under [dolphie] section:
             elif ssl_mode == "VERIFY_IDENTITY":
                 self.config.ssl["check_hostname"] = True
             else:
-                self.exit(f"Unsupported SSL mode [b]{ssl_mode}[/b]")
+                self.exit(f"Unsupported SSL mode [red2]{ssl_mode}[/red2]")
 
         if ssl_ca:
             self.config.ssl["ca"] = ssl_ca
@@ -524,13 +525,15 @@ Dolphie config file supports these options under [dolphie] section:
             elif value.lower() == "false":
                 return False
             else:
-                self.exit(f"Error with dolphie config: {option} is a boolean and must either be true/false")
+                self.exit(
+                    f"Error with Dolphie config: [red2]{option}[/red2] is a boolean and must either be true/false"
+                )
 
         elif data_type == int:
             try:
                 return int(value)
             except ValueError:
-                self.exit(f"Error with dolphie config: {option} is an integer and must be a number")
+                self.exit(f"Error with Dolphie config: [red2]{option}[/red2] is an integer and must be a number")
         else:
             return value
 
