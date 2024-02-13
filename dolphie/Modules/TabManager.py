@@ -94,6 +94,9 @@ class Tab:
 
     cluster_data: Static = None
 
+    def get_panel_widget(self, panel_name: str) -> Container:
+        return getattr(self, f"panel_{panel_name}")
+
     async def disconnect(self, update_topbar: bool = True):
         if self.worker_timer:
             self.worker_timer.stop()
@@ -106,17 +109,16 @@ class Tab:
         if self.replicas_worker:
             self.replicas_worker.cancel()
 
-        if self.dolphie.main_db_connection:
-            self.dolphie.main_db_connection.close()
-
-        if self.dolphie.secondary_db_connection:
-            self.dolphie.secondary_db_connection.close()
+        self.dolphie.main_db_connection.close()
+        self.dolphie.secondary_db_connection.close()
 
         self.dolphie.replica_manager.remove_all()
 
         self.main_container.display = False
         self.sparkline.display = False
         self.loading_indicator.display = False
+
+        self.sparkline.data = [0]
 
         self.replicas_title.update("")
         for member in self.dolphie.app.query(f".replica_container_{self.id}"):
@@ -437,6 +439,9 @@ class TabManager:
         tab.sparkline.display = False
         tab.main_container.display = False
         tab.loading_indicator.display = False
+
+        # Set the sparkline data to 0
+        tab.sparkline.data = [None]
 
         for panel in tab.dolphie.panels.all():
             self.app.query_one(f"#panel_{panel}_{tab.id}").display = False

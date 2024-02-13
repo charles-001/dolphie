@@ -304,40 +304,29 @@ class DolphieApp(App):
     def refresh_screen(self, tab: Tab):
         dolphie = tab.dolphie
 
-        loading_indicator = tab.loading_indicator
-        if loading_indicator.display:
-            loading_indicator.display = False
+        if tab.loading_indicator.display:
+            tab.loading_indicator.display = False
 
             self.layout_graphs(tab)
             self.tab_manager.update_topbar(tab=tab, connection_status=dolphie.connection_status)
 
         if not tab.main_container.display:
             tab.main_container.display = True
+            tab.sparkline.display = True
 
-        if dolphie.panels.dashboard.visible:
-            self.refresh_panel(tab, dolphie.panels.dashboard.name)
+        # Loop each panel and refresh it
+        for panel in dolphie.panels.get_all_panels():
+            if panel.visible:
+                # Skip the graphs panel since it's handled separately
+                if panel.name == dolphie.panels.graphs.name:
+                    continue
 
-            # Update the sparkline for queries per second
-            sparkline = tab.sparkline
-            sparkline_data = dolphie.metric_manager.metrics.dml.Queries.values
-            if not sparkline.display:
-                sparkline_data = [0]
-                sparkline.display = True
+                self.refresh_panel(tab, panel.name)
 
-            sparkline.data = sparkline_data
-            sparkline.refresh()
-
-        if dolphie.panels.processlist.visible:
-            self.refresh_panel(tab, dolphie.panels.processlist.name)
-
-        if dolphie.panels.replication.visible:
-            self.refresh_panel(tab, dolphie.panels.replication.name)
-
-        if dolphie.panels.locks.visible:
-            self.refresh_panel(tab, dolphie.panels.locks.name)
-
-        if dolphie.panels.ddl.visible:
-            self.refresh_panel(tab, dolphie.panels.ddl.name)
+                if panel.name == dolphie.panels.dashboard.name and dolphie.metric_manager.metrics.dml.Queries.values:
+                    # Update the sparkline for queries per second
+                    tab.sparkline.data = dolphie.metric_manager.metrics.dml.Queries.values
+                    tab.sparkline.refresh()
 
         if dolphie.panels.graphs.visible:
             # Hide/show replication tab based on replication status
@@ -449,7 +438,8 @@ class DolphieApp(App):
         getattr(self.tab_manager.active_tab, tab_metric_instance_name).update(formatted_stat_data)
 
     def toggle_panel(self, panel_name):
-        panel = self.app.query_one(f"#panel_{panel_name}_{self.tab_manager.active_tab.id}")
+        # We store the panel objects in the tab object (i.e. tab.panel_dashboard, tab.panel_processlist, etc.)
+        panel = self.tab_manager.active_tab.get_panel_widget(panel_name)
 
         new_display = not panel.display
         panel.display = new_display
@@ -460,25 +450,21 @@ class DolphieApp(App):
             self.app.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
-        # If loading indicator is displaying, don't refresh
-        if tab.loading_indicator.display:
-            return
+        panel_mapping = {
+            tab.dolphie.panels.replication.name: replication_panel,
+            tab.dolphie.panels.dashboard.name: dashboard_panel,
+            tab.dolphie.panels.processlist.name: processlist_panel,
+            tab.dolphie.panels.locks.name: locks_panel,
+            tab.dolphie.panels.ddl.name: ddl_panel,
+        }
+        for panel_map_name, panel_map_obj in panel_mapping.items():
+            if panel_name == panel_map_name:
+                panel_map_obj.create_panel(tab)
 
-        if panel_name == tab.dolphie.panels.replication.name:
-            # When replication panel status is changed, we need to refresh the dashboard panel as well since
-            # it adds/removes it from there
-            replication_panel.create_panel(tab)
-
-            if toggled and tab.dolphie.replication_status:
+            if panel_name == tab.dolphie.panels.replication.name and toggled and tab.dolphie.replication_status:
+                # When replication panel status is changed, we need to refresh the dashboard panel as well since
+                # it adds/removes it from there
                 dashboard_panel.create_panel(tab)
-        elif panel_name == tab.dolphie.panels.dashboard.name:
-            dashboard_panel.create_panel(tab)
-        elif panel_name == tab.dolphie.panels.processlist.name:
-            processlist_panel.create_panel(tab)
-        elif panel_name == tab.dolphie.panels.locks.name:
-            locks_panel.create_panel(tab)
-        elif panel_name == tab.dolphie.panels.ddl.name:
-            ddl_panel.create_panel(tab)
 
         if toggled or not tab.dolphie.completed_first_loop:
             # Update the sizes of the panels depending if replication container is visible or not
@@ -1436,9 +1422,9 @@ class DolphieApp(App):
                 # Compare the current version with the latest version
                 if parse_version(latest_version) > parse_version(__version__):
                     self.notify(
-                        f":tada: [b]New version [highlight]v{latest_version}[/highlight] is available!"
-                        f"[/b]:tada:\n\nPlease update at your earliest convenience"
-                        f"\n[dark_gray]Find more details at https://github.com/charles-001/dolphie",
+                        f":tada:  [b]New version [highlight]v{latest_version}[/highlight] is available![/b] :tada:\n\n"
+                        f"Please update at your earliest convenience\n"
+                        f"[dark_gray]Find more details at https://github.com/charles-001/dolphie",
                         title="",
                         severity="information",
                         timeout=20,

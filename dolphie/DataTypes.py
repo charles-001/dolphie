@@ -73,7 +73,13 @@ class Panels:
         self.locks = Panel("locks")
         self.ddl = Panel("ddl")
 
-    def all(self):
+    def get_panel(self, panel_name: str) -> Panel:
+        return self.__dict__.get(panel_name, None)
+
+    def get_all_panels(self) -> List[Panel]:
+        return [panel for panel in self.__dict__.values() if isinstance(panel, Panel)]
+
+    def all(self) -> List[str]:
         return [
             panel.name
             for name, panel in self.__dict__.items()
