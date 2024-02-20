@@ -222,6 +222,29 @@ class MySQLQueries:
         GROUP BY
             t.processlist_id
     """
+    metadata_locks: str = """
+        SELECT
+            CONCAT( blocker.OBJECT_SCHEMA, '.', blocker.OBJECT_NAME ) AS object_name,
+            blocker.OBJECT_TYPE AS object_type,
+            blocker.LOCK_TYPE as lock_type,
+            blocking_t.PROCESSLIST_ID AS blocking_pid,
+            waiting_t.PROCESSLIST_ID AS waiting_pid,
+            blocking_t.PROCESSLIST_INFO AS blocking_query,
+            blocking_t.PROCESSLIST_TIME AS blocking_time,
+            waiting_t.PROCESSLIST_INFO AS waiting_query,
+            waiting_t.PROCESSLIST_TIME AS waiting_time
+        FROM
+            `performance_schema`.metadata_locks waiting JOIN
+            `performance_schema`.metadata_locks blocker ON
+                waiting.OBJECT_SCHEMA = blocker.OBJECT_SCHEMA AND
+                waiting.OBJECT_NAME = blocker.OBJECT_NAME JOIN
+            `performance_schema`.`threads` blocking_t ON blocker.OWNER_THREAD_ID = blocking_t.THREAD_ID JOIN
+            `performance_schema`.`threads` waiting_t ON waiting.OWNER_THREAD_ID = waiting_t.THREAD_ID
+        WHERE
+            waiting.LOCK_STATUS = 'PENDING'
+            AND blocker.LOCK_STATUS = 'GRANTED'
+            AND blocker.OBJECT_TYPE != 'COLUMN STATISTICS'
+    """
     error_log: str = """
         SELECT
             logged AS timestamp,

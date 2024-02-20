@@ -49,7 +49,7 @@ class Graph(Static):
                     y=self.metric_instance.checkpoint_age_max,
                     x=max(x),
                     alignment="right",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                 )
                 plt.text(
@@ -57,7 +57,7 @@ class Graph(Static):
                     y=self.metric_instance.checkpoint_age_sync_flush,
                     x=max(x),
                     alignment="right",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                 )
 
@@ -85,7 +85,7 @@ class Graph(Static):
                     y=self.metric_instance.redo_log_size,
                     x=0,
                     alignment="center",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                 )
 
@@ -98,7 +98,7 @@ class Graph(Static):
                     y=y[0],
                     x=0,
                     alignment="center",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                     background=bar_color,
                 )
@@ -122,7 +122,7 @@ class Graph(Static):
                     y=34,
                     x=max(x),
                     alignment="right",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                 )
 
@@ -346,10 +346,10 @@ class DiskIOMetrics:
 
 
 @dataclass
-class LocksMetrics:
+class InnoDBTRXLocksMetrics:
     lock_count: MetricData
     graphs: List[str]
-    tab_name: str = "locks"
+    tab_name: str = "innodb_trx_locks"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
 
@@ -369,7 +369,7 @@ class MetricInstances:
     temporary_objects: TemporaryObjectMetrics
     aborted_connections: AbortedConnectionsMetrics
     disk_io: DiskIOMetrics
-    locks: LocksMetrics
+    innodb_trx_locks: InnoDBTRXLocksMetrics
 
 
 class MetricManager:
@@ -466,8 +466,8 @@ class MetricManager:
                 io_read=MetricData(label="Read", color=MetricColor.blue),
                 io_write=MetricData(label="Write", color=MetricColor.green),
             ),
-            locks=LocksMetrics(
-                graphs=["graph_locks"],
+            innodb_trx_locks=InnoDBTRXLocksMetrics(
+                graphs=["graph_innodb_trx_locks"],
                 lock_count=MetricData(label="Lock Count", color=MetricColor.blue, per_second_calculation=False),
             ),
         )
@@ -480,7 +480,7 @@ class MetricManager:
         global_status: Dict[str, int],
         innodb_metrics: Dict[str, int],
         disk_io_metrics: Dict[str, int],
-        lock_metrics: Dict[str, int],
+        innodb_trx_lock_metrics: Dict[str, int],
         replication_status: Dict[str, Union[int, str]],
         replication_lag: int,  # this can be from SHOW SLAVE STatus/Performance Schema/heartbeat table
     ):
@@ -490,7 +490,7 @@ class MetricManager:
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
         self.disk_io_metrics = disk_io_metrics
-        self.lock_metrics = lock_metrics
+        self.innodb_trx_lock_metrics = innodb_trx_lock_metrics
         self.replication_status = replication_status
         self.replication_lag = replication_lag
 
@@ -507,7 +507,7 @@ class MetricManager:
         self.update_metrics_replication_lag()
         self.update_metrics_checkpoint()
         self.update_metrics_adaptive_hash_index_hit_ratio()
-        self.update_metrics_locks()
+        self.update_metrics_innodb_trx_locks()
 
         self.update_metrics_last_value()
 
@@ -574,9 +574,9 @@ class MetricManager:
         metric_instance.checkpoint_age_max = max_checkpoint_age_bytes
         metric_instance.checkpoint_age_sync_flush = checkpoint_age_sync_flush_bytes
 
-    def update_metrics_locks(self):
-        metric_instance = self.metrics.locks
-        self.add_metric(metric_instance.lock_count, len(self.lock_metrics))
+    def update_metrics_innodb_trx_locks(self):
+        metric_instance = self.metrics.innodb_trx_locks
+        self.add_metric(metric_instance.lock_count, len(self.innodb_trx_lock_metrics))
         metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def get_metric_calculate_per_sec(self, metric_name, metric_source=None, format=True):

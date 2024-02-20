@@ -42,7 +42,7 @@ class Config:
     hostgroup_hosts: Dict[str, List[str]] = field(default_factory=dict)
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
-    historical_locks: bool = False
+    historical_trx_locks: bool = False
 
 
 class ArgumentParser:
@@ -303,12 +303,12 @@ Dolphie config file supports these options under [dolphie] section:
             help="Start with additional columns in Processlist panel",
         )
         self.parser.add_argument(
-            "--historical-locks",
-            dest="historical_locks",
+            "--historical-trx-locks",
+            dest="historical_trx_locks",
             action="store_true",
             help=(
-                "Always run the locks query so it can save historical data to its graph instead of only when "
-                "the Locks panel is open. This query can be expensive in some environments"
+                "Always run the InnoDB TRX Locks query so it can save historical data to its graph instead of only "
+                "when the panel is open. This query can be expensive in some environments"
             ),
         )
         self.parser.add_argument(
@@ -443,7 +443,7 @@ Dolphie config file supports these options under [dolphie] section:
         self.config.show_additional_query_columns = options["show_additional_query_columns"]
 
         self.config.pypi_repository = options["pypi_repository"]
-        self.config.historical_locks = options["historical_locks"]
+        self.config.historical_trx_locks = options["historical_trx_locks"]
 
         # Save all hostgroups found to the config object so we can use it in the app
         self.config.hostgroup = options["hostgroup"]

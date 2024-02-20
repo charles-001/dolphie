@@ -12,13 +12,13 @@ def create_panel(tab: Tab) -> DataTable:
     columns = {
         "wait_age": {"name": "Lock Age", "width": 8, "format_number": False},
         "locked_type": {"name": "Lock Type", "width": 10, "format_number": False},
-        "waiting_pid": {"name": "[yellow]Waiting TRX[/yellow]", "width": 13, "format_number": False},
+        "waiting_pid": {"name": "[highlight]Waiting PID[/highlight]", "width": 13, "format_number": False},
         "waiting_trx_age": {"name": "Age", "width": 8, "format_number": False},
         "waiting_lock_mode": {"name": "Mode", "width": 5, "format_number": False},
         "waiting_trx_rows_locked": {"name": "R-Lock", "width": 6, "format_number": True},
         "waiting_trx_rows_modified": {"name": "R-Mod", "width": 6, "format_number": True},
         "waiting_query": {"name": "Query", "width": None, "format_number": False},
-        "blocking_pid": {"name": "[red]Blocking TRX[/red]", "width": 13, "format_number": False},
+        "blocking_pid": {"name": "[red]Blocking PID[/red]", "width": 13, "format_number": False},
         "blocking_trx_age": {"name": "Age", "width": 8, "format_number": False},
         "blocking_lock_mode": {"name": "Mode", "width": 5, "format_number": False},
         "blocking_trx_rows_locked": {"name": "R-Lock", "width": 6, "format_number": True},
@@ -31,7 +31,7 @@ def create_panel(tab: Tab) -> DataTable:
     columns["waiting_query"]["width"] = query_characters
     columns["blocking_query"]["width"] = query_characters
 
-    locks_datatable = tab.locks_datatable
+    locks_datatable = tab.innodb_trx_locks_datatable
     locks_datatable.clear(columns=True)
 
     for column_key, column_data in columns.items():
@@ -57,4 +57,6 @@ def create_panel(tab: Tab) -> DataTable:
         lock_key = f"{lock['waiting_pid']}-{lock['blocking_pid']}"
         locks_datatable.add_row(*row_values, key=lock_key)
 
-    tab.locks_title.update(f"Locks ([highlight]{len(dolphie.lock_transactions)}[/highlight])")
+    tab.innodb_trx_locks_title.update(
+        f"InnoDB Transaction Locks ([highlight]{len(dolphie.lock_transactions)}[/highlight])"
+    )

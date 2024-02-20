@@ -39,7 +39,7 @@ class Dolphie:
         self.host_setup_available_hosts = config.host_setup_available_hosts
         self.startup_panels = config.startup_panels
         self.graph_marker = config.graph_marker
-        self.historical_locks = config.historical_locks
+        self.historical_trx_locks = config.historical_trx_locks
         self.hostgroup = config.hostgroup
         self.hostgroup_hosts = config.hostgroup_hosts
 
@@ -80,6 +80,7 @@ class Dolphie:
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}
         self.lock_transactions: dict = {}
+        self.metadata_locks: dict = {}
         self.ddl: list = []
         self.pause_refresh: bool = False
         self.previous_binlog_position: int = 0
@@ -87,7 +88,7 @@ class Dolphie:
         self.innodb_metrics: dict = {}
         self.disk_io_metrics: dict = {}
         self.global_variables: dict = {}
-        self.lock_metrics: dict = {}
+        self.innodb_trx_lock_metrics: dict = {}
         self.global_status: dict = {}
         self.binlog_status: dict = {}
         self.replication_status: dict = {}

@@ -24,7 +24,8 @@ from dolphie.Modules.TabManager import Tab, TabManager
 from dolphie.Panels import (
     dashboard_panel,
     ddl_panel,
-    locks_panel,
+    innodb_trx_locks_panel,
+    metadata_locks_panel,
     processlist_panel,
     replication_panel,
 )
@@ -184,9 +185,13 @@ class DolphieApp(App):
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
             if dolphie.is_mysql_version_at_least("5.7"):
-                if dolphie.panels.locks.visible or dolphie.config.historical_locks:
+                if dolphie.panels.innodb_trx_locks.visible or dolphie.config.historical_trx_locks:
                     dolphie.main_db_connection.execute(MySQLQueries.locks_query)
                     dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
+
+                if dolphie.panels.metadata_locks.visible:
+                    dolphie.main_db_connection.execute(MySQLQueries.metadata_locks)
+                    dolphie.metadata_locks = dolphie.main_db_connection.fetchall()
 
                 if dolphie.panels.ddl.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.ddls)
@@ -199,7 +204,7 @@ class DolphieApp(App):
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
                 disk_io_metrics=dolphie.disk_io_metrics,
-                lock_metrics=dolphie.lock_transactions,
+                innodb_trx_lock_metrics=dolphie.lock_transactions,
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
@@ -372,10 +377,11 @@ class DolphieApp(App):
     @work()
     async def connect_as_hostgroup(self, hostgroup: str):
         self.loading_hostgroups = True
+        self.notify(f"Connecting to hosts in hostgroup [highlight]{hostgroup}", severity="information")
 
-        for counter, host in enumerate(self.config.hostgroup_hosts.get(hostgroup, [])):
-            # We only want to switch to the first tab created
-            switch_tab = True if counter == 0 else False
+        for host in self.config.hostgroup_hosts.get(hostgroup, []):
+            # We only want to switch if it's the first tab created
+            switch_tab = True if not self.tab_manager.active_tab else False
 
             tab = await self.tab_manager.create_tab(tab_name=host, use_hostgroup=True, switch_tab=switch_tab)
 
@@ -383,6 +389,7 @@ class DolphieApp(App):
             self.run_worker_replicas(tab.id)
 
         self.loading_hostgroups = False
+        self.notify(f"Finished connecting to hosts in hostgroup [highlight]{hostgroup}", severity="success")
 
     async def on_mount(self):
         self.tab_manager = TabManager(app=self.app, config=self.config)
@@ -454,7 +461,8 @@ class DolphieApp(App):
             tab.dolphie.panels.replication.name: replication_panel,
             tab.dolphie.panels.dashboard.name: dashboard_panel,
             tab.dolphie.panels.processlist.name: processlist_panel,
-            tab.dolphie.panels.locks.name: locks_panel,
+            tab.dolphie.panels.innodb_trx_locks.name: innodb_trx_locks_panel,
+            tab.dolphie.panels.metadata_locks.name: metadata_locks_panel,
             tab.dolphie.panels.ddl.name: ddl_panel,
         }
         for panel_map_name, panel_map_obj in panel_mapping.items():
@@ -596,12 +604,30 @@ class DolphieApp(App):
             self.app.update_graphs("dml")
         elif key == "5":
             if not dolphie.is_mysql_version_at_least("5.7"):
-                self.notify("Locks panel requires MySQL 5.7+")
+                self.notify("InnoDB Transaction Locks panel requires MySQL 5.7+")
                 return
 
-            self.toggle_panel(dolphie.panels.locks.name)
-            self.tab_manager.active_tab.locks_datatable.clear()
+            self.toggle_panel(dolphie.panels.innodb_trx_locks.name)
+            self.tab_manager.active_tab.innodb_trx_locks_datatable.clear()
         elif key == "6":
+            if not dolphie.is_mysql_version_at_least("5.7"):
+                self.notify("Metadata Locks panel requires MySQL 5.7+")
+                return
+
+            query = (
+                "SELECT enabled FROM performance_schema.setup_instruments WHERE name = 'wait/lock/metadata/sql/mdl';"
+            )
+            dolphie.secondary_db_connection.execute(query)
+            row = dolphie.secondary_db_connection.fetchone()
+            if row and row.get("enabled") == "NO":
+                self.notify(
+                    "Metadata Locks panel requires Performance Schema to have 'wait/lock/metadata/sql/mdl' enabled"
+                )
+                return
+
+            self.toggle_panel(dolphie.panels.metadata_locks.name)
+            self.tab_manager.active_tab.metadata_locks_datatable.clear()
+        elif key == "7":
             if not dolphie.is_mysql_version_at_least("5.7"):
                 self.notify("DDL panel requires MySQL 5.7+")
                 return
@@ -952,8 +978,9 @@ class DolphieApp(App):
                 "2": "Show/hide Processlist",
                 "3": "Show/hide Replication/Replicas",
                 "4": "Show/hide Graph Metrics",
-                "5": "Show/hide Locks",
-                "6": "Show/hide DDLs",
+                "5": "Show/hide InnoDB Transaction Locks",
+                "6": "Show/hide Metadata Locks",
+                "7": "Show/hide DDLs",
                 "`": "Open Host Setup",
                 "+": "Create a new tab",
                 "-": "Remove the current tab",
@@ -1157,7 +1184,10 @@ class DolphieApp(App):
 
                 tab.spinner.show()
                 threads_killed = 0
-                for thread_id, thread in dolphie.processlist_threads_snapshot.items():
+
+                # We need to make a copy of the threads snapshot to so it doesn't change while we're iterating over it
+                threads = dolphie.processlist_threads_snapshot.copy()
+                for thread_id, thread in threads.items():
                     thread: ProcesslistThread
                     try:
                         if thread.command in commands_to_kill:

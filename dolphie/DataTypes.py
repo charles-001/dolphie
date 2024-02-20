@@ -70,7 +70,8 @@ class Panels:
         self.processlist = Panel("processlist")
         self.graphs = Panel("graphs")
         self.replication = Panel("replication")
-        self.locks = Panel("locks")
+        self.innodb_trx_locks = Panel("innodb_trx_locks")
+        self.metadata_locks = Panel("metadata_locks")
         self.ddl = Panel("ddl")
 
     def get_panel(self, panel_name: str) -> Panel:

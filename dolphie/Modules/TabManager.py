@@ -35,7 +35,7 @@ from textual.worker import Worker
 class Tab:
     id: int
     name: str
-    dolphie: Dolphie
+    dolphie: Dolphie = None
     manual_tab_name: str = None
 
     worker: Worker = None
@@ -54,7 +54,8 @@ class Tab:
     panel_dashboard: Container = None
     panel_graphs: Container = None
     panel_replication: Container = None
-    panel_locks: Container = None
+    panel_innodb_trx_locks: Container = None
+    panel_metadata_locks: Container = None
     panel_ddl: Container = None
     panel_processlist: Container = None
 
@@ -69,8 +70,11 @@ class Tab:
     ddl_title: Label = None
     ddl_datatable: DataTable = None
 
-    locks_title: Label = None
-    locks_datatable: DataTable = None
+    innodb_trx_locks_title: Label = None
+    innodb_trx_locks_datatable: DataTable = None
+
+    metadata_locks_title: Label = None
+    metadata_locks_datatable: DataTable = None
 
     processlist_title: Label = None
     processlist_datatable: DataTable = None
@@ -202,7 +206,7 @@ class TabManager:
             return
 
         # Create our new tab instance
-        tab = Tab(id=tab_id, name=tab_name, dolphie=None)
+        tab = Tab(id=tab_id, name=tab_name)
 
         # If we're using hostgroups
         if use_hostgroup and self.config.hostgroup_hosts:
@@ -229,6 +233,7 @@ class TabManager:
         dolphie.tab_id = tab_id
         dolphie.tab_name = tab_name
 
+        # Save the Dolphie instance to the tab
         tab.dolphie = dolphie
 
         # Revert the port back to its original value
@@ -296,10 +301,16 @@ class TabManager:
                         classes="panel_container replication_panel",
                     ),
                     Container(
-                        Label(id=f"locks_title_{tab_id}"),
-                        DataTable(id=f"locks_datatable_{tab_id}", show_cursor=False),
-                        id=f"panel_locks_{tab_id}",
-                        classes="locks",
+                        Label(id=f"innodb_trx_locks_title_{tab_id}"),
+                        DataTable(id=f"innodb_trx_locks_datatable_{tab_id}", show_cursor=False),
+                        id=f"panel_innodb_trx_locks_{tab_id}",
+                        classes="innodb_trx_locks",
+                    ),
+                    Container(
+                        Label(id=f"metadata_locks_title_{tab_id}"),
+                        DataTable(id=f"metadata_locks_datatable_{tab_id}", show_cursor=False),
+                        id=f"panel_metadata_locks_{tab_id}",
+                        classes="metadata_locks",
                     ),
                     Container(
                         Label(id=f"ddl_title_{tab_id}"),
@@ -324,7 +335,7 @@ class TabManager:
         metrics = MetricManager.MetricManager().metrics
         metric_tab_labels = [
             ("DML", metrics.dml, True),
-            ("Locks", metrics.locks, False),
+            ("InnoDB TRX Locks", metrics.innodb_trx_locks, False),
             ("Table Cache", metrics.table_cache, True),
             ("Threads", metrics.threads, True),
             ("BP Requests", metrics.buffer_pool_requests, True),
@@ -393,7 +404,8 @@ class TabManager:
         tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)
         tab.panel_graphs = self.app.query_one(f"#panel_graphs_{tab.id}", Container)
         tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
-        tab.panel_locks = self.app.query_one(f"#panel_locks_{tab.id}", Container)
+        tab.panel_innodb_trx_locks = self.app.query_one(f"#panel_innodb_trx_locks_{tab.id}", Container)
+        tab.panel_metadata_locks = self.app.query_one(f"#panel_metadata_locks_{tab.id}", Container)
         tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", Container)
         tab.panel_ddl = self.app.query_one(f"#panel_ddl_{tab.id}", Container)
 
@@ -404,8 +416,10 @@ class TabManager:
         tab.ddl_datatable = self.app.query_one(f"#ddl_datatable_{tab.id}", DataTable)
         tab.processlist_title = self.app.query_one(f"#processlist_title_{tab.id}", Label)
         tab.processlist_datatable = self.app.query_one(f"#processlist_data_{tab.id}", DataTable)
-        tab.locks_title = self.app.query_one(f"#locks_title_{tab.id}", Label)
-        tab.locks_datatable = self.app.query_one(f"#locks_datatable_{tab.id}", DataTable)
+        tab.innodb_trx_locks_title = self.app.query_one(f"#innodb_trx_locks_title_{tab.id}", Label)
+        tab.innodb_trx_locks_datatable = self.app.query_one(f"#innodb_trx_locks_datatable_{tab.id}", DataTable)
+        tab.metadata_locks_title = self.app.query_one(f"#metadata_locks_title_{tab.id}", Label)
+        tab.metadata_locks_datatable = self.app.query_one(f"#metadata_locks_datatable_{tab.id}", DataTable)
 
         tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
         tab.dashboard_innodb = self.app.query_one(f"#dashboard_innodb_{tab.id}", Static)
@@ -440,9 +454,6 @@ class TabManager:
         tab.main_container.display = False
         tab.loading_indicator.display = False
 
-        # Set the sparkline data to 0
-        tab.sparkline.data = [None]
-
         for panel in tab.dolphie.panels.all():
             self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
 
@@ -464,6 +475,9 @@ class TabManager:
 
         if switch_tab:
             self.switch_tab(tab_id)
+
+        # Set the sparkline data to 0
+        tab.sparkline.data = [0]
 
         # Increment the tab id counter
         self.tab_id_counter += 1
