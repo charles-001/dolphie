@@ -335,7 +335,7 @@ class TabManager:
         metrics = MetricManager.MetricManager().metrics
         metric_tab_labels = [
             ("DML", metrics.dml, True),
-            ("InnoDB TRX Locks", metrics.innodb_trx_locks, False),
+            ("Locks", metrics.locks, True),
             ("Table Cache", metrics.table_cache, True),
             ("Threads", metrics.threads, True),
             ("BP Requests", metrics.buffer_pool_requests, True),

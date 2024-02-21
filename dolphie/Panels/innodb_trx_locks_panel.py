@@ -35,7 +35,7 @@ def create_panel(tab: Tab) -> DataTable:
     locks_datatable.clear(columns=True)
 
     for column_key, column_data in columns.items():
-        locks_datatable.add_column(column_data["name"], key=column_key, width=column_data["width"])
+        locks_datatable.add_column(column_data["name"], width=column_data["width"])
 
     for lock in dolphie.lock_transactions:
         row_values = []
@@ -45,7 +45,10 @@ def create_panel(tab: Tab) -> DataTable:
             column_format_number = column_data["format_number"]
 
             if column_name == "Query":
-                value = markup_escape(sub(r"\s+", " ", lock[column_key][0:query_characters]))
+                if lock[column_key]:
+                    value = markup_escape(sub(r"\s+", " ", lock[column_key][0:query_characters]))
+                else:
+                    value = ""
             else:
                 if column_format_number:
                     value = format_number(lock[column_key])
@@ -54,8 +57,7 @@ def create_panel(tab: Tab) -> DataTable:
 
             row_values.append(value)
 
-        lock_key = f"{lock['waiting_pid']}-{lock['blocking_pid']}"
-        locks_datatable.add_row(*row_values, key=lock_key)
+        locks_datatable.add_row(*row_values)
 
     tab.innodb_trx_locks_title.update(
         f"InnoDB Transaction Locks ([highlight]{len(dolphie.lock_transactions)}[/highlight])"

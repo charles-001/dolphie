@@ -185,13 +185,15 @@ class DolphieApp(App):
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
             if dolphie.is_mysql_version_at_least("5.7"):
-                if dolphie.panels.innodb_trx_locks.visible or dolphie.config.historical_trx_locks:
-                    dolphie.main_db_connection.execute(MySQLQueries.locks_query)
-                    dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
-
+                # Always run this so we can save the data for graphing
                 if dolphie.panels.metadata_locks.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.metadata_locks)
                     dolphie.metadata_locks = dolphie.main_db_connection.fetchall()
+
+                # This can cause MySQL to crash: https://bugs.mysql.com/bug.php?id=112035
+                # if dolphie.panels.innodb_trx_locks.visible or dolphie.historical_trx_locks:
+                #     dolphie.main_db_connection.execute(MySQLQueries.locks_query)
+                #     dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
 
                 if dolphie.panels.ddl.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.ddls)
@@ -204,7 +206,8 @@ class DolphieApp(App):
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
                 disk_io_metrics=dolphie.disk_io_metrics,
-                innodb_trx_lock_metrics=dolphie.lock_transactions,
+                # innodb_trx_lock_metrics=dolphie.lock_transactions,
+                metadata_lock_metrics=dolphie.metadata_locks,
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
@@ -602,14 +605,14 @@ class DolphieApp(App):
         elif key == "4":
             self.toggle_panel(dolphie.panels.graphs.name)
             self.app.update_graphs("dml")
-        elif key == "5":
-            if not dolphie.is_mysql_version_at_least("5.7"):
-                self.notify("InnoDB Transaction Locks panel requires MySQL 5.7+")
-                return
+        # elif key == "5":
+        #     if not dolphie.is_mysql_version_at_least("5.7"):
+        #         self.notify("InnoDB Transaction Locks panel requires MySQL 5.7+")
+        #         return
 
-            self.toggle_panel(dolphie.panels.innodb_trx_locks.name)
-            self.tab_manager.active_tab.innodb_trx_locks_datatable.clear()
-        elif key == "6":
+        #     self.toggle_panel(dolphie.panels.innodb_trx_locks.name)
+        #     self.tab_manager.active_tab.innodb_trx_locks_datatable.clear()
+        elif key == "5":
             if not dolphie.is_mysql_version_at_least("5.7"):
                 self.notify("Metadata Locks panel requires MySQL 5.7+")
                 return
@@ -627,7 +630,7 @@ class DolphieApp(App):
 
             self.toggle_panel(dolphie.panels.metadata_locks.name)
             self.tab_manager.active_tab.metadata_locks_datatable.clear()
-        elif key == "7":
+        elif key == "6":
             if not dolphie.is_mysql_version_at_least("5.7"):
                 self.notify("DDL panel requires MySQL 5.7+")
                 return
@@ -978,9 +981,9 @@ class DolphieApp(App):
                 "2": "Show/hide Processlist",
                 "3": "Show/hide Replication/Replicas",
                 "4": "Show/hide Graph Metrics",
-                "5": "Show/hide InnoDB Transaction Locks",
-                "6": "Show/hide Metadata Locks",
-                "7": "Show/hide DDLs",
+                # "5": "Show/hide InnoDB Transaction Locks",
+                "5": "Show/hide Metadata Locks",
+                "6": "Show/hide DDLs",
                 "`": "Open Host Setup",
                 "+": "Create a new tab",
                 "-": "Remove the current tab",

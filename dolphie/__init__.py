@@ -39,7 +39,7 @@ class Dolphie:
         self.host_setup_available_hosts = config.host_setup_available_hosts
         self.startup_panels = config.startup_panels
         self.graph_marker = config.graph_marker
-        self.historical_trx_locks = config.historical_trx_locks
+        # self.historical_trx_locks = config.historical_trx_locks
         self.hostgroup = config.hostgroup
         self.hostgroup_hosts = config.hostgroup_hosts
 

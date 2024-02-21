@@ -1,6 +1,6 @@
 from re import sub
 
-from dolphie.Modules.Functions import format_number
+from dolphie.Modules.Functions import format_number, format_time
 from dolphie.Modules.TabManager import Tab
 from rich.markup import escape as markup_escape
 from textual.widgets import DataTable
@@ -11,7 +11,7 @@ def create_panel(tab: Tab) -> DataTable:
 
     columns = {
         "object_type": {"name": "Object Type", "width": 11, "format_number": False},
-        "object_name": {"name": "Object Name", "width": 20, "format_number": False},
+        "object_name": {"name": "Object Name", "width": 25, "format_number": False},
         "lock_type": {"name": "Lock Type", "width": 20, "format_number": False},
         "waiting_pid": {"name": "[highlight]Waiting PID[/highlight]", "width": 13, "format_number": False},
         "waiting_time": {"name": "Age", "width": 8, "format_number": False},
@@ -22,7 +22,7 @@ def create_panel(tab: Tab) -> DataTable:
     }
 
     # Hacky way to calculate the width of the query columns
-    query_characters = round((dolphie.app.console.size.width / 2) - ((len(columns) * 6) + 3))
+    query_characters = round((dolphie.app.console.size.width / 2) - ((len(columns) * 6) + 4))
     columns["waiting_query"]["width"] = query_characters
     columns["blocking_query"]["width"] = query_characters
 
@@ -30,7 +30,7 @@ def create_panel(tab: Tab) -> DataTable:
     metadata_locks_datatable.clear(columns=True)
 
     for column_key, column_data in columns.items():
-        metadata_locks_datatable.add_column(column_data["name"], key=column_key, width=column_data["width"])
+        metadata_locks_datatable.add_column(column_data["name"], width=column_data["width"])
 
     for lock in dolphie.metadata_locks:
         row_values = []
@@ -44,6 +44,8 @@ def create_panel(tab: Tab) -> DataTable:
                     value = markup_escape(sub(r"\s+", " ", lock[column_key][0:query_characters]))
                 else:
                     value = ""
+            elif column_name == "Age":
+                value = format_time(lock[column_key])
             else:
                 if column_format_number:
                     value = format_number(lock[column_key])
@@ -52,7 +54,6 @@ def create_panel(tab: Tab) -> DataTable:
 
             row_values.append(value)
 
-        lock_key = f"{lock['waiting_pid']}-{lock['blocking_pid']}"
-        metadata_locks_datatable.add_row(*row_values, key=lock_key)
+        metadata_locks_datatable.add_row(*row_values)
 
     tab.metadata_locks_title.update(f"Metadata Locks ([highlight]{len(dolphie.metadata_locks)}[/highlight])")
