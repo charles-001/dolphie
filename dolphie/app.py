@@ -435,7 +435,7 @@ class DolphieApp(App):
         stat_data = {}
 
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
-            if hasattr(metric_instance, "tab_name") and metric_instance.tab_name == tab_metric_instance_name:
+            if metric_instance.tab_name == tab_metric_instance_name:
                 number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
                 for metric_data in metric_instance.__dict__.values():
                     if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
