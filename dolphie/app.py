@@ -24,7 +24,6 @@ from dolphie.Modules.TabManager import Tab, TabManager
 from dolphie.Panels import (
     dashboard_panel,
     ddl_panel,
-    innodb_trx_locks_panel,
     metadata_locks_panel,
     processlist_panel,
     replication_panel,
@@ -464,7 +463,7 @@ class DolphieApp(App):
             tab.dolphie.panels.replication.name: replication_panel,
             tab.dolphie.panels.dashboard.name: dashboard_panel,
             tab.dolphie.panels.processlist.name: processlist_panel,
-            tab.dolphie.panels.innodb_trx_locks.name: innodb_trx_locks_panel,
+            # tab.dolphie.panels.innodb_trx_locks.name: innodb_trx_locks_panel,
             tab.dolphie.panels.metadata_locks.name: metadata_locks_panel,
             tab.dolphie.panels.ddl.name: ddl_panel,
         }

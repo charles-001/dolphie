@@ -54,7 +54,7 @@ class Tab:
     panel_dashboard: Container = None
     panel_graphs: Container = None
     panel_replication: Container = None
-    panel_innodb_trx_locks: Container = None
+    # panel_innodb_trx_locks: Container = None
     panel_metadata_locks: Container = None
     panel_ddl: Container = None
     panel_processlist: Container = None
@@ -70,8 +70,8 @@ class Tab:
     ddl_title: Label = None
     ddl_datatable: DataTable = None
 
-    innodb_trx_locks_title: Label = None
-    innodb_trx_locks_datatable: DataTable = None
+    # innodb_trx_locks_title: Label = None
+    # innodb_trx_locks_datatable: DataTable = None
 
     metadata_locks_title: Label = None
     metadata_locks_datatable: DataTable = None
@@ -300,12 +300,12 @@ class TabManager:
                         id=f"panel_replication_{tab_id}",
                         classes="panel_container replication_panel",
                     ),
-                    Container(
-                        Label(id=f"innodb_trx_locks_title_{tab_id}"),
-                        DataTable(id=f"innodb_trx_locks_datatable_{tab_id}", show_cursor=False),
-                        id=f"panel_innodb_trx_locks_{tab_id}",
-                        classes="innodb_trx_locks",
-                    ),
+                    # Container(
+                    #     Label(id=f"innodb_trx_locks_title_{tab_id}"),
+                    #     DataTable(id=f"innodb_trx_locks_datatable_{tab_id}", show_cursor=False),
+                    #     id=f"panel_innodb_trx_locks_{tab_id}",
+                    #     classes="innodb_trx_locks",
+                    # ),
                     Container(
                         Label(id=f"metadata_locks_title_{tab_id}"),
                         DataTable(id=f"metadata_locks_datatable_{tab_id}", show_cursor=False),
@@ -404,7 +404,7 @@ class TabManager:
         tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)
         tab.panel_graphs = self.app.query_one(f"#panel_graphs_{tab.id}", Container)
         tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
-        tab.panel_innodb_trx_locks = self.app.query_one(f"#panel_innodb_trx_locks_{tab.id}", Container)
+        # tab.panel_innodb_trx_locks = self.app.query_one(f"#panel_innodb_trx_locks_{tab.id}", Container)
         tab.panel_metadata_locks = self.app.query_one(f"#panel_metadata_locks_{tab.id}", Container)
         tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", Container)
         tab.panel_ddl = self.app.query_one(f"#panel_ddl_{tab.id}", Container)
@@ -416,8 +416,8 @@ class TabManager:
         tab.ddl_datatable = self.app.query_one(f"#ddl_datatable_{tab.id}", DataTable)
         tab.processlist_title = self.app.query_one(f"#processlist_title_{tab.id}", Label)
         tab.processlist_datatable = self.app.query_one(f"#processlist_data_{tab.id}", DataTable)
-        tab.innodb_trx_locks_title = self.app.query_one(f"#innodb_trx_locks_title_{tab.id}", Label)
-        tab.innodb_trx_locks_datatable = self.app.query_one(f"#innodb_trx_locks_datatable_{tab.id}", DataTable)
+        # tab.innodb_trx_locks_title = self.app.query_one(f"#innodb_trx_locks_title_{tab.id}", Label)
+        # tab.innodb_trx_locks_datatable = self.app.query_one(f"#innodb_trx_locks_datatable_{tab.id}", DataTable)
         tab.metadata_locks_title = self.app.query_one(f"#metadata_locks_title_{tab.id}", Label)
         tab.metadata_locks_datatable = self.app.query_one(f"#metadata_locks_datatable_{tab.id}", DataTable)
 
