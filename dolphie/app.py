@@ -215,7 +215,7 @@ class DolphieApp(App):
             # host setup modal with the error
             tab.worker_cancel_error = exception
 
-            await tab.disconnect()
+            await self.tab_manager.disconnect_tab(tab)
 
         tab.worker_running = False
 
@@ -258,7 +258,7 @@ class DolphieApp(App):
                     if not self.loading_hostgroups:
                         self.tab_manager.switch_tab(tab.id)
 
-                        tab.host_setup()
+                        self.tab_manager.setup_host_tab(tab)
                         self.bell()
         elif event.worker.group == "replicas":
             tab.replicas_worker_running = False
@@ -645,15 +645,15 @@ class DolphieApp(App):
             self.toggle_panel(dolphie.panels.ddl.name)
             self.tab_manager.active_tab.ddl_datatable.clear()
         elif key == "grave_accent":
-            self.tab_manager.active_tab.host_setup()
+            self.tab_manager.setup_host_tab(tab)
         elif key == "space":
             if tab.worker.state != WorkerState.RUNNING:
                 tab.worker_timer.stop()
                 self.run_worker_main(tab.id)
         elif key == "plus":
-            await self.tab_manager.create_tab(tab_name="New Tab")
+            new_tab = await self.tab_manager.create_tab(tab_name="New Tab")
             self.tab_manager.topbar.host = ""
-            self.tab_manager.active_tab.host_setup()
+            self.tab_manager.setup_host_tab(new_tab)
         elif key == "equals_sign":
 
             def command_get_input(tab_name):
@@ -668,7 +668,7 @@ class DolphieApp(App):
                 self.notify("Removing all tabs is not permitted", severity="error")
             else:
                 await self.tab_manager.remove_tab(tab)
-                await tab.disconnect(update_topbar=False)
+                await self.tab_manager.disconnect_tab(tab=tab, update_topbar=False)
 
                 self.notify(f"Tab [highlight]{tab.name}[/highlight] [white]has been removed", severity="success")
                 self.tab_manager.tabs.pop(tab.id, None)
@@ -704,7 +704,7 @@ class DolphieApp(App):
             self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "D":
-            await tab.disconnect()
+            await self.tab_manager.disconnect_tab(tab)
 
         elif key == "e":
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:

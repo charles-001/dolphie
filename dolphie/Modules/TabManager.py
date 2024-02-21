@@ -101,89 +101,6 @@ class Tab:
     def get_panel_widget(self, panel_name: str) -> Container:
         return getattr(self, f"panel_{panel_name}")
 
-    async def disconnect(self, update_topbar: bool = True):
-        if self.worker_timer:
-            self.worker_timer.stop()
-        if self.replicas_worker_timer:
-            self.replicas_worker_timer.stop()
-
-        if self.worker:
-            self.worker.cancel()
-
-        if self.replicas_worker:
-            self.replicas_worker.cancel()
-
-        self.dolphie.main_db_connection.close()
-        self.dolphie.secondary_db_connection.close()
-
-        self.dolphie.replica_manager.remove_all()
-
-        self.main_container.display = False
-        self.sparkline.display = False
-        self.loading_indicator.display = False
-
-        self.sparkline.data = [0]
-
-        self.replicas_title.update("")
-        for member in self.dolphie.app.query(f".replica_container_{self.id}"):
-            await member.remove()
-
-        if update_topbar:
-            self.dolphie.app.tab_manager.update_topbar(tab=self, connection_status=ConnectionStatus.disconnected)
-
-    def host_setup(self):
-        dolphie = self.dolphie
-
-        async def command_get_input(data):
-            host_port = data["host"].split(":")
-
-            dolphie.host = host_port[0]
-            dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
-            dolphie.user = data.get("username")
-            dolphie.password = data.get("password")
-            hostgroup = data.get("hostgroup")
-
-            if hostgroup:
-                self.dolphie.app.connect_as_hostgroup(hostgroup)
-            else:
-                await self.disconnect()
-
-                self.loading_indicator.display = True
-                while True:
-                    if not self.worker_running and not self.replicas_worker_running:
-                        dolphie.reset_runtime_variables()
-
-                        self.worker_cancel_error = ""
-
-                        self.dolphie.app.run_worker_main(self.id)
-                        self.dolphie.app.run_worker_replicas(self.id)
-
-                        break
-
-                    await asyncio.sleep(0.25)
-
-        # If we're here because of a worker cancel error or manually disconnected,
-        # we want to pre-populate the host/port
-        if self.worker_cancel_error or dolphie.connection_status == ConnectionStatus.disconnected:
-            host = dolphie.host
-            port = dolphie.port
-        else:
-            host = ""
-            port = ""
-
-        self.dolphie.app.push_screen(
-            HostSetupModal(
-                host=host,
-                port=port,
-                username=dolphie.user,
-                password=dolphie.password,
-                hostgroups=dolphie.hostgroup_hosts.keys(),
-                available_hosts=dolphie.host_setup_available_hosts,
-                error_message=self.worker_cancel_error,
-            ),
-            command_get_input,
-        )
-
 
 class TabManager:
     def __init__(self, app: App, config: Config):
@@ -198,6 +115,20 @@ class TabManager:
         self.host_tabs.display = False
 
         self.topbar = self.app.query_one(TopBar)
+
+    def update_topbar(self, tab: Tab, connection_status: ConnectionStatus):
+        dolphie = tab.dolphie
+
+        dolphie.connection_status = connection_status
+
+        # Only update the topbar if we're on the active tab
+        if tab.id == self.active_tab.id:
+            if dolphie.connection_status:
+                self.topbar.connection_status = dolphie.connection_status
+                self.topbar.host = dolphie.mysql_host
+            else:
+                self.topbar.connection_status = None
+                self.topbar.host = ""
 
     async def create_tab(self, tab_name: str, use_hostgroup: bool = False, switch_tab: bool = True) -> Tab:
         tab_id = self.tab_id_counter
@@ -534,16 +465,84 @@ class TabManager:
 
         return all_tabs
 
-    def update_topbar(self, tab: Tab, connection_status: ConnectionStatus):
+    async def disconnect_tab(self, tab: Tab, update_topbar: bool = True):
+        if tab.worker_timer:
+            tab.worker_timer.stop()
+        if tab.replicas_worker_timer:
+            tab.replicas_worker_timer.stop()
+
+        if tab.worker:
+            tab.worker.cancel()
+
+        if tab.replicas_worker:
+            tab.replicas_worker.cancel()
+
+        tab.dolphie.main_db_connection.close()
+        tab.dolphie.secondary_db_connection.close()
+
+        tab.dolphie.replica_manager.remove_all()
+
+        tab.main_container.display = False
+        tab.sparkline.display = False
+        tab.loading_indicator.display = False
+
+        tab.sparkline.data = [0]
+
+        tab.replicas_title.update("")
+        for member in tab.dolphie.app.query(f".replica_container_{tab.id}"):
+            await member.remove()
+
+        if update_topbar:
+            self.update_topbar(tab=tab, connection_status=ConnectionStatus.disconnected)
+
+    def setup_host_tab(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.connection_status = connection_status
+        async def command_get_input(data):
+            host_port = data["host"].split(":")
 
-        # Only update the topbar if we're on the active tab
-        if tab.id == self.active_tab.id:
-            if dolphie.connection_status:
-                self.topbar.connection_status = dolphie.connection_status
-                self.topbar.host = dolphie.mysql_host
+            dolphie.host = host_port[0]
+            dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
+            dolphie.user = data.get("username")
+            dolphie.password = data.get("password")
+            hostgroup = data.get("hostgroup")
+
+            if hostgroup:
+                dolphie.app.connect_as_hostgroup(hostgroup)
             else:
-                self.topbar.connection_status = None
-                self.topbar.host = ""
+                await self.disconnect_tab(tab)
+
+                tab.loading_indicator.display = True
+                while True:
+                    if not tab.worker_running and not tab.replicas_worker_running:
+                        tab.worker_cancel_error = ""
+
+                        dolphie.reset_runtime_variables()
+                        dolphie.app.run_worker_main(tab.id)
+                        dolphie.app.run_worker_replicas(tab.id)
+
+                        break
+
+                    await asyncio.sleep(0.25)
+
+        # If we're here because of a worker cancel error or manually disconnected,
+        # we want to pre-populate the host/port
+        if tab.worker_cancel_error or dolphie.connection_status == ConnectionStatus.disconnected:
+            host = dolphie.host
+            port = dolphie.port
+        else:
+            host = ""
+            port = ""
+
+        dolphie.app.push_screen(
+            HostSetupModal(
+                host=host,
+                port=port,
+                username=dolphie.user,
+                password=dolphie.password,
+                hostgroups=dolphie.hostgroup_hosts.keys(),
+                available_hosts=dolphie.host_setup_available_hosts,
+                error_message=tab.worker_cancel_error,
+            ),
+            command_get_input,
+        )
