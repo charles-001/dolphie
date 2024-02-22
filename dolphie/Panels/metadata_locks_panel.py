@@ -1,6 +1,6 @@
 from re import sub
 
-from dolphie.Modules.Functions import format_number, format_time
+from dolphie.Modules.Functions import format_time
 from dolphie.Modules.TabManager import Tab
 from rich.markup import escape as markup_escape
 from textual.widgets import DataTable
@@ -10,50 +10,91 @@ def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
     columns = {
-        "object_type": {"name": "Object Type", "width": 11, "format_number": False},
-        "object_name": {"name": "Object Name", "width": 25, "format_number": False},
-        "lock_type": {"name": "Lock Type", "width": 20, "format_number": False},
-        "waiting_pid": {"name": "[highlight]Waiting PID[/highlight]", "width": 13, "format_number": False},
-        "waiting_time": {"name": "Age", "width": 8, "format_number": False},
-        "waiting_query": {"name": "Query", "width": None, "format_number": False},
-        "blocking_pid": {"name": "[red]Blocking PID[/red]", "width": 13, "format_number": False},
-        "blocking_time": {"name": "Age", "width": 8, "format_number": False},
-        "blocking_query": {"name": "Query", "width": None, "format_number": False},
+        "OBJECT_TYPE": {"name": "Object Type", "width": 13},
+        "OBJECT_SCHEMA": {"name": "Object Schema", "width": 13},
+        "OBJECT_NAME": {"name": "Object Name", "width": 15},
+        "LOCK_TYPE": {"name": "Lock Type", "width": 20},
+        "LOCK_STATUS": {"name": "Lock Status", "width": 11},
+        "SOURCE": {"name": "Source", "width": 15},
+        "PROCESSLIST_ID": {"name": "PID", "width": 13},
+        "PROCESSLIST_USER": {"name": "User", "width": 13},
+        "PROCESSLIST_TIME": {"name": "Age", "width": 8},
+        "PROCESSLIST_INFO": {"name": "Query", "width": None},
     }
 
-    # Hacky way to calculate the width of the query columns
-    query_characters = round((dolphie.app.console.size.width / 2) - ((len(columns) * 6) + 4))
-    columns["waiting_query"]["width"] = query_characters
-    columns["blocking_query"]["width"] = query_characters
-
     metadata_locks_datatable = tab.metadata_locks_datatable
-    metadata_locks_datatable.clear(columns=True)
 
-    for column_key, column_data in columns.items():
-        metadata_locks_datatable.add_column(column_data["name"], width=column_data["width"])
-
-    for lock in dolphie.metadata_locks:
-        row_values = []
-
+    if not metadata_locks_datatable.columns:
         for column_key, column_data in columns.items():
             column_name = column_data["name"]
-            column_format_number = column_data["format_number"]
+            metadata_locks_datatable.add_column(column_name, key=column_name, width=column_data["width"])
 
-            if column_name == "Query":
-                if lock[column_key]:
-                    value = markup_escape(sub(r"\s+", " ", lock[column_key][0:query_characters]))
-                else:
-                    value = ""
-            elif column_name == "Age":
-                value = format_time(lock[column_key])
+    for lock in dolphie.metadata_locks:
+        lock_id = str(lock["id"])
+
+        row_values = []
+        for column_id, (column_key, column_data) in enumerate(columns.items()):
+            column_name = column_data["name"]
+
+            value = format_value(lock, column_key, lock[column_key])
+            if lock_id in metadata_locks_datatable.rows:
+                # Update the datatable if values differ
+                if value != metadata_locks_datatable.get_row(lock_id)[column_id]:
+                    metadata_locks_datatable.update_cell(lock_id, column_name, value, update_width=True)
             else:
-                if column_format_number:
-                    value = format_number(lock[column_key])
-                else:
-                    value = lock[column_key]
+                # Create an array of values to append to the datatable
+                row_values.append(value)
 
-            row_values.append(value)
+        # Add a new row to the datatable
+        if row_values:
+            metadata_locks_datatable.add_row(*row_values, key=lock_id)
 
-        metadata_locks_datatable.add_row(*row_values)
+    # Find the ids that exist in datatable but not in metadata_locks
+    if dolphie.metadata_locks:
+        metadata_lock_ids = {str(lock["id"]) for lock in dolphie.metadata_locks}
+        datatable_ids = {row_key.value for row_key in metadata_locks_datatable.rows.keys()}
+        rows_to_remove = datatable_ids - metadata_lock_ids
+
+        for id in rows_to_remove:
+            metadata_locks_datatable.remove_row(id)
+    else:
+        if metadata_locks_datatable.rows:
+            metadata_locks_datatable.clear()
 
     tab.metadata_locks_title.update(f"Metadata Locks ([highlight]{len(dolphie.metadata_locks)}[/highlight])")
+
+
+def format_value(lock, column_key, value: str) -> str:
+    # OBJECT_NAME is in the format "schema/table" sometimes where OBJECT_SCHEMA is empty,
+    # so I want to split OBJECT_NAME and correct it if necessary
+    if column_key == "OBJECT_SCHEMA" and not value and lock["OBJECT_NAME"] and "/" in lock["OBJECT_NAME"]:
+        formatted_value = lock["OBJECT_NAME"].split("/")[0]
+    elif column_key == "OBJECT_NAME" and value and "/" in value:
+        formatted_value = value.split("/")[1]
+    elif value is None or value == "":
+        formatted_value = "N/A"
+    elif column_key == "PROCESSLIST_INFO":
+        if value:
+            formatted_value = markup_escape(sub(r"\s+", " ", value))
+        else:
+            formatted_value = ""
+    elif column_key == "LOCK_STATUS":
+        if value == "GRANTED":
+            formatted_value = f"[green]{value}[/green]"
+        elif value == "PENDING":
+            formatted_value = f"[red]{value}[/red]"
+        else:
+            formatted_value = value
+    elif column_key == "LOCK_TYPE":
+        if value == "EXCLUSIVE":
+            formatted_value = f"[yellow]{value}[/yellow]"
+        else:
+            formatted_value = value
+    elif column_key == "PROCESSLIST_TIME":
+        formatted_value = format_time(value)
+    elif column_key == "SOURCE":
+        formatted_value = value.split(":")[0]
+    else:
+        formatted_value = value
+
+    return formatted_value

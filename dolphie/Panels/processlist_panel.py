@@ -62,42 +62,41 @@ def create_panel(tab: Tab) -> DataTable:
 
     # Iterate through dolphie.processlist_threads
     for thread_id, thread in dolphie.processlist_threads.items():
-        # Check if the thread_id exists in the datatable
-        if thread_id in processlist_datatable.rows:
-            datatable_row = processlist_datatable.get_row(thread_id)
+        row_values = []
 
-            # Update the datatable if values differ
-            for column_id, column_data in enumerate(columns):
-                column_name = column_data["name"]
-                column_field = column_data["field"]
-                column_format_number = column_data["format_number"]
-                column_value = getattr(thread, column_field)
+        for column_id, (column_data) in enumerate(columns):
+            column_name = column_data["name"]
+            column_field = column_data["field"]
+            column_format_number = column_data["format_number"]
+            column_value = getattr(thread, column_field)
 
-                update_width = False
-                if column_field == "formatted_query":
-                    update_width = True
+            update_width = False
+            if column_field == "formatted_query":
+                update_width = True
 
-                value = format_number(column_value) if column_format_number else column_value
-                if value != datatable_row[column_id] or column_field == "formatted_time":
+            value = format_number(column_value) if column_format_number else column_value
+            if thread_id in processlist_datatable.rows:
+                # Update the datatable if values differ
+                if value != processlist_datatable.get_row(thread_id)[column_id] or column_field == "formatted_time":
                     processlist_datatable.update_cell(thread_id, column_name, value, update_width=update_width)
-        else:
-            # Add a new row to the datatable if thread_id does not exist
-            row_values = []
-            for column_data in columns:
-                column_field = column_data["field"]
-                column_format_number = column_data["format_number"]
-                column_value = getattr(thread, column_field)
-
-                value = format_number(column_value) if column_format_number else column_value
-
+            else:
+                # Create an array of values to append to the datatable
                 row_values.append(value)
 
+        # Add a new row to the datatable
+        if row_values:
             processlist_datatable.add_row(*row_values, key=thread_id)
 
     # Remove rows from processlist_datatable that no longer exist in dolphie.processlist_threads
-    rows_to_remove = set(processlist_datatable.rows.keys()) - set(dolphie.processlist_threads.keys())
-    for id in rows_to_remove:
-        processlist_datatable.remove_row(id)
+    if dolphie.processlist_threads:
+        datatable_ids = {row_key.value for row_key in processlist_datatable.rows.keys()}
+        rows_to_remove = datatable_ids - set(dolphie.processlist_threads.keys())
+
+        for id in rows_to_remove:
+            processlist_datatable.remove_row(id)
+    else:
+        if processlist_datatable.rows:
+            processlist_datatable.clear()
 
     processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 

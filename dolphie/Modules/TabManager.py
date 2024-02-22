@@ -176,7 +176,7 @@ class TabManager:
             TabPane(
                 intial_tab_name,
                 LoadingIndicator(id=f"loading_indicator_{tab_id}", classes="connection_loading_indicator"),
-                SpinnerWidget(id=f"spinner_{tab_id}"),
+                SpinnerWidget(id=f"spinner_{tab_id}", text="Processing command"),
                 VerticalScroll(
                     Container(
                         Center(

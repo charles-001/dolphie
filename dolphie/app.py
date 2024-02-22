@@ -219,7 +219,7 @@ class DolphieApp(App):
 
         tab.worker_running = False
 
-    async def on_worker_state_changed(self, event: Worker.StateChanged):
+    def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
         if not tab:
             return

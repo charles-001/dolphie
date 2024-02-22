@@ -3,10 +3,10 @@ from textual.widgets import Static
 
 
 class SpinnerWidget(Static):
-    def __init__(self, id):
+    def __init__(self, id, text):
         super().__init__("")
         self._id = id
-        self._spinner = Spinner("bouncingBar", text="[label]Processing command", speed=0.7)
+        self._spinner = Spinner("bouncingBar", text=f"[label]{text}", speed=0.7)
 
     def on_mount(self) -> None:
         self.update_render = self.set_interval(1 / 60, self.update_spinner)

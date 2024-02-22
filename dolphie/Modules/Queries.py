@@ -224,45 +224,25 @@ class MySQLQueries:
     """
     metadata_locks: str = """
         SELECT
-            CONCAT(blocker.OBJECT_SCHEMA, '.', blocker.OBJECT_NAME) AS object_name,
-            blocker.OBJECT_TYPE AS object_type,
-            blocker.LOCK_TYPE AS lock_type,
-            blocking_t.PROCESSLIST_ID AS blocking_pid,
-            waiting_t.PROCESSLIST_ID AS waiting_pid,
-            blocking_t.PROCESSLIST_INFO AS blocking_query,
-            blocking_t.PROCESSLIST_TIME AS blocking_time,
-            waiting_t.PROCESSLIST_INFO AS waiting_query,
-            waiting_t.PROCESSLIST_TIME AS waiting_time
+            OBJECT_INSTANCE_BEGIN AS id,
+            OBJECT_TYPE,
+            OBJECT_SCHEMA,
+            OBJECT_NAME,
+            LOCK_TYPE,
+            LOCK_STATUS,
+            SOURCE,
+            PROCESSLIST_ID,
+            PROCESSLIST_USER,
+            PROCESSLIST_TIME,
+            PROCESSLIST_INFO
         FROM
-            (
-            SELECT
-                mlb.OBJECT_SCHEMA,
-                mlb.OBJECT_NAME,
-                mlb.OBJECT_TYPE,
-                mlb.LOCK_TYPE,
-                mlb.OWNER_THREAD_ID
-            FROM
-                `performance_schema`.metadata_locks mlb
-            WHERE
-                mlb.LOCK_TYPE = 'EXCLUSIVE'
-            ) AS blocker
-        JOIN
-            (
-            SELECT
-                mlw.OBJECT_SCHEMA,
-                mlw.OBJECT_NAME,
-                mlw.LOCK_TYPE,
-                mlw.OWNER_THREAD_ID
-            FROM
-                `performance_schema`.metadata_locks mlw
-            WHERE
-                mlw.LOCK_STATUS = 'PENDING'
-            ) AS waiting
-        ON
-            CONCAT(waiting.OBJECT_SCHEMA, '/', waiting.OBJECT_NAME) = blocker.OBJECT_NAME OR
-            (blocker.OBJECT_NAME = waiting.OBJECT_NAME and blocker.OBJECT_SCHEMA = waiting.OBJECT_SCHEMA)
-        JOIN `performance_schema`.`threads` blocking_t ON blocker.OWNER_THREAD_ID = blocking_t.THREAD_ID
-        JOIN `performance_schema`.`threads` waiting_t ON waiting.OWNER_THREAD_ID = waiting_t.THREAD_ID;
+            `performance_schema`.`metadata_locks` mlb JOIN
+            `performance_schema`.`threads` t ON mlb.OWNER_THREAD_ID = t.THREAD_ID
+        WHERE
+            NOT (OBJECT_TYPE = 'TABLE' AND LOCK_STATUS = 'GRANTED') AND
+            OBJECT_TYPE != 'COLUMN STATISTICS'
+        ORDER BY
+            PROCESSLIST_TIME DESC
     """
     error_log: str = """
         SELECT
@@ -275,7 +255,8 @@ class MySQLQueries:
         WHERE
             data != 'Could not open log file.'
             $1
-        ORDER BY timestamp
+        ORDER BY
+            timestamp
     """
     memory_by_user: str = """
         SELECT
