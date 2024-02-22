@@ -31,8 +31,8 @@ def create_panel(tab: Tab) -> DataTable:
 
     for lock in dolphie.metadata_locks:
         lock_id = str(lock["id"])
-
         row_values = []
+
         for column_id, (column_key, column_data) in enumerate(columns.items()):
             column_name = column_data["name"]
 
@@ -51,14 +51,13 @@ def create_panel(tab: Tab) -> DataTable:
 
     # Find the ids that exist in datatable but not in metadata_locks
     if dolphie.metadata_locks:
-        metadata_lock_ids = {str(lock["id"]) for lock in dolphie.metadata_locks}
-        datatable_ids = {row_key.value for row_key in metadata_locks_datatable.rows.keys()}
-        rows_to_remove = datatable_ids - metadata_lock_ids
-
+        rows_to_remove = set(metadata_locks_datatable.rows.keys()) - {
+            str(lock["id"]) for lock in dolphie.metadata_locks
+        }
         for id in rows_to_remove:
             metadata_locks_datatable.remove_row(id)
     else:
-        if metadata_locks_datatable.rows:
+        if metadata_locks_datatable.row_count:
             metadata_locks_datatable.clear()
 
     tab.metadata_locks_title.update(f"Metadata Locks ([highlight]{len(dolphie.metadata_locks)}[/highlight])")

@@ -60,7 +60,7 @@ def create_panel(tab: Tab) -> DataTable:
             column_width = column_data["width"]
             processlist_datatable.add_column(column_name, key=column_name, width=column_width)
 
-    # Iterate through dolphie.processlist_threads
+    # Iterate through processlist_threads
     for thread_id, thread in dolphie.processlist_threads.items():
         row_values = []
 
@@ -87,15 +87,13 @@ def create_panel(tab: Tab) -> DataTable:
         if row_values:
             processlist_datatable.add_row(*row_values, key=thread_id)
 
-    # Remove rows from processlist_datatable that no longer exist in dolphie.processlist_threads
+    # Remove rows from processlist_datatable that no longer exist in processlist_threads
     if dolphie.processlist_threads:
-        datatable_ids = {row_key.value for row_key in processlist_datatable.rows.keys()}
-        rows_to_remove = datatable_ids - set(dolphie.processlist_threads.keys())
-
+        rows_to_remove = set(processlist_datatable.rows.keys()) - set(dolphie.processlist_threads.keys())
         for id in rows_to_remove:
             processlist_datatable.remove_row(id)
     else:
-        if processlist_datatable.rows:
+        if processlist_datatable.row_count:
             processlist_datatable.clear()
 
     processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
