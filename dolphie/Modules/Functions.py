@@ -39,7 +39,7 @@ def format_query(query: str, minify: bool = True) -> Syntax:
             query,
             "sql",
             line_numbers=False,
-            word_wrap=False,
+            word_wrap=True,
             theme="nord-darker",
             background_color="#101626",
         )

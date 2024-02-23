@@ -1316,9 +1316,10 @@ class DolphieApp(App):
                 thread_table.add_row("[label]TRX State", thread_data.trx_state)
                 thread_table.add_row("[label]TRX Operation", thread_data.trx_operation_state)
 
-                query = sqlformat(thread_data.query, reindent_aligned=True)
-                query_db = thread_data.db
-                if query:
+                if thread_data.query:
+                    query = sqlformat(thread_data.query, reindent_aligned=True)
+                    query_db = thread_data.db
+
                     formatted_query = format_query(query, minify=False)
 
                     if query_db:
@@ -1368,7 +1369,12 @@ class DolphieApp(App):
                         transaction_history_table.add_column("Query", overflow="fold")
 
                         for query in transaction_history:
-                            trx_history_formatted_query = sqlformat(query["sql_text"], reindent_aligned=True)
+                            trx_history_formatted_query = query["sql_text"]
+                            if trx_history_formatted_query:
+                                trx_history_formatted_query = sqlformat(
+                                    trx_history_formatted_query, reindent_aligned=True
+                                )
+
                             trx_history_formatted_query = format_query(trx_history_formatted_query, minify=False)
 
                             transaction_history_table.add_row(

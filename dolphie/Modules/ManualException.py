@@ -1,3 +1,4 @@
+from dolphie.Modules.Functions import format_query
 from rich import box
 from rich.table import Table
 
@@ -13,7 +14,7 @@ class ManualException(Exception):
         table_exception.add_column("MySQL Connection Error", overflow="fold")
         if self.query:
             table_exception.add_row("[red]Failed to execute query:[/red]")
-            table_exception.add_row(f"[label]{self.query}[/label]")
+            table_exception.add_row(format_query(self.query, minify=False))
             table_exception.add_row("")
 
         if self.reason:
