@@ -1,5 +1,4 @@
 from rich import box
-from rich.syntax import Syntax
 from rich.table import Table
 
 
@@ -11,19 +10,10 @@ class ManualException(Exception):
     def output(self):
         table_exception = Table(box=box.SQUARE, show_header=True, style="#ec8888")
 
-        table_exception.add_column("MySQL Connection Error")
+        table_exception.add_column("MySQL Connection Error", overflow="fold")
         if self.query:
             table_exception.add_row("[red]Failed to execute query:[/red]")
-            table_exception.add_row(
-                Syntax(
-                    self.query.strip(),
-                    "sql",
-                    line_numbers=False,
-                    word_wrap=True,
-                    theme="monokai",
-                    background_color="#131626",
-                )
-            )
+            table_exception.add_row(f"[label]{self.query}[/label]")
             table_exception.add_row("")
 
         if self.reason:

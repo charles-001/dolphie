@@ -87,11 +87,9 @@ class EventLog(Screen):
             if self.screen.is_attached:
                 self.app.pop_screen()
         elif event.key == "1":
-            table = self.query_one(DataTable)
-            table.move_cursor(row=0)
+            self.datatable.move_cursor(row=0)
         elif event.key == "2":
-            table = self.query_one(DataTable)
-            table.move_cursor(row=table.row_count - 1)
+            self.datatable.move_cursor(row=self.datatable.row_count - 1)
 
     def compose(self) -> ComposeResult:
         yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)

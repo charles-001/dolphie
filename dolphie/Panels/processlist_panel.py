@@ -4,6 +4,7 @@ from dolphie.DataTypes import ProcesslistThread
 from dolphie.Modules.Functions import format_number
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
+from rich.syntax import Syntax
 from textual.widgets import DataTable
 
 
@@ -70,18 +71,29 @@ def create_panel(tab: Tab) -> DataTable:
             column_format_number = column_data["format_number"]
             column_value = getattr(thread, column_field)
 
-            update_width = False
-            if column_field == "formatted_query":
-                update_width = True
-
-            value = format_number(column_value) if column_format_number else column_value
+            thread_value = format_number(column_value) if column_format_number else column_value
             if thread_id in processlist_datatable.rows:
+                datatable_value = processlist_datatable.get_row(thread_id)[column_id]
+
+                # Store the code of the Syntax object if it's a query
+                temp_thread_value = thread_value
+                temp_datatable_value = datatable_value
+
+                # If the column is the query, we need to compare the code of the Syntax object
+                update_width = False
+                if column_field == "formatted_query":
+                    update_width = True
+                    if isinstance(thread_value, Syntax):
+                        temp_thread_value = thread_value.code
+                    if isinstance(datatable_value, Syntax):
+                        temp_datatable_value = datatable_value.code
+
                 # Update the datatable if values differ
-                if value != processlist_datatable.get_row(thread_id)[column_id] or column_field == "formatted_time":
-                    processlist_datatable.update_cell(thread_id, column_name, value, update_width=update_width)
+                if temp_thread_value != temp_datatable_value or column_field == "formatted_time":
+                    processlist_datatable.update_cell(thread_id, column_name, thread_value, update_width=update_width)
             else:
                 # Create an array of values to append to the datatable
-                row_values.append(value)
+                row_values.append(thread_value)
 
         # Add a new row to the datatable
         if row_values:
@@ -199,6 +211,6 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
         host = thread["host"].split(":")[0]
         thread["host"] = dolphie.get_hostname(host)
 
-        processlist_threads[str(thread["id"])] = ProcesslistThread(thread)
+        processlist_threads[str(thread["id"])] = ProcesslistThread(thread, dolphie.app.console.width)
 
     return processlist_threads

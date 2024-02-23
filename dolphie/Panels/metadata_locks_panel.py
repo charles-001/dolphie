@@ -1,5 +1,6 @@
 from dolphie.Modules.Functions import format_query, format_time
 from dolphie.Modules.TabManager import Tab
+from rich.syntax import Syntax
 from textual.widgets import DataTable
 
 
@@ -33,18 +34,29 @@ def create_panel(tab: Tab) -> DataTable:
         for column_id, (column_key, column_data) in enumerate(columns.items()):
             column_name = column_data["name"]
 
-            update_width = False
-            if column_key == "PROCESSLIST_INFO":
-                update_width = True
-
-            value = format_value(lock, column_key, lock[column_key])
+            thread_value = format_value(lock, column_key, lock[column_key])
             if lock_id in metadata_locks_datatable.rows:
+                datatable_value = metadata_locks_datatable.get_row(lock_id)[column_id]
+
+                temp_thread_value = thread_value
+                temp_datatable_value = datatable_value
+
+                # If the column is the query, we need to compare the code of the Syntax object
+                update_width = False
+                if column_key == "PROCESSLIST_INFO":
+                    update_width = True
+
+                    if isinstance(thread_value, Syntax):
+                        temp_thread_value = thread_value.code
+                    if isinstance(datatable_value, Syntax):
+                        temp_datatable_value = datatable_value.code
+
                 # Update the datatable if values differ
-                if value != metadata_locks_datatable.get_row(lock_id)[column_id]:
-                    metadata_locks_datatable.update_cell(lock_id, column_name, value, update_width=update_width)
+                if temp_thread_value != temp_datatable_value:
+                    metadata_locks_datatable.update_cell(lock_id, column_name, thread_value, update_width=update_width)
             else:
                 # Create an array of values to append to the datatable
-                row_values.append(value)
+                row_values.append(thread_value)
 
         # Add a new row to the datatable
         if row_values:
@@ -64,7 +76,7 @@ def create_panel(tab: Tab) -> DataTable:
     tab.metadata_locks_title.update(f"Metadata Locks ([highlight]{metadata_locks_datatable.row_count}[/highlight])")
 
 
-def format_value(lock, column_key, value: str) -> str:
+def format_value(lock: dict, column_key: str, value: str) -> str:
     # OBJECT_NAME is in the format "schema/table" sometimes where OBJECT_SCHEMA is empty,
     # so I want to split OBJECT_NAME and correct it if necessary
     if column_key == "OBJECT_SCHEMA" and not value and lock["OBJECT_NAME"] and "/" in lock["OBJECT_NAME"]:

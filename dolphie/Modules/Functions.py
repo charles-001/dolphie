@@ -30,7 +30,7 @@ def load_host_cache_file(host_cache_file: str):
     return host_cache
 
 
-def format_query(query: str, minify=True) -> Syntax:
+def format_query(query: str, minify: bool = True) -> Syntax:
     formatted_query = ""
     if query:
         query = markup_escape(re.sub(r"\s+", " ", query)) if minify else query

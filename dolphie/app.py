@@ -42,7 +42,6 @@ from rich import box
 from rich.align import Align
 from rich.console import Group
 from rich.style import Style
-from rich.syntax import Syntax
 from rich.table import Table
 from rich.theme import Theme
 from rich.traceback import Traceback
@@ -1369,16 +1368,8 @@ class DolphieApp(App):
                         transaction_history_table.add_column("Query", overflow="fold")
 
                         for query in transaction_history:
-                            trx_history_formatted_query = ""
-                            if query["sql_text"]:
-                                trx_history_formatted_query = Syntax(
-                                    re.sub(r"\s+", " ", query["sql_text"]),
-                                    "sql",
-                                    line_numbers=False,
-                                    word_wrap=True,
-                                    theme="monokai",
-                                    background_color="#101626",
-                                )
+                            trx_history_formatted_query = sqlformat(query["sql_text"], reindent_aligned=True)
+                            trx_history_formatted_query = format_query(trx_history_formatted_query, minify=False)
 
                             transaction_history_table.add_row(
                                 query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), trx_history_formatted_query

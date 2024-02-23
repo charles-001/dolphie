@@ -87,7 +87,9 @@ class Panels:
 
 
 class ProcesslistThread:
-    def __init__(self, thread_data: Dict[str, str]):
+    def __init__(self, thread_data: Dict[str, str], console_width: int):
+        self.console_width = console_width
+
         self.id = str(thread_data.get("id", ""))
         self.mysql_thread_id = thread_data.get("mysql_thread_id")
         self.user = thread_data.get("user", "")
@@ -124,16 +126,16 @@ class ProcesslistThread:
                     thread_color = "green"
         return thread_color
 
-    def _get_formatted_command(self, command: str) -> str:
+    def _get_formatted_command(self, command: str):
         return "[red]Killed[/red]" if command == "Killed" else command
 
-    def _get_formatted_trx_time(self, trx_time: str) -> str:
+    def _get_formatted_trx_time(self, trx_time: str):
         return format_time(int(trx_time)) if trx_time else "[dark_gray]N/A"
 
-    def _get_formatted_query(self, query: str) -> str:
+    def _get_formatted_query(self, query: str):
         return format_query(query)
 
-    def _get_formatted_string(self, string: str) -> str:
+    def _get_formatted_string(self, string: str):
         if not string:
             return "[dark_gray]N/A"
 
