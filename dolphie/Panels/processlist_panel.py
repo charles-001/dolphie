@@ -211,6 +211,6 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
         host = thread["host"].split(":")[0]
         thread["host"] = dolphie.get_hostname(host)
 
-        processlist_threads[str(thread["id"])] = ProcesslistThread(thread, dolphie.app.console.width)
+        processlist_threads[str(thread["id"])] = ProcesslistThread(thread)
 
     return processlist_threads

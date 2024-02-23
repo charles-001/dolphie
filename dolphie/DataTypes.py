@@ -87,9 +87,7 @@ class Panels:
 
 
 class ProcesslistThread:
-    def __init__(self, thread_data: Dict[str, str], console_width: int):
-        self.console_width = console_width
-
+    def __init__(self, thread_data: Dict[str, str]):
         self.id = str(thread_data.get("id", ""))
         self.mysql_thread_id = thread_data.get("mysql_thread_id")
         self.user = thread_data.get("user", "")

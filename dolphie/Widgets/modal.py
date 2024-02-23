@@ -44,9 +44,9 @@ class CommandModal(ModalScreen):
         }
         CommandModal #error_response {
             color: #fe5c5c;
-            # width: 100%;
+            width: 100%;
             height: auto;
-            # content-align: center middle;
+            content-align: center middle;
             padding-bottom: 1;
         }
     """
@@ -86,7 +86,7 @@ class CommandModal(ModalScreen):
                     Input(id="modal_input"),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
                 )
-                yield Static(id="error_response", expand=True)
+                yield Static(id="error_response")
             with Horizontal(classes="button_container"):
                 yield Button("Submit", id="submit", variant="primary")
                 yield Button("Cancel", id="cancel")
