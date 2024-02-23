@@ -15,7 +15,7 @@ def create_panel(tab: Tab) -> DataTable:
         dolphie.use_performance_schema = False
 
     columns = [
-        {"name": "Thread ID", "field": "id", "width": 11, "format_number": False},
+        {"name": "Process ID", "field": "id", "width": 11, "format_number": False},
         {"name": "Username", "field": "user", "width": 13, "format_number": False},
     ]
 
@@ -98,7 +98,7 @@ def create_panel(tab: Tab) -> DataTable:
 
     processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 
-    tab.processlist_title.update(f"Processlist ([highlight]{len(dolphie.processlist_threads)}[/highlight])")
+    tab.processlist_title.update(f"Processlist ([highlight]{processlist_datatable.row_count}[/highlight])")
 
 
 def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:

@@ -30,6 +30,9 @@ class EventLog(Screen):
             overflow-x: hidden;
             max-height: 100%;
         }
+        EventLog SpinnerWidget {
+            margin-top: 1;
+        }
         #info {
             padding-top: 1;
             width: 100%;
@@ -72,8 +75,9 @@ class EventLog(Screen):
         self.info = self.query_one("#info", Label)
         self.search_text = self.query_one("#search", Input)
 
-        self.datatable.display = False
         self.info.display = False
+        self.datatable.display = False
+        self.search_text.display = False
 
         self.update_datatable()
 
@@ -97,9 +101,9 @@ class EventLog(Screen):
             for label, switch_id in switch_options:
                 yield Label(label)
                 yield Switch(animate=False, id=switch_id, value=True)
+        yield SpinnerWidget(id="spinner", text="Loading events")
         yield Input(id="search", placeholder="Search (hit enter when ready)")
         yield Label("", id="info")
-        yield SpinnerWidget(id="spinner", text="Loading events")
         with Container():
             yield DataTable(show_cursor=False)
 
@@ -116,7 +120,10 @@ class EventLog(Screen):
     @work(thread=True)
     def update_datatable(self):
         self.spinner.show()
+
         self.info.display = False
+        self.datatable.display = False
+        self.search_text.display = False
 
         active_sql_list = [data["sql"] for data in self.levels.values() if data["active"]]
         where_clause = " OR ".join(active_sql_list)

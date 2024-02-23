@@ -1,7 +1,10 @@
 import os
+import re
 from decimal import Decimal
 
 import charset_normalizer
+from rich.markup import escape as markup_escape
+from rich.syntax import Syntax
 
 
 def load_host_cache_file(host_cache_file: str):
@@ -25,6 +28,23 @@ def load_host_cache_file(host_cache_file: str):
                 host_cache[host] = hostname
 
     return host_cache
+
+
+def format_query(query: str, minify=True) -> Syntax:
+    formatted_query = ""
+    if query:
+        query = markup_escape(re.sub(r"\s+", " ", query)) if minify else query
+
+        formatted_query = Syntax(
+            query,
+            "sql",
+            line_numbers=False,
+            word_wrap=False,
+            theme="nord-darker",
+            background_color="#101626",
+        )
+
+    return formatted_query
 
 
 def format_bytes(bytes_value, color=True):
@@ -80,7 +100,7 @@ def round_num(n, decimal=2):
 
 # This is from https://pypi.org/project/numerize
 def format_number(n, decimal=2, color=True):
-    if not n:
+    if not n or n == "0":
         return "0"
 
     # fmt: off

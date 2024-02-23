@@ -74,6 +74,15 @@ class Database:
         if not self.is_connected():
             return None
 
+        if self.running_query:
+            self.app.notify(
+                "Another query is already running, please repeat action",
+                title="Unable to run multiple queries at the same time",
+                severity="error",
+                timeout=10,
+            )
+            return None
+
         error_message = None
 
         # Prefix all queries with dolphie so they can be identified in the processlist from other people

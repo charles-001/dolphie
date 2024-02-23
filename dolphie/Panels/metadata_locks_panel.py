@@ -1,8 +1,5 @@
-from re import sub
-
-from dolphie.Modules.Functions import format_time
+from dolphie.Modules.Functions import format_query, format_time
 from dolphie.Modules.TabManager import Tab
-from rich.markup import escape as markup_escape
 from textual.widgets import DataTable
 
 
@@ -16,7 +13,7 @@ def create_panel(tab: Tab) -> DataTable:
         "LOCK_TYPE": {"name": "Lock Type", "width": 20},
         "LOCK_STATUS": {"name": "Lock Status", "width": 11},
         "SOURCE": {"name": "Source", "width": 15},
-        "PROCESSLIST_ID": {"name": "PID", "width": 13},
+        "PROCESSLIST_ID": {"name": "Process ID", "width": 13},
         "PROCESSLIST_USER": {"name": "User", "width": 13},
         "PROCESSLIST_TIME": {"name": "Age", "width": 8},
         "PROCESSLIST_INFO": {"name": "Query", "width": None},
@@ -36,11 +33,15 @@ def create_panel(tab: Tab) -> DataTable:
         for column_id, (column_key, column_data) in enumerate(columns.items()):
             column_name = column_data["name"]
 
+            update_width = False
+            if column_key == "PROCESSLIST_INFO":
+                update_width = True
+
             value = format_value(lock, column_key, lock[column_key])
             if lock_id in metadata_locks_datatable.rows:
                 # Update the datatable if values differ
                 if value != metadata_locks_datatable.get_row(lock_id)[column_id]:
-                    metadata_locks_datatable.update_cell(lock_id, column_name, value, update_width=True)
+                    metadata_locks_datatable.update_cell(lock_id, column_name, value, update_width=update_width)
             else:
                 # Create an array of values to append to the datatable
                 row_values.append(value)
@@ -60,7 +61,7 @@ def create_panel(tab: Tab) -> DataTable:
         if metadata_locks_datatable.row_count:
             metadata_locks_datatable.clear()
 
-    tab.metadata_locks_title.update(f"Metadata Locks ([highlight]{len(dolphie.metadata_locks)}[/highlight])")
+    tab.metadata_locks_title.update(f"Metadata Locks ([highlight]{metadata_locks_datatable.row_count}[/highlight])")
 
 
 def format_value(lock, column_key, value: str) -> str:
@@ -71,12 +72,9 @@ def format_value(lock, column_key, value: str) -> str:
     elif column_key == "OBJECT_NAME" and value and "/" in value:
         formatted_value = value.split("/")[1]
     elif value is None or value == "":
-        formatted_value = "N/A"
+        formatted_value = "[dark_gray]N/A"
     elif column_key == "PROCESSLIST_INFO":
-        if value:
-            formatted_value = markup_escape(sub(r"\s+", " ", value))
-        else:
-            formatted_value = ""
+        formatted_value = format_query(value)
     elif column_key == "LOCK_STATUS":
         if value == "GRANTED":
             formatted_value = f"[green]{value}[/green]"

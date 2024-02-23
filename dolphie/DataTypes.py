@@ -1,10 +1,8 @@
-import re
 from dataclasses import dataclass
 from typing import Dict, List
 
-from dolphie.Modules.Functions import format_time
+from dolphie.Modules.Functions import format_query, format_time
 from dolphie.Modules.MySQL import Database
-from rich.markup import escape as markup_escape
 from rich.table import Table
 
 
@@ -100,12 +98,12 @@ class ProcesslistThread:
         self.formatted_query = self._get_formatted_query(thread_data.get("query", ""))
         self.formatted_time = self._get_formatted_time()
         self.command = self._get_formatted_command(thread_data.get("command", ""))
-        self.state = thread_data.get("state", "")
-        self.trx_state = thread_data.get("trx_state", "")
-        self.trx_operation_state = thread_data.get("trx_operation_state", "")
-        self.trx_rows_locked = thread_data.get("trx_rows_locked", "")
-        self.trx_rows_modified = thread_data.get("trx_rows_modified", "")
-        self.trx_concurrency_tickets = thread_data.get("trx_concurrency_tickets", "")
+        self.state = self._get_formatted_string(thread_data.get("state", ""))
+        self.trx_state = self._get_formatted_string(thread_data.get("trx_state", ""))
+        self.trx_operation_state = self._get_formatted_string(thread_data.get("trx_operation_state", ""))
+        self.trx_rows_locked = self._get_formatted_number(thread_data.get("trx_rows_locked", 0))
+        self.trx_rows_modified = self._get_formatted_number(thread_data.get("trx_rows_modified", 0))
+        self.trx_concurrency_tickets = self._get_formatted_number(thread_data.get("trx_concurrency_tickets", 0))
         self.trx_time = self._get_formatted_trx_time(thread_data.get("trx_time", ""))
 
     def _get_formatted_time(self) -> str:
@@ -124,17 +122,28 @@ class ProcesslistThread:
                     thread_color = "yellow"
                 else:
                     thread_color = "green"
-
         return thread_color
 
     def _get_formatted_command(self, command: str) -> str:
         return "[red]Killed[/red]" if command == "Killed" else command
 
     def _get_formatted_trx_time(self, trx_time: str) -> str:
-        return format_time(int(trx_time)) if trx_time else ""
+        return format_time(int(trx_time)) if trx_time else "[dark_gray]N/A"
 
     def _get_formatted_query(self, query: str) -> str:
-        return markup_escape(re.sub(r"\s+", " ", query)) if query else ""
+        return format_query(query)
+
+    def _get_formatted_string(self, string: str) -> str:
+        if not string:
+            return "[dark_gray]N/A"
+
+        return string
+
+    def _get_formatted_number(self, number):
+        if not number or number == "0":
+            return "[dark_gray]0"
+
+        return number
 
 
 class HotkeyCommands:

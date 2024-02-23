@@ -17,7 +17,11 @@ import requests
 from dolphie import Dolphie
 from dolphie.DataTypes import ConnectionStatus, HotkeyCommands, ProcesslistThread
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
-from dolphie.Modules.Functions import format_number, format_sys_table_memory
+from dolphie.Modules.Functions import (
+    format_number,
+    format_query,
+    format_sys_table_memory,
+)
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab, TabManager
@@ -450,13 +454,14 @@ class DolphieApp(App):
         # We store the panel objects in the tab object (i.e. tab.panel_dashboard, tab.panel_processlist, etc.)
         panel = self.tab_manager.active_tab.get_panel_widget(panel_name)
 
-        new_display = not panel.display
-        panel.display = new_display
+        new_display_status = not panel.display
 
-        setattr(getattr(self.tab_manager.active_tab.dolphie.panels, panel_name), "visible", new_display)
+        setattr(getattr(self.tab_manager.active_tab.dolphie.panels, panel_name), "visible", new_display_status)
 
-        if panel_name not in [self.tab_manager.active_tab.dolphie.panels.graphs.name]:
-            self.app.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
+        if new_display_status and panel_name not in [self.tab_manager.active_tab.dolphie.panels.graphs.name]:
+            self.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
+
+        panel.display = new_display_status
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         panel_mapping = {
@@ -470,7 +475,6 @@ class DolphieApp(App):
         for panel_map_name, panel_map_obj in panel_mapping.items():
             if panel_name == panel_map_name:
                 panel_map_obj.create_panel(tab)
-
             if panel_name == tab.dolphie.panels.replication.name and toggled and tab.dolphie.replication_status:
                 # When replication panel status is changed, we need to refresh the dashboard panel as well since
                 # it adds/removes it from there
@@ -583,8 +587,10 @@ class DolphieApp(App):
         if key == "1":
             self.toggle_panel(dolphie.panels.dashboard.name)
         elif key == "2":
-            self.toggle_panel(dolphie.panels.processlist.name)
             self.tab_manager.active_tab.processlist_datatable.clear()
+            self.toggle_panel(dolphie.panels.processlist.name)
+
+            tab.processlist_title.update("Processlist ([highlight]0[/highlight])")
         elif key == "3":
             self.toggle_panel(dolphie.panels.replication.name)
 
@@ -629,6 +635,7 @@ class DolphieApp(App):
 
             self.toggle_panel(dolphie.panels.metadata_locks.name)
             self.tab_manager.active_tab.metadata_locks_datatable.clear()
+            tab.metadata_locks_title.update("Metadata Locks ([highlight]0[/highlight])")
         elif key == "6":
             if not dolphie.is_mysql_version_at_least("5.7"):
                 self.notify("DDL panel requires MySQL 5.7+")
@@ -644,6 +651,7 @@ class DolphieApp(App):
 
             self.toggle_panel(dolphie.panels.ddl.name)
             self.tab_manager.active_tab.ddl_datatable.clear()
+            tab.ddl_title.update("DDL ([highlight]0[/highlight])")
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)
         elif key == "space":
@@ -1312,14 +1320,7 @@ class DolphieApp(App):
                 query = sqlformat(thread_data.query, reindent_aligned=True)
                 query_db = thread_data.db
                 if query:
-                    formatted_query = Syntax(
-                        query,
-                        "sql",
-                        line_numbers=False,
-                        word_wrap=True,
-                        theme="monokai",
-                        background_color="#101626",
-                    )
+                    formatted_query = format_query(query, minify=False)
 
                     if query_db:
                         try:
