@@ -33,14 +33,14 @@ class NordModifiedTheme(Style):
 
     nord7 = "#8fbcbb"
     nord8 = "#88c0d0"
-    nord9 = "#8194c1"
+    nord9 = "#879bca"
     nord10 = "#5e81ac"
 
     nord11 = "#bf616a"
     nord12 = "#d08770"
     nord13 = "#81c194"
-    nord14 = "#9a82c6"
-    nord15 = "#c782a8"
+    nord14 = "#ac8bdd"
+    nord15 = "#ca87a5"
 
     background_color = nord0
     default = nord4
