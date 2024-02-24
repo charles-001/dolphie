@@ -3,31 +3,91 @@ import re
 from decimal import Decimal
 
 import charset_normalizer
+from pygments.style import Style
+from pygments.token import (
+    Comment,
+    Error,
+    Generic,
+    Keyword,
+    Name,
+    Number,
+    Operator,
+    Punctuation,
+    String,
+    Whitespace,
+)
 from rich.markup import escape as markup_escape
 from rich.syntax import Syntax
 
 
-def load_host_cache_file(host_cache_file: str):
-    host_cache = {}
-    if os.path.exists(host_cache_file):
-        with open(host_cache_file) as file:
-            for line in file:
-                line = line.strip()
-                error_message = f"Host cache entry '{line}' is not properly formatted! Format: ip=hostname"
+class NordModifiedTheme(Style):
+    nord0 = "#101626"
+    nord1 = "#3b4252"
+    nord2 = "#434c5e"
+    nord3 = "#4c566a"
+    nord3_bright = "#616e87"
 
-                if "=" not in line:
-                    raise Exception(error_message)
+    nord4 = "#d8dee9"
+    nord5 = "#e5e9f0"
+    nord6 = "#eceff4"
 
-                host, hostname = line.split("=", maxsplit=1)
-                host = host.strip()
-                hostname = hostname.strip()
+    nord7 = "#8fbcbb"
+    nord8 = "#88c0d0"
+    nord9 = "#8194c1"
+    nord10 = "#5e81ac"
 
-                if not host or not hostname:
-                    raise Exception(error_message)
+    nord11 = "#bf616a"
+    nord12 = "#d08770"
+    nord13 = "#81c194"
+    nord14 = "#9a82c6"
+    nord15 = "#c782a8"
 
-                host_cache[host] = hostname
+    background_color = nord0
+    default = nord4
 
-    return host_cache
+    styles = {
+        Whitespace: nord4,
+        Comment: f"italic {nord3_bright}",
+        Comment.Preproc: nord10,
+        Keyword: f"bold {nord9}",
+        Keyword.Pseudo: f"nobold {nord9}",
+        Keyword.Type: f"nobold {nord9}",
+        Operator: nord9,
+        Operator.Word: f"bold {nord9}",
+        Name: nord4,
+        Name.Builtin: nord9,
+        Name.Function: nord8,
+        Name.Class: nord7,
+        Name.Namespace: nord7,
+        Name.Exception: nord11,
+        Name.Variable: nord4,
+        Name.Constant: nord7,
+        Name.Label: nord7,
+        Name.Entity: nord12,
+        Name.Attribute: nord7,
+        Name.Tag: nord9,
+        Name.Decorator: nord12,
+        Punctuation: nord6,
+        String: nord14,
+        String.Doc: nord3_bright,
+        String.Interpol: nord14,
+        String.Escape: nord13,
+        String.Regex: nord13,
+        String.Symbol: nord14,
+        String.Other: nord14,
+        Number: nord15,
+        Generic.Heading: f"bold {nord8}",
+        Generic.Subheading: f"bold {nord8}",
+        Generic.Deleted: nord11,
+        Generic.Inserted: nord14,
+        Generic.Error: nord11,
+        Generic.Emph: "italic",
+        Generic.Strong: "bold",
+        Generic.Prompt: f"bold {nord3}",
+        Generic.Output: nord4,
+        Generic.Traceback: nord11,
+        Error: nord11,
+    }
 
 
 def format_query(query: str, minify: bool = True) -> Syntax:
@@ -35,14 +95,7 @@ def format_query(query: str, minify: bool = True) -> Syntax:
     if query:
         query = markup_escape(re.sub(r"\s+", " ", query)) if minify else query
 
-        formatted_query = Syntax(
-            query,
-            "sql",
-            line_numbers=False,
-            word_wrap=True,
-            theme="nord-darker",
-            background_color="#101626",
-        )
+        formatted_query = Syntax(code=query, lexer="sql", word_wrap=True, theme=NordModifiedTheme)
 
     return formatted_query
 
@@ -76,6 +129,29 @@ def format_time(time: int, picoseconds=False):
     minutes, seconds = divmod(remainder, 60)
 
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+
+
+def load_host_cache_file(host_cache_file: str):
+    host_cache = {}
+    if os.path.exists(host_cache_file):
+        with open(host_cache_file) as file:
+            for line in file:
+                line = line.strip()
+                error_message = f"Host cache entry '{line}' is not properly formatted! Format: ip=hostname"
+
+                if "=" not in line:
+                    raise Exception(error_message)
+
+                host, hostname = line.split("=", maxsplit=1)
+                host = host.strip()
+                hostname = hostname.strip()
+
+                if not host or not hostname:
+                    raise Exception(error_message)
+
+                host_cache[host] = hostname
+
+    return host_cache
 
 
 def detect_encoding(text):
