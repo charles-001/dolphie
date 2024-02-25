@@ -38,4 +38,4 @@ def create_panel(tab: Tab) -> DataTable:
 
         ddl_datatable.add_row(*row_values, key=ddl["processlist_id"])
 
-    tab.ddl_title.update(f"DDL ([highlight]{len(dolphie.ddl)}[/highlight])")
+    tab.ddl_title.update(f"DDL ([highlight]{ddl_datatable.row_count}[/highlight])")

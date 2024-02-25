@@ -49,6 +49,7 @@ class Database:
                 ssl=self.ssl,
                 autocommit=True,
                 connect_timeout=5,
+                program_name="Dolphie",
             )
             self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
 

@@ -70,25 +70,27 @@ class DolphieApp(App):
 
         self.loading_hostgroups: bool = False
 
-        theme = Theme({
-            "white": "#e9e9e9",
-            "green": "#54efae",
-            "yellow": "#f6ff8f",
-            "dark_yellow": "#cad45f",
-            "red": "#fd8383",
-            "purple": "#b565f3",
-            "dark_gray": "#969aad",
-            "highlight": "#91abec",
-            "label": "#c5c7d2",
-            "b label": "b #c5c7d2",
-            "light_blue": "#bbc8e8",
-            "b white": "b #e9e9e9",
-            "b highlight": "b #91abec",
-            "b red": "b #fd8383",
-            "b light_blue": "b #bbc8e8",
-            "panel_border": "#6171a6",
-            "table_border": "#333f62",
-        })
+        theme = Theme(
+            {
+                "white": "#e9e9e9",
+                "green": "#54efae",
+                "yellow": "#f6ff8f",
+                "dark_yellow": "#cad45f",
+                "red": "#fd8383",
+                "purple": "#b565f3",
+                "dark_gray": "#969aad",
+                "highlight": "#91abec",
+                "label": "#c5c7d2",
+                "b label": "b #c5c7d2",
+                "light_blue": "#bbc8e8",
+                "b white": "b #e9e9e9",
+                "b highlight": "b #91abec",
+                "b red": "b #fd8383",
+                "b light_blue": "b #bbc8e8",
+                "panel_border": "#6171a6",
+                "table_border": "#333f62",
+            }
+        )
         self.console.push_theme(theme)
         self.console.set_window_title(self.TITLE)
 
@@ -457,7 +459,7 @@ class DolphieApp(App):
 
         setattr(getattr(self.tab_manager.active_tab.dolphie.panels, panel_name), "visible", new_display_status)
 
-        if new_display_status and panel_name not in [self.tab_manager.active_tab.dolphie.panels.graphs.name]:
+        if panel_name not in [self.tab_manager.active_tab.dolphie.panels.graphs.name]:
             self.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
 
         panel.display = new_display_status
