@@ -19,7 +19,7 @@ def create_panel(tab: Tab) -> DataTable:
         "CODE_SOURCE": {"name": "Code Source", "width": 15},
         "THREAD_SOURCE": {"name": "Thread Source", "width": 15},
         "PROCESSLIST_ID": {"name": "Process ID", "width": 13},
-        "PROCESSLIST_USER": {"name": "User", "width": 13},
+        "PROCESSLIST_USER": {"name": "User", "width": 20},
         "PROCESSLIST_TIME": {"name": "Age", "width": 8},
         "PROCESSLIST_INFO": {"name": "Query", "width": None},
     }

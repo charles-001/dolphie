@@ -17,7 +17,7 @@ def create_panel(tab: Tab) -> DataTable:
 
     columns = [
         {"name": "Process ID", "field": "id", "width": 11, "format_number": False},
-        {"name": "Username", "field": "user", "width": 13, "format_number": False},
+        {"name": "Username", "field": "user", "width": 20, "format_number": False},
     ]
 
     if dolphie.show_additional_query_columns:
@@ -31,7 +31,7 @@ def create_panel(tab: Tab) -> DataTable:
     columns.extend(
         [
             {"name": "Command", "field": "command", "width": 8, "format_number": False},
-            {"name": "State", "field": "state", "width": 16, "format_number": False},
+            {"name": "State", "field": "state", "width": 20, "format_number": False},
             {"name": "TRX State", "field": "trx_state", "width": 9, "format_number": False},
             {"name": "R-Lock", "field": "trx_rows_locked", "width": 7, "format_number": True},
             {"name": "R-Mod", "field": "trx_rows_modified", "width": 7, "format_number": True},
