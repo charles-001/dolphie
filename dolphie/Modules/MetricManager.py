@@ -49,7 +49,7 @@ class Graph(Static):
                     y=self.metric_instance.checkpoint_age_max,
                     x=max(x),
                     alignment="right",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                 )
                 plt.text(
@@ -57,7 +57,7 @@ class Graph(Static):
                     y=self.metric_instance.checkpoint_age_sync_flush,
                     x=max(x),
                     alignment="right",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                 )
 
@@ -85,7 +85,7 @@ class Graph(Static):
                     y=self.metric_instance.redo_log_size,
                     x=0,
                     alignment="center",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                 )
 
@@ -98,7 +98,7 @@ class Graph(Static):
                     y=y[0],
                     x=0,
                     alignment="center",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                     background=bar_color,
                 )
@@ -122,7 +122,7 @@ class Graph(Static):
                     y=34,
                     x=max(x),
                     alignment="right",
-                    color="white",
+                    color=(233, 233, 233),
                     style="bold",
                 )
 
@@ -347,7 +347,8 @@ class DiskIOMetrics:
 
 @dataclass
 class LocksMetrics:
-    lock_count: MetricData
+    # innodb_trx_lock_count: MetricData
+    metadata_lock_count: MetricData
     graphs: List[str]
     tab_name: str = "locks"
     metric_source: MetricSource = MetricSource.global_status
@@ -468,7 +469,10 @@ class MetricManager:
             ),
             locks=LocksMetrics(
                 graphs=["graph_locks"],
-                lock_count=MetricData(label="Lock Count", color=MetricColor.blue, per_second_calculation=False),
+                # innodb_trx_lock_count=MetricData(
+                #     label="InnoDB TRX", color=MetricColor.blue, per_second_calculation=False
+                # ),
+                metadata_lock_count=MetricData(label="Metadata", color=MetricColor.red, per_second_calculation=False),
             ),
         )
 
@@ -480,9 +484,10 @@ class MetricManager:
         global_status: Dict[str, int],
         innodb_metrics: Dict[str, int],
         disk_io_metrics: Dict[str, int],
-        lock_metrics: Dict[str, int],
+        # innodb_trx_lock_metrics: Dict[str, int],
+        metadata_lock_metrics: Dict[str, int],
         replication_status: Dict[str, Union[int, str]],
-        replication_lag: int,  # this can be from SHOW SLAVE STatus/Performance Schema/heartbeat table
+        replication_lag: int,  # this can be from SHOW SLAVE Status/heartbeat table
     ):
         self.worker_start_time = worker_start_time
         self.polling_latency = polling_latency
@@ -490,7 +495,8 @@ class MetricManager:
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
         self.disk_io_metrics = disk_io_metrics
-        self.lock_metrics = lock_metrics
+        # self.innodb_trx_lock_metrics = innodb_trx_lock_metrics
+        self.metadata_lock_metrics = metadata_lock_metrics
         self.replication_status = replication_status
         self.replication_lag = replication_lag
 
@@ -576,7 +582,8 @@ class MetricManager:
 
     def update_metrics_locks(self):
         metric_instance = self.metrics.locks
-        self.add_metric(metric_instance.lock_count, len(self.lock_metrics))
+        # self.add_metric(metric_instance.innodb_trx_lock_count, len(self.innodb_trx_lock_metrics))
+        self.add_metric(metric_instance.metadata_lock_count, len(self.metadata_lock_metrics))
         metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def get_metric_calculate_per_sec(self, metric_name, metric_source=None, format=True):

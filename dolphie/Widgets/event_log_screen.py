@@ -2,12 +2,13 @@ import textwrap
 
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
+from dolphie.Widgets.spinner import SpinnerWidget
 from dolphie.Widgets.topbar import TopBar
-from textual import events, on
+from textual import events, on, work
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
-from textual.widgets import DataTable, Input, Label, LoadingIndicator, Switch
+from textual.widgets import DataTable, Input, Label, Switch
 
 
 class EventLog(Screen):
@@ -28,6 +29,9 @@ class EventLog(Screen):
             border: none;
             overflow-x: hidden;
             max-height: 100%;
+        }
+        EventLog SpinnerWidget {
+            margin-top: 1;
         }
         #info {
             padding-top: 1;
@@ -64,9 +68,16 @@ class EventLog(Screen):
         }
 
     def on_mount(self):
-        datatable = self.query_one(DataTable)
-        datatable.focus()
-        datatable.styles.overflow_x = "auto"
+        self.datatable = self.query_one(DataTable)
+        self.datatable.focus()
+
+        self.spinner = self.query_one(SpinnerWidget)
+        self.info = self.query_one("#info", Label)
+        self.search_text = self.query_one("#search", Input)
+
+        self.info.display = False
+        self.datatable.display = False
+        self.search_text.display = False
 
         self.update_datatable()
 
@@ -76,26 +87,21 @@ class EventLog(Screen):
             if self.screen.is_attached:
                 self.app.pop_screen()
         elif event.key == "1":
-            table = self.query_one(DataTable)
-            table.move_cursor(row=0)
+            self.datatable.move_cursor(row=0)
         elif event.key == "2":
-            table = self.query_one(DataTable)
-            table.move_cursor(row=table.row_count - 1)
+            self.datatable.move_cursor(row=self.datatable.row_count - 1)
 
     def compose(self) -> ComposeResult:
         yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
-
-        yield LoadingIndicator()
-
         yield Label("[b white]1[/b white] = top of events/[b white]2[/b white] = bottom of events", id="help")
         with Horizontal():
             switch_options = [("System", "system"), ("Warning", "warning"), ("Error", "error")]
             for label, switch_id in switch_options:
                 yield Label(label)
                 yield Switch(animate=False, id=switch_id, value=True)
-
-        yield Label("", id="info")
+        yield SpinnerWidget(id="spinner", text="Loading events")
         yield Input(id="search", placeholder="Search (hit enter when ready)")
+        yield Label("", id="info")
         with Container():
             yield DataTable(show_cursor=False)
 
@@ -109,20 +115,23 @@ class EventLog(Screen):
 
         self.update_datatable()
 
+    @work(thread=True)
     def update_datatable(self):
+        self.spinner.show()
+
+        self.info.display = False
+        self.datatable.display = False
+        self.search_text.display = False
+
         active_sql_list = [data["sql"] for data in self.levels.values() if data["active"]]
         where_clause = " OR ".join(active_sql_list)
 
-        search_text = self.query_one("#search", Input)
-        if search_text.value:
-            where_clause = f"({where_clause}) AND (data LIKE '%{search_text.value}%')"
+        if self.search_text.value:
+            where_clause = f"({where_clause}) AND (data LIKE '%{self.search_text.value}%')"
 
-        table = self.query_one(DataTable)
-        info = self.query_one("#info", Label)
-
-        table.clear(columns=True)
-        table.add_column("Time")
-        table.add_column("Level")
+        self.datatable.clear(columns=True)
+        self.datatable.add_column("Time")
+        self.datatable.add_column("Level")
 
         if where_clause:
             query = MySQLQueries.error_log.replace("$1", f"AND ({where_clause})")
@@ -130,11 +139,7 @@ class EventLog(Screen):
             data = self.db_connection.fetchall()
 
             if data:
-                table.add_column(f"Event ({event_count})")
-
-                info.display = False
-                table.display = True
-                search_text.display = True
+                self.datatable.add_column(f"Event ({event_count})")
 
                 for row in data:
                     level_color = ""
@@ -156,15 +161,20 @@ class EventLog(Screen):
                     line_counts = [cell.count("\n") + 1 for cell in wrapped_message]
                     height = max(line_counts)
 
-                    table.add_row(timestamp, level, wrapped_message, height=height)
-            else:
-                table.display = False
-                info.display = True
-                info.update("No events found")
-        else:
-            table.display = False
-            search_text.display = False
-            info.display = True
-            info.update("Toggle the switches above to filter what events you'd like to see")
+                    self.datatable.add_row(timestamp, level, wrapped_message, height=height)
 
-        self.query_one(LoadingIndicator).display = False
+                self.datatable.display = True
+                self.search_text.display = True
+                self.datatable.focus()
+            else:
+                self.datatable.display = False
+                self.search_text.display = True
+                self.info.display = True
+                self.info.update("No events found")
+        else:
+            self.datatable.display = False
+            self.search_text.display = False
+            self.info.display = True
+            self.info.update("Toggle the switches above to filter what events you'd like to see")
+
+        self.spinner.hide()

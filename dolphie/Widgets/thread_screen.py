@@ -161,7 +161,10 @@ class ThreadScreen(Screen):
         with Container(id="transaction_history_container", classes="container"):
             yield Rule(line_style="heavy")
             yield Label("Transaction History", id="transaction_history_label")
-            yield Center(Static(id="transaction_history_table", classes="table"), id="transaction_history_table_center")
+            yield Center(
+                Static(id="transaction_history_table", shrink=True, classes="table"),
+                id="transaction_history_table_center",
+            )
 
     @on(events.Key)
     def on_keypress(self, event: events.Key):

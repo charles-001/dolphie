@@ -295,8 +295,8 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     if not dashboard_table:
         table.add_row("[label]User", "%s" % data["Master_User"])
 
-    io_thread_running = "[green]Yes[/green]" if data.get("Slave_IO_Running").lower() == "yes" else "[red]NO[/red]"
-    sql_thread_running = "[green]Yes[/green]" if data.get("Slave_SQL_Running").lower() == "yes" else "[red]NO[/red]"
+    io_thread_running = "[green]ON[/green]" if data.get("Slave_IO_Running").lower() == "yes" else "[red]OFF[/red]"
+    sql_thread_running = "[green]ON[/green]" if data.get("Slave_SQL_Running").lower() == "yes" else "[red]OFF[/red]"
     table.add_row(
         "[label]Thread",
         f"[label]IO[/label] {io_thread_running} [label]SQL[/label] {sql_thread_running}",
@@ -346,6 +346,9 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         table.add_row("[label]GTID", "%s" % gtid_status)
         table.add_row("[label]State", "%s" % data["Slave_SQL_Running_State"])
     else:
+        ssl_enabled = "ON" if data.get("Master_SSL_Allowed") == "Yes" else "OFF"
+        table.add_row("[label]SSL", "%s" % ssl_enabled)
+
         replication_status_filtering = [
             "Replicate_Do_DB",
             "Replicate_Ignore_Table",

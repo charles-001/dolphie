@@ -17,14 +17,18 @@ import requests
 from dolphie import Dolphie
 from dolphie.DataTypes import ConnectionStatus, HotkeyCommands, ProcesslistThread
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
-from dolphie.Modules.Functions import format_number, format_sys_table_memory
+from dolphie.Modules.Functions import (
+    format_number,
+    format_query,
+    format_sys_table_memory,
+)
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab, TabManager
 from dolphie.Panels import (
     dashboard_panel,
     ddl_panel,
-    locks_panel,
+    metadata_locks_panel,
     processlist_panel,
     replication_panel,
 )
@@ -38,7 +42,6 @@ from rich import box
 from rich.align import Align
 from rich.console import Group
 from rich.style import Style
-from rich.syntax import Syntax
 from rich.table import Table
 from rich.theme import Theme
 from rich.traceback import Traceback
@@ -67,25 +70,27 @@ class DolphieApp(App):
 
         self.loading_hostgroups: bool = False
 
-        theme = Theme({
-            "white": "#e9e9e9",
-            "green": "#54efae",
-            "yellow": "#f6ff8f",
-            "dark_yellow": "#cad45f",
-            "red": "#fd8383",
-            "purple": "#b565f3",
-            "dark_gray": "#969aad",
-            "highlight": "#91abec",
-            "label": "#c5c7d2",
-            "b label": "b #c5c7d2",
-            "light_blue": "#bbc8e8",
-            "b white": "b #e9e9e9",
-            "b highlight": "b #91abec",
-            "b red": "b #fd8383",
-            "b light_blue": "b #bbc8e8",
-            "panel_border": "#6171a6",
-            "table_border": "#333f62",
-        })
+        theme = Theme(
+            {
+                "white": "#e9e9e9",
+                "green": "#54efae",
+                "yellow": "#f6ff8f",
+                "dark_yellow": "#cad45f",
+                "red": "#fd8383",
+                "purple": "#b565f3",
+                "dark_gray": "#969aad",
+                "highlight": "#91abec",
+                "label": "#c5c7d2",
+                "b label": "b #c5c7d2",
+                "light_blue": "#bbc8e8",
+                "b white": "b #e9e9e9",
+                "b highlight": "b #91abec",
+                "b red": "b #fd8383",
+                "b light_blue": "b #bbc8e8",
+                "panel_border": "#6171a6",
+                "table_border": "#333f62",
+            }
+        )
         self.console.push_theme(theme)
         self.console.set_window_title(self.TITLE)
 
@@ -184,9 +189,14 @@ class DolphieApp(App):
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
             if dolphie.is_mysql_version_at_least("5.7"):
-                if dolphie.panels.locks.visible or dolphie.config.historical_locks:
-                    dolphie.main_db_connection.execute(MySQLQueries.locks_query)
-                    dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
+                # Always run this so we can save the data for graphing
+                if dolphie.panels.metadata_locks.visible:
+                    dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
+
+                # This can cause MySQL to crash: https://bugs.mysql.com/bug.php?id=112035
+                # if dolphie.panels.innodb_trx_locks.visible or dolphie.historical_trx_locks:
+                #     dolphie.main_db_connection.execute(MySQLQueries.locks_query)
+                #     dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
 
                 if dolphie.panels.ddl.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.ddls)
@@ -199,7 +209,8 @@ class DolphieApp(App):
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
                 disk_io_metrics=dolphie.disk_io_metrics,
-                lock_metrics=dolphie.lock_transactions,
+                # innodb_trx_lock_metrics=dolphie.lock_transactions,
+                metadata_lock_metrics=dolphie.metadata_locks,
                 replication_status=dolphie.replication_status,
                 replication_lag=dolphie.replica_lag,
             )
@@ -208,11 +219,11 @@ class DolphieApp(App):
             # host setup modal with the error
             tab.worker_cancel_error = exception
 
-            await tab.disconnect()
+            await self.tab_manager.disconnect_tab(tab)
 
         tab.worker_running = False
 
-    async def on_worker_state_changed(self, event: Worker.StateChanged):
+    def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
         if not tab:
             return
@@ -251,7 +262,7 @@ class DolphieApp(App):
                     if not self.loading_hostgroups:
                         self.tab_manager.switch_tab(tab.id)
 
-                        tab.host_setup()
+                        self.tab_manager.setup_host_tab(tab)
                         self.bell()
         elif event.worker.group == "replicas":
             tab.replicas_worker_running = False
@@ -372,10 +383,11 @@ class DolphieApp(App):
     @work()
     async def connect_as_hostgroup(self, hostgroup: str):
         self.loading_hostgroups = True
+        self.notify(f"Connecting to hosts in hostgroup [highlight]{hostgroup}", severity="information")
 
-        for counter, host in enumerate(self.config.hostgroup_hosts.get(hostgroup, [])):
-            # We only want to switch to the first tab created
-            switch_tab = True if counter == 0 else False
+        for host in self.config.hostgroup_hosts.get(hostgroup, []):
+            # We only want to switch if it's the first tab created
+            switch_tab = True if not self.tab_manager.active_tab else False
 
             tab = await self.tab_manager.create_tab(tab_name=host, use_hostgroup=True, switch_tab=switch_tab)
 
@@ -383,6 +395,7 @@ class DolphieApp(App):
             self.run_worker_replicas(tab.id)
 
         self.loading_hostgroups = False
+        self.notify(f"Finished connecting to hosts in hostgroup [highlight]{hostgroup}", severity="success")
 
     async def on_mount(self):
         self.tab_manager = TabManager(app=self.app, config=self.config)
@@ -426,7 +439,7 @@ class DolphieApp(App):
         stat_data = {}
 
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
-            if hasattr(metric_instance, "tab_name") and metric_instance.tab_name == tab_metric_instance_name:
+            if metric_instance.tab_name == tab_metric_instance_name:
                 number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
                 for metric_data in metric_instance.__dict__.values():
                     if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
@@ -441,26 +454,27 @@ class DolphieApp(App):
         # We store the panel objects in the tab object (i.e. tab.panel_dashboard, tab.panel_processlist, etc.)
         panel = self.tab_manager.active_tab.get_panel_widget(panel_name)
 
-        new_display = not panel.display
-        panel.display = new_display
+        new_display_status = not panel.display
 
-        setattr(getattr(self.tab_manager.active_tab.dolphie.panels, panel_name), "visible", new_display)
+        setattr(getattr(self.tab_manager.active_tab.dolphie.panels, panel_name), "visible", new_display_status)
 
         if panel_name not in [self.tab_manager.active_tab.dolphie.panels.graphs.name]:
-            self.app.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
+            self.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
+
+        panel.display = new_display_status
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         panel_mapping = {
             tab.dolphie.panels.replication.name: replication_panel,
             tab.dolphie.panels.dashboard.name: dashboard_panel,
             tab.dolphie.panels.processlist.name: processlist_panel,
-            tab.dolphie.panels.locks.name: locks_panel,
+            # tab.dolphie.panels.innodb_trx_locks.name: innodb_trx_locks_panel,
+            tab.dolphie.panels.metadata_locks.name: metadata_locks_panel,
             tab.dolphie.panels.ddl.name: ddl_panel,
         }
         for panel_map_name, panel_map_obj in panel_mapping.items():
             if panel_name == panel_map_name:
                 panel_map_obj.create_panel(tab)
-
             if panel_name == tab.dolphie.panels.replication.name and toggled and tab.dolphie.replication_status:
                 # When replication panel status is changed, we need to refresh the dashboard panel as well since
                 # it adds/removes it from there
@@ -573,8 +587,10 @@ class DolphieApp(App):
         if key == "1":
             self.toggle_panel(dolphie.panels.dashboard.name)
         elif key == "2":
-            self.toggle_panel(dolphie.panels.processlist.name)
             self.tab_manager.active_tab.processlist_datatable.clear()
+            self.toggle_panel(dolphie.panels.processlist.name)
+
+            tab.processlist_title.update("Processlist ([highlight]0[/highlight])")
         elif key == "3":
             self.toggle_panel(dolphie.panels.replication.name)
 
@@ -594,16 +610,36 @@ class DolphieApp(App):
         elif key == "4":
             self.toggle_panel(dolphie.panels.graphs.name)
             self.app.update_graphs("dml")
+        # elif key == "5":
+        #     if not dolphie.is_mysql_version_at_least("5.7"):
+        #         self.notify("InnoDB Transaction Locks panel requires MySQL 5.7+")
+        #         return
+
+        #     self.toggle_panel(dolphie.panels.innodb_trx_locks.name)
+        #     self.tab_manager.active_tab.innodb_trx_locks_datatable.clear()
         elif key == "5":
-            if not dolphie.is_mysql_version_at_least("5.7"):
-                self.notify("Locks panel requires MySQL 5.7+")
+            if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
+                self.notify("Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled")
                 return
 
-            self.toggle_panel(dolphie.panels.locks.name)
-            self.tab_manager.active_tab.locks_datatable.clear()
+            query = (
+                "SELECT enabled FROM performance_schema.setup_instruments WHERE name = 'wait/lock/metadata/sql/mdl';"
+            )
+            dolphie.secondary_db_connection.execute(query)
+            row = dolphie.secondary_db_connection.fetchone()
+            if row and row.get("enabled") == "NO":
+                self.notify(
+                    "Metadata Locks panel requires Performance Schema to have"
+                    " [highlight]wait/lock/metadata/sql/mdl[/highlight] enabled"
+                )
+                return
+
+            self.toggle_panel(dolphie.panels.metadata_locks.name)
+            self.tab_manager.active_tab.metadata_locks_datatable.clear()
+            tab.metadata_locks_title.update("Metadata Locks ([highlight]0[/highlight])")
         elif key == "6":
-            if not dolphie.is_mysql_version_at_least("5.7"):
-                self.notify("DDL panel requires MySQL 5.7+")
+            if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
+                self.notify("DDL panel requires MySQL 5.7+ with Performance Schema enabled")
                 return
 
             query = "SELECT enabled FROM performance_schema.setup_instruments WHERE name LIKE 'stage/innodb/alter%';"
@@ -616,16 +652,17 @@ class DolphieApp(App):
 
             self.toggle_panel(dolphie.panels.ddl.name)
             self.tab_manager.active_tab.ddl_datatable.clear()
+            tab.ddl_title.update("DDL ([highlight]0[/highlight])")
         elif key == "grave_accent":
-            self.tab_manager.active_tab.host_setup()
+            self.tab_manager.setup_host_tab(tab)
         elif key == "space":
             if tab.worker.state != WorkerState.RUNNING:
                 tab.worker_timer.stop()
                 self.run_worker_main(tab.id)
         elif key == "plus":
-            await self.tab_manager.create_tab(tab_name="New Tab")
+            new_tab = await self.tab_manager.create_tab(tab_name="New Tab")
             self.tab_manager.topbar.host = ""
-            self.tab_manager.active_tab.host_setup()
+            self.tab_manager.setup_host_tab(new_tab)
         elif key == "equals_sign":
 
             def command_get_input(tab_name):
@@ -640,7 +677,7 @@ class DolphieApp(App):
                 self.notify("Removing all tabs is not permitted", severity="error")
             else:
                 await self.tab_manager.remove_tab(tab)
-                await tab.disconnect(update_topbar=False)
+                await self.tab_manager.disconnect_tab(tab=tab, update_topbar=False)
 
                 self.notify(f"Tab [highlight]{tab.name}[/highlight] [white]has been removed", severity="success")
                 self.tab_manager.tabs.pop(tab.id, None)
@@ -676,7 +713,7 @@ class DolphieApp(App):
             self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "D":
-            await tab.disconnect()
+            await self.tab_manager.disconnect_tab(tab)
 
         elif key == "e":
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
@@ -743,7 +780,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.thread_kill_by_id,
-                    message="Specify a Thread ID to kill",
+                    message="Kill Thread",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -808,7 +845,7 @@ class DolphieApp(App):
                 )
 
             self.app.push_screen(
-                CommandModal(HotkeyCommands.refresh_interval, message="Specify refresh interval (in seconds)"),
+                CommandModal(HotkeyCommands.refresh_interval, message="Refresh Interval"),
                 command_get_input,
             )
 
@@ -834,7 +871,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.show_thread,
-                    message="Specify a Thread ID to display its details",
+                    message="Thread Details",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -952,7 +989,8 @@ class DolphieApp(App):
                 "2": "Show/hide Processlist",
                 "3": "Show/hide Replication/Replicas",
                 "4": "Show/hide Graph Metrics",
-                "5": "Show/hide Locks",
+                # "5": "Show/hide InnoDB Transaction Locks",
+                "5": "Show/hide Metadata Locks",
                 "6": "Show/hide DDLs",
                 "`": "Open Host Setup",
                 "+": "Create a new tab",
@@ -970,14 +1008,14 @@ class DolphieApp(App):
                 "l": "Display the most recent deadlock",
                 "o": "Display output from SHOW ENGINE INNODB STATUS",
                 "m": "Display memory usage",
-                "p": "Pause refreshing",
+                "p": "Pause refreshing of panels",
                 "P": "Switch between using Information Schema/Performance Schema for processlist panel",
                 "q": "Quit",
                 "r": "Set the refresh interval",
                 "R": "Reset all metrics",
                 "t": "Display details of a thread along with an EXPLAIN of its query",
                 "T": "Transaction view - toggle displaying threads that only have an active transaction",
-                "s": "Sort processlist by time in descending/ascending order",
+                "s": "Toggle sorting for Age in descending/ascending order",
                 "u": "List active connected users and their statistics",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
                 "z": "Display all entries in the host cache",
@@ -1157,7 +1195,10 @@ class DolphieApp(App):
 
                 tab.spinner.show()
                 threads_killed = 0
-                for thread_id, thread in dolphie.processlist_threads_snapshot.items():
+
+                # We need to make a copy of the threads snapshot to so it doesn't change while we're iterating over it
+                threads = dolphie.processlist_threads_snapshot.copy()
+                for thread_id, thread in threads.items():
                     thread: ProcesslistThread
                     try:
                         if thread.command in commands_to_kill:
@@ -1277,17 +1318,11 @@ class DolphieApp(App):
                 thread_table.add_row("[label]TRX State", thread_data.trx_state)
                 thread_table.add_row("[label]TRX Operation", thread_data.trx_operation_state)
 
-                query = sqlformat(thread_data.query, reindent_aligned=True)
-                query_db = thread_data.db
-                if query:
-                    formatted_query = Syntax(
-                        query,
-                        "sql",
-                        line_numbers=False,
-                        word_wrap=True,
-                        theme="monokai",
-                        background_color="#101626",
-                    )
+                if thread_data.query:
+                    query = sqlformat(thread_data.query, reindent_aligned=True)
+                    query_db = thread_data.db
+
+                    formatted_query = format_query(query, minify=False)
 
                     if query_db:
                         try:
@@ -1336,16 +1371,13 @@ class DolphieApp(App):
                         transaction_history_table.add_column("Query", overflow="fold")
 
                         for query in transaction_history:
-                            trx_history_formatted_query = ""
-                            if query["sql_text"]:
-                                trx_history_formatted_query = Syntax(
-                                    re.sub(r"\s+", " ", query["sql_text"]),
-                                    "sql",
-                                    line_numbers=False,
-                                    word_wrap=True,
-                                    theme="monokai",
-                                    background_color="#101626",
+                            trx_history_formatted_query = query["sql_text"]
+                            if trx_history_formatted_query:
+                                trx_history_formatted_query = sqlformat(
+                                    trx_history_formatted_query, reindent_aligned=True
                                 )
+
+                            trx_history_formatted_query = format_query(trx_history_formatted_query, minify=False)
 
                             transaction_history_table.add_row(
                                 query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), trx_history_formatted_query

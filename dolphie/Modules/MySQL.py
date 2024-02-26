@@ -49,6 +49,7 @@ class Database:
                 ssl=self.ssl,
                 autocommit=True,
                 connect_timeout=5,
+                program_name="Dolphie",
             )
             self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
 
@@ -72,6 +73,15 @@ class Database:
 
     def execute(self, query, values=None, ignore_error=False):
         if not self.is_connected():
+            return None
+
+        if self.running_query:
+            self.app.notify(
+                "Another query is already running, please repeat action",
+                title="Unable to run multiple queries at the same time",
+                severity="error",
+                timeout=10,
+            )
             return None
 
         error_message = None

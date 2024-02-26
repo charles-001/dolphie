@@ -35,7 +35,7 @@ from textual.worker import Worker
 class Tab:
     id: int
     name: str
-    dolphie: Dolphie
+    dolphie: Dolphie = None
     manual_tab_name: str = None
 
     worker: Worker = None
@@ -54,7 +54,8 @@ class Tab:
     panel_dashboard: Container = None
     panel_graphs: Container = None
     panel_replication: Container = None
-    panel_locks: Container = None
+    # panel_innodb_trx_locks: Container = None
+    panel_metadata_locks: Container = None
     panel_ddl: Container = None
     panel_processlist: Container = None
 
@@ -69,8 +70,11 @@ class Tab:
     ddl_title: Label = None
     ddl_datatable: DataTable = None
 
-    locks_title: Label = None
-    locks_datatable: DataTable = None
+    # innodb_trx_locks_title: Label = None
+    # innodb_trx_locks_datatable: DataTable = None
+
+    metadata_locks_title: Label = None
+    metadata_locks_datatable: DataTable = None
 
     processlist_title: Label = None
     processlist_datatable: DataTable = None
@@ -97,89 +101,6 @@ class Tab:
     def get_panel_widget(self, panel_name: str) -> Container:
         return getattr(self, f"panel_{panel_name}")
 
-    async def disconnect(self, update_topbar: bool = True):
-        if self.worker_timer:
-            self.worker_timer.stop()
-        if self.replicas_worker_timer:
-            self.replicas_worker_timer.stop()
-
-        if self.worker:
-            self.worker.cancel()
-
-        if self.replicas_worker:
-            self.replicas_worker.cancel()
-
-        self.dolphie.main_db_connection.close()
-        self.dolphie.secondary_db_connection.close()
-
-        self.dolphie.replica_manager.remove_all()
-
-        self.main_container.display = False
-        self.sparkline.display = False
-        self.loading_indicator.display = False
-
-        self.sparkline.data = [0]
-
-        self.replicas_title.update("")
-        for member in self.dolphie.app.query(f".replica_container_{self.id}"):
-            await member.remove()
-
-        if update_topbar:
-            self.dolphie.app.tab_manager.update_topbar(tab=self, connection_status=ConnectionStatus.disconnected)
-
-    def host_setup(self):
-        dolphie = self.dolphie
-
-        async def command_get_input(data):
-            host_port = data["host"].split(":")
-
-            dolphie.host = host_port[0]
-            dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
-            dolphie.user = data.get("username")
-            dolphie.password = data.get("password")
-            hostgroup = data.get("hostgroup")
-
-            if hostgroup:
-                self.dolphie.app.connect_as_hostgroup(hostgroup)
-            else:
-                await self.disconnect()
-
-                self.loading_indicator.display = True
-                while True:
-                    if not self.worker_running and not self.replicas_worker_running:
-                        dolphie.reset_runtime_variables()
-
-                        self.worker_cancel_error = ""
-
-                        self.dolphie.app.run_worker_main(self.id)
-                        self.dolphie.app.run_worker_replicas(self.id)
-
-                        break
-
-                    await asyncio.sleep(0.25)
-
-        # If we're here because of a worker cancel error or manually disconnected,
-        # we want to pre-populate the host/port
-        if self.worker_cancel_error or dolphie.connection_status == ConnectionStatus.disconnected:
-            host = dolphie.host
-            port = dolphie.port
-        else:
-            host = ""
-            port = ""
-
-        self.dolphie.app.push_screen(
-            HostSetupModal(
-                host=host,
-                port=port,
-                username=dolphie.user,
-                password=dolphie.password,
-                hostgroups=dolphie.hostgroup_hosts.keys(),
-                available_hosts=dolphie.host_setup_available_hosts,
-                error_message=self.worker_cancel_error,
-            ),
-            command_get_input,
-        )
-
 
 class TabManager:
     def __init__(self, app: App, config: Config):
@@ -195,6 +116,20 @@ class TabManager:
 
         self.topbar = self.app.query_one(TopBar)
 
+    def update_topbar(self, tab: Tab, connection_status: ConnectionStatus):
+        dolphie = tab.dolphie
+
+        dolphie.connection_status = connection_status
+
+        # Only update the topbar if we're on the active tab
+        if tab.id == self.active_tab.id:
+            if dolphie.connection_status:
+                self.topbar.connection_status = dolphie.connection_status
+                self.topbar.host = dolphie.mysql_host
+            else:
+                self.topbar.connection_status = None
+                self.topbar.host = ""
+
     async def create_tab(self, tab_name: str, use_hostgroup: bool = False, switch_tab: bool = True) -> Tab:
         tab_id = self.tab_id_counter
 
@@ -202,7 +137,7 @@ class TabManager:
             return
 
         # Create our new tab instance
-        tab = Tab(id=tab_id, name=tab_name, dolphie=None)
+        tab = Tab(id=tab_id, name=tab_name)
 
         # If we're using hostgroups
         if use_hostgroup and self.config.hostgroup_hosts:
@@ -229,6 +164,7 @@ class TabManager:
         dolphie.tab_id = tab_id
         dolphie.tab_name = tab_name
 
+        # Save the Dolphie instance to the tab
         tab.dolphie = dolphie
 
         # Revert the port back to its original value
@@ -240,7 +176,7 @@ class TabManager:
             TabPane(
                 intial_tab_name,
                 LoadingIndicator(id=f"loading_indicator_{tab_id}", classes="connection_loading_indicator"),
-                SpinnerWidget(id=f"spinner_{tab_id}"),
+                SpinnerWidget(id=f"spinner_{tab_id}", text="Processing command"),
                 VerticalScroll(
                     Container(
                         Center(
@@ -295,11 +231,17 @@ class TabManager:
                         id=f"panel_replication_{tab_id}",
                         classes="panel_container replication_panel",
                     ),
+                    # Container(
+                    #     Label(id=f"innodb_trx_locks_title_{tab_id}"),
+                    #     DataTable(id=f"innodb_trx_locks_datatable_{tab_id}", show_cursor=False),
+                    #     id=f"panel_innodb_trx_locks_{tab_id}",
+                    #     classes="innodb_trx_locks",
+                    # ),
                     Container(
-                        Label(id=f"locks_title_{tab_id}"),
-                        DataTable(id=f"locks_datatable_{tab_id}", show_cursor=False),
-                        id=f"panel_locks_{tab_id}",
-                        classes="locks",
+                        Label(id=f"metadata_locks_title_{tab_id}"),
+                        DataTable(id=f"metadata_locks_datatable_{tab_id}", show_cursor=False),
+                        id=f"panel_metadata_locks_{tab_id}",
+                        classes="metadata_locks",
                     ),
                     Container(
                         Label(id=f"ddl_title_{tab_id}"),
@@ -324,7 +266,7 @@ class TabManager:
         metrics = MetricManager.MetricManager().metrics
         metric_tab_labels = [
             ("DML", metrics.dml, True),
-            ("Locks", metrics.locks, False),
+            ("Locks", metrics.locks, True),
             ("Table Cache", metrics.table_cache, True),
             ("Threads", metrics.threads, True),
             ("BP Requests", metrics.buffer_pool_requests, True),
@@ -393,7 +335,8 @@ class TabManager:
         tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)
         tab.panel_graphs = self.app.query_one(f"#panel_graphs_{tab.id}", Container)
         tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
-        tab.panel_locks = self.app.query_one(f"#panel_locks_{tab.id}", Container)
+        # tab.panel_innodb_trx_locks = self.app.query_one(f"#panel_innodb_trx_locks_{tab.id}", Container)
+        tab.panel_metadata_locks = self.app.query_one(f"#panel_metadata_locks_{tab.id}", Container)
         tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", Container)
         tab.panel_ddl = self.app.query_one(f"#panel_ddl_{tab.id}", Container)
 
@@ -404,8 +347,10 @@ class TabManager:
         tab.ddl_datatable = self.app.query_one(f"#ddl_datatable_{tab.id}", DataTable)
         tab.processlist_title = self.app.query_one(f"#processlist_title_{tab.id}", Label)
         tab.processlist_datatable = self.app.query_one(f"#processlist_data_{tab.id}", DataTable)
-        tab.locks_title = self.app.query_one(f"#locks_title_{tab.id}", Label)
-        tab.locks_datatable = self.app.query_one(f"#locks_datatable_{tab.id}", DataTable)
+        # tab.innodb_trx_locks_title = self.app.query_one(f"#innodb_trx_locks_title_{tab.id}", Label)
+        # tab.innodb_trx_locks_datatable = self.app.query_one(f"#innodb_trx_locks_datatable_{tab.id}", DataTable)
+        tab.metadata_locks_title = self.app.query_one(f"#metadata_locks_title_{tab.id}", Label)
+        tab.metadata_locks_datatable = self.app.query_one(f"#metadata_locks_datatable_{tab.id}", DataTable)
 
         tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
         tab.dashboard_innodb = self.app.query_one(f"#dashboard_innodb_{tab.id}", Static)
@@ -440,9 +385,6 @@ class TabManager:
         tab.main_container.display = False
         tab.loading_indicator.display = False
 
-        # Set the sparkline data to 0
-        tab.sparkline.data = [None]
-
         for panel in tab.dolphie.panels.all():
             self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
 
@@ -464,6 +406,9 @@ class TabManager:
 
         if switch_tab:
             self.switch_tab(tab_id)
+
+        # Set the sparkline data to 0
+        tab.sparkline.data = [0]
 
         # Increment the tab id counter
         self.tab_id_counter += 1
@@ -520,16 +465,84 @@ class TabManager:
 
         return all_tabs
 
-    def update_topbar(self, tab: Tab, connection_status: ConnectionStatus):
+    async def disconnect_tab(self, tab: Tab, update_topbar: bool = True):
+        if tab.worker_timer:
+            tab.worker_timer.stop()
+        if tab.replicas_worker_timer:
+            tab.replicas_worker_timer.stop()
+
+        if tab.worker:
+            tab.worker.cancel()
+
+        if tab.replicas_worker:
+            tab.replicas_worker.cancel()
+
+        tab.dolphie.main_db_connection.close()
+        tab.dolphie.secondary_db_connection.close()
+
+        tab.dolphie.replica_manager.remove_all()
+
+        tab.main_container.display = False
+        tab.sparkline.display = False
+        tab.loading_indicator.display = False
+
+        tab.sparkline.data = [0]
+
+        tab.replicas_title.update("")
+        for member in tab.dolphie.app.query(f".replica_container_{tab.id}"):
+            await member.remove()
+
+        if update_topbar:
+            self.update_topbar(tab=tab, connection_status=ConnectionStatus.disconnected)
+
+    def setup_host_tab(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.connection_status = connection_status
+        async def command_get_input(data):
+            host_port = data["host"].split(":")
 
-        # Only update the topbar if we're on the active tab
-        if tab.id == self.active_tab.id:
-            if dolphie.connection_status:
-                self.topbar.connection_status = dolphie.connection_status
-                self.topbar.host = dolphie.mysql_host
+            dolphie.host = host_port[0]
+            dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
+            dolphie.user = data.get("username")
+            dolphie.password = data.get("password")
+            hostgroup = data.get("hostgroup")
+
+            if hostgroup:
+                dolphie.app.connect_as_hostgroup(hostgroup)
             else:
-                self.topbar.connection_status = None
-                self.topbar.host = ""
+                await self.disconnect_tab(tab)
+
+                tab.loading_indicator.display = True
+                while True:
+                    if not tab.worker_running and not tab.replicas_worker_running:
+                        tab.worker_cancel_error = ""
+
+                        dolphie.reset_runtime_variables()
+                        dolphie.app.run_worker_main(tab.id)
+                        dolphie.app.run_worker_replicas(tab.id)
+
+                        break
+
+                    await asyncio.sleep(0.25)
+
+        # If we're here because of a worker cancel error or manually disconnected,
+        # we want to pre-populate the host/port
+        if tab.worker_cancel_error or dolphie.connection_status == ConnectionStatus.disconnected:
+            host = dolphie.host
+            port = dolphie.port
+        else:
+            host = ""
+            port = ""
+
+        dolphie.app.push_screen(
+            HostSetupModal(
+                host=host,
+                port=port,
+                username=dolphie.user,
+                password=dolphie.password,
+                hostgroups=dolphie.hostgroup_hosts.keys(),
+                available_hosts=dolphie.host_setup_available_hosts,
+                error_message=tab.worker_cancel_error,
+            ),
+            command_get_input,
+        )

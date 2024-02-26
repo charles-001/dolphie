@@ -222,6 +222,42 @@ class MySQLQueries:
         GROUP BY
             t.processlist_id
     """
+    metadata_locks: str = """
+        SELECT
+            ANY_VALUE(OBJECT_INSTANCE_BEGIN) AS id,
+            OBJECT_TYPE,
+            ANY_VALUE(OBJECT_SCHEMA) AS OBJECT_SCHEMA,
+            CASE
+                WHEN COUNT(DISTINCT OBJECT_NAME) = 1 THEN ANY_VALUE(OBJECT_NAME)
+                WHEN COUNT(DISTINCT OBJECT_NAME) = 0 THEN NULL
+                ELSE CONCAT(COUNT(DISTINCT OBJECT_NAME), ' objects')
+            END AS OBJECT_NAME,
+            LOCK_TYPE,
+            LOCK_STATUS,
+            ANY_VALUE(SOURCE) AS CODE_SOURCE,
+            ANY_VALUE(NAME) AS THREAD_SOURCE,
+            ANY_VALUE(PROCESSLIST_ID) AS PROCESSLIST_ID,
+            ANY_VALUE(PROCESSLIST_USER) AS PROCESSLIST_USER,
+            ANY_VALUE(PROCESSLIST_TIME) AS PROCESSLIST_TIME,
+            ANY_VALUE(PROCESSLIST_INFO) AS PROCESSLIST_INFO
+        FROM
+            `performance_schema`.`metadata_locks` mlb JOIN
+            `performance_schema`.`threads` t ON mlb.OWNER_THREAD_ID = t.THREAD_ID
+        WHERE
+            NOT (
+                OBJECT_TYPE = 'TABLE' AND
+                LOCK_STATUS = 'GRANTED' AND
+                LOCK_TYPE LIKE 'SHARED%' AND
+                PROCESSLIST_TIME <= 2
+            ) AND
+            OBJECT_TYPE != 'COLUMN STATISTICS'
+            $1
+        GROUP BY
+            THREAD_ID,
+            OBJECT_TYPE,
+            LOCK_TYPE,
+            LOCK_STATUS
+    """
     error_log: str = """
         SELECT
             logged AS timestamp,
@@ -233,7 +269,8 @@ class MySQLQueries:
         WHERE
             data != 'Could not open log file.'
             $1
-        ORDER BY timestamp
+        ORDER BY
+            timestamp
     """
     memory_by_user: str = """
         SELECT

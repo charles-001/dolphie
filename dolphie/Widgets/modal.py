@@ -122,6 +122,12 @@ class CommandModal(ModalScreen):
         elif self.command == HotkeyCommands.variable_search:
             input.placeholder = "Input 'all' to show everything"
             input.focus()
+        elif self.command in [HotkeyCommands.show_thread, HotkeyCommands.thread_kill_by_id]:
+            input.placeholder = "Input a Process ID"
+            input.focus()
+        elif self.command == HotkeyCommands.refresh_interval:
+            input.placeholder = "Input a refresh interval (seconds)"
+            input.focus()
         else:
             input.focus()
 
@@ -215,10 +221,7 @@ class CommandModal(ModalScreen):
                             None,
                         )
 
-                    if not value:
-                        self.update_error_response(f"{filter_label} [b red]{modal_input}[/b red] does not exist")
-                    else:
-                        self.dismiss([filter_label, modal_input])
+                    self.dismiss([filter_label, modal_input])
             else:
                 self.update_error_response("Please select a filter option")
         elif self.command == HotkeyCommands.thread_kill_by_parameter:

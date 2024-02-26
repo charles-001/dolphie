@@ -4,6 +4,7 @@ from dolphie.DataTypes import ProcesslistThread
 from dolphie.Modules.Functions import format_number
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
+from rich.syntax import Syntax
 from textual.widgets import DataTable
 
 
@@ -15,37 +16,43 @@ def create_panel(tab: Tab) -> DataTable:
         dolphie.use_performance_schema = False
 
     columns = [
-        {"name": "Thread ID", "field": "id", "width": 11, "format_number": False},
-        {"name": "Username", "field": "user", "width": 13, "format_number": False},
+        {"name": "Process ID", "field": "id", "width": 11, "format_number": False},
+        {"name": "Username", "field": "user", "width": 20, "format_number": False},
     ]
 
     if dolphie.show_additional_query_columns:
-        columns.extend([
-            {"name": "Hostname/IP", "field": "host", "width": 16, "format_number": False},
-            {"name": "Database", "field": "db", "width": 13, "format_number": False},
-        ])
+        columns.extend(
+            [
+                {"name": "Hostname/IP", "field": "host", "width": 16, "format_number": False},
+                {"name": "Database", "field": "db", "width": 13, "format_number": False},
+            ]
+        )
 
-    columns.extend([
-        {"name": "Command", "field": "command", "width": 8, "format_number": False},
-        {"name": "State", "field": "state", "width": 16, "format_number": False},
-        {"name": "TRX State", "field": "trx_state", "width": 9, "format_number": False},
-        {"name": "R-Lock", "field": "trx_rows_locked", "width": 7, "format_number": True},
-        {"name": "R-Mod", "field": "trx_rows_modified", "width": 7, "format_number": True},
-    ])
+    columns.extend(
+        [
+            {"name": "Command", "field": "command", "width": 8, "format_number": False},
+            {"name": "State", "field": "state", "width": 20, "format_number": False},
+            {"name": "TRX State", "field": "trx_state", "width": 9, "format_number": False},
+            {"name": "R-Lock", "field": "trx_rows_locked", "width": 7, "format_number": True},
+            {"name": "R-Mod", "field": "trx_rows_modified", "width": 7, "format_number": True},
+        ]
+    )
 
     if dolphie.show_additional_query_columns and dolphie.global_variables.get("innodb_thread_concurrency"):
         columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": True})
 
     if dolphie.show_trxs_only:
         columns.append(
-            {"name": "TRX Time", "field": "trx_time", "width": 9, "format_number": False},
+            {"name": "TRX Age", "field": "trx_time", "width": 9, "format_number": False},
         )
 
-    columns.extend([
-        {"name": "Time", "field": "formatted_time", "width": 9, "format_number": False},
-        {"name": "Query", "field": "formatted_query", "width": None, "format_number": False},
-        {"name": "time_seconds", "field": "time", "width": 0, "format_number": False},
-    ])
+    columns.extend(
+        [
+            {"name": "Age", "field": "formatted_time", "width": 9, "format_number": False},
+            {"name": "Query", "field": "formatted_query", "width": None, "format_number": False},
+            {"name": "time_seconds", "field": "time", "width": 0, "format_number": False},
+        ]
+    )
 
     processlist_datatable = tab.processlist_datatable
 
@@ -60,48 +67,56 @@ def create_panel(tab: Tab) -> DataTable:
             column_width = column_data["width"]
             processlist_datatable.add_column(column_name, key=column_name, width=column_width)
 
-    # Iterate through dolphie.processlist_threads
+    # Iterate through processlist_threads
     for thread_id, thread in dolphie.processlist_threads.items():
-        # Check if the thread_id exists in the datatable
-        if thread_id in processlist_datatable.rows:
-            datatable_row = processlist_datatable.get_row(thread_id)
+        row_values = []
 
-            # Update the datatable if values differ
-            for column_id, column_data in enumerate(columns):
-                column_name = column_data["name"]
-                column_field = column_data["field"]
-                column_format_number = column_data["format_number"]
-                column_value = getattr(thread, column_field)
+        for column_id, (column_data) in enumerate(columns):
+            column_name = column_data["name"]
+            column_field = column_data["field"]
+            column_format_number = column_data["format_number"]
+            column_value = getattr(thread, column_field)
 
+            thread_value = format_number(column_value) if column_format_number else column_value
+            if thread_id in processlist_datatable.rows:
+                datatable_value = processlist_datatable.get_row(thread_id)[column_id]
+
+                # Store the code of the Syntax object if it's a query
+                temp_thread_value = thread_value
+                temp_datatable_value = datatable_value
+
+                # If the column is the query, we need to compare the code of the Syntax object
                 update_width = False
                 if column_field == "formatted_query":
                     update_width = True
+                    if isinstance(thread_value, Syntax):
+                        temp_thread_value = thread_value.code
+                    if isinstance(datatable_value, Syntax):
+                        temp_datatable_value = datatable_value.code
 
-                value = format_number(column_value) if column_format_number else column_value
-                if value != datatable_row[column_id] or column_field == "formatted_time":
-                    processlist_datatable.update_cell(thread_id, column_name, value, update_width=update_width)
-        else:
-            # Add a new row to the datatable if thread_id does not exist
-            row_values = []
-            for column_data in columns:
-                column_field = column_data["field"]
-                column_format_number = column_data["format_number"]
-                column_value = getattr(thread, column_field)
+                # Update the datatable if values differ
+                if temp_thread_value != temp_datatable_value or column_field == "formatted_time":
+                    processlist_datatable.update_cell(thread_id, column_name, thread_value, update_width=update_width)
+            else:
+                # Create an array of values to append to the datatable
+                row_values.append(thread_value)
 
-                value = format_number(column_value) if column_format_number else column_value
-
-                row_values.append(value)
-
+        # Add a new row to the datatable
+        if row_values:
             processlist_datatable.add_row(*row_values, key=thread_id)
 
-    # Remove rows from processlist_datatable that no longer exist in dolphie.processlist_threads
-    rows_to_remove = set(processlist_datatable.rows.keys()) - set(dolphie.processlist_threads.keys())
-    for id in rows_to_remove:
-        processlist_datatable.remove_row(id)
+    # Remove rows from processlist_datatable that no longer exist in processlist_threads
+    if dolphie.processlist_threads:
+        rows_to_remove = set(processlist_datatable.rows.keys()) - set(dolphie.processlist_threads.keys())
+        for id in rows_to_remove:
+            processlist_datatable.remove_row(id)
+    else:
+        if processlist_datatable.row_count:
+            processlist_datatable.clear()
 
     processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 
-    tab.processlist_title.update(f"Processlist ([highlight]{len(dolphie.processlist_threads)}[/highlight])")
+    tab.processlist_title.update(f"Processlist ([highlight]{processlist_datatable.row_count}[/highlight])")
 
 
 def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
