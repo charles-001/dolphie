@@ -780,7 +780,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.thread_kill_by_id,
-                    message="Specify a Thread ID to kill",
+                    message="Kill Thread",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -845,7 +845,7 @@ class DolphieApp(App):
                 )
 
             self.app.push_screen(
-                CommandModal(HotkeyCommands.refresh_interval, message="Specify refresh interval (in seconds)"),
+                CommandModal(HotkeyCommands.refresh_interval, message="Refresh Interval"),
                 command_get_input,
             )
 
@@ -871,7 +871,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.show_thread,
-                    message="Specify a Thread ID to display its details",
+                    message="Thread Details",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -1008,14 +1008,14 @@ class DolphieApp(App):
                 "l": "Display the most recent deadlock",
                 "o": "Display output from SHOW ENGINE INNODB STATUS",
                 "m": "Display memory usage",
-                "p": "Pause refreshing",
+                "p": "Pause refreshing of panels",
                 "P": "Switch between using Information Schema/Performance Schema for processlist panel",
                 "q": "Quit",
                 "r": "Set the refresh interval",
                 "R": "Reset all metrics",
                 "t": "Display details of a thread along with an EXPLAIN of its query",
                 "T": "Transaction view - toggle displaying threads that only have an active transaction",
-                "s": "Sort processlist by time in descending/ascending order",
+                "s": "Toggle sorting for Age in descending/ascending order",
                 "u": "List active connected users and their statistics",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
                 "z": "Display all entries in the host cache",

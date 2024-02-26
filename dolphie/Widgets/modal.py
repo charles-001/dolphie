@@ -122,6 +122,12 @@ class CommandModal(ModalScreen):
         elif self.command == HotkeyCommands.variable_search:
             input.placeholder = "Input 'all' to show everything"
             input.focus()
+        elif self.command in [HotkeyCommands.show_thread, HotkeyCommands.thread_kill_by_id]:
+            input.placeholder = "Input a Process ID"
+            input.focus()
+        elif self.command == HotkeyCommands.refresh_interval:
+            input.placeholder = "Input a refresh interval (seconds)"
+            input.focus()
         else:
             input.focus()
 
