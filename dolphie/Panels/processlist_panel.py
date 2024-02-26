@@ -21,32 +21,38 @@ def create_panel(tab: Tab) -> DataTable:
     ]
 
     if dolphie.show_additional_query_columns:
-        columns.extend([
-            {"name": "Hostname/IP", "field": "host", "width": 16, "format_number": False},
-            {"name": "Database", "field": "db", "width": 13, "format_number": False},
-        ])
+        columns.extend(
+            [
+                {"name": "Hostname/IP", "field": "host", "width": 16, "format_number": False},
+                {"name": "Database", "field": "db", "width": 13, "format_number": False},
+            ]
+        )
 
-    columns.extend([
-        {"name": "Command", "field": "command", "width": 8, "format_number": False},
-        {"name": "State", "field": "state", "width": 16, "format_number": False},
-        {"name": "TRX State", "field": "trx_state", "width": 9, "format_number": False},
-        {"name": "R-Lock", "field": "trx_rows_locked", "width": 7, "format_number": True},
-        {"name": "R-Mod", "field": "trx_rows_modified", "width": 7, "format_number": True},
-    ])
+    columns.extend(
+        [
+            {"name": "Command", "field": "command", "width": 8, "format_number": False},
+            {"name": "State", "field": "state", "width": 16, "format_number": False},
+            {"name": "TRX State", "field": "trx_state", "width": 9, "format_number": False},
+            {"name": "R-Lock", "field": "trx_rows_locked", "width": 7, "format_number": True},
+            {"name": "R-Mod", "field": "trx_rows_modified", "width": 7, "format_number": True},
+        ]
+    )
 
     if dolphie.show_additional_query_columns and dolphie.global_variables.get("innodb_thread_concurrency"):
         columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": True})
 
     if dolphie.show_trxs_only:
         columns.append(
-            {"name": "TRX Time", "field": "trx_time", "width": 9, "format_number": False},
+            {"name": "TRX Age", "field": "trx_time", "width": 9, "format_number": False},
         )
 
-    columns.extend([
-        {"name": "Time", "field": "formatted_time", "width": 9, "format_number": False},
-        {"name": "Query", "field": "formatted_query", "width": None, "format_number": False},
-        {"name": "time_seconds", "field": "time", "width": 0, "format_number": False},
-    ])
+    columns.extend(
+        [
+            {"name": "Age", "field": "formatted_time", "width": 9, "format_number": False},
+            {"name": "Query", "field": "formatted_query", "width": None, "format_number": False},
+            {"name": "time_seconds", "field": "time", "width": 0, "format_number": False},
+        ]
+    )
 
     processlist_datatable = tab.processlist_datatable
 

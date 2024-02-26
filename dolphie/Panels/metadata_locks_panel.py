@@ -1,4 +1,7 @@
+from typing import Dict
+
 from dolphie.Modules.Functions import format_query, format_time
+from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 from rich.syntax import Syntax
 from textual.widgets import DataTable
@@ -10,10 +13,11 @@ def create_panel(tab: Tab) -> DataTable:
     columns = {
         "OBJECT_TYPE": {"name": "Object Type", "width": 13},
         "OBJECT_SCHEMA": {"name": "Object Schema", "width": 13},
-        "OBJECT_NAME": {"name": "Object Name", "width": 15},
+        "OBJECT_NAME": {"name": "Object Name", "width": 25},
         "LOCK_TYPE": {"name": "Lock Type", "width": 20},
         "LOCK_STATUS": {"name": "Lock Status", "width": 11},
-        "SOURCE": {"name": "Source", "width": 15},
+        "CODE_SOURCE": {"name": "Code Source", "width": 15},
+        "THREAD_SOURCE": {"name": "Thread Source", "width": 15},
         "PROCESSLIST_ID": {"name": "Process ID", "width": 13},
         "PROCESSLIST_USER": {"name": "User", "width": 13},
         "PROCESSLIST_TIME": {"name": "Age", "width": 8},
@@ -73,10 +77,55 @@ def create_panel(tab: Tab) -> DataTable:
         if metadata_locks_datatable.row_count:
             metadata_locks_datatable.clear()
 
+    metadata_locks_datatable.sort("Age", reverse=dolphie.sort_by_time_descending)
+
     tab.metadata_locks_title.update(f"Metadata Locks ([highlight]{metadata_locks_datatable.row_count}[/highlight])")
 
 
+def fetch_data(tab: Tab) -> Dict[str, str]:
+    dolphie = tab.dolphie
+
+    ########################
+    # WHERE clause filters #
+    ########################
+    where_clause = []
+
+    # Filter user
+    if dolphie.user_filter:
+        where_clause.append("processlist_user = '%s'" % dolphie.user_filter)
+
+    # Filter database
+    if dolphie.db_filter:
+        where_clause.append("processlist_db = '%s'" % dolphie.db_filter)
+
+    # Filter hostname/IP
+    if dolphie.host_filter:
+        # Have to use LIKE since there's a port at the end
+        where_clause.append("processlist_host LIKE '%s%%'" % dolphie.host_filter)
+
+    # Filter time
+    if dolphie.query_time_filter:
+        where_clause.append("processlist_time >= '%s'" % dolphie.query_time_filter)
+
+    # Filter query
+    if dolphie.query_filter:
+        where_clause.append("(processlist_info LIKE '%%%s%%')" % (dolphie.query_filter))
+
+    if where_clause:
+        # Add in our dynamic WHERE clause for filtering
+        query = MySQLQueries.metadata_locks.replace("$1", "AND " + " AND ".join(where_clause))
+    else:
+        query = MySQLQueries.metadata_locks.replace("$1", "")
+
+    dolphie.main_db_connection.execute(query)
+    threads = dolphie.main_db_connection.fetchall()
+
+    return threads
+
+
 def format_value(lock: dict, column_key: str, value: str) -> str:
+    formatted_value = value
+
     # OBJECT_NAME is in the format "schema/table" sometimes where OBJECT_SCHEMA is empty,
     # so I want to split OBJECT_NAME and correct it if necessary
     if column_key == "OBJECT_SCHEMA" and not value and lock["OBJECT_NAME"] and "/" in lock["OBJECT_NAME"]:
@@ -92,18 +141,17 @@ def format_value(lock: dict, column_key: str, value: str) -> str:
             formatted_value = f"[green]{value}[/green]"
         elif value == "PENDING":
             formatted_value = f"[red]{value}[/red]"
-        else:
-            formatted_value = value
     elif column_key == "LOCK_TYPE":
         if value == "EXCLUSIVE":
             formatted_value = f"[yellow]{value}[/yellow]"
-        else:
-            formatted_value = value
     elif column_key == "PROCESSLIST_TIME":
         formatted_value = format_time(value)
-    elif column_key == "SOURCE":
+    elif column_key == "CODE_SOURCE":
         formatted_value = value.split(":")[0]
-    else:
-        formatted_value = value
+    elif column_key == "THREAD_SOURCE":
+        formatted_value = value.split("/")[-1]
+
+        if formatted_value == "one_connection":
+            formatted_value = "user_connection"
 
     return formatted_value

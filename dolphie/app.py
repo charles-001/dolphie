@@ -191,8 +191,7 @@ class DolphieApp(App):
             if dolphie.is_mysql_version_at_least("5.7"):
                 # Always run this so we can save the data for graphing
                 if dolphie.panels.metadata_locks.visible:
-                    dolphie.main_db_connection.execute(MySQLQueries.metadata_locks)
-                    dolphie.metadata_locks = dolphie.main_db_connection.fetchall()
+                    dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
 
                 # This can cause MySQL to crash: https://bugs.mysql.com/bug.php?id=112035
                 # if dolphie.panels.innodb_trx_locks.visible or dolphie.historical_trx_locks:
@@ -619,8 +618,8 @@ class DolphieApp(App):
         #     self.toggle_panel(dolphie.panels.innodb_trx_locks.name)
         #     self.tab_manager.active_tab.innodb_trx_locks_datatable.clear()
         elif key == "5":
-            if not dolphie.is_mysql_version_at_least("5.7"):
-                self.notify("Metadata Locks panel requires MySQL 5.7+")
+            if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
+                self.notify("Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled")
                 return
 
             query = (
@@ -630,7 +629,8 @@ class DolphieApp(App):
             row = dolphie.secondary_db_connection.fetchone()
             if row and row.get("enabled") == "NO":
                 self.notify(
-                    "Metadata Locks panel requires Performance Schema to have 'wait/lock/metadata/sql/mdl' enabled"
+                    "Metadata Locks panel requires Performance Schema to have"
+                    " [highlight]wait/lock/metadata/sql/mdl[/highlight] enabled"
                 )
                 return
 
@@ -638,8 +638,8 @@ class DolphieApp(App):
             self.tab_manager.active_tab.metadata_locks_datatable.clear()
             tab.metadata_locks_title.update("Metadata Locks ([highlight]0[/highlight])")
         elif key == "6":
-            if not dolphie.is_mysql_version_at_least("5.7"):
-                self.notify("DDL panel requires MySQL 5.7+")
+            if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
+                self.notify("DDL panel requires MySQL 5.7+ with Performance Schema enabled")
                 return
 
             query = "SELECT enabled FROM performance_schema.setup_instruments WHERE name LIKE 'stage/innodb/alter%';"

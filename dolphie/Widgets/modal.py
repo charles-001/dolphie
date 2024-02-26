@@ -215,10 +215,7 @@ class CommandModal(ModalScreen):
                             None,
                         )
 
-                    if not value:
-                        self.update_error_response(f"{filter_label} [b red]{modal_input}[/b red] does not exist")
-                    else:
-                        self.dismiss([filter_label, modal_input])
+                    self.dismiss([filter_label, modal_input])
             else:
                 self.update_error_response("Please select a filter option")
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
