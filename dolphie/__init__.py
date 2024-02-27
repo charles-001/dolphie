@@ -29,7 +29,6 @@ class Dolphie:
         self.port = config.port
         self.socket = config.socket
         self.ssl = config.ssl
-        self.config_file = config.config_file
         self.host_cache_file = config.host_cache_file
         self.host_setup_file = config.host_setup_file
         self.refresh_interval = config.refresh_interval

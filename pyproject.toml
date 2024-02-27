@@ -1,17 +1,17 @@
 [tool.poetry]
 name = "dolphie"
-version = "4.3.0"
+version = "4.3.1"
 license = "GPL-3.0-or-later"
-description = "An intuitive feature-rich terminal tool for monitoring MySQL in real-time"
+description = "Echolocate your MySQL health with real-time monitoring in the terminal"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-rich = "^13.6.0"
+rich = "^13.7.0"
 pymysql = "^1.1.0"
 myloginpath = "^0.0.4"
-packaging = "^23.1"
+packaging = "^23.2"
 requests = "^2.31.0"
 sqlparse = "^0.4.4"
 textual = "^0.52.1"

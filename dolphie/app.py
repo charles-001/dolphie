@@ -189,9 +189,11 @@ class DolphieApp(App):
                 dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
             if dolphie.is_mysql_version_at_least("5.7"):
-                # Always run this so we can save the data for graphing
                 if dolphie.panels.metadata_locks.visible:
                     dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
+                else:
+                    # Reset this data so the graph doesn't show old data
+                    dolphie.metadata_locks = {}
 
                 # This can cause MySQL to crash: https://bugs.mysql.com/bug.php?id=112035
                 # if dolphie.panels.innodb_trx_locks.visible or dolphie.historical_trx_locks:

@@ -31,7 +31,7 @@ class Graph(Static):
         plt.date_form("d/m/y H:M:S")
         plt.canvas_color((10, 14, 27))
         plt.axes_color((10, 14, 27))
-        plt.ticks_color((144, 169, 223))
+        plt.ticks_color((133, 159, 213))
 
         plt.plotsize(self.size.width, self.size.height)
 
@@ -351,7 +351,7 @@ class LocksMetrics:
     metadata_lock_count: MetricData
     graphs: List[str]
     tab_name: str = "locks"
-    metric_source: MetricSource = MetricSource.global_status
+    metric_source: MetricSource = MetricSource.none
     datetimes: List[str] = field(default_factory=list)
 
 
@@ -446,9 +446,7 @@ class MetricManager:
             ),
             threads=ThreadMetrics(
                 graphs=["graph_threads"],
-                Threads_connected=MetricData(
-                    label="Connected", color=MetricColor.green, visible=False, per_second_calculation=False
-                ),
+                Threads_connected=MetricData(label="Connected", color=MetricColor.green, per_second_calculation=False),
                 Threads_running=MetricData(label="Running", color=MetricColor.blue, per_second_calculation=False),
             ),
             temporary_objects=TemporaryObjectMetrics(

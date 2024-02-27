@@ -19,7 +19,7 @@ class Config:
     app_version: str
     user: str = None
     password: str = None
-    host: str = None
+    host: str = "localhost"
     port: int = 3306
     socket: str = None
     ssl: Dict = field(default_factory=dict)
@@ -27,7 +27,7 @@ class Config:
     ssl_ca: str = None
     ssl_cert: str = None
     ssl_key: str = None
-    config_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/.dolphie")
+    config_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/.dolphie.cnf")
     mycnf_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/.my.cnf")
     login_path: str = "client"
     host_cache_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_host_cache")
@@ -49,7 +49,7 @@ class ArgumentParser:
     def __init__(self, app_version: str):
         self.config_options = {}
         for variable in fields(Config):
-            # Exclude these options since they are manually configured
+            # Exclude these options since we handle them differently
             if variable.name not in [
                 "app_version",
                 "config_file",
@@ -63,6 +63,13 @@ class ArgumentParser:
             [f"({data_type.__name__}) {option}" for option, data_type in self.config_options.items()]
         )
         epilog = f"""
+Order of precedence for methods that pass options to Dolphie:
+\t1. Command-line
+\t2. Environment variables
+\t3. Dolphie's config (set by --config-file)
+\t4. ~/.mylogin.cnf (mysql_config_editor)
+\t5. ~/.my.cnf (set by --mycnf-file)
+
 MySQL my.cnf file supports these options under [client] section:
 \thost
 \tuser
@@ -88,7 +95,7 @@ Environment variables support these options:
 \tDOLPHIE_PORT
 \tDOLPHIE_SOCKET
 
-Dolphie config file supports these options under [dolphie] section:
+Dolphie's config supports these options under [dolphie] section:
 \t{self.formatted_options}
 """
         self.parser = argparse.ArgumentParser(
@@ -99,11 +106,15 @@ Dolphie config file supports these options under [dolphie] section:
         )
         self.config = Config(app_version)
         self.panels = Panels()
+
         self.console = Console(style="indian_red", highlight=False)
-        theme = Theme({
-            "red2": "b #fb9a9a",
-        })
-        self.console.push_theme(theme)
+        self.console.push_theme(
+            Theme(
+                {
+                    "red2": "b #fb9a9a",
+                }
+            )
+        )
 
         self._add_options()
         self._parse()
@@ -135,7 +146,7 @@ Dolphie config file supports these options under [dolphie] section:
             "--port",
             dest="port",
             type=int,
-            help="Port for MySQL (Socket has precendence)",
+            help="Port for MySQL (socket has precendence)",
             metavar="",
         )
         self.parser.add_argument(
@@ -150,7 +161,10 @@ Dolphie config file supports these options under [dolphie] section:
             "--config-file",
             dest="config_file",
             type=str,
-            help=f"Dolphie's config file to use [default: {self.config.config_file}]",
+            help=(
+                f"Dolphie's config file to use. Options are read from these files in the given order: "
+                f"/etc/dolphie.cnf, {self.config.config_file}"
+            ),
             metavar="",
         )
         self.parser.add_argument(
@@ -158,8 +172,8 @@ Dolphie config file supports these options under [dolphie] section:
             dest="mycnf_file",
             type=str,
             help=(
-                "MySQL config file path to use. This should use [client] section. "
-                f"See below for options support [default: {self.config.mycnf_file}]"
+                "MySQL config file path to use. This should use [client] section "
+                f"[default: {self.config.mycnf_file}]"
             ),
             metavar="",
         )
@@ -192,7 +206,7 @@ Dolphie config file supports these options under [dolphie] section:
             type=str,
             help=(
                 "Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login"
-                f" credentials. Supercedes config file [default: {self.config.login_path}]"
+                f" credentials [default: {self.config.login_path}]"
             ),
             metavar="",
         )
@@ -229,21 +243,21 @@ Dolphie config file supports these options under [dolphie] section:
             "--ssl-ca",
             dest="ssl_ca",
             type=str,
-            help="Path to the file that contains a PEM-formatted CA certificate",
+            help="Path to the file that contains a CA (certificate authority)",
             metavar="",
         )
         self.parser.add_argument(
             "--ssl-cert",
             dest="ssl_cert",
             type=str,
-            help="Path to the file that contains a PEM-formatted client certificate",
+            help="Path to the file that contains a certificate",
             metavar="",
         )
         self.parser.add_argument(
             "--ssl-key",
             dest="ssl_key",
             type=str,
-            help="Path to the file that contains a PEM-formatted private key for the client certificate",
+            help="Path to the file that contains a private key for the certificate",
             metavar="",
         )
         self.parser.add_argument(
@@ -252,7 +266,7 @@ Dolphie config file supports these options under [dolphie] section:
             type=str,
             help=(
                 "What panels to display on startup separated by a comma. Supports:"
-                f" {'/'.join(self.panels.all())} [default: {self.config.startup_panels}]"
+                f" {','.join(self.panels.all())} [default: {self.config.startup_panels}]"
             ),
             metavar="",
         )
@@ -325,31 +339,62 @@ Dolphie config file supports these options under [dolphie] section:
         options = vars(self.parser.parse_args())  # Convert object to dictionary
 
         command_line_login_options_used = {option: options[option] for option in login_options if options[option]}
-
-        if options["config_file"]:
-            self.config.config_file = options["config_file"]
-
         dolphie_config_login_options_used = {}
-        if os.path.isfile(self.config.config_file):
-            cfg = ConfigParser()
-            cfg.read(self.config.config_file)
+        hostgroups = {}
 
-            # Loop through all of available options
-            for option, data_type in self.config_options.items():
-                # If the option is in the config file
-                if cfg.has_option("dolphie", option):
-                    # Check if the value is of the correct data type
-                    value = self.verify_config_value(option, cfg.get("dolphie", option), data_type)
+        config_files = ["/etc/dolphie.cnf", self.config.config_file]
+        if options["config_file"]:
+            config_files = [options["config_file"]]
 
-                    # Set the option to the value from the config file
-                    setattr(self.config, option, value)
-                    # print("dolphie config - Setting", option, "to", value)
+        # Loop through config files to find the supplied options
+        for config_file in config_files:
+            if os.path.isfile(config_file):
+                cfg = ConfigParser()
+                cfg.read(config_file)
 
-                    # Save the login option to be used later
-                    if option in login_options:
-                        dolphie_config_login_options_used[option] = value
+                # Loop through all of available options
+                for option, data_type in self.config_options.items():
+                    # If the option is in the config file
+                    if cfg.has_option("dolphie", option):
+                        # Check if the value is of the correct data type
+                        value = self.verify_config_value(option, cfg.get("dolphie", option), data_type)
 
-        # If the options are not set from Dolphie config, set them to what command-line is or default
+                        # Set the option to the value from the config file
+                        setattr(self.config, option, value)
+                        # print(f"dolphie config {config_file} - Setting", option, "to", value)
+
+                        # Save the login option to be used later
+                        if option in login_options:
+                            dolphie_config_login_options_used[option] = value
+
+                # Save all hostgroups found to the config object
+                for hostgroup in cfg.sections():
+                    hosts = []
+                    if hostgroup == "dolphie":
+                        continue
+
+                    for key in cfg.options(hostgroup):
+                        host = cfg.get(hostgroup, key).strip()
+                        if host:
+                            hosts.append(host)
+                        else:
+                            self.exit(
+                                f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] has an empty host"
+                                f" for key [red2]{key}[/red2]"
+                            )
+
+                    if not hosts:
+                        self.exit(
+                            f"Hostgroup [red2]{hostgroup}[/red2] cannot be loaded because"
+                            f" it doesn't have any hosts listed under its section in Dolphie's config"
+                        )
+
+                    hostgroups[hostgroup] = hosts
+
+        # Save the hostgroups found to the config object
+        self.config.hostgroup_hosts = hostgroups
+
+        # If the options are not set from Dolphie configs, set them to what command-line is or default
         for option in self.config_options.keys():
             value = getattr(self.config, option)
 
@@ -358,12 +403,11 @@ Dolphie config file supports these options under [dolphie] section:
                 setattr(self.config, option, options[option])
                 # print("command line - Setting", option, "to", options[option])
 
-            # If the option is still not set, set it to the default from dataclass
+            # If the option is not set, set it to the default from dataclass or command-line arguments
             if not options[option]:
-                options[option] = getattr(self.config, option)
+                options[option] = value
 
         # Use MySQL's my.cnf file for login options if specified
-        self.config.mycnf_file = options.get("mycnf_file")
         if os.path.isfile(self.config.mycnf_file):
             cfg = ConfigParser()
             cfg.read(self.config.mycnf_file)
@@ -376,9 +420,9 @@ Dolphie config file supports these options under [dolphie] section:
             self.parse_ssl_options(cfg)
 
         # Use login path for login options if specified
-        if options["login_path"]:
+        if self.config.login_path:
             try:
-                login_path_data = myloginpath.parse(options["login_path"])
+                login_path_data = myloginpath.parse(self.config.login_path)
 
                 for option in login_options:
                     if option in login_path_data:
@@ -386,7 +430,7 @@ Dolphie config file supports these options under [dolphie] section:
                         # print("login path - Setting", option, "to", login_path_data[option])
             except Exception as e:
                 # Don't error out for default login path
-                if options["login_path"] != "client":
+                if self.config.login_path != "client":
                     self.exit(f"Problem reading login path file: {e}")
 
         # Update config object with Dolphie config for all options at this point
@@ -421,13 +465,17 @@ Dolphie config file supports these options under [dolphie] section:
             except Exception as e:
                 self.exit(f"Invalid URI: {e} (see --help for more information)")
 
-        if not self.config.host:
-            self.config.host = "localhost"
+        # Sanity check for hostgroup
+        if self.config.hostgroup:
+            if self.config.hostgroup not in hostgroups:
+                self.exit(
+                    f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because"
+                    f" it wasn't found in Dolphie's config"
+                )
 
-        if options["heartbeat_table"]:
-            pattern_match = re.search(r"^(\w+\.\w+)$", options["heartbeat_table"])
+        if self.config.heartbeat_table:
+            pattern_match = re.search(r"^(\w+\.\w+)$", self.config.heartbeat_table)
             if pattern_match:
-                self.config.heartbeat_table = options["heartbeat_table"]
                 MySQLQueries.heartbeat_replica_lag = MySQLQueries.heartbeat_replica_lag.replace(
                     "$1", self.config.heartbeat_table
                 )
@@ -436,53 +484,10 @@ Dolphie config file supports these options under [dolphie] section:
 
         self.parse_ssl_options(options)
 
-        self.config.host_cache_file = options.get("host_cache_file")
-        self.config.host_setup_file = options.get("host_setup_file")
-
-        self.config.show_trxs_only = options["show_trxs_only"]
-        self.config.show_additional_query_columns = options["show_additional_query_columns"]
-
-        self.config.pypi_repository = options["pypi_repository"]
-        # self.config.historical_trx_locks = options["historical_trx_locks"]
-
-        # Save all hostgroups found to the config object so we can use it in the app
-        self.config.hostgroup = options["hostgroup"]
-        if os.path.isfile(self.config.config_file):
-            cfg = ConfigParser()
-            cfg.read(self.config.config_file)
-
-            hostgroups = {}
-            for hostgroup in cfg.sections():
-                hosts = []
-                if hostgroup == "dolphie":
-                    continue
-
-                for key in cfg.options(hostgroup):
-                    host = cfg.get(hostgroup, key).strip()
-                    if host:
-                        hosts.append(host)
-                    else:
-                        self.exit(f"Hostgroup [red2]{hostgroup}[/red2] has an empty host for key [red2]{key}[/red2]")
-
-                hostgroups[hostgroup] = hosts
-
-            if self.config.hostgroup and self.config.hostgroup not in hostgroups:
-                self.exit(f"Hostgroup [red2]{options['hostgroup']}[/red2] was not found in Dolphie's config file")
-
-            self.config.hostgroup_hosts = hostgroups
-        else:
-            if self.config.hostgroup:
-                self.exit(
-                    f"Hostgroup [red2]{options['hostgroup']}[/red2] cannot be used because Dolphie's config file"
-                    f" doesn't exist at {self.config.config_file}"
-                )
-
-        self.config.startup_panels = options["startup_panels"].split(",")
+        self.config.startup_panels = self.config.startup_panels.split(",")
         for panel in self.config.startup_panels:
             if panel not in self.panels.all():
                 self.exit(f"Panel [red2]{panel}[/red2] is not valid (see --help for more information)")
-
-        self.config.graph_marker = options["graph_marker"]
 
         if os.path.exists(self.config.host_setup_file):
             with open(self.config.host_setup_file, "r") as file:
