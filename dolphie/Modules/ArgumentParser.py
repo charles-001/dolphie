@@ -342,11 +342,11 @@ Dolphie's config supports these options under [dolphie] section:
         dolphie_config_login_options_used = {}
         hostgroups = {}
 
-        if options["config_file"]:
-            self.config.config_file = options["config_file"]
-
-        # Loop through all of the config files to find the options with config.config_file taking precedence
         config_files = ["/etc/dolphie.cnf", self.config.config_file]
+        if options["config_file"]:
+            config_files = [options["config_file"]]
+
+        # Loop through config files to find the supplied options
         for config_file in config_files:
             if os.path.isfile(config_file):
                 cfg = ConfigParser()
