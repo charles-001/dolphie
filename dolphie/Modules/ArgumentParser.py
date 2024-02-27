@@ -63,12 +63,12 @@ class ArgumentParser:
             [f"({data_type.__name__}) {option}" for option, data_type in self.config_options.items()]
         )
         epilog = f"""
-Order of precedence for variables passed to Dolphie:
+Order of precedence for methods that pass options to Dolphie:
 \t1. Command-line
 \t2. Environment variables
-\t3. Dolphie's config files
+\t3. Dolphie's config (set by --config-file)
 \t4. ~/.mylogin.cnf (mysql_config_editor)
-\t5. ~/.my.cnf
+\t5. ~/.my.cnf (set by --mycnf-file)
 
 MySQL my.cnf file supports these options under [client] section:
 \thost
@@ -95,7 +95,7 @@ Environment variables support these options:
 \tDOLPHIE_PORT
 \tDOLPHIE_SOCKET
 
-Dolphie's config files support these options under [dolphie] section:
+Dolphie's config supports these options under [dolphie] section:
 \t{self.formatted_options}
 """
         self.parser = argparse.ArgumentParser(
@@ -459,11 +459,18 @@ Dolphie's config files support these options under [dolphie] section:
             except Exception as e:
                 self.exit(f"Invalid URI: {e} (see --help for more information)")
 
-        if self.config.hostgroup and self.config.hostgroup not in hostgroups:
-            self.exit(
-                f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because"
-                f" it wasn't found in Dolphie's config files"
-            )
+        # Sanity checks for hostgroup
+        if self.config.hostgroup:
+            if self.config.hostgroup not in hostgroups:
+                self.exit(
+                    f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because"
+                    f" it wasn't found in Dolphie's config"
+                )
+            elif not hostgroups[self.config.hostgroup]:
+                self.exit(
+                    f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because"
+                    f" it doesn't have any hosts listed under its section in Dolphie's config"
+                )
 
         if self.config.heartbeat_table:
             pattern_match = re.search(r"^(\w+\.\w+)$", self.config.heartbeat_table)

@@ -124,7 +124,7 @@ Environment variables support these options:
 	DOLPHIE_PORT
 	DOLPHIE_SOCKET
 
-Dolphie's config files support these options under [dolphie] section:
+Dolphie's config supports these options under [dolphie] section:
 	(str) user
 	(str) password
 	(str) host
@@ -196,12 +196,12 @@ Example:
 ```
 
 ## Things to note
-Order of precedence for variables passed to Dolphie:
+Order of precedence for methods that pass options to Dolphie:
 1. Command-line
 2. Environment variables
-3. Dolphie's config files
+3. Dolphie's config (set by `--config-file`)
 4. ~/.mylogin.cnf (`mysql_config_editor`)
-5. ~/.my.cnf
+5. ~/.my.cnf (set by `--mycnf-file`)
 
 ## Feedback
 I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please let me know! I'd love to hear from you :smiley:
