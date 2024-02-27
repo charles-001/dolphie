@@ -351,7 +351,7 @@ class LocksMetrics:
     metadata_lock_count: MetricData
     graphs: List[str]
     tab_name: str = "locks"
-    metric_source: MetricSource = MetricSource.global_status
+    metric_source: MetricSource = MetricSource.none
     datetimes: List[str] = field(default_factory=list)
 
 
@@ -446,9 +446,7 @@ class MetricManager:
             ),
             threads=ThreadMetrics(
                 graphs=["graph_threads"],
-                Threads_connected=MetricData(
-                    label="Connected", color=MetricColor.green, visible=False, per_second_calculation=False
-                ),
+                Threads_connected=MetricData(label="Connected", color=MetricColor.green, per_second_calculation=False),
                 Threads_running=MetricData(label="Running", color=MetricColor.blue, per_second_calculation=False),
             ),
             temporary_objects=TemporaryObjectMetrics(
