@@ -76,8 +76,8 @@ options:
   -h , --host           Hostname/IP address for MySQL
   -P , --port           Port for MySQL (Socket has precendence)
   -S , --socket         Socket file for MySQL
-  --config-file         Dolphie's config file to use [default: ~/.dolphie]
-  --mycnf-file          MySQL config file path to use. This should use [client] section. See below for options support [default: ~/.my.cnf]
+  --config-file         Dolphie's config file to use. Default options are read from these files in the given order: /etc/dolphie.cnf, ~/.dolphie.cnf
+  --mycnf-file          MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
   -f , --host-cache-file
                         Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format ip=hostname [default: ~/dolphie_host_cache]
   -q , --host-setup-file
@@ -88,10 +88,10 @@ options:
   -H , --heartbeat-table
                         If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW REPLICA STATUS
   --ssl-mode            Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
-  --ssl-ca              Path to the file that contains a PEM-formatted CA certificate
-  --ssl-cert            Path to the file that contains a PEM-formatted client certificate
-  --ssl-key             Path to the file that contains a PEM-formatted private key for the client certificate
-  --panels              What panels to display on startup separated by a comma. Supports: dashboard/processlist/graphs/replication/locks/ddl [default: dashboard,processlist]
+  --ssl-ca              Path to the file that contains a CA (certificate authority)
+  --ssl-cert            Path to the file that contains a certificate
+  --ssl-key             Path to the file that contains a private key for the certificate
+  --panels              What panels to display on startup separated by a comma. Supports: dashboard,processlist,graphs,replication,metadata_locks,ddl [default: dashboard,processlist]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
   --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
@@ -124,7 +124,7 @@ Environment variables support these options:
 	DOLPHIE_PORT
 	DOLPHIE_SOCKET
 
-Dolphie config file supports these options under [dolphie] section:
+Dolphie's config files support these options under [dolphie] section:
 	(str) user
 	(str) password
 	(str) host
@@ -146,7 +146,6 @@ Dolphie config file supports these options under [dolphie] section:
 	(str) hostgroup
 	(bool) show_trxs_only
 	(bool) show_additional_query_columns
-	(bool) historical_locks
 ```
 
 ## Supported MySQL versions
@@ -200,7 +199,7 @@ Example:
 Order of precedence for variables passed to Dolphie:
 1. Command-line
 2. Environment variables
-3. Dolphie's config file
+3. Dolphie's config files
 4. ~/.mylogin.cnf (`mysql_config_editor`)
 5. ~/.my.cnf
 

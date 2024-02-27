@@ -8,10 +8,10 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-rich = "^13.6.0"
+rich = "^13.7.0"
 pymysql = "^1.1.0"
 myloginpath = "^0.0.4"
-packaging = "^23.1"
+packaging = "^23.2"
 requests = "^2.31.0"
 sqlparse = "^0.4.4"
 textual = "^0.52.1"
