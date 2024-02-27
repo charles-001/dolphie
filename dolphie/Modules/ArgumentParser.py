@@ -146,7 +146,7 @@ Dolphie's config supports these options under [dolphie] section:
             "--port",
             dest="port",
             type=int,
-            help="Port for MySQL (Socket has precendence)",
+            help="Port for MySQL (socket has precendence)",
             metavar="",
         )
         self.parser.add_argument(
@@ -162,7 +162,7 @@ Dolphie's config supports these options under [dolphie] section:
             dest="config_file",
             type=str,
             help=(
-                f"Dolphie's config file to use. Default options are read from these files in the given order: "
+                f"Dolphie's config file to use. Options are read from these files in the given order: "
                 f"/etc/dolphie.cnf, {self.config.config_file}"
             ),
             metavar="",
@@ -383,6 +383,12 @@ Dolphie's config supports these options under [dolphie] section:
                                 f" for key [red2]{key}[/red2]"
                             )
 
+                    if not hosts:
+                        self.exit(
+                            f"Hostgroup [red2]{hostgroup}[/red2] cannot be loaded because"
+                            f" it doesn't have any hosts listed under its section in Dolphie's config"
+                        )
+
                     hostgroups[hostgroup] = hosts
 
         # Save the hostgroups found to the config object
@@ -459,17 +465,12 @@ Dolphie's config supports these options under [dolphie] section:
             except Exception as e:
                 self.exit(f"Invalid URI: {e} (see --help for more information)")
 
-        # Sanity checks for hostgroup
+        # Sanity check for hostgroup
         if self.config.hostgroup:
             if self.config.hostgroup not in hostgroups:
                 self.exit(
                     f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because"
                     f" it wasn't found in Dolphie's config"
-                )
-            elif not hostgroups[self.config.hostgroup]:
-                self.exit(
-                    f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because"
-                    f" it doesn't have any hosts listed under its section in Dolphie's config"
                 )
 
         if self.config.heartbeat_table:

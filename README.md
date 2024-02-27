@@ -76,7 +76,7 @@ options:
   -h , --host           Hostname/IP address for MySQL
   -P , --port           Port for MySQL (Socket has precendence)
   -S , --socket         Socket file for MySQL
-  --config-file         Dolphie's config file to use. Default options are read from these files in the given order: /etc/dolphie.cnf, ~/.dolphie.cnf
+  --config-file         Dolphie's config file to use. Options are read from these files in the given order: /etc/dolphie.cnf, ~/.dolphie.cnf
   --mycnf-file          MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
   -f , --host-cache-file
                         Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format ip=hostname [default: ~/dolphie_host_cache]
