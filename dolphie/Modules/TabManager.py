@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass
+from typing import List
 
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie import Dolphie
@@ -457,7 +458,7 @@ class TabManager:
         if id in self.tabs:
             return self.tabs[id]
 
-    def get_all_tabs(self) -> list[Tab]:
+    def get_all_tabs(self) -> List[Tab]:
         all_tabs = []
 
         for tab in self.tabs.values():

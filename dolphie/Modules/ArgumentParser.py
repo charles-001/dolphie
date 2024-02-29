@@ -385,7 +385,7 @@ Dolphie's config supports these options under [dolphie] section:
 
                     if not hosts:
                         self.exit(
-                            f"Hostgroup [red2]{hostgroup}[/red2] cannot be loaded because"
+                            f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] cannot be loaded because"
                             f" it doesn't have any hosts listed under its section in Dolphie's config"
                         )
 

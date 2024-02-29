@@ -17,6 +17,7 @@ def create_panel(tab: Tab) -> DataTable:
 
     columns = [
         {"name": "Process ID", "field": "id", "width": 11, "format_number": False},
+        {"name": "Protocol", "field": "protocol", "width": 8, "format_number": False},
         {"name": "Username", "field": "user", "width": 20, "format_number": False},
     ]
 

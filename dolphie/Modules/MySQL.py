@@ -31,9 +31,9 @@ class Database:
         self.ssl = ssl
         self.save_connection_id = save_connection_id
 
-        self.max_reconnect_attempts = 3
-        self.running_query = False
-        self.using_ssl = False
+        self.max_reconnect_attempts: int = 3
+        self.running_query: bool = False
+        self.using_ssl: str = None
 
         if auto_connect:
             self.connect()
@@ -58,7 +58,7 @@ class Database:
             if self.save_connection_id:
                 self.connection_id = self.fetch_value_from_field("SELECT CONNECTION_ID()")
 
-            # Check if SSL is being used
+            # Determine if SSL is being used
             self.using_ssl = "ON" if self.fetch_value_from_field("SHOW STATUS LIKE 'Ssl_cipher'", "Value") else "OFF"
 
         except pymysql.Error as e:

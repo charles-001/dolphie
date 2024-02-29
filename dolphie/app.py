@@ -1302,6 +1302,10 @@ class DolphieApp(App):
 
                 thread_id = additional_data
                 thread_data: ProcesslistThread = dolphie.processlist_threads_snapshot.get(thread_id)
+                if not thread_data:
+                    self.notify(f"Thread ID [highlight]{thread_id}[/highlight] was not found", severity="error")
+                    return
+
                 thread_table.add_row("[label]Thread ID", thread_id)
                 thread_table.add_row("[label]User", thread_data.user)
                 thread_table.add_row("[label]Host", thread_data.host)

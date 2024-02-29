@@ -95,6 +95,7 @@ class ProcesslistThread:
         self.db = thread_data.get("db", "")
         self.query = thread_data.get("query", "")
         self.time = int(thread_data.get("time", 0))
+        self.protocol = self._get_formatted_string(thread_data.get("connection_type", ""))
         self.formatted_query = self._get_formatted_query(thread_data.get("query", ""))
         self.formatted_time = self._get_formatted_time()
         self.command = self._get_formatted_command(thread_data.get("command", ""))
