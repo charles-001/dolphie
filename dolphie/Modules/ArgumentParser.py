@@ -10,7 +10,9 @@ from urllib.parse import urlparse
 import myloginpath
 from dolphie.DataTypes import Panels
 from dolphie.Modules.Queries import MySQLQueries
+from rich import box
 from rich.console import Console
+from rich.table import Table
 from rich.theme import Theme
 
 
@@ -108,7 +110,7 @@ Dolphie's config supports these options under [dolphie] section:
         self.config = Config(app_version)
         self.panels = Panels()
 
-        self.console = Console(style="indian_red", highlight=False)
+        self.console = Console(style="#e9e9e9", highlight=False)
         self.console.push_theme(
             Theme(
                 {
@@ -333,6 +335,12 @@ Dolphie's config supports these options under [dolphie] section:
         #     ),
         # )
         self.parser.add_argument(
+            "--debug-options",
+            dest="debug_options",
+            action="store_true",
+            help="Display options that are set and what they're set by (command-line, dolphie config, etc) then exit",
+        )
+        self.parser.add_argument(
             "-V",
             "--version",
             action="version",
@@ -340,14 +348,28 @@ Dolphie's config supports these options under [dolphie] section:
             help="Display version and exit",
         )
 
+    def set_config_value(self, source, option, value):
+        setattr(self.config, option, value)
+
+        if self.debug_options:
+            self.debug_options_table.add_row(source, option, str(value))
+
     def _parse(self):
         login_options = ["user", "password", "host", "port", "socket"]
 
         options = vars(self.parser.parse_args())  # Convert object to dictionary
 
-        command_line_login_options_used = {option: options[option] for option in login_options if options[option]}
         dolphie_config_login_options_used = {}
         hostgroups = {}
+
+        self.debug_options = False
+        if options["debug_options"]:
+            self.debug_options = True
+
+            self.debug_options_table = Table(box=box.SIMPLE_HEAVY, header_style="b", style="#333f62")
+            self.debug_options_table.add_column("Source")
+            self.debug_options_table.add_column("Option", style="#91abec")
+            self.debug_options_table.add_column("Value", style="#bbc8e8")
 
         config_files = ["/etc/dolphie.cnf", self.config.config_file]
         if options["config_file"]:
@@ -367,8 +389,7 @@ Dolphie's config supports these options under [dolphie] section:
                         value = self.verify_config_value(option, cfg.get("dolphie", option), data_type)
 
                         # Set the option to the value from the config file
-                        setattr(self.config, option, value)
-                        # print(f"dolphie config {config_file} - Setting", option, "to", value)
+                        self.set_config_value(f"dolphie config {config_file}", option, value)
 
                         # Save the login option to be used later
                         if option in login_options:
@@ -405,12 +426,11 @@ Dolphie's config supports these options under [dolphie] section:
         for option in self.config_options.keys():
             value = getattr(self.config, option)
 
-            # Override the option with command-line arguments
-            if options[option] and value != options[option]:
-                setattr(self.config, option, options[option])
-                # print("command line - Setting", option, "to", options[option])
+            # Override the option with command-line arguments if the option isn't for login
+            if option not in login_options and options[option] and value != options[option]:
+                self.set_config_value("command-line", option, options[option])
 
-            # If the option is not set, set it to the default from dataclass or command-line arguments
+            # If the option is not set, set it to the default from Config's dataclass
             if not options[option]:
                 options[option] = value
 
@@ -421,8 +441,7 @@ Dolphie's config supports these options under [dolphie] section:
 
             for option in login_options:
                 if cfg.has_option("client", option):
-                    setattr(self.config, option, cfg.get("client", option))
-                    # print("my.cnf - Setting", option, "to", cfg.get("client", option))
+                    self.set_config_value("my.cnf", option, cfg.get("client", option))
 
             self.parse_ssl_options(cfg)
 
@@ -433,29 +452,28 @@ Dolphie's config supports these options under [dolphie] section:
 
                 for option in login_options:
                     if option in login_path_data:
-                        setattr(self.config, option, login_path_data[option])
-                        # print("login path - Setting", option, "to", login_path_data[option])
+                        self.set_config_value("login path", option, login_path_data[option])
             except Exception as e:
                 # Don't error out for default login path
                 if self.config.login_path != "client":
                     self.exit(f"Problem reading login path file: {e}")
 
-        # Update config object with Dolphie config for all options at this point
-        for option, value in dolphie_config_login_options_used.items():
-            setattr(self.config, option, value)
-            # print("dolphie config - Setting", option, "to", value)
-
+        # Update login options based on precedence
         for option in login_options:
-            # Use environment variables if specified
-            environment_var = "DOLPHIE_%s" % option.upper()
-            if environment_var in os.environ and os.environ[environment_var]:
-                setattr(self.config, option, os.environ[environment_var])
-                # print("environment - Setting", option, "to", os.environ[environment_var])
+            # Update config object with Dolphie config
+            dolphie_value = dolphie_config_login_options_used.get(option)
+            if dolphie_value is not None:
+                self.set_config_value("dolphie config", option, dolphie_value)
 
-        # Override login options with command-line arguments that we saved earlier
-        for option, value in command_line_login_options_used.items():
-            setattr(self.config, option, value)
-            # print("command line - Setting", option, "to", value)
+            # Use environment variables if specified
+            environment_var = f"DOLPHIE_{option.upper()}"
+            env_value = os.environ.get(environment_var)
+            if env_value is not None:
+                self.set_config_value("environment", option, env_value)
+
+            # Use command-line arguments if specified
+            if options.get(option):
+                self.set_config_value("command-line", option, options[option])
 
         # Lastly, parse URI if specified
         if options["uri"]:
@@ -499,6 +517,11 @@ Dolphie's config supports these options under [dolphie] section:
         if os.path.exists(self.config.host_setup_file):
             with open(self.config.host_setup_file, "r") as file:
                 self.config.host_setup_available_hosts = [line.strip() for line in file]
+
+        if self.debug_options:
+            self.console.print(self.debug_options_table)
+            self.console.print("[#969aad]Note: Options are set by their source in the order they appear")
+            sys.exit()
 
     def parse_ssl_options(self, data):
         if isinstance(data, ConfigParser):
@@ -559,5 +582,5 @@ Dolphie's config supports these options under [dolphie] section:
             return value
 
     def exit(self, message):
-        self.console.print(message)
+        self.console.print(f"[indian_red]{message}[/indian_red]")
         sys.exit()

@@ -98,6 +98,7 @@ options:
   --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
   --show-trxs-only      Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
+  --debug-options       Display options that are set and what they're set by (command-line, dolphie config, etc) then exit
   -V, --version         Display version and exit
 
 MySQL my.cnf file supports these options under [client] section:
@@ -126,6 +127,7 @@ Environment variables support these options:
 	DOLPHIE_SOCKET
 
 Dolphie's config supports these options under [dolphie] section:
+	(bool) host_setup
 	(str) user
 	(str) password
 	(str) host
