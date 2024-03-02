@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dolphie"
-version = "4.3.2"
+version = "4.3.3"
 license = "GPL-3.0-or-later"
 description = "Echolocate your MySQL health with real-time monitoring in the terminal"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]

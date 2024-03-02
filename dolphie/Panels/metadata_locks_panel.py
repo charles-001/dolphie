@@ -45,10 +45,13 @@ def create_panel(tab: Tab) -> DataTable:
                 column_key == "OBJECT_NAME"
                 and column_value
                 and len(column_value) > column_data["width"]
-                and "\n" in column_value
+                and "," in column_value
             ):
-                row_height = column_value.count("\n") + 1
-                thread_value = column_value
+                # Truncate the object names to the width of the column
+                object_names = [object_name[: column_data["width"]] for object_name in column_value.split(",")]
+                thread_value = "\n".join(object_names)
+
+                row_height = len(object_names)
             else:
                 thread_value = format_value(lock, column_key, column_value)
 

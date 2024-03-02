@@ -258,6 +258,7 @@ class HostSetupModal(ModalScreen):
             self.query_one("#username", Input).disabled = True
             self.query_one("#password", Input).disabled = True
             self.query_one("#socket_file", Input).disabled = True
+            self.query_one("#ssl", Checkbox).value = False
             self.query_one("#ssl", Checkbox).disabled = True
             self.query_one("#show_password", Button).disabled = True
 
