@@ -71,6 +71,7 @@ positional arguments:
 
 options:
   --help                show this help message and exit
+  --host-setup          Start Dolphie by showing the Host Setup modal instead of automatically connecting
   -u , --user           Username for MySQL
   -p , --password       Password for MySQL
   -h , --host           Hostname/IP address for MySQL

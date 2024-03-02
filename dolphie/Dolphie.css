@@ -30,6 +30,12 @@ Rule {
 DataTable {
     overflow-x: hidden;
 }
+DataTable > .datatable--odd-row {
+    background: #131a2c;
+}
+DataTable > .datatable--even-row {
+    background: #0f1525;
+}
 LoadingIndicator {
     color: #8fb0ee;
     height: auto;
@@ -401,17 +407,25 @@ RadioSet > RadioButton.-selected > .toggle--label {
 
 
 Checkbox {
-    background: #121626;
+    background: #131626;
     border: none;
-    padding-top: 1;
-    content-align: center middle;
-    width: 100%;
+    padding-left: 2;
+    padding-bottom: 1;
+    content-align: left middle;
 }
 Checkbox .toggle--button {
     background: #343d56;
 }
+RadioSet:focus > .toggle--label {
+    text-style: underline;
+}
 ToggleButton:focus > .toggle--label {
     text-style: underline;
+    color: #a5b8e7;
+}
+ToggleButton:hover > .toggle--label {
+    text-style: underline;
+    color: #a5b8e7;
 }
 ToggleButton.-on > .toggle--button {
     color: #62c39a;

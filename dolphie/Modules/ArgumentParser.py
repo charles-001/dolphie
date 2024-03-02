@@ -17,6 +17,7 @@ from rich.theme import Theme
 @dataclass
 class Config:
     app_version: str
+    host_setup: bool = False
     user: str = None
     password: str = None
     host: str = "localhost"
@@ -131,6 +132,12 @@ Dolphie's config supports these options under [dolphie] section:
             ),
         )
 
+        self.parser.add_argument(
+            "--host-setup",
+            dest="host_setup",
+            action="store_true",
+            help="Start Dolphie by showing the Host Setup modal instead of automatically connecting",
+        )
         self.parser.add_argument("-u", "--user", dest="user", type=str, help="Username for MySQL", metavar="")
         self.parser.add_argument("-p", "--password", dest="password", type=str, help="Password for MySQL", metavar="")
         self.parser.add_argument(
@@ -509,20 +516,28 @@ Dolphie's config supports these options under [dolphie] section:
             ssl_mode = ssl_mode.upper()
 
             if ssl_mode == "REQUIRED":
-                self.config.ssl[""] = True
+                self.config.ssl["required"] = True
             elif ssl_mode == "VERIFY_CA":
+                if not ssl_ca:
+                    self.exit("SSL mode [red2]VERIFY_CA[/red2] requires a CA file (--ssl-ca) to be specified")
+
                 self.config.ssl["check_hostname"] = False
+                self.config.ssl["verify_mode"] = True
             elif ssl_mode == "VERIFY_IDENTITY":
+                if not ssl_ca:
+                    self.exit("SSL mode [red2]VERIFY_IDENTITY[/red2] requires a CA file (--ssl-ca) to be specified")
+
                 self.config.ssl["check_hostname"] = True
+                self.config.ssl["verify_mode"] = True
             else:
                 self.exit(f"Unsupported SSL mode [red2]{ssl_mode}[/red2]")
 
-        if ssl_ca:
-            self.config.ssl["ca"] = ssl_ca
-        if ssl_cert:
-            self.config.ssl["cert"] = ssl_cert
-        if ssl_key:
-            self.config.ssl["key"] = ssl_key
+            if ssl_ca:
+                self.config.ssl["ca"] = ssl_ca
+            if ssl_cert:
+                self.config.ssl["cert"] = ssl_cert
+            if ssl_key:
+                self.config.ssl["key"] = ssl_key
 
     def verify_config_value(self, option, value, data_type):
         if data_type == bool:

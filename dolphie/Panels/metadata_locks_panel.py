@@ -34,11 +34,20 @@ def create_panel(tab: Tab) -> DataTable:
     for lock in dolphie.metadata_locks:
         lock_id = str(lock["id"])
         row_values = []
+        row_height = 1
 
         for column_id, (column_key, column_data) in enumerate(columns.items()):
             column_name = column_data["name"]
+            column_value = lock[column_key]
 
-            thread_value = format_value(lock, column_key, lock[column_key])
+            # Get height of row based on the how many objects are in the OBJECT_NAME field
+            if column_key == "OBJECT_NAME" and column_value:
+                if len(column_value) > column_data["width"] and "\n" in column_value:
+                    row_height = column_value.count("\n") + 1
+                thread_value = column_value
+            else:
+                thread_value = format_value(lock, column_key, column_value)
+
             if lock_id in metadata_locks_datatable.rows:
                 datatable_value = metadata_locks_datatable.get_row(lock_id)[column_id]
 
@@ -64,7 +73,7 @@ def create_panel(tab: Tab) -> DataTable:
 
         # Add a new row to the datatable
         if row_values:
-            metadata_locks_datatable.add_row(*row_values, key=lock_id)
+            metadata_locks_datatable.add_row(*row_values, key=lock_id, height=row_height)
 
     # Find the ids that exist in datatable but not in metadata_locks
     if dolphie.metadata_locks:

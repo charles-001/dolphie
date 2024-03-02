@@ -405,9 +405,13 @@ class DolphieApp(App):
         if self.config.hostgroup:
             self.connect_as_hostgroup(self.config.hostgroup)
         else:
-            await self.tab_manager.create_tab(tab_name="Initial Tab")
-            self.run_worker_main(self.tab_manager.active_tab.id)
-            self.run_worker_replicas(self.tab_manager.active_tab.id)
+            tab = await self.tab_manager.create_tab(tab_name="Initial Tab")
+
+            if self.config.host_setup:
+                self.tab_manager.setup_host_tab(tab)
+            else:
+                self.run_worker_main(self.tab_manager.active_tab.id)
+                self.run_worker_replicas(self.tab_manager.active_tab.id)
 
         self.check_for_new_version()
 

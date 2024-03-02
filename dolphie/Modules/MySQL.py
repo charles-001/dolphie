@@ -1,4 +1,5 @@
 import time
+from ssl import SSLError
 
 import pymysql
 from dolphie.Modules.ManualException import ManualException
@@ -65,6 +66,8 @@ class Database:
             raise ManualException(e.args[1])
         except FileNotFoundError:  # Catch SSL file path errors
             raise ManualException("SSL certificate file path isn't valid!")
+        except SSLError as e:
+            raise ManualException(f"SSL error: {e}")
 
     def close(self):
         if self.is_connected():

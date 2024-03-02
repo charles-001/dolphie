@@ -240,7 +240,7 @@ class TabManager:
                     # ),
                     Container(
                         Label(id=f"metadata_locks_title_{tab_id}"),
-                        DataTable(id=f"metadata_locks_datatable_{tab_id}", show_cursor=False),
+                        DataTable(id=f"metadata_locks_datatable_{tab_id}", show_cursor=False, zebra_stripes=True),
                         id=f"panel_metadata_locks_{tab_id}",
                         classes="metadata_locks",
                     ),
@@ -500,6 +500,10 @@ class TabManager:
         dolphie = tab.dolphie
 
         async def command_get_input(data):
+            # Set host_setup to false since it's only used when Dolphie first loads
+            if self.config.host_setup:
+                self.config.host_setup = False
+
             host_port = data["host"].split(":")
 
             dolphie.host = host_port[0]
@@ -507,6 +511,8 @@ class TabManager:
             dolphie.user = data.get("username")
             dolphie.password = data.get("password")
             hostgroup = data.get("hostgroup")
+            dolphie.socket = data.get("socket_file")
+            dolphie.ssl = data.get("ssl")
 
             if hostgroup:
                 dolphie.app.connect_as_hostgroup(hostgroup)
@@ -528,7 +534,11 @@ class TabManager:
 
         # If we're here because of a worker cancel error or manually disconnected,
         # we want to pre-populate the host/port
-        if tab.worker_cancel_error or dolphie.connection_status == ConnectionStatus.disconnected:
+        if (
+            tab.worker_cancel_error
+            or dolphie.connection_status == ConnectionStatus.disconnected
+            or self.config.host_setup
+        ):
             host = dolphie.host
             port = dolphie.port
         else:
@@ -541,6 +551,8 @@ class TabManager:
                 port=port,
                 username=dolphie.user,
                 password=dolphie.password,
+                ssl=dolphie.ssl,
+                socket_file=dolphie.socket,
                 hostgroups=dolphie.hostgroup_hosts.keys(),
                 available_hosts=dolphie.host_setup_available_hosts,
                 error_message=tab.worker_cancel_error,
