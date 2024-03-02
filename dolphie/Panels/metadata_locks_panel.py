@@ -41,9 +41,13 @@ def create_panel(tab: Tab) -> DataTable:
             column_value = lock[column_key]
 
             # Get height of row based on the how many objects are in the OBJECT_NAME field
-            if column_key == "OBJECT_NAME" and column_value:
-                if len(column_value) > column_data["width"] and "\n" in column_value:
-                    row_height = column_value.count("\n") + 1
+            if (
+                column_key == "OBJECT_NAME"
+                and column_value
+                and len(column_value) > column_data["width"]
+                and "\n" in column_value
+            ):
+                row_height = column_value.count("\n") + 1
                 thread_value = column_value
             else:
                 thread_value = format_value(lock, column_key, column_value)
