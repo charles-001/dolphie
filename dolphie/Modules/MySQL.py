@@ -61,10 +61,11 @@ class Database:
 
             # Determine if SSL is being used
             self.using_ssl = "ON" if self.fetch_value_from_field("SHOW STATUS LIKE 'Ssl_cipher'", "Value") else "OFF"
-        except pymysql.OperationalError as e:
-            raise ManualException(e)
         except pymysql.Error as e:
-            raise ManualException(e.args[1])
+            if len(e.args) == 1:
+                raise ManualException(e)
+            else:
+                raise ManualException(e.args[1])
         except FileNotFoundError:  # Catch SSL file path errors
             raise ManualException("SSL certificate file path isn't valid!")
         except SSLError as e:
