@@ -1178,6 +1178,8 @@ class DolphieApp(App):
                 try:
                     if dolphie.aws_rds:
                         dolphie.secondary_db_connection.execute("CALL mysql.rds_kill(%s)" % thread_id)
+                    elif dolphie.azure:
+                        dolphie.secondary_db_connection.execute("CALL mysql.az_kill(%s)" % thread_id)
                     else:
                         dolphie.secondary_db_connection.execute("KILL %s" % thread_id)
 
@@ -1188,7 +1190,13 @@ class DolphieApp(App):
             if key == "K":
 
                 def execute_kill(thread_id):
-                    query = "CALL mysql.rds_kill(%s)" if dolphie.aws_rds else "KILL %s"
+                    if dolphie.aws_rds:
+                        query = "CALL mysql.rds_kill(%s)"
+                    elif dolphie.azure:
+                        query = "CALL mysql.az_kill(%s)"
+                    else:
+                        query = "KILL %s"
+
                     dolphie.secondary_db_connection.execute(query % thread_id)
 
                 kill_type, kill_value, include_sleeping_queries, lower_limit, upper_limit = additional_data
