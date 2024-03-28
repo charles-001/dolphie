@@ -186,7 +186,7 @@ class Dolphie:
         # For RDS and Azure, we will use the host specified to connect with since hostname isn't related to the endpoint
         if self.aws_rds:
             self.mysql_host = f"{self.host.split('.rds.amazonaws.com')[0]}:{self.port}"
-        if self.azure:
+        elif self.azure:
             self.mysql_host = f"{self.host.split('.mysql.database.azure.com')[0]}:{self.port}"
         else:
             self.mysql_host = f"{global_variables.get('hostname')}:{self.port}"
