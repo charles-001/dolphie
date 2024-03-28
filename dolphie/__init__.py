@@ -112,6 +112,7 @@ class Dolphie:
         self.innodb_cluster_read_replica: bool = False
         self.replicaset: bool = False
         self.aws_rds: bool = False
+        self.azure: bool = False
         self.mariadb: bool = False
 
         # These are for group replication in replication panel
@@ -176,12 +177,17 @@ class Dolphie:
         elif "rdsdb" in basedir:
             self.host_distro = "Amazon RDS"
             self.aws_rds = True
+        elif global_variables.get("aad_auth_only"):
+            self.host_distro = "Azure MySQL"
+            self.azure = True
         else:
             self.host_distro = "MySQL"
 
-        # For RDS, we will use the host specified to connect with since hostname isn't related to the endpoint
+        # For RDS and Azure, we will use the host specified to connect with since hostname isn't related to the endpoint
         if self.aws_rds:
             self.mysql_host = f"{self.host.split('.rds.amazonaws.com')[0]}:{self.port}"
+        elif self.azure:
+            self.mysql_host = f"{self.host.split('.mysql.database.azure.com')[0]}:{self.port}"
         else:
             self.mysql_host = f"{global_variables.get('hostname')}:{self.port}"
 
@@ -268,7 +274,8 @@ class Dolphie:
         if self.is_mysql_version_at_least("8.0"):
             # If we're using MySQL 8, we need to fetch the checkpoint age from the performance schema if it's not
             # available in global status
-            if not self.global_status.get("Innodb_checkpoint_age"):
+            # On Azure MySQL there is no BACKUP_ADMIN privilege so we can't fetch the checkpoint age
+            if not self.global_status.get("Innodb_checkpoint_age") and not self.azure:
                 self.global_status["Innodb_checkpoint_age"] = self.main_db_connection.fetch_value_from_field(
                     MySQLQueries.checkpoint_age, "checkpoint_age"
                 )
