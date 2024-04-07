@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dolphie"
-version = "4.3.4"
+version = "4.3.5"
 license = "GPL-3.0-or-later"
 description = "Echolocate your MySQL health with real-time monitoring in the terminal"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]
@@ -8,15 +8,15 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-rich = "^13.7.0"
+rich = "^13.7.1"
 pymysql = "^1.1.0"
 myloginpath = "^0.0.4"
-packaging = "^23.2"
+packaging = "^24.0"
 requests = "^2.31.0"
 sqlparse = "^0.4.4"
 textual = "^0.56.2"
 textual-autocomplete = "^2.1.0b0"
-charset-normalizer = "^3.2.0"
+charset-normalizer = "^3.3.2"
 plotext = "^5.2.8"
 
 [build-system]
