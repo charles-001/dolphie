@@ -201,6 +201,8 @@ class MySQLQueries:
             JOIN `performance_schema`.threads t ON sca.PROCESSLIST_ID = t.processlist_id
         WHERE
             t.processlist_id = $1
+        ORDER BY
+            ATTR_NAME
     """
     ddls: str = """
         SELECT

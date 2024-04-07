@@ -63,7 +63,7 @@ class Database:
             self.using_ssl = "ON" if self.fetch_value_from_field("SHOW STATUS LIKE 'Ssl_cipher'", "Value") else "OFF"
         except pymysql.Error as e:
             if len(e.args) == 1:
-                raise ManualException(e)
+                raise ManualException(e.args[0])
             else:
                 raise ManualException(e.args[1])
         except FileNotFoundError:  # Catch SSL file path errors

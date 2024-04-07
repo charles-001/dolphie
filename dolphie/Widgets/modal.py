@@ -49,6 +49,13 @@ class CommandModal(ModalScreen):
             content-align: center middle;
             padding-bottom: 1;
         }
+        CommandModal Checkbox {
+            background: #131626;
+            border: none;
+            content-align: center middle;
+            padding-top: 1;
+            width: 100%;
+        }
     """
     BINDINGS = [
         Binding("escape", "app.pop_screen", "", show=False),

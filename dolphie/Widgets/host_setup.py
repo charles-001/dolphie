@@ -83,6 +83,13 @@ class HostSetupModal(ModalScreen):
             padding-top: 1;
             margin: 0 2;
         }
+        HostSetupModal Checkbox {
+            background: #131626;
+            border: none;
+            padding-left: 2;
+            padding-bottom: 1;
+            content-align: left middle;
+        }
         HostSetupModal Select {
             width: 100%;
             margin: 0 2;
