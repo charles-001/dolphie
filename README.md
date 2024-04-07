@@ -153,7 +153,7 @@ Dolphie's config supports these options under [dolphie] section:
 
 ## Supported MySQL versions
 - MySQL/Percona Server 5.6/5.7/8.0+
-- RDS/Aurora
+- RDS & Aurora + Azure
 
 ## Grants required
 #### Least privilege
