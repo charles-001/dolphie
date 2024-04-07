@@ -12,7 +12,9 @@ def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
     if not dolphie.performance_schema_enabled and dolphie.use_performance_schema:
-        dolphie.notify("Performance Schema is not enabled on this host, using Information Schema instead")
+        dolphie.app.notify(
+            "Performance Schema is not enabled on this host, using Information Schema instead for processlist"
+        )
         dolphie.use_performance_schema = False
 
     columns = [
