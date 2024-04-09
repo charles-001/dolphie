@@ -274,8 +274,8 @@ class Dolphie:
         if self.is_mysql_version_at_least("8.0"):
             # If we're using MySQL 8, we need to fetch the checkpoint age from the performance schema if it's not
             # available in global status
-            # On Azure MySQL there is no BACKUP_ADMIN privilege so we can't fetch the checkpoint age
-            if not self.global_status.get("Innodb_checkpoint_age") and not self.azure:
+            # On Azure MySQL and Aurora MySQL there is no BACKUP_ADMIN privilege so we can't fetch the checkpoint age
+            if not self.global_status.get("Innodb_checkpoint_age") and not self.azure and not self.aws_rds:
                 self.global_status["Innodb_checkpoint_age"] = self.main_db_connection.fetch_value_from_field(
                     MySQLQueries.checkpoint_age, "checkpoint_age"
                 )
