@@ -1,3 +1,4 @@
+import re
 import time
 from ssl import SSLError
 
@@ -35,6 +36,10 @@ class Database:
         self.max_reconnect_attempts: int = 3
         self.running_query: bool = False
         self.using_ssl: str = None
+        self.host_version: str = None
+
+        self.mysql: bool = False
+        self.proxysql: bool = False
 
         if auto_connect:
             self.connect()
@@ -54,13 +59,30 @@ class Database:
                 program_name="Dolphie",
             )
             self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
+            self.host_version = self.fetch_value_from_field("SELECT @@version")
+
+            # example: 2.6.0-590-g9878ed3
+            proxysql_pattern = re.compile(r"^\d+\.\d+\.\d+\-\d+\-.*$")
+
+            # example: 8.0.34-54 or 8.0.34
+            mysql_pattern = re.compile(r"^(?:\d+\.\d+\.\d+|\d+\.\d+\.\d+\-\d+)$")
+
+            # Check if the version string matches the pattern for ProxySQL
+            if proxysql_pattern.match(self.host_version):
+                self.proxysql = True
+            elif mysql_pattern.match(self.host_version):
+                self.mysql = True
 
             # Get connection ID for processlist filtering
             if self.save_connection_id:
-                self.connection_id = self.fetch_value_from_field("SELECT CONNECTION_ID()")
+                self.connection_id = self.connection.thread_id()
 
-            # Determine if SSL is being used
-            self.using_ssl = "ON" if self.fetch_value_from_field("SHOW STATUS LIKE 'Ssl_cipher'", "Value") else "OFF"
+                # Determine if SSL is being used
+                self.using_ssl = (
+                    "ON"
+                    if self.mysql and self.fetch_value_from_field("SHOW STATUS LIKE 'Ssl_cipher'", "Value")
+                    else "OFF"
+                )
         except pymysql.Error as e:
             if len(e.args) == 1:
                 raise ManualException(e.args[0])
@@ -97,7 +119,8 @@ class Database:
         error_message = None
 
         # Prefix all queries with dolphie so they can be identified in the processlist from other people
-        query = "/* dolphie */ " + query
+        if self.mysql:
+            query = "/* dolphie */ " + query
 
         for _ in range(self.max_reconnect_attempts):
             self.running_query = True
@@ -167,7 +190,10 @@ class Database:
 
         for field, value in row.items():
             if isinstance(value, (bytes, bytearray)):
-                processed_row[field] = value.decode()
+                try:
+                    processed_row[field] = value.decode()
+                except UnicodeDecodeError:
+                    processed_row[field] = "/* Dolphie can't decode query with utf-8 */"
             else:
                 processed_row[field] = value
 

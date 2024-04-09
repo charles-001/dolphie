@@ -2,6 +2,27 @@ from dataclasses import dataclass
 
 
 @dataclass
+class ProxySQLQueries:
+
+    processlist: str = """
+        SELECT
+            IFNULL(SessionID, "") AS id,
+            IFNULL(user, "") AS user,
+            IFNULL(db, "") AS db,
+            IFNULL(cli_host, "") AS frontend_host,
+            IFNULL(hostgroup, "") AS hostgroup,
+            IFNULL(srv_host, "") AS backend_host,
+            IFNULL(command, "") AS command,
+            IFNULL(time_ms, "0") AS time,
+            IFNULL(info, "") AS query
+        FROM
+            stats_mysql_processlist
+        WHERE
+            $1
+    """
+
+
+@dataclass
 class MySQLQueries:
     pl_query: str = """
         SELECT

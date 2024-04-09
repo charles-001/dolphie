@@ -43,7 +43,7 @@ def create_panel(tab: Tab) -> Table:
 
     table_information.add_column()
     table_information.add_column(min_width=25, max_width=27)
-    table_information.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.mysql_version}")
+    table_information.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
     table_information.add_row(
         "[label]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
     )

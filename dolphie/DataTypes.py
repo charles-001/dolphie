@@ -68,7 +68,6 @@ class Panels:
         self.processlist = Panel("processlist")
         self.graphs = Panel("graphs")
         self.replication = Panel("replication")
-        # self.innodb_trx_locks = Panel("innodb_trx_locks")
         self.metadata_locks = Panel("metadata_locks")
         self.ddl = Panel("ddl")
 
@@ -123,6 +122,57 @@ class ProcesslistThread:
                     thread_color = "yellow"
                 else:
                     thread_color = "green"
+        return thread_color
+
+    def _get_formatted_command(self, command: str):
+        return "[red]Killed[/red]" if command == "Killed" else command
+
+    def _get_formatted_trx_time(self, trx_time: str):
+        return format_time(int(trx_time)) if trx_time else "[dark_gray]N/A"
+
+    def _get_formatted_query(self, query: str):
+        return format_query(query)
+
+    def _get_formatted_string(self, string: str):
+        if not string:
+            return "[dark_gray]N/A"
+
+        return string
+
+    def _get_formatted_number(self, number):
+        if not number or number == "0":
+            return "[dark_gray]0"
+
+        return number
+
+
+class ProxySQLProcesslistThread:
+    def __init__(self, thread_data: Dict[str, str]):
+        self.id = str(thread_data.get("id", ""))
+        self.hostgroup = thread_data.get("hostgroup")
+        self.user = thread_data.get("user", "")
+        self.frontend_host = self._get_formatted_string(thread_data.get("frontend_host", ""))
+        self.host = self._get_formatted_string(thread_data.get("backend_host", ""))
+        self.db = thread_data.get("db", "")
+        self.query = thread_data.get("query", "").strip(" \t\n\r")
+        self.time = int(thread_data.get("time", 0)) / 1000  # Convert to seconds since ProxySQL returns milliseconds
+        self.formatted_query = self._get_formatted_query(self.query)
+        self.formatted_time = self._get_formatted_time()
+        self.command = self._get_formatted_command(thread_data.get("command", ""))
+
+    def _get_formatted_time(self) -> str:
+        thread_color = self._get_time_color()
+        return f"[{thread_color}]{format_time(self.time)}[/{thread_color}]" if thread_color else format_time(self.time)
+
+    def _get_time_color(self) -> str:
+        thread_color = ""
+        if self.query:
+            if self.time >= 10:
+                thread_color = "red"
+            elif self.time >= 5:
+                thread_color = "yellow"
+            else:
+                thread_color = "green"
         return thread_color
 
     def _get_formatted_command(self, command: str):

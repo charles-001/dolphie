@@ -19,7 +19,7 @@ def create_panel(tab: Tab):
     dolphie = tab.dolphie
 
     if (
-        dolphie.panels.replication.visible
+        dolphie.panels.mysql.replication.visible
         and not dolphie.replica_manager.available_replicas
         and not dolphie.replication_status
         and not dolphie.galera_cluster

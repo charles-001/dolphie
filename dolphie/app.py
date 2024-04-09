@@ -30,6 +30,7 @@ from dolphie.Panels import (
     ddl_panel,
     metadata_locks_panel,
     processlist_panel,
+    proxysql_processlist_panel,
     replication_panel,
 )
 from dolphie.Widgets.command_screen import CommandScreen
@@ -106,7 +107,7 @@ class DolphieApp(App):
         dolphie = tab.dolphie
         try:
             if not dolphie.main_db_connection.is_connected():
-                self.tab_manager.rename_tab(tab)  # this will use dolphie.host instead of mysql_host
+                self.tab_manager.rename_tab(tab)  # this will use dolphie.host instead of host_with_port
                 self.tab_manager.update_topbar(tab=tab, connection_status=ConnectionStatus.connecting)
                 tab.loading_indicator.display = True
 
@@ -118,104 +119,10 @@ class DolphieApp(App):
             dolphie.refresh_latency = round(dolphie.polling_latency - dolphie.refresh_interval, 2)
             dolphie.worker_previous_start_time = dolphie.worker_start_time
 
-            dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
-            dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
-            dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
-
-            if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
-                find_replicas_query = MySQLQueries.ps_find_replicas
-            else:
-                find_replicas_query = MySQLQueries.pl_find_replicas
-
-            dolphie.main_db_connection.execute(find_replicas_query)
-            available_replicas = dolphie.main_db_connection.fetchall()
-            # We update the replica ports used if the number of replicas have changed
-            if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
-                dolphie.replica_manager.ports = {}
-
-                dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
-                replica_data = dolphie.main_db_connection.fetchall()
-                for row in replica_data:
-                    dolphie.replica_manager.ports[row["Slave_UUID"]] = row["Port"]
-
-                dolphie.replica_manager.available_replicas = available_replicas
-
-            dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
-            dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
-
-            dolphie.previous_replica_sbm = dolphie.replica_lag
-            dolphie.replica_lag_source, dolphie.replica_lag, dolphie.replication_status = (
-                replication_panel.fetch_replication_data(tab)
-            )
-
-            # If using MySQL 8, fetch the replication applier status data
-            if (
-                dolphie.is_mysql_version_at_least("8.0")
-                and dolphie.panels.replication.visible
-                and dolphie.global_variables.get("slave_parallel_workers", 0) > 1
-            ):
-                dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
-                dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
-
-            dolphie.massage_metrics_data()
-
-            if dolphie.group_replication or dolphie.innodb_cluster:
-                if dolphie.is_mysql_version_at_least("8.0.13"):
-                    dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
-                    dolphie.group_replication_data = dolphie.main_db_connection.fetchone()
-
-                dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
-                dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
-                for member_role_data in dolphie.group_replication_members:
-                    if (
-                        member_role_data.get("MEMBER_ID") == dolphie.server_uuid
-                        and member_role_data.get("MEMBER_ROLE") == "PRIMARY"
-                    ):
-                        dolphie.is_group_replication_primary = True
-                        break
-
-            if dolphie.panels.dashboard.visible:
-                dolphie.main_db_connection.execute(MySQLQueries.binlog_status)
-                dolphie.binlog_status = dolphie.main_db_connection.fetchone()
-
-                # This can cause MySQL to crash: https://perconadev.atlassian.net/browse/PS-9066
-                # if dolphie.global_variables.get("binlog_transaction_compression") == "ON":
-                #     dolphie.main_db_connection.execute(MySQLQueries.get_binlog_transaction_compression_percentage)
-                #     dolphie.binlog_transaction_compression_percentage = dolphie.main_db_connection.fetchone().get(
-                #         "compression_percentage"
-                #     )
-
-            if dolphie.panels.processlist.visible:
-                dolphie.processlist_threads = processlist_panel.fetch_data(tab)
-
-            if dolphie.is_mysql_version_at_least("5.7"):
-                if dolphie.panels.metadata_locks.visible:
-                    dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
-                else:
-                    # Reset this data so the graph doesn't show old data
-                    dolphie.metadata_locks = {}
-
-                # This can cause MySQL to crash: https://bugs.mysql.com/bug.php?id=112035
-                # if dolphie.panels.innodb_trx_locks.visible or dolphie.historical_trx_locks:
-                #     dolphie.main_db_connection.execute(MySQLQueries.locks_query)
-                #     dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
-
-                if dolphie.panels.ddl.visible:
-                    dolphie.main_db_connection.execute(MySQLQueries.ddls)
-                    dolphie.ddl = dolphie.main_db_connection.fetchall()
-
-            dolphie.metric_manager.refresh_data(
-                worker_start_time=dolphie.worker_start_time,
-                polling_latency=dolphie.polling_latency,
-                global_variables=dolphie.global_variables,
-                global_status=dolphie.global_status,
-                innodb_metrics=dolphie.innodb_metrics,
-                disk_io_metrics=dolphie.disk_io_metrics,
-                # innodb_trx_lock_metrics=dolphie.lock_transactions,
-                metadata_lock_metrics=dolphie.metadata_locks,
-                replication_status=dolphie.replication_status,
-                replication_lag=dolphie.replica_lag,
-            )
+            if dolphie.mysql:
+                self.process_mysql_data(tab)
+            elif dolphie.proxysql:
+                self.process_proxysql_data(tab)
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
@@ -244,7 +151,10 @@ class DolphieApp(App):
 
                     return
 
-                self.refresh_screen(tab)
+                if dolphie.mysql:
+                    self.refresh_screen_mysql(tab)
+                elif dolphie.proxysql:
+                    self.refresh_screen_proxysql(tab)
 
                 tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
@@ -256,7 +166,7 @@ class DolphieApp(App):
                                 f"[b light_blue]{dolphie.host}:{dolphie.port}[/b light_blue]: "
                                 f"{tab.worker_cancel_error.reason}"
                             ),
-                            title="MySQL Connection Error",
+                            title="Connection Error",
                             severity="error",
                             timeout=10,
                         )
@@ -314,7 +224,154 @@ class DolphieApp(App):
             # If we're not displaying the replication panel, close all replica connections
             dolphie.replica_manager.remove_all()
 
-    def refresh_screen(self, tab: Tab):
+    def process_mysql_data(self, tab: Tab):
+        dolphie = tab.dolphie
+
+        dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+        dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
+        dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
+
+        if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
+            find_replicas_query = MySQLQueries.ps_find_replicas
+        else:
+            find_replicas_query = MySQLQueries.pl_find_replicas
+
+        dolphie.main_db_connection.execute(find_replicas_query)
+        available_replicas = dolphie.main_db_connection.fetchall()
+        # We update the replica ports used if the number of replicas have changed
+        if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
+            dolphie.replica_manager.ports = {}
+
+            dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
+            replica_data = dolphie.main_db_connection.fetchall()
+            for row in replica_data:
+                dolphie.replica_manager.ports[row["Slave_UUID"]] = row["Port"]
+
+            dolphie.replica_manager.available_replicas = available_replicas
+
+        dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
+        dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
+
+        dolphie.previous_replica_sbm = dolphie.replica_lag
+        dolphie.replica_lag_source, dolphie.replica_lag, dolphie.replication_status = (
+            replication_panel.fetch_replication_data(tab)
+        )
+
+        # If using MySQL 8, fetch the replication applier status data
+        if (
+            dolphie.is_mysql_version_at_least("8.0")
+            and dolphie.panels.replication.visible
+            and dolphie.global_variables.get("slave_parallel_workers", 0) > 1
+        ):
+            dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
+            dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
+
+        dolphie.massage_metrics_data()
+
+        if dolphie.group_replication or dolphie.innodb_cluster:
+            if dolphie.is_mysql_version_at_least("8.0.13"):
+                dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
+                dolphie.group_replication_data = dolphie.main_db_connection.fetchone()
+
+            dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
+            dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
+            for member_role_data in dolphie.group_replication_members:
+                if (
+                    member_role_data.get("MEMBER_ID") == dolphie.server_uuid
+                    and member_role_data.get("MEMBER_ROLE") == "PRIMARY"
+                ):
+                    dolphie.is_group_replication_primary = True
+                    break
+
+        if dolphie.panels.dashboard.visible:
+            dolphie.main_db_connection.execute(MySQLQueries.binlog_status)
+            dolphie.binlog_status = dolphie.main_db_connection.fetchone()
+
+            # This can cause MySQL to crash: https://perconadev.atlassian.net/browse/PS-9066
+            # if dolphie.global_variables.get("binlog_transaction_compression") == "ON":
+            #     dolphie.main_db_connection.execute(MySQLQueries.get_binlog_transaction_compression_percentage)
+            #     dolphie.binlog_transaction_compression_percentage = dolphie.main_db_connection.fetchone().get(
+            #         "compression_percentage"
+            #     )
+
+        if dolphie.panels.processlist.visible:
+            dolphie.processlist_threads = processlist_panel.fetch_data(tab)
+
+        if dolphie.is_mysql_version_at_least("5.7"):
+            if dolphie.panels.metadata_locks.visible:
+                dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
+            else:
+                # Reset this data so the graph doesn't show old data
+                dolphie.metadata_locks = {}
+
+            # This can cause MySQL to crash: https://bugs.mysql.com/bug.php?id=112035
+            # if dolphie.panels.innodb_trx_locks.visible or dolphie.historical_trx_locks:
+            #     dolphie.main_db_connection.execute(MySQLQueries.locks_query)
+            #     dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
+
+            if dolphie.panels.ddl.visible:
+                dolphie.main_db_connection.execute(MySQLQueries.ddls)
+                dolphie.ddl = dolphie.main_db_connection.fetchall()
+
+        dolphie.metric_manager.refresh_data(
+            worker_start_time=dolphie.worker_start_time,
+            polling_latency=dolphie.polling_latency,
+            global_variables=dolphie.global_variables,
+            global_status=dolphie.global_status,
+            innodb_metrics=dolphie.innodb_metrics,
+            disk_io_metrics=dolphie.disk_io_metrics,
+            # innodb_trx_lock_metrics=dolphie.lock_transactions,
+            metadata_lock_metrics=dolphie.metadata_locks,
+            replication_status=dolphie.replication_status,
+            replication_lag=dolphie.replica_lag,
+        )
+
+    def process_proxysql_data(self, tab: Tab):
+        dolphie = tab.dolphie
+
+        dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+
+        if dolphie.panels.processlist.visible:
+            dolphie.processlist_threads = proxysql_processlist_panel.fetch_data(tab)
+
+    def refresh_screen_proxysql(self, tab: Tab):
+        dolphie = tab.dolphie
+
+        if tab.loading_indicator.display:
+            tab.loading_indicator.display = False
+
+            self.tab_manager.update_topbar(tab=tab, connection_status="ONLINE")
+
+        if not tab.main_container.display:
+            tab.main_container.display = True
+            tab.sparkline.display = True
+
+        # Loop each panel and refresh it
+        for panel in dolphie.panels.get_all_panels():
+            if panel.visible:
+                # Skip the graphs panel since it's handled separately
+                if panel.name == dolphie.panels.graphs.name:
+                    continue
+
+                self.refresh_panel(tab, panel.name)
+
+                if panel.name == dolphie.panels.dashboard.name and dolphie.metric_manager.metrics.dml.Queries.values:
+                    # Update the sparkline for queries per second
+                    tab.sparkline.data = dolphie.metric_manager.metrics.dml.Queries.values
+                    tab.sparkline.refresh()
+
+        if dolphie.panels.graphs.visible:
+            # Refresh the graph(s) for the selected tab
+            self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
+
+        # We take a snapshot of the processlist to be used for commands
+        # since the data can change after a key is pressed
+        dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
+
+        # This denotes that we've gone through the first loop of the worker thread
+        dolphie.completed_first_loop = True
+
+    def refresh_screen_mysql(self, tab: Tab):
         dolphie = tab.dolphie
 
         if tab.loading_indicator.display:
@@ -361,11 +418,14 @@ class DolphieApp(App):
     def monitor_read_only_change(self, tab: Tab):
         dolphie = tab.dolphie
 
+        if not dolphie.mysql:
+            return
+
         current_ro_status = dolphie.global_variables.get("read_only")
         formatted_ro_status = ConnectionStatus.read_only if current_ro_status == "ON" else ConnectionStatus.read_write
         status = "read-only" if current_ro_status == "ON" else "read/write"
 
-        message = f"Host [light_blue]{dolphie.mysql_host}[/light_blue] is now [b highlight]{status}[/b highlight]"
+        message = f"Host [light_blue]{dolphie.host_with_port}[/light_blue] is now [b highlight]{status}[/b highlight]"
 
         if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
             message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
@@ -470,14 +530,45 @@ class DolphieApp(App):
         panel.display = new_display_status
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
-        panel_mapping = {
-            tab.dolphie.panels.replication.name: replication_panel,
-            tab.dolphie.panels.dashboard.name: dashboard_panel,
-            tab.dolphie.panels.processlist.name: processlist_panel,
-            # tab.dolphie.panels.innodb_trx_locks.name: innodb_trx_locks_panel,
-            tab.dolphie.panels.metadata_locks.name: metadata_locks_panel,
-            tab.dolphie.panels.ddl.name: ddl_panel,
-        }
+        if tab.dolphie.mysql:
+            panel_mapping = {
+                tab.dolphie.panels.replication.name: replication_panel,
+                tab.dolphie.panels.dashboard.name: dashboard_panel,
+                tab.dolphie.panels.processlist.name: processlist_panel,
+                # tab.dolphie.panels.innodb_trx_locks.name: innodb_trx_locks_panel,
+                tab.dolphie.panels.metadata_locks.name: metadata_locks_panel,
+                tab.dolphie.panels.ddl.name: ddl_panel,
+            }
+
+            if toggled or not tab.dolphie.completed_first_loop:
+                # Update the sizes of the panels depending if replication container is visible or not
+                if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
+                    tab.dashboard_host_information.styles.width = "25vw"
+                    tab.dashboard_binary_log.styles.width = "21vw"
+                    tab.dashboard_innodb.styles.width = "17vw"
+                    tab.dashboard_replication.styles.width = "25vw"
+                    tab.dashboard_statistics.styles.width = "12vw"
+
+                    tab.dashboard_replication.display = True
+                else:
+                    tab.dashboard_host_information.styles.width = "32vw"
+                    tab.dashboard_binary_log.styles.width = "27vw"
+                    tab.dashboard_innodb.styles.width = "24vw"
+                    tab.dashboard_replication.styles.width = "0"
+                    tab.dashboard_statistics.styles.width = "17vw"
+
+                    tab.dashboard_replication.display = False
+
+                tab.dashboard_host_information.styles.max_width = "45"
+                tab.dashboard_binary_log.styles.max_width = "38"
+                tab.dashboard_innodb.styles.max_width = "32"
+                tab.dashboard_replication.styles.max_width = "55"
+                tab.dashboard_statistics.styles.max_width = "22"
+        elif tab.dolphie.proxysql:
+            panel_mapping = {
+                tab.dolphie.panels.processlist.name: proxysql_processlist_panel,
+            }
+
         for panel_map_name, panel_map_obj in panel_mapping.items():
             if panel_name == panel_map_name:
                 panel_map_obj.create_panel(tab)
@@ -485,31 +576,6 @@ class DolphieApp(App):
                 # When replication panel status is changed, we need to refresh the dashboard panel as well since
                 # it adds/removes it from there
                 dashboard_panel.create_panel(tab)
-
-        if toggled or not tab.dolphie.completed_first_loop:
-            # Update the sizes of the panels depending if replication container is visible or not
-            if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
-                tab.dashboard_host_information.styles.width = "25vw"
-                tab.dashboard_binary_log.styles.width = "21vw"
-                tab.dashboard_innodb.styles.width = "17vw"
-                tab.dashboard_replication.styles.width = "25vw"
-                tab.dashboard_statistics.styles.width = "12vw"
-
-                tab.dashboard_replication.display = True
-            else:
-                tab.dashboard_host_information.styles.width = "32vw"
-                tab.dashboard_binary_log.styles.width = "27vw"
-                tab.dashboard_innodb.styles.width = "24vw"
-                tab.dashboard_replication.styles.width = "0"
-                tab.dashboard_statistics.styles.width = "17vw"
-
-                tab.dashboard_replication.display = False
-
-            tab.dashboard_host_information.styles.max_width = "45"
-            tab.dashboard_binary_log.styles.max_width = "38"
-            tab.dashboard_innodb.styles.max_width = "32"
-            tab.dashboard_replication.styles.max_width = "55"
-            tab.dashboard_statistics.styles.max_width = "22"
 
     def layout_graphs(self, tab: Tab):
         # These variables are dynamically created
@@ -727,7 +793,7 @@ class DolphieApp(App):
                     EventLog(
                         dolphie.connection_status,
                         dolphie.app_version,
-                        dolphie.mysql_host,
+                        dolphie.host_with_port,
                         dolphie.secondary_db_connection,
                     )
                 )
@@ -952,7 +1018,9 @@ class DolphieApp(App):
                     screen_data = Align.center(table_grid)
 
                     self.app.push_screen(
-                        CommandScreen(dolphie.connection_status, dolphie.app_version, dolphie.mysql_host, screen_data)
+                        CommandScreen(
+                            dolphie.connection_status, dolphie.app_version, dolphie.host_with_port, screen_data
+                        )
                     )
                 else:
                     if input_variable:
@@ -1094,7 +1162,7 @@ class DolphieApp(App):
 
         if screen_data:
             self.app.push_screen(
-                CommandScreen(dolphie.connection_status, dolphie.app_version, dolphie.mysql_host, screen_data)
+                CommandScreen(dolphie.connection_status, dolphie.app_version, dolphie.host_with_port, screen_data)
             )
 
     @work(thread=True)
@@ -1104,7 +1172,7 @@ class DolphieApp(App):
         # These are the screens to display we use for the commands
         def show_command_screen():
             self.app.push_screen(
-                CommandScreen(dolphie.connection_status, dolphie.app_version, dolphie.mysql_host, screen_data)
+                CommandScreen(dolphie.connection_status, dolphie.app_version, dolphie.host_with_port, screen_data)
             )
 
         def show_thread_screen():
@@ -1112,7 +1180,7 @@ class DolphieApp(App):
                 ThreadScreen(
                     connection_status=dolphie.connection_status,
                     app_version=dolphie.app_version,
-                    host=dolphie.mysql_host,
+                    host=dolphie.host_with_port,
                     thread_table=thread_table,
                     user_thread_attributes_table=user_thread_attributes_table,
                     query=formatted_query,
@@ -1180,12 +1248,14 @@ class DolphieApp(App):
                         dolphie.secondary_db_connection.execute("CALL mysql.rds_kill(%s)" % thread_id)
                     elif dolphie.azure:
                         dolphie.secondary_db_connection.execute("CALL mysql.az_kill(%s)" % thread_id)
+                    elif dolphie.proxysql:
+                        dolphie.secondary_db_connection.execute("KILL CONNECTION %s" % thread_id)
                     else:
                         dolphie.secondary_db_connection.execute("KILL %s" % thread_id)
 
-                    self.notify("Killed Thread ID [b highlight]%s[/b highlight]" % thread_id, severity="success")
+                    self.notify("Killed Process ID [b highlight]%s[/b highlight]" % thread_id, severity="success")
                 except ManualException as e:
-                    self.notify(e.reason, title="Error killing Thread ID", severity="error")
+                    self.notify(e.reason, title="Error killing Process ID", severity="error")
 
             if key == "K":
 
@@ -1194,6 +1264,8 @@ class DolphieApp(App):
                         query = "CALL mysql.rds_kill(%s)"
                     elif dolphie.azure:
                         query = "CALL mysql.az_kill(%s)"
+                    elif dolphie.proxysql:
+                        query = "KILL CONNECTION %s"
                     else:
                         query = "KILL %s"
 
@@ -1224,12 +1296,12 @@ class DolphieApp(App):
                                 execute_kill(thread_id)
                                 threads_killed += 1
                     except ManualException as e:
-                        self.notify(e.reason, title=f"Error Killing Thread ID {thread_id}", severity="error")
+                        self.notify(e.reason, title=f"Error Killing Process ID {thread_id}", severity="error")
 
                 if threads_killed:
-                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] threads")
+                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] processes")
                 else:
-                    self.notify("No threads were killed")
+                    self.notify("No processes were killed")
 
             elif key == "l":
                 deadlock = ""

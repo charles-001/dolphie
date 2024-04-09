@@ -274,7 +274,7 @@ Dolphie's config supports these options under [dolphie] section:
             dest="startup_panels",
             type=str,
             help=(
-                "What panels to display on startup separated by a comma. Supports:"
+                "What panels to display on startup separated by a comma. Supports: "
                 f" {','.join(self.panels.all())} [default: {self.config.startup_panels}]"
             ),
             metavar="",

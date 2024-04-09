@@ -126,7 +126,7 @@ class TabManager:
         if tab.id == self.active_tab.id:
             if dolphie.connection_status:
                 self.topbar.connection_status = dolphie.connection_status
-                self.topbar.host = dolphie.mysql_host
+                self.topbar.host = dolphie.host_with_port
             else:
                 self.topbar.connection_status = None
                 self.topbar.host = ""
@@ -423,8 +423,8 @@ class TabManager:
 
     def rename_tab(self, tab: Tab, new_name: str = None):
         if not new_name and not tab.manual_tab_name:
-            # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
-            host = tab.dolphie.mysql_host.split(":")[0][:24]
+            # host_with_port is the full host:port string, we want to split & truncate it to 24 characters
+            host = tab.dolphie.host_with_port.split(":")[0][:24]
             if not host:
                 return
 

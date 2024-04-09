@@ -38,7 +38,6 @@ class Dolphie:
         self.host_setup_available_hosts = config.host_setup_available_hosts
         self.startup_panels = config.startup_panels
         self.graph_marker = config.graph_marker
-        # self.historical_trx_locks = config.historical_trx_locks
         self.hostgroup = config.hostgroup
         self.hostgroup_hosts = config.hostgroup_hosts
 
@@ -48,8 +47,10 @@ class Dolphie:
         self.panels = DataTypes.Panels()
         for panel in self.panels.all():
             setattr(getattr(self.panels, panel), "visible", False)
+
         for panel in self.startup_panels:
-            setattr(getattr(self.panels, panel), "visible", True)
+            if panel in self.panels.all():
+                setattr(getattr(self.panels, panel), "visible", True)
 
         self.show_idle_threads: bool = False
         self.sort_by_time_descending: bool = True
@@ -95,7 +96,7 @@ class Dolphie:
         self.replica_lag_source: str = None
         self.replica_lag: int = None
         self.active_redo_logs: int = None
-        self.mysql_host: str = f"{self.host}:{self.port}"
+        self.host_with_port: str = f"{self.host}:{self.port}"
         self.binlog_transaction_compression_percentage: int = None
         self.host_cache: dict = {}
 
@@ -114,6 +115,8 @@ class Dolphie:
         self.aws_rds: bool = False
         self.azure: bool = False
         self.mariadb: bool = False
+        self.mysql: bool = False
+        self.proxysql: bool = False
 
         # These are for group replication in replication panel
         self.is_group_replication_primary: bool = False
@@ -138,7 +141,7 @@ class Dolphie:
         self.performance_schema_enabled: bool = False
         self.use_performance_schema: bool = True
         self.server_uuid: str = None
-        self.mysql_version: str = None
+        self.host_version: str = None
         self.host_distro: str = None
 
         self.host_cache_from_file = load_host_cache_file(self.host_cache_file)
@@ -147,6 +150,25 @@ class Dolphie:
         self.main_db_connection.connect()
         self.secondary_db_connection.connect()
 
+        version_split = self.main_db_connection.host_version.split(".")
+        self.host_version = "%s.%s.%s" % (
+            version_split[0],
+            version_split[1],
+            version_split[2].split("-")[0],
+        )
+
+        if self.main_db_connection.proxysql:
+            self.proxysql = True
+            self.host_distro = "ProxySQL"
+            self.host_with_port = f"{self.host}:{self.port}"
+        elif self.main_db_connection.mysql:
+            self.mysql = True
+            self.setup_connection_mysql()
+
+        # Add host to host setup file if it doesn't exist
+        self.add_host_to_host_cache_file()
+
+    def setup_connection_mysql(self):
         global_variables = self.main_db_connection.fetch_status_and_variables("variables")
 
         basedir = global_variables.get("basedir")
@@ -154,11 +176,6 @@ class Dolphie:
         version = global_variables.get("version").lower()
         version_comment = global_variables.get("version_comment").lower()
         version_split = version.split(".")
-        self.mysql_version = "%s.%s.%s" % (
-            version_split[0],
-            version_split[1],
-            version_split[2].split("-")[0],
-        )
 
         # Get proper host version and fork
         if "percona xtradb cluster" in version_comment:
@@ -185,11 +202,11 @@ class Dolphie:
 
         # For RDS and Azure, we will use the host specified to connect with since hostname isn't related to the endpoint
         if self.aws_rds:
-            self.mysql_host = f"{self.host.split('.rds.amazonaws.com')[0]}:{self.port}"
+            self.host_with_port = f"{self.host.split('.rds.amazonaws.com')[0]}:{self.port}"
         elif self.azure:
-            self.mysql_host = f"{self.host.split('.mysql.database.azure.com')[0]}:{self.port}"
+            self.host_with_port = f"{self.host.split('.mysql.database.azure.com')[0]}:{self.port}"
         else:
-            self.mysql_host = f"{global_variables.get('hostname')}:{self.port}"
+            self.host_with_port = f"{global_variables.get('hostname')}:{self.port}"
 
         major_version = int(version_split[0])
         self.server_uuid = global_variables.get("server_uuid")
@@ -228,7 +245,7 @@ class Dolphie:
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
 
-        # Add host to host setup file if it doesn't exist
+    def add_host_to_host_cache_file(self):
         with open(self.host_setup_file, "a+") as file:
             file.seek(0)
             lines = file.readlines()
@@ -243,7 +260,7 @@ class Dolphie:
                 self.host_setup_available_hosts.append(host[:-1])  # remove the \n
 
     def is_mysql_version_at_least(self, target, use_version=None):
-        version = self.mysql_version
+        version = self.host_version
         if use_version:
             version = use_version
 
