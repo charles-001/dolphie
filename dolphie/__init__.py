@@ -6,7 +6,7 @@ import dolphie.DataTypes as DataTypes
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
-from dolphie.Modules.MySQL import Database
+from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.Queries import MySQLQueries
 from packaging.version import parse as parse_version
 from textual.app import App
@@ -150,18 +150,19 @@ class Dolphie:
         self.main_db_connection.connect()
         self.secondary_db_connection.connect()
 
-        version_split = self.main_db_connection.host_version.split(".")
+        version = self.main_db_connection.fetch_value_from_field("SELECT @@version")
+        version_split = version.split(".")
         self.host_version = "%s.%s.%s" % (
             version_split[0],
             version_split[1],
             version_split[2].split("-")[0],
         )
 
-        if self.main_db_connection.proxysql:
+        if self.main_db_connection.source == ConnectionSource.proxysql:
             self.proxysql = True
             self.host_distro = "ProxySQL"
             self.host_with_port = f"{self.host}:{self.port}"
-        elif self.main_db_connection.mysql:
+        elif self.main_db_connection.source == ConnectionSource.mysql:
             self.mysql = True
             self.setup_connection_mysql()
 
