@@ -606,7 +606,6 @@ class DolphieApp(App):
                 tab.dashboard_binary_log.display = True
                 tab.dashboard_replication.display = True
                 tab.dashboard_innodb.display = True
-
         elif tab.dolphie.connection_source == ConnectionSource.proxysql:
             tab.dashboard_host_information.styles.width = "25vw"
             tab.dashboard_statistics.styles.width = "12vw"
@@ -738,7 +737,7 @@ class DolphieApp(App):
             self.app.update_graphs("dml")
         elif key == "5":
             if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify("Replication panel is only available for MySQL connections")
+                self.notify("Metadata Locks panel is only available for MySQL connections")
                 return
 
             if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
@@ -762,7 +761,7 @@ class DolphieApp(App):
             tab.metadata_locks_title.update("Metadata Locks ([highlight]0[/highlight])")
         elif key == "6":
             if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify("Replication panel is only available for MySQL connections")
+                self.notify("DDL panel is only available for MySQL connections")
                 return
 
             if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
@@ -1153,7 +1152,6 @@ class DolphieApp(App):
                 "2": "Show/hide Processlist",
                 "3": "Show/hide Replication/Replicas or ProxySQL Hostgroup Summary",
                 "4": "Show/hide Graph Metrics",
-                # "5": "Show/hide InnoDB Transaction Locks",
                 "5": "Show/hide Metadata Locks",
                 "6": "Show/hide DDLs",
                 "`": "Open Host Setup",

@@ -111,7 +111,7 @@ class Database:
         error_message = None
 
         # Prefix all queries with dolphie so they can be identified in the processlist from other people
-        if self.source == ConnectionSource.mysql:
+        if self.source != ConnectionSource.proxysql:
             query = "/* dolphie */ " + query
 
         for _ in range(self.max_reconnect_attempts):

@@ -347,7 +347,6 @@ class DiskIOMetrics:
 
 @dataclass
 class LocksMetrics:
-    # innodb_trx_lock_count: MetricData
     metadata_lock_count: MetricData
     graphs: List[str]
     tab_name: str = "locks"
@@ -467,9 +466,6 @@ class MetricManager:
             ),
             locks=LocksMetrics(
                 graphs=["graph_locks"],
-                # innodb_trx_lock_count=MetricData(
-                #     label="InnoDB TRX", color=MetricColor.blue, per_second_calculation=False
-                # ),
                 metadata_lock_count=MetricData(label="Metadata", color=MetricColor.red, per_second_calculation=False),
             ),
         )
@@ -482,7 +478,6 @@ class MetricManager:
         global_status: Dict[str, int] = {},
         innodb_metrics: Dict[str, int] = {},
         disk_io_metrics: Dict[str, int] = {},
-        # innodb_trx_lock_metrics: Dict[str, int],
         metadata_lock_metrics: Dict[str, int] = {},
         replication_status: Dict[str, Union[int, str]] = {},
         replication_lag: int = 0,  # this can be from SHOW SLAVE Status/heartbeat table
@@ -493,7 +488,6 @@ class MetricManager:
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
         self.disk_io_metrics = disk_io_metrics
-        # self.innodb_trx_lock_metrics = innodb_trx_lock_metrics
         self.metadata_lock_metrics = metadata_lock_metrics
         self.replication_status = replication_status
         self.replication_lag = replication_lag
@@ -580,7 +574,6 @@ class MetricManager:
 
     def update_metrics_locks(self):
         metric_instance = self.metrics.locks
-        # self.add_metric(metric_instance.innodb_trx_lock_count, len(self.innodb_trx_lock_metrics))
         self.add_metric(metric_instance.metadata_lock_count, len(self.metadata_lock_metrics))
         metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
@@ -604,7 +597,7 @@ class MetricManager:
         checkpoint_age_bytes = round(self.global_status.get("Innodb_checkpoint_age", 0))
         max_checkpoint_age_bytes = self.redo_log_size
 
-        if checkpoint_age_bytes + max_checkpoint_age_bytes == 0:
+        if checkpoint_age_bytes == 0:
             return "N/A"
 
         checkpoint_age_sync_flush_bytes = round(max_checkpoint_age_bytes * 0.825)
