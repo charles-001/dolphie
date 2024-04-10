@@ -1,6 +1,6 @@
 import re
 
-from dolphie.DataTypes import HotkeyCommands
+from dolphie.DataTypes import ConnectionSource, HotkeyCommands
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -61,10 +61,13 @@ class CommandModal(ModalScreen):
         Binding("escape", "app.pop_screen", "", show=False),
     ]
 
-    def __init__(self, command, message, processlist_data=None, host_cache_data=None):
+    def __init__(
+        self, command, message, connection_source: ConnectionSource = None, processlist_data=None, host_cache_data=None
+    ):
         super().__init__()
         self.command = command
         self.message = message
+        self.connection_source = connection_source
         self.processlist_data = processlist_data
         self.host_cache_data = host_cache_data
 
@@ -81,6 +84,7 @@ class CommandModal(ModalScreen):
                     yield RadioButton("User", id="user")
                     yield RadioButton("Host/IP", id="host")
                     yield RadioButton("Database", id="db")
+                    yield RadioButton("Hostgroup", id="hostgroup")
                     yield RadioButton("Query Text", id="query_text")
                     yield RadioButton("Query Time", id="query_time")
                 with Vertical(id="kill_container"):
@@ -112,6 +116,9 @@ class CommandModal(ModalScreen):
             filter_radio_buttons.focus()
 
             input.placeholder = "Select an option from above"
+
+            if self.connection_source != ConnectionSource.proxysql:
+                self.query_one("#filter_radio_buttons #hostgroup", RadioButton).display = False
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
             sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
             sleeping_queries_checkbox.toggle()
@@ -169,6 +176,9 @@ class CommandModal(ModalScreen):
             elif event.pressed.id == "user":
                 self.create_dropdown_items("user")
                 modal_input.placeholder = "Username"
+            elif event.pressed.id == "hostgroup":
+                self.create_dropdown_items("hostgroup")
+                modal_input.placeholder = "Hostgroup"
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
             if event.pressed.id == "username":
                 self.create_dropdown_items("user")
@@ -196,6 +206,7 @@ class CommandModal(ModalScreen):
                 "user": "User",
                 "db": "Database",
                 "host": "Host",
+                "hostgroup": "Hostgroup",
                 "query_time": "Query time",
                 "query_text": "Query text",
             }
@@ -207,9 +218,9 @@ class CommandModal(ModalScreen):
                     break
 
             if filter_label:
-                if filter_id == "query_time":
+                if filter_id in ["query_time", "hostgroup"]:
                     if not modal_input.isdigit():
-                        self.update_error_response("Query time must be an integer")
+                        self.update_error_response("Value must be an integer")
                     else:
                         self.dismiss([filter_label, int(modal_input)])
                 elif filter_id == "query_text":

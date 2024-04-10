@@ -20,6 +20,36 @@ class ProxySQLQueries:
         WHERE
             $1
     """
+    mysql_stats: str = """
+        SELECT
+            Variable_Name as Variable_name,
+            Variable_Value as Value
+        FROM
+            stats_mysql_global
+    """
+    mysql_command_counters: str = """
+        SELECT
+            Command as Variable_name,
+            Total_cnt AS Value
+        FROM
+            stats_mysql_commands_counters
+    """
+    queries_per_sec: str = """
+        SELECT
+            SUM(Queries) AS query_count
+        FROM
+            stats_mysql_connection_pool
+    """
+    hostgroup_summary: str = """
+        SELECT
+            *
+        FROM
+            stats_mysql_connection_pool
+            LEFT JOIN runtime_mysql_servers ON hostgroup = hostgroup_id AND srv_host = hostname AND srv_port = port
+        ORDER BY
+            hostgroup
+    """
+    variables: str = "SHOW GLOBAL VARIABLES"
 
 
 @dataclass

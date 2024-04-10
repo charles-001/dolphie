@@ -99,24 +99,22 @@ class Dolphie:
         self.host_with_port: str = f"{self.host}:{self.port}"
         self.binlog_transaction_compression_percentage: int = None
         self.host_cache: dict = {}
+        self.proxysql_hostgroup_summary: dict = {}
 
         self.user_filter = None
         self.db_filter = None
         self.host_filter = None
+        self.hostgroup_filter = None
         self.query_time_filter = None
         self.query_filter = None
 
         # Types of hosts
+        self.connection_source: ConnectionSource = ConnectionSource.mysql
         self.galera_cluster: bool = False
         self.group_replication: bool = False
         self.innodb_cluster: bool = False
         self.innodb_cluster_read_replica: bool = False
         self.replicaset: bool = False
-        self.aws_rds: bool = False
-        self.azure: bool = False
-        self.mariadb: bool = False
-        self.mysql: bool = False
-        self.proxysql: bool = False
 
         # These are for group replication in replication panel
         self.is_group_replication_primary: bool = False
@@ -158,12 +156,11 @@ class Dolphie:
             version_split[2].split("-")[0],
         )
 
-        if self.main_db_connection.source == ConnectionSource.proxysql:
-            self.proxysql = True
+        self.connection_source = self.main_db_connection.source
+        if self.connection_source == ConnectionSource.proxysql:
             self.host_distro = "ProxySQL"
             self.host_with_port = f"{self.host}:{self.port}"
-        elif self.main_db_connection.source == ConnectionSource.mysql:
-            self.mysql = True
+        elif self.connection_source == ConnectionSource.mysql:
             self.setup_connection_mysql()
 
         # Add host to host setup file if it doesn't exist
@@ -185,26 +182,26 @@ class Dolphie:
             self.host_distro = "Percona Server"
         elif "mariadb cluster" in version_comment:
             self.host_distro = "MariaDB Cluster"
-            self.mariadb = True
+            self.connection_source == ConnectionSource.mariadb
         elif "mariadb" in version_comment or "mariadb" in version:
             self.host_distro = "MariaDB"
-            self.mariadb = True
+            self.connection_source == ConnectionSource.mariadb
         elif aurora_version:
             self.host_distro = "Amazon Aurora"
-            self.aws_rds = True
+            self.connection_source == ConnectionSource.aws_rds
         elif "rdsdb" in basedir:
             self.host_distro = "Amazon RDS"
-            self.aws_rds = True
+            self.connection_source == ConnectionSource.aws_rds
         elif global_variables.get("aad_auth_only"):
             self.host_distro = "Azure MySQL"
-            self.azure = True
+            self.connection_source == ConnectionSource.azure_mysql
         else:
             self.host_distro = "MySQL"
 
         # For RDS and Azure, we will use the host specified to connect with since hostname isn't related to the endpoint
-        if self.aws_rds:
+        if self.connection_source == ConnectionSource.aws_rds:
             self.host_with_port = f"{self.host.split('.rds.amazonaws.com')[0]}:{self.port}"
-        elif self.azure:
+        elif self.connection_source == ConnectionSource.azure_mysql:
             self.host_with_port = f"{self.host.split('.mysql.database.azure.com')[0]}:{self.port}"
         else:
             self.host_with_port = f"{global_variables.get('hostname')}:{self.port}"
@@ -293,7 +290,7 @@ class Dolphie:
             # If we're using MySQL 8, we need to fetch the checkpoint age from the performance schema if it's not
             # available in global status
             # On Azure MySQL and Aurora MySQL there is no BACKUP_ADMIN privilege so we can't fetch the checkpoint age
-            if not self.global_status.get("Innodb_checkpoint_age") and not self.azure and not self.aws_rds:
+            if not self.global_status.get("Innodb_checkpoint_age") and self.connection_source == ConnectionSource.mysql:
                 self.global_status["Innodb_checkpoint_age"] = self.main_db_connection.fetch_value_from_field(
                     MySQLQueries.checkpoint_age, "checkpoint_age"
                 )

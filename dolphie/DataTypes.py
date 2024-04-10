@@ -2,8 +2,16 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 from dolphie.Modules.Functions import format_query, format_time
-from dolphie.Modules.MySQL import Database
 from rich.table import Table
+
+
+@dataclass
+class ConnectionSource:
+    mysql = "mysql"
+    proxysql = "proxysql"
+    mariadb = "mariadb"
+    aws_rds = "aws_rds"
+    azure_mysql = "azure_mysql"
 
 
 @dataclass
@@ -18,7 +26,7 @@ class ConnectionStatus:
 class Replica:
     thread_id: int
     host: str
-    connection: Database = None
+    connection: str = None
     table: Table = None
     replication_status: Dict[str, str] = None
     lag_source: str = None
@@ -70,6 +78,7 @@ class Panels:
         self.replication = Panel("replication")
         self.metadata_locks = Panel("metadata_locks")
         self.ddl = Panel("ddl")
+        self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary")
 
     def get_panel(self, panel_name: str) -> Panel:
         return self.__dict__.get(panel_name, None)

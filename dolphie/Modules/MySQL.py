@@ -1,17 +1,11 @@
 import time
-from dataclasses import dataclass
 from ssl import SSLError
 
 import pymysql
+from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.Queries import MySQLQueries
+from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
 from textual.app import App
-
-
-@dataclass
-class ConnectionSource:
-    mysql = "mysql"
-    proxysql = "proxysql"
 
 
 class Database:
@@ -74,13 +68,13 @@ class Database:
             if self.save_connection_id:
                 self.connection_id = self.connection.thread_id()
 
-                # Determine if SSL is being used
-                self.using_ssl = (
-                    "ON"
-                    if self.source == ConnectionSource.mysql
-                    and self.fetch_value_from_field("SHOW STATUS LIKE 'Ssl_cipher'", "Value")
-                    else "OFF"
-                )
+            # Determine if SSL is being used
+            self.using_ssl = (
+                "ON"
+                if self.source == ConnectionSource.mysql
+                and self.fetch_value_from_field("SHOW STATUS LIKE 'Ssl_cipher'", "Value")
+                else "OFF"
+            )
         except pymysql.Error as e:
             if len(e.args) == 1:
                 raise ManualException(e.args[0])
@@ -243,10 +237,14 @@ class Database:
 
         command_data = {}
 
-        self.execute(getattr(MySQLQueries, command))
+        if self.source == ConnectionSource.proxysql:
+            self.execute(getattr(ProxySQLQueries, command))
+        else:
+            self.execute(getattr(MySQLQueries, command))
+
         data = self.fetchall()
 
-        if command in {"status", "variables"}:
+        if command in {"status", "variables", "mysql_stats"}:
             for row in data:
                 variable = row["Variable_name"]
                 value = row["Value"]

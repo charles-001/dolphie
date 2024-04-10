@@ -478,14 +478,14 @@ class MetricManager:
         self,
         worker_start_time: datetime,
         polling_latency: float,
-        global_variables: Dict[str, Union[int, str]],
-        global_status: Dict[str, int],
-        innodb_metrics: Dict[str, int],
-        disk_io_metrics: Dict[str, int],
+        global_variables: Dict[str, Union[int, str]] = {},
+        global_status: Dict[str, int] = {},
+        innodb_metrics: Dict[str, int] = {},
+        disk_io_metrics: Dict[str, int] = {},
         # innodb_trx_lock_metrics: Dict[str, int],
-        metadata_lock_metrics: Dict[str, int],
-        replication_status: Dict[str, Union[int, str]],
-        replication_lag: int,  # this can be from SHOW SLAVE Status/heartbeat table
+        metadata_lock_metrics: Dict[str, int] = {},
+        replication_status: Dict[str, Union[int, str]] = {},
+        replication_lag: int = 0,  # this can be from SHOW SLAVE Status/heartbeat table
     ):
         self.worker_start_time = worker_start_time
         self.polling_latency = polling_latency

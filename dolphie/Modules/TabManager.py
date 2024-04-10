@@ -59,6 +59,7 @@ class Tab:
     panel_metadata_locks: Container = None
     panel_ddl: Container = None
     panel_processlist: Container = None
+    panel_proxysql_hostgroup_summary: Container = None
 
     spinner: SpinnerWidget = None
 
@@ -96,6 +97,9 @@ class Tab:
     replicas_grid: Container = None
     replicas_loading_indicator: LoadingIndicator = None
     replicas_title: Label = None
+
+    proxysql_hostgroup_summary_title: Static = None
+    proxysql_hostgroup_summary_datatable: DataTable = None
 
     cluster_data: Static = None
 
@@ -251,6 +255,12 @@ class TabManager:
                         classes="ddl",
                     ),
                     Container(
+                        Label(id=f"proxysql_hostgroup_summary_title_{tab_id}"),
+                        DataTable(id=f"proxysql_hostgroup_summary_datatable_{tab_id}", show_cursor=False),
+                        id=f"panel_proxysql_hostgroup_summary_{tab_id}",
+                        classes="proxysql_hostgroup_summary",
+                    ),
+                    Container(
                         Label(id=f"processlist_title_{tab_id}"),
                         DataTable(id=f"processlist_data_{tab_id}", show_cursor=False),
                         id=f"panel_processlist_{tab_id}",
@@ -336,10 +346,12 @@ class TabManager:
         tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)
         tab.panel_graphs = self.app.query_one(f"#panel_graphs_{tab.id}", Container)
         tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
-        # tab.panel_innodb_trx_locks = self.app.query_one(f"#panel_innodb_trx_locks_{tab.id}", Container)
         tab.panel_metadata_locks = self.app.query_one(f"#panel_metadata_locks_{tab.id}", Container)
         tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", Container)
         tab.panel_ddl = self.app.query_one(f"#panel_ddl_{tab.id}", Container)
+        tab.panel_proxysql_hostgroup_summary = self.app.query_one(
+            f"#panel_proxysql_hostgroup_summary_{tab.id}", Container
+        )
 
         tab.spinner = self.app.query_one(f"#spinner_{tab.id}", SpinnerWidget)
         tab.spinner.hide()
@@ -348,10 +360,12 @@ class TabManager:
         tab.ddl_datatable = self.app.query_one(f"#ddl_datatable_{tab.id}", DataTable)
         tab.processlist_title = self.app.query_one(f"#processlist_title_{tab.id}", Label)
         tab.processlist_datatable = self.app.query_one(f"#processlist_data_{tab.id}", DataTable)
-        # tab.innodb_trx_locks_title = self.app.query_one(f"#innodb_trx_locks_title_{tab.id}", Label)
-        # tab.innodb_trx_locks_datatable = self.app.query_one(f"#innodb_trx_locks_datatable_{tab.id}", DataTable)
         tab.metadata_locks_title = self.app.query_one(f"#metadata_locks_title_{tab.id}", Label)
         tab.metadata_locks_datatable = self.app.query_one(f"#metadata_locks_datatable_{tab.id}", DataTable)
+        tab.proxysql_hostgroup_summary_title = self.app.query_one(f"#proxysql_hostgroup_summary_title_{tab.id}", Static)
+        tab.proxysql_hostgroup_summary_datatable = self.app.query_one(
+            f"#proxysql_hostgroup_summary_datatable_{tab.id}", DataTable
+        )
 
         tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
         tab.dashboard_innodb = self.app.query_one(f"#dashboard_innodb_{tab.id}", Static)

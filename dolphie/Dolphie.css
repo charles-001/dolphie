@@ -232,6 +232,24 @@ TopBar {
     content-align: center middle;
 }
 
+.proxysql_hostgroup_summary {
+    height: auto;
+    background: #0f1525;
+    border: tall #1b233a;
+    margin-bottom: 1;
+}
+.proxysql_hostgroup_summary > Container {
+    height: auto;
+    width: auto;
+}
+.proxysql_hostgroup_summary > Label {
+    width: 100%;
+    color: #bbc8e8;
+    text-style: bold;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
 .pad_bottom_1 {
     padding-bottom: 1;
 }

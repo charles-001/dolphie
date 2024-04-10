@@ -132,6 +132,10 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
     if dolphie.query_filter:
         where_clause.append("info LIKE '%%%s%%'" % dolphie.query_filter)
 
+    # Filter hostgroup
+    if dolphie.hostgroup_filter:
+        where_clause.append("hostgroup = '%s'" % dolphie.hostgroup_filter)
+
     # Add in our dynamic WHERE clause for filtering
     if where_clause:
         processlist_query = ProxySQLQueries.processlist.replace("$1", " AND ".join(where_clause))
