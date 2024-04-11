@@ -42,6 +42,7 @@ from dolphie.Panels import (
 )
 from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
+from dolphie.Widgets.help import HelpScreen
 from dolphie.Widgets.modal import CommandModal
 from dolphie.Widgets.thread_screen import ThreadScreen
 from dolphie.Widgets.topbar import TopBar
@@ -157,6 +158,21 @@ class DolphieApp(App):
                     tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_main, tab.id))
 
                     return
+
+                # If the main container isn't displayed, it means we just connected
+                if not tab.main_container.display:
+                    tab.main_container.display = True
+                    tab.sparkline.display = True
+
+                    # Hide all tabs so we can show the ones we want
+                    tabs = tab.metric_graph_tabs.query(TabPane)
+                    for graph_tab in tabs:
+                        tab.metric_graph_tabs.hide_tab(graph_tab.id)
+
+                    # Show the tabs that are for the current connection source
+                    for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
+                        if dolphie.connection_source in metric_instance.connection_source:
+                            tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}_{tab.id}")
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -375,18 +391,6 @@ class DolphieApp(App):
             tab.loading_indicator.display = False
             self.tab_manager.update_topbar(tab=tab, connection_status="ONLINE")
 
-        if not tab.main_container.display:
-            tab.main_container.display = True
-            tab.sparkline.display = True
-
-            # Hide all tabs so we can show the ones we want
-            tabs = tab.metric_graph_tabs.query(TabPane)
-            for graph_tab in tabs:
-                tab.metric_graph_tabs.hide_tab(graph_tab.id)
-
-            tab.metric_graph_tabs.show_tab(f"graph_tab_dml_{tab.id}")
-            tab.metric_graph_tabs.show_tab(f"graph_tab_proxysql_connections_{tab.id}")
-            tab.metric_graph_tabs.show_tab(f"graph_tab_proxysql_queries_data_network_{tab.id}")
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
             if panel.visible:
@@ -421,16 +425,6 @@ class DolphieApp(App):
             self.layout_graphs(tab)
             self.tab_manager.update_topbar(tab=tab, connection_status=dolphie.connection_status)
 
-        if not tab.main_container.display:
-            tab.main_container.display = True
-            tab.sparkline.display = True
-
-            # Show all tabs
-            tabs = tab.metric_graph_tabs.query(TabPane)
-            for graph_tab in tabs:
-                tab.metric_graph_tabs.show_tab(graph_tab.id)
-
-            tab.metric_graph_tabs.hide_tab(f"graph_tab_proxysql_connections_{tab.id}")
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
             if panel.visible:
@@ -610,8 +604,6 @@ class DolphieApp(App):
                 tab.dashboard_innodb.styles.max_width = "32"
                 tab.dashboard_replication.styles.max_width = "55"
                 tab.dashboard_statistics.styles.max_width = "22"
-
-                tab.dashboard_replication.display = True
         elif tab.dolphie.connection_source == ConnectionSource.proxysql:
             tab.dashboard_host_information.styles.width = "25vw"
             tab.dashboard_statistics.styles.width = "13vw"
@@ -1158,105 +1150,10 @@ class DolphieApp(App):
                 )
 
         elif key == "question_mark":
-            keys = {
-                "1": "Show/hide Dashboard",
-                "2": "Show/hide Processlist",
-                "3": "Show/hide Replication/Replicas or ProxySQL Hostgroup Summary",
-                "4": "Show/hide Graph Metrics",
-                "5": "Show/hide Metadata Locks",
-                "6": "Show/hide DDLs",
-                "`": "Open Host Setup",
-                "+": "Create a new tab",
-                "-": "Remove the current tab",
-                "=": "Rename the current tab",
-                "a": "Toggle additional processlist columns",
-                "c": "Clear all filters set",
-                "d": "Display all databases",
-                "D": "Disconnect from the tab's host",
-                "e": "Display error log from Performance Schema",
-                "f": "Filter processlist by a supported option",
-                "i": "Toggle displaying idle threads",
-                "k": "Kill a thread by its ID",
-                "K": "Kill a thread by a supported option",
-                "l": "Display the most recent deadlock",
-                "o": "Display output from SHOW ENGINE INNODB STATUS",
-                "m": "Display memory usage",
-                "p": "Pause refreshing of panels",
-                "P": "Switch between using Information Schema/Performance Schema for processlist panel",
-                "q": "Quit",
-                "r": "Set the refresh interval",
-                "R": "Reset all metrics",
-                "t": "Display details of a thread along with an EXPLAIN of its query",
-                "T": "Transaction view - toggle displaying threads that only have an active transaction",
-                "s": "Toggle sorting for Age in descending/ascending order",
-                "u": "List active connected users and their statistics or list frontend users connected to ProxySQL",
-                "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
-                "z": "Display all entries in the host cache",
-                "space": "Force a manual refresh of all panels except replicas",
-                "ctrl+a": "Switch to the previous tab",
-                "ctrl+d": "Switch to the next tab",
-            }
-
-            table_keys = Table(
-                box=box.SIMPLE_HEAVY,
-                show_edge=False,
-                style="table_border",
-                title="Commands",
-                title_style="bold #bbc8e8",
-                header_style="bold",
-            )
-            table_keys.add_column("Key", justify="center", style="b highlight")
-            table_keys.add_column("Description")
-
-            for key, description in keys.items():
-                table_keys.add_row(key, description)
-
-            datapoints = {
-                "Read Only": "If the host is in read-only mode",
-                "Read Hit": "The percentage of how many reads are from InnoDB buffer pool compared to from disk",
-                "Lag": ("Retrieves metric from: Default -> SHOW SLAVE STATUS, HB -> Heartbeat table"),
-                "Chkpt Age": (
-                    "This depicts how close InnoDB is before it starts to furiously flush dirty data to disk "
-                    "(Lower is better)"
-                ),
-                "AHI Hit": (
-                    "The percentage of how many lookups there are from Adapative Hash Index compared to it not"
-                    " being used"
-                ),
-                "Diff": "This is the size difference of the binary log between each refresh interval",
-                "Cache Hit": "The percentage of how many binary log lookups are from cache instead of from disk",
-                "History List": "History list length (number of un-purged row changes in InnoDB's undo logs)",
-                "QPS": "Queries per second from Com_queries in SHOW GLOBAL STATUS",
-                "Latency": "How much time it takes to receive data from the host for each refresh interval",
-                "Threads": "Con = Connected, Run = Running, Cac = Cached from SHOW GLOBAL STATUS",
-                "Speed": "How many seconds were taken off of replication lag from the last refresh interval",
-                "Tickets": "Relates to innodb_concurrency_tickets variable",
-                "R-Lock/Mod": "Relates to how many rows are locked/modified for the thread's transaction",
-                "GR": "Group Replication",
-            }
-
-            table_terminology = Table(
-                box=box.SIMPLE_HEAVY,
-                show_edge=False,
-                style="table_border",
-                title="Terminology",
-                title_style="bold #bbc8e8",
-                header_style="bold",
-            )
-            table_terminology.add_column("Datapoint", style="highlight")
-            table_terminology.add_column("Description")
-            for datapoint, description in sorted(datapoints.items()):
-                table_terminology.add_row(datapoint, description)
-
-            screen_data = Group(
-                Align.center(table_keys),
-                "",
-                Align.center(table_terminology),
-                "",
-                Align.center(
-                    "[light_blue][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
-                    " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-copy-text"
-                ),
+            self.app.push_screen(
+                HelpScreen(
+                    dolphie.connection_status, dolphie.app_version, dolphie.host_with_port, dolphie.connection_source
+                )
             )
 
         if screen_data:
@@ -1343,9 +1240,9 @@ class DolphieApp(App):
             if key == "k":
                 thread_id = additional_data
                 try:
-                    if dolphie.connection_source == ConnectionSource.aws_rds:
+                    if dolphie.connection_source_alt == ConnectionSource.aws_rds:
                         dolphie.secondary_db_connection.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                    elif dolphie.connection_source == ConnectionSource.azure_mysql:
+                    elif dolphie.connection_source_alt == ConnectionSource.azure_mysql:
                         dolphie.secondary_db_connection.execute("CALL mysql.az_kill(%s)" % thread_id)
                     elif dolphie.connection_source == ConnectionSource.proxysql:
                         dolphie.secondary_db_connection.execute("KILL CONNECTION %s" % thread_id)
@@ -1359,9 +1256,9 @@ class DolphieApp(App):
             if key == "K":
 
                 def execute_kill(thread_id):
-                    if dolphie.connection_source == ConnectionSource.aws_rds:
+                    if dolphie.connection_source_alt == ConnectionSource.aws_rds:
                         query = "CALL mysql.rds_kill(%s)"
-                    elif dolphie.connection_source == ConnectionSource.azure_mysql:
+                    elif dolphie.connection_source_alt == ConnectionSource.azure_mysql:
                         query = "CALL mysql.az_kill(%s)"
                     elif dolphie.connection_source == ConnectionSource.proxysql:
                         query = "KILL CONNECTION %s"

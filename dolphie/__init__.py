@@ -101,6 +101,7 @@ class Dolphie:
 
         # Types of hosts
         self.connection_source: ConnectionSource = ConnectionSource.mysql
+        self.connection_source_alt: ConnectionSource = ConnectionSource.mysql  # rds, azure, etc
         self.galera_cluster: bool = False
         self.group_replication: bool = False
         self.innodb_cluster: bool = False
@@ -150,6 +151,7 @@ class Dolphie:
         )
 
         self.connection_source = self.main_db_connection.source
+        self.connection_source_alt = self.connection_source
         if self.connection_source == ConnectionSource.proxysql:
             self.host_distro = "ProxySQL"
             self.host_with_port = f"{self.host}:{self.port}"
@@ -175,33 +177,33 @@ class Dolphie:
             self.host_distro = "Percona Server"
         elif "mariadb cluster" in version_comment:
             self.host_distro = "MariaDB Cluster"
-            self.connection_source == ConnectionSource.mariadb
+            self.connection_source_alt == ConnectionSource.mariadb
         elif "mariadb" in version_comment or "mariadb" in version:
             self.host_distro = "MariaDB"
-            self.connection_source == ConnectionSource.mariadb
+            self.connection_source_alt == ConnectionSource.mariadb
         elif aurora_version:
             self.host_distro = "Amazon Aurora"
-            self.connection_source == ConnectionSource.aws_rds
+            self.connection_source_alt == ConnectionSource.aws_rds
         elif "rdsdb" in basedir:
             self.host_distro = "Amazon RDS"
-            self.connection_source == ConnectionSource.aws_rds
+            self.connection_source_alt == ConnectionSource.aws_rds
         elif global_variables.get("aad_auth_only"):
             self.host_distro = "Azure MySQL"
-            self.connection_source == ConnectionSource.azure_mysql
+            self.connection_source_alt == ConnectionSource.azure_mysql
         else:
             self.host_distro = "MySQL"
 
         # For RDS and Azure, we will use the host specified to connect with since hostname isn't related to the endpoint
-        if self.connection_source == ConnectionSource.aws_rds:
+        if self.connection_source_alt == ConnectionSource.aws_rds:
             self.host_with_port = f"{self.host.split('.rds.amazonaws.com')[0]}:{self.port}"
-        elif self.connection_source == ConnectionSource.azure_mysql:
+        elif self.connection_source_alt == ConnectionSource.azure_mysql:
             self.host_with_port = f"{self.host.split('.mysql.database.azure.com')[0]}:{self.port}"
         else:
             self.host_with_port = f"{global_variables.get('hostname')}:{self.port}"
 
         major_version = int(version_split[0])
         self.server_uuid = global_variables.get("server_uuid")
-        if "MariaDB" in self.host_distro and major_version >= 10:
+        if self.connection_source_alt == ConnectionSource.mariadb and major_version >= 10:
             self.server_uuid = global_variables.get("server_id")
 
         if global_variables.get("performance_schema") == "ON":
@@ -283,7 +285,10 @@ class Dolphie:
             # If we're using MySQL 8, we need to fetch the checkpoint age from the performance schema if it's not
             # available in global status
             # On Azure/Aurora MySQL there is no BACKUP_ADMIN privilege so we can't fetch the checkpoint age from them
-            if not self.global_status.get("Innodb_checkpoint_age") and self.connection_source == ConnectionSource.mysql:
+            if (
+                not self.global_status.get("Innodb_checkpoint_age")
+                and self.connection_source_alt == ConnectionSource.mysql
+            ):
                 self.global_status["Innodb_checkpoint_age"] = self.main_db_connection.fetch_value_from_field(
                     MySQLQueries.checkpoint_age, "checkpoint_age"
                 )

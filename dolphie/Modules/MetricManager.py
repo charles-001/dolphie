@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Dict, List, Union
 
 import plotext as plt
+from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.Functions import format_bytes, format_number, format_time
 from rich.text import Text
 from textual.widgets import Static
@@ -223,6 +224,9 @@ class DMLMetrics:
     tab_name: str = "dml"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(
+        default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
+    )
 
 
 @dataclass
@@ -231,8 +235,8 @@ class ReplicationLagMetrics:
     graphs: List[str]
     tab_name: str = "replication_lag"
     metric_source: MetricSource = MetricSource.none
-
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -244,6 +248,7 @@ class CheckpointMetrics:
     datetimes: List[str] = field(default_factory=list)
     checkpoint_age_max: int = 0
     checkpoint_age_sync_flush: int = 0
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -255,6 +260,7 @@ class BufferPoolRequestsMetrics:
     tab_name: str = "buffer_pool_requests"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -265,6 +271,7 @@ class AdaptiveHashIndexMetrics:
     tab_name: str = "adaptive_hash_index"
     metric_source: MetricSource = MetricSource.innodb_metrics
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -275,6 +282,7 @@ class AdaptiveHashIndexHitRatioMetrics:
     tab_name: str = "adaptive_hash_index"
     metric_source: MetricSource = MetricSource.none
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -285,6 +293,7 @@ class RedoLogMetrics:
     redo_log_size: int = 0
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -294,6 +303,7 @@ class RedoLogActiveCountMetrics:
     tab_name: str = "redo_log"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -305,6 +315,7 @@ class TableCacheMetrics:
     tab_name: str = "table_cache"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -315,6 +326,7 @@ class ThreadMetrics:
     tab_name: str = "threads"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -326,6 +338,7 @@ class TemporaryObjectMetrics:
     tab_name: str = "temporary_objects"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -336,6 +349,7 @@ class AbortedConnectionsMetrics:
     tab_name: str = "aborted_connections"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -346,6 +360,7 @@ class DiskIOMetrics:
     tab_name: str = "disk_io"
     metric_source: MetricSource = MetricSource.disk_io_metrics
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -355,6 +370,7 @@ class LocksMetrics:
     tab_name: str = "locks"
     metric_source: MetricSource = MetricSource.none
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -370,6 +386,7 @@ class ProxySQLConnectionsMetrics:
     tab_name: str = "proxysql_connections"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
 
 
 @dataclass
@@ -382,6 +399,7 @@ class ProxySQLQueriesDataNetwork:
     tab_name: str = "proxysql_queries_data_network"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
 
 
 @dataclass

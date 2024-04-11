@@ -337,7 +337,7 @@ class TabManager:
 
                     # Toggle the switch if the metric is visible
                     if metric_data.visible:
-                        self.app.query_one(f"#{metric}", Switch).toggle()
+                        self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id} #{metric}", Switch).toggle()
 
         # Save the tab instance to the tabs dictionary
         self.tabs[tab_id] = tab
