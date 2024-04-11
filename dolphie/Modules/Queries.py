@@ -69,12 +69,11 @@ class ProxySQLQueries:
         SELECT
             rule_id,
             hits,
+            hits AS hits_s,
             match_digest,
             match_pattern,
-            negate_match_pattern,
             flagIN,
             flagOUT,
-            re_modifiers,
             destination_hostgroup,
             apply
         FROM

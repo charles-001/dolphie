@@ -41,14 +41,13 @@ def create_panel(tab: Tab) -> DataTable:
 
             # Calculate the values per second for the following columns
             if column_key in ["hits_s"]:
-                column_value = row.get("hits", 0)
                 if not dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0):
                     column_value = 0
                 else:
                     value_diff = int(column_value) - dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0)
                     column_value = round(value_diff / dolphie.polling_latency)
 
-                dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = int(row.get("hits", 0))
+                dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = int(row.get(column_key, 0))
 
             if column_format == "number":
                 column_value = format_number(column_value)
