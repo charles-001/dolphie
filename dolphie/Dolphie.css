@@ -100,19 +100,6 @@ TopBar {
     width: auto;
 }
 
-.innodb_trx_locks {
-    height: auto;
-    background: #0f1525;
-    border: tall #1b233a;
-    margin-bottom: 1;
-}
-.innodb_trx_locks > Label {
-    width: 100%;
-    text-style: bold;
-    color: #bbc8e8;
-    content-align: center middle;
-    margin-bottom: 1;
-}
 
 .metadata_locks {
     height: auto;

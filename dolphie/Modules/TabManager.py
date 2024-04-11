@@ -287,6 +287,7 @@ class TabManager:
             ("Disk I/O", metrics.disk_io),
             ("Replication", metrics.replication_lag),
             ("Connections", metrics.proxysql_connections),
+            ("Query Data Rates", metrics.proxysql_queries_data_network),
         ]
 
         for tab_formatted_name, metric_instance in metric_tab_labels:
@@ -333,6 +334,10 @@ class TabManager:
                     await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
                         Switch(animate=False, id=metric, name=metric_tab_name)
                     )
+
+                    # Toggle the switch if the metric is visible
+                    if metric_data.visible:
+                        self.app.query_one(f"#{metric}", Switch).toggle()
 
         # Save the tab instance to the tabs dictionary
         self.tabs[tab_id] = tab
@@ -414,16 +419,6 @@ class TabManager:
         graphs = self.app.query(MetricManager.Graph)
         for graph in graphs:
             graph.marker = dolphie.graph_marker
-
-        # Set default switches to be toggled on
-        for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
-            for metric, metric_data in metric_instance.__dict__.items():
-                if (
-                    isinstance(metric_data, MetricManager.MetricData)
-                    and metric_data.create_switch
-                    and metric_data.visible
-                ):
-                    self.app.query_one(f"#{metric}", Switch).toggle()
 
         if switch_tab:
             self.switch_tab(tab_id)

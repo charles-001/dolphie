@@ -34,6 +34,12 @@ class ProxySQLQueries:
         FROM
             stats_mysql_commands_counters
     """
+    backend_host_average_latency: str = """
+        SELECT
+            SUM(Latency_us) / COUNT(*) AS avg_latency
+        FROM
+            stats_mysql_connection_pool
+    """
     user_stats: str = """
         SELECT DISTINCT
             su.username,

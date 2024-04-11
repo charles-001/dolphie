@@ -49,7 +49,7 @@ def create_panel(tab: Tab) -> Table:
     )
     table_information.add_row("[label]Type", f"{host_type} [label]SSL[/label] {dolphie.main_db_connection.using_ssl}")
     table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
-    table_information.add_row("[label]Runtime", f"{runtime} [label]Latency[/label] {dolphie.refresh_latency}s")
+    table_information.add_row("[label]Runtime", f"{runtime} [dark_gray]({dolphie.refresh_latency}s)")
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
         "[label]Threads",

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from dolphie.Modules.Functions import format_number
+from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.MetricManager import MetricData
 from dolphie.Modules.TabManager import Tab
 from rich.style import Style
@@ -12,45 +12,110 @@ def create_panel(tab: Tab) -> Table:
 
     global_status = dolphie.global_status
 
+    ####################
+    # Host Information #
+    ####################
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
     table_title_style = Style(color="#bbc8e8", bold=True)
-    table_information = Table(show_header=False, box=None, title="Host Information", title_style=table_title_style)
+    table = Table(show_header=False, box=None, title="Host Information", title_style=table_title_style)
 
-    table_information.add_column()
-    table_information.add_column(min_width=25, max_width=27)
-    table_information.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
-    table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["ProxySQL_Uptime"])))
-    table_information.add_row("[label]Runtime", f"{runtime} [label]Latency[/label] {dolphie.refresh_latency}s")
-    table_information.add_row("[label]Active TRX", f"{global_status['Active_Transactions']}")
-    # table_information.add_row(
-    #     "[label]Threads",
-    #     "[label]con[/label] %s[highlight]/[/highlight][label]run[/label]"
-    #     " %s[highlight]/[/highlight][label]cac[/label] %s"
-    #     % (
-    #         format_number(global_status["Threads_connected"]),
-    #         format_number(global_status["Threads_running"]),
-    #         format_number(global_status["Threads_cached"]),
-    #     ),
-    # )
-    # table_information.add_row(
-    #     "[label]Tables",
-    #     "[label]open[/label] %s[highlight]/[/highlight][label]opened[/label] %s"
-    #     % (
-    #         format_number(global_status["Open_tables"]),
-    #         format_number(global_status["Opened_tables"]),
-    #     ),
-    # )
+    table.add_column()
+    table.add_column(min_width=25)
+    table.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
+    table.add_row("[label]Uptime", str(timedelta(seconds=global_status["ProxySQL_Uptime"])))
+    table.add_row("[label]Runtime", f"{runtime} [dark_gray]({dolphie.refresh_latency}s)")
+    table.add_row(
+        "[label]Latency",
+        f"[label]CP Avg[/label] {round(dolphie.proxysql_backend_host_average_latency / 1000, 2)}ms",
+    )
+    table.add_row("[label]Active TRX", f"{global_status['Active_Transactions']}")
+    tab.dashboard_host_information.update(table)
 
-    tab.dashboard_host_information.update(table_information)
+    ##########################
+    # Connection Information #
+    ##########################
+    proxysql_connections = dolphie.metric_manager.metrics.proxysql_connections
+
+    table = Table(show_header=False, box=None, title="Connections", title_style=table_title_style)
+
+    table.add_column()
+    table.add_column(min_width=6)
+    data_dict = {
+        "[label]FE Connected": proxysql_connections.Client_Connections_connected.values,
+        "[label]BE Connected": proxysql_connections.Server_Connections_connected.values,
+        "[label]FE Created": proxysql_connections.Client_Connections_created.values,
+        "[label]BE Created": proxysql_connections.Server_Connections_created.values,
+        "[label]FE Aborted": proxysql_connections.Client_Connections_aborted.values,
+        "[label]BE Aborted": proxysql_connections.Server_Connections_aborted.values,
+        "[label]Wrong Passwd": proxysql_connections.Access_Denied_Wrong_Password.values,
+    }
+
+    fe_usage = round(
+        (dolphie.global_status["Client_Connections_connected"] / dolphie.global_variables["mysql-max_connections"])
+        * 100,
+        2,
+    )
+
+    if fe_usage >= 90:
+        color_code = "red"
+    elif fe_usage >= 70:
+        color_code = "yellow"
+    else:
+        color_code = "green"
+
+    table.add_row("[label]FE Usage", f"[{color_code}]{fe_usage}%")
+    for label, values in data_dict.items():
+        if values:
+            value = format_number(values[-1])
+        else:
+            value = 0
+
+        if "Created" in label or "Aborted" in label or "Wrong Passwd" in label:
+            table.add_row(label, f"{value}/s")
+        else:
+            table.add_row(label, f"{value}")
+
+    # Reuse Innodb table for connection information
+    tab.dashboard_innodb.update(table)
+
+    ####################################
+    # Query Sent/Recv Rate Information #
+    ####################################
+    proxysql_queries_network_data = dolphie.metric_manager.metrics.proxysql_queries_data_network
+
+    table = Table(show_header=False, box=None, title="Query Data Rates", title_style=table_title_style)
+
+    table.add_column()
+    table.add_column(min_width=7)
+    data_dict = {
+        "[label]FE Sent": proxysql_queries_network_data.Queries_frontends_bytes_sent.values,
+        "[label]BE Sent": proxysql_queries_network_data.Queries_backends_bytes_sent.values,
+        "[label]FE Recv": proxysql_queries_network_data.Queries_frontends_bytes_recv.values,
+        "[label]BE Recv": proxysql_queries_network_data.Queries_backends_bytes_recv.values,
+    }
+
+    for label, values in data_dict.items():
+        if values:
+            value = format_bytes(values[-1])
+        else:
+            value = 0
+
+        if "Created" in label or "Aborted" in label or "Wrong Passwd" in label:
+            table.add_row(label, f"{value}/s")
+        else:
+            table.add_row(label, f"{value}")
+
+    # Reuse binary log table for connection information
+    tab.dashboard_binary_log.update(table)
 
     ###############
     # Statistics #
     ###############
-    table_stats = Table(show_header=False, box=None, title="Statistics/s", title_style=table_title_style)
+    table = Table(show_header=False, box=None, title="Statistics/s", title_style=table_title_style)
 
-    table_stats.add_column()
-    table_stats.add_column(min_width=6)
+    table.add_column()
+    table.add_column(min_width=6)
 
     # Add DML statistics
     metrics = dolphie.metric_manager.metrics.dml
@@ -69,8 +134,8 @@ def create_panel(tab: Tab) -> Table:
         metric_data: MetricData = getattr(metrics, metric_name)
 
         if metric_data.values:
-            table_stats.add_row(f"[label]{label}", format_number(metric_data.values[-1]))
+            table.add_row(f"[label]{label}", format_number(metric_data.values[-1]))
         else:
-            table_stats.add_row(f"[label]{label}", "0")
+            table.add_row(f"[label]{label}", "0")
 
-    tab.dashboard_statistics.update(table_stats)
+    tab.dashboard_statistics.update(table)

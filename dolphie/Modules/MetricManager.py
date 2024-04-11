@@ -172,6 +172,7 @@ def get_number_format_function(data, color=False):
         RedoLogMetrics: lambda val: format_bytes(val, color=color),
         AdaptiveHashIndexHitRatioMetrics: lambda val: f"{round(val)}%",
         DiskIOMetrics: lambda val: format_bytes(val, color=color),
+        ProxySQLQueriesDataNetwork: lambda val: format_bytes(val, color=color),
     }
 
     return data_formatters.get(type(data), lambda val: format_number(val, color=color))
@@ -192,6 +193,7 @@ class MetricColor:
     green: tuple = (84, 239, 174)
     red: tuple = (255, 73, 112)
     yellow: tuple = (252, 213, 121)
+    purple: tuple = (191, 121, 252)
 
 
 @dataclass
@@ -363,8 +365,21 @@ class ProxySQLConnectionsMetrics:
     Server_Connections_aborted: MetricData
     Server_Connections_connected: MetricData
     Server_Connections_created: MetricData
+    Access_Denied_Wrong_Password: MetricData
     graphs: List[str]
     tab_name: str = "proxysql_connections"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ProxySQLQueriesDataNetwork:
+    Queries_backends_bytes_recv: MetricData
+    Queries_backends_bytes_sent: MetricData
+    Queries_frontends_bytes_recv: MetricData
+    Queries_frontends_bytes_sent: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_queries_data_network"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
 
@@ -386,6 +401,7 @@ class MetricInstances:
     disk_io: DiskIOMetrics
     locks: LocksMetrics
     proxysql_connections: ProxySQLConnectionsMetrics
+    proxysql_queries_data_network: ProxySQLQueriesDataNetwork
 
 
 class MetricManager:
@@ -494,16 +510,24 @@ class MetricManager:
             ),
             proxysql_connections=ProxySQLConnectionsMetrics(
                 graphs=["graph_proxysql_connections"],
-                Client_Connections_aborted=MetricData(label="Frontend (aborted)", color=MetricColor.red),
+                Client_Connections_aborted=MetricData(label="FE (aborted)", color=MetricColor.gray),
                 Client_Connections_connected=MetricData(
-                    label="Frontend (connected)", color=MetricColor.green, per_second_calculation=False, visible=False
+                    label="FE (connected)", color=MetricColor.green, per_second_calculation=False, visible=False
                 ),
-                Client_Connections_created=MetricData(label="Frontend (created)", color=MetricColor.yellow),
-                Server_Connections_aborted=MetricData(label="Backend (aborted)", color=MetricColor.red),
+                Client_Connections_created=MetricData(label="FE (created)", color=MetricColor.yellow),
+                Server_Connections_aborted=MetricData(label="BE (aborted)", color=MetricColor.red),
                 Server_Connections_connected=MetricData(
-                    label="Backend (connected)", color=MetricColor.green, per_second_calculation=False, visible=False
+                    label="BE (connected)", color=MetricColor.green, per_second_calculation=False, visible=False
                 ),
-                Server_Connections_created=MetricData(label="Backend (created)", color=MetricColor.yellow),
+                Server_Connections_created=MetricData(label="BE (created)", color=MetricColor.blue),
+                Access_Denied_Wrong_Password=MetricData(label="Wrong Password", color=MetricColor.purple),
+            ),
+            proxysql_queries_data_network=ProxySQLQueriesDataNetwork(
+                graphs=["graph_proxysql_queries_data_network"],
+                Queries_backends_bytes_recv=MetricData(label="BE Recv", color=MetricColor.blue),
+                Queries_backends_bytes_sent=MetricData(label="BE Sent", color=MetricColor.green),
+                Queries_frontends_bytes_recv=MetricData(label="FE Recv", color=MetricColor.purple),
+                Queries_frontends_bytes_sent=MetricData(label="FE Sent", color=MetricColor.yellow),
             ),
         )
 

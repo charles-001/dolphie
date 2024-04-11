@@ -45,15 +45,15 @@ def create_panel(tab: Tab) -> DataTable:
             column_value = row[column_key]
             column_format = column_data["format"]
 
+            # Calculate the values per second for the following columns since the total isn't a great metric
             if column_key in ["Queries", "Bytes_data_sent", "Bytes_data_recv"]:
                 if not dolphie.proxysql_hostgroup_summary_snapshot.get(row_id, {}).get(column_key, 0):
                     column_value = 0
                 else:
-                    column_value = round(
-                        int(column_value)
-                        - dolphie.proxysql_hostgroup_summary_snapshot.get(row_id, {}).get(column_key, 0),
-                        0,
+                    value_diff = int(column_value) - dolphie.proxysql_hostgroup_summary_snapshot.get(row_id, {}).get(
+                        column_key, 0
                     )
+                    column_value = round(value_diff / dolphie.polling_latency)
 
                 dolphie.proxysql_hostgroup_summary_snapshot.setdefault(row_id, {})[column_key] = int(row[column_key])
             if column_format == "time":

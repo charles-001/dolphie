@@ -59,17 +59,6 @@ class Dolphie:
         self.metric_manager = MetricManager.MetricManager()
         self.replica_manager = DataTypes.ReplicaManager()
 
-        # Set the graph switches to what they're currently selected to since we reset metric_manager
-        switches = self.app.query(f".switch_container_{self.tab_id} Switch")
-        for switch in switches:
-            switch: Switch
-            metric_instance_name = switch.name
-            metric = switch.id
-
-            metric_instance = getattr(self.metric_manager.metrics, metric_instance_name)
-            metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
-            metric_data.visible = switch.value
-
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
@@ -101,6 +90,7 @@ class Dolphie:
         self.host_cache: dict = {}
         self.proxysql_hostgroup_summary: dict = {}
         self.proxysql_hostgroup_summary_snapshot: dict = {}
+        self.proxysql_backend_host_average_latency: float = 0
 
         self.user_filter = None
         self.db_filter = None
@@ -144,6 +134,8 @@ class Dolphie:
         self.host_distro: str = None
 
         self.host_cache_from_file = load_host_cache_file(self.host_cache_file)
+
+        self.update_switches_after_reset()
 
     def db_connect(self):
         self.main_db_connection.connect()
@@ -306,3 +298,15 @@ class Dolphie:
         # which has less precision, but it's good enough
         if not self.global_status.get("Innodb_lsn_current"):
             self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
+
+    def update_switches_after_reset(self):
+        # Set the graph switches to what they're currently selected to after a reset
+        switches = self.app.query(f".switch_container_{self.tab_id} Switch")
+        for switch in switches:
+            switch: Switch
+            metric_instance_name = switch.name
+            metric = switch.id
+
+            metric_instance = getattr(self.metric_manager.metrics, metric_instance_name)
+            metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+            metric_data.visible = switch.value

@@ -347,6 +347,13 @@ class DolphieApp(App):
             # Format the key to match the global status keys of MySQL
             dolphie.global_status[f"Com_{row['Variable_name'].lower()}"] = int(row["Value"])
 
+        if dolphie.panels.dashboard.visible:
+            dolphie.proxysql_backend_host_average_latency = int(
+                dolphie.main_db_connection.fetch_value_from_field(
+                    ProxySQLQueries.backend_host_average_latency, "avg_latency"
+                )
+            )
+
         if dolphie.panels.proxysql_hostgroup_summary.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
             dolphie.proxysql_hostgroup_summary = dolphie.main_db_connection.fetchall()
@@ -379,6 +386,7 @@ class DolphieApp(App):
 
             tab.metric_graph_tabs.show_tab(f"graph_tab_dml_{tab.id}")
             tab.metric_graph_tabs.show_tab(f"graph_tab_proxysql_connections_{tab.id}")
+            tab.metric_graph_tabs.show_tab(f"graph_tab_proxysql_queries_data_network_{tab.id}")
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
             if panel.visible:
@@ -603,19 +611,19 @@ class DolphieApp(App):
                 tab.dashboard_replication.styles.max_width = "55"
                 tab.dashboard_statistics.styles.max_width = "22"
 
-                tab.dashboard_binary_log.display = True
                 tab.dashboard_replication.display = True
-                tab.dashboard_innodb.display = True
         elif tab.dolphie.connection_source == ConnectionSource.proxysql:
             tab.dashboard_host_information.styles.width = "25vw"
-            tab.dashboard_statistics.styles.width = "12vw"
+            tab.dashboard_statistics.styles.width = "13vw"
+            tab.dashboard_innodb.styles.width = "20vw"
+            tab.dashboard_binary_log.styles.width = "22vw"
 
-            tab.dashboard_binary_log.display = False
             tab.dashboard_replication.display = False
-            tab.dashboard_innodb.display = False
 
             tab.dashboard_host_information.styles.max_width = "45"
-            tab.dashboard_statistics.styles.max_width = "22"
+            tab.dashboard_statistics.styles.max_width = "25"
+            tab.dashboard_innodb.styles.max_width = "28"
+            tab.dashboard_binary_log.styles.max_width = "25"
 
             panel_mapping = {
                 tab.dolphie.panels.processlist.name: proxysql_processlist_panel,
@@ -1011,6 +1019,7 @@ class DolphieApp(App):
             dolphie.metric_manager.reset()
 
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
+            dolphie.update_switches_after_reset()
             self.notify("Metrics have been reset", severity="success")
 
         elif key == "s":
@@ -1180,7 +1189,7 @@ class DolphieApp(App):
                 "t": "Display details of a thread along with an EXPLAIN of its query",
                 "T": "Transaction view - toggle displaying threads that only have an active transaction",
                 "s": "Toggle sorting for Age in descending/ascending order",
-                "u": "List active connected users and their statistics or List frontend users connected to ProxySQL",
+                "u": "List active connected users and their statistics or list frontend users connected to ProxySQL",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
                 "z": "Display all entries in the host cache",
                 "space": "Force a manual refresh of all panels except replicas",
