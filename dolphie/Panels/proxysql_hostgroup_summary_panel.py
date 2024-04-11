@@ -13,14 +13,14 @@ def create_panel(tab: Tab) -> DataTable:
         "status": {"name": "Status", "width": 10, "format": None},
         "weight": {"name": "Weight", "width": 7, "format": None},
         "use_ssl": {"name": "SSL", "width": 5, "format": None},
-        "ConnUsed": {"name": "Conn Used", "width": 10, "format": "number"},
+        "ConnUsed": {"name": "Conn Active", "width": 11, "format": "number"},
         "ConnFree": {"name": "Conn Free", "width": 10, "format": "number"},
         "ConnOK": {"name": "Conn OK", "width": 10, "format": "number"},
         "ConnERR": {"name": "Conn ERR", "width": 10, "format": "number"},
         "MaxConnUsed": {"name": "Max Conn", "width": 11, "format": "number"},
-        "Queries": {"name": "Queries", "width": 10, "format": "number"},
-        "Bytes_data_sent": {"name": "Data Sent", "width": 10, "format": "bytes"},
-        "Bytes_data_recv": {"name": "Data Recvd", "width": 10, "format": "bytes"},
+        "Queries": {"name": "Queries/s", "width": 10, "format": "number"},
+        "Bytes_data_sent": {"name": "Data Sent/s", "width": 11, "format": "bytes"},
+        "Bytes_data_recv": {"name": "Data Recvd/s", "width": 12, "format": "bytes"},
         "Latency_us": {"name": "Latency (ms)", "width": 12, "format": "time"},
     }
 
@@ -45,12 +45,23 @@ def create_panel(tab: Tab) -> DataTable:
             column_value = row[column_key]
             column_format = column_data["format"]
 
+            if column_key in ["Queries", "Bytes_data_sent", "Bytes_data_recv"]:
+                if not dolphie.proxysql_hostgroup_summary_snapshot.get(row_id, {}).get(column_key, 0):
+                    column_value = 0
+                else:
+                    column_value = round(
+                        int(column_value)
+                        - dolphie.proxysql_hostgroup_summary_snapshot.get(row_id, {}).get(column_key, 0),
+                        0,
+                    )
+
+                dolphie.proxysql_hostgroup_summary_snapshot.setdefault(row_id, {})[column_key] = int(row[column_key])
             if column_format == "time":
                 column_value = f"{round(int(column_value) / 1000, 2)}"
             elif column_format == "bytes":
-                column_value = format_bytes(int(column_value))
+                column_value = format_bytes(column_value)
             elif column_format == "number":
-                column_value = format_number(int(column_value))
+                column_value = format_number(column_value)
             elif column_key == "srv_host":
                 column_value = dolphie.get_hostname(column_value)
             elif column_key == "status":

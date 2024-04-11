@@ -232,6 +232,9 @@ TopBar {
     content-align: center middle;
 }
 
+.proxysql_hostgroup_summary_datatable {
+    overflow-x: auto;
+}
 .proxysql_hostgroup_summary {
     height: auto;
     background: #0f1525;

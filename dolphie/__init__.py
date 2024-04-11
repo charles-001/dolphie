@@ -100,6 +100,7 @@ class Dolphie:
         self.binlog_transaction_compression_percentage: int = None
         self.host_cache: dict = {}
         self.proxysql_hostgroup_summary: dict = {}
+        self.proxysql_hostgroup_summary_snapshot: dict = {}
 
         self.user_filter = None
         self.db_filter = None

@@ -34,11 +34,21 @@ class ProxySQLQueries:
         FROM
             stats_mysql_commands_counters
     """
-    queries_per_sec: str = """
-        SELECT
-            SUM(Queries) AS query_count
+    user_stats: str = """
+        SELECT DISTINCT
+            su.username,
+            frontend_connections,
+            frontend_max_connections,
+            default_hostgroup,
+            default_schema,
+            use_ssl
         FROM
-            stats_mysql_connection_pool
+            stats_mysql_users su JOIN
+            runtime_mysql_users ru ON su.username = ru.username
+        WHERE
+            frontend_connections > 0
+        ORDER BY
+            frontend_connections DESC
     """
     hostgroup_summary: str = """
         SELECT

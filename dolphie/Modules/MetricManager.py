@@ -203,6 +203,7 @@ class MetricData:
     per_second_calculation: bool = True
     last_value: int = None
     graphable: bool = True
+    create_switch: bool = True
     values: List[int] = field(default_factory=list)
 
 
@@ -355,6 +356,20 @@ class LocksMetrics:
 
 
 @dataclass
+class ProxySQLConnectionsMetrics:
+    Client_Connections_aborted: MetricData
+    Client_Connections_connected: MetricData
+    Client_Connections_created: MetricData
+    Server_Connections_aborted: MetricData
+    Server_Connections_connected: MetricData
+    Server_Connections_created: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_connections"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+
+
+@dataclass
 class MetricInstances:
     dml: DMLMetrics
     replication_lag: ReplicationLagMetrics
@@ -370,6 +385,7 @@ class MetricInstances:
     aborted_connections: AbortedConnectionsMetrics
     disk_io: DiskIOMetrics
     locks: LocksMetrics
+    proxysql_connections: ProxySQLConnectionsMetrics
 
 
 class MetricManager:
@@ -404,12 +420,12 @@ class MetricManager:
             ),
             replication_lag=ReplicationLagMetrics(
                 graphs=["graph_replication_lag"],
-                lag=MetricData(label="Lag", color=MetricColor.blue, per_second_calculation=False),
+                lag=MetricData(label="Lag", color=MetricColor.blue, per_second_calculation=False, create_switch=False),
             ),
             checkpoint=CheckpointMetrics(
                 graphs=["graph_checkpoint"],
                 Innodb_checkpoint_age=MetricData(
-                    label="Uncheckpointed", color=MetricColor.blue, per_second_calculation=False
+                    label="Uncheckpointed", color=MetricColor.blue, per_second_calculation=False, create_switch=False
                 ),
             ),
             buffer_pool_requests=BufferPoolRequestsMetrics(
@@ -425,16 +441,22 @@ class MetricManager:
             ),
             adaptive_hash_index_hit_ratio=AdaptiveHashIndexHitRatioMetrics(
                 graphs=["graph_adaptive_hash_index_hit_ratio"],
-                hit_ratio=MetricData(label="Hit Ratio", color=MetricColor.green, per_second_calculation=False),
+                hit_ratio=MetricData(
+                    label="Hit Ratio", color=MetricColor.green, per_second_calculation=False, create_switch=False
+                ),
             ),
             redo_log=RedoLogMetrics(
                 graphs=["graph_redo_log", "graph_redo_log_bar"],
-                Innodb_lsn_current=MetricData(label="Data Written", color=MetricColor.blue),
+                Innodb_lsn_current=MetricData(label="Data Written", color=MetricColor.blue, create_switch=False),
             ),
             redo_log_active_count=RedoLogActiveCountMetrics(
                 graphs=["graph_redo_log_active_count"],
                 Active_redo_log_count=MetricData(
-                    label="Active Count", color=MetricColor.blue, per_second_calculation=False, visible=False
+                    label="Active Count",
+                    color=MetricColor.blue,
+                    per_second_calculation=False,
+                    visible=False,
+                    create_switch=False,
                 ),
             ),
             table_cache=TableCacheMetrics(
@@ -445,7 +467,9 @@ class MetricManager:
             ),
             threads=ThreadMetrics(
                 graphs=["graph_threads"],
-                Threads_connected=MetricData(label="Connected", color=MetricColor.green, per_second_calculation=False),
+                Threads_connected=MetricData(
+                    label="Connected", color=MetricColor.green, per_second_calculation=False, visible=False
+                ),
                 Threads_running=MetricData(label="Running", color=MetricColor.blue, per_second_calculation=False),
             ),
             temporary_objects=TemporaryObjectMetrics(
@@ -467,6 +491,19 @@ class MetricManager:
             locks=LocksMetrics(
                 graphs=["graph_locks"],
                 metadata_lock_count=MetricData(label="Metadata", color=MetricColor.red, per_second_calculation=False),
+            ),
+            proxysql_connections=ProxySQLConnectionsMetrics(
+                graphs=["graph_proxysql_connections"],
+                Client_Connections_aborted=MetricData(label="Frontend (aborted)", color=MetricColor.red),
+                Client_Connections_connected=MetricData(
+                    label="Frontend (connected)", color=MetricColor.green, per_second_calculation=False, visible=False
+                ),
+                Client_Connections_created=MetricData(label="Frontend (created)", color=MetricColor.yellow),
+                Server_Connections_aborted=MetricData(label="Backend (aborted)", color=MetricColor.red),
+                Server_Connections_connected=MetricData(
+                    label="Backend (connected)", color=MetricColor.green, per_second_calculation=False, visible=False
+                ),
+                Server_Connections_created=MetricData(label="Backend (created)", color=MetricColor.yellow),
             ),
         )
 

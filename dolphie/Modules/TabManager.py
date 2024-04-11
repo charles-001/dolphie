@@ -236,12 +236,6 @@ class TabManager:
                         id=f"panel_replication_{tab_id}",
                         classes="panel_container replication_panel",
                     ),
-                    # Container(
-                    #     Label(id=f"innodb_trx_locks_title_{tab_id}"),
-                    #     DataTable(id=f"innodb_trx_locks_datatable_{tab_id}", show_cursor=False),
-                    #     id=f"panel_innodb_trx_locks_{tab_id}",
-                    #     classes="innodb_trx_locks",
-                    # ),
                     Container(
                         Label(id=f"metadata_locks_title_{tab_id}"),
                         DataTable(id=f"metadata_locks_datatable_{tab_id}", show_cursor=False, zebra_stripes=True),
@@ -256,7 +250,11 @@ class TabManager:
                     ),
                     Container(
                         Label(id=f"proxysql_hostgroup_summary_title_{tab_id}"),
-                        DataTable(id=f"proxysql_hostgroup_summary_datatable_{tab_id}", show_cursor=False),
+                        DataTable(
+                            id=f"proxysql_hostgroup_summary_datatable_{tab_id}",
+                            classes="proxysql_hostgroup_summary_datatable",
+                            show_cursor=False,
+                        ),
                         id=f"panel_proxysql_hostgroup_summary_{tab_id}",
                         classes="proxysql_hostgroup_summary",
                     ),
@@ -276,21 +274,22 @@ class TabManager:
 
         metrics = MetricManager.MetricManager().metrics
         metric_tab_labels = [
-            ("DML", metrics.dml, True),
-            ("Locks", metrics.locks, True),
-            ("Table Cache", metrics.table_cache, True),
-            ("Threads", metrics.threads, True),
-            ("BP Requests", metrics.buffer_pool_requests, True),
-            ("Checkpoint", metrics.checkpoint, False),
-            ("Redo Log", metrics.redo_log, False),
-            ("AHI", metrics.adaptive_hash_index, True),
-            ("Temp Objects", metrics.temporary_objects, True),
-            ("Aborted Connections", metrics.aborted_connections, True),
-            ("Disk I/O", metrics.disk_io, True),
-            ("Replication", metrics.replication_lag, False),
+            ("DML", metrics.dml),
+            ("Locks", metrics.locks),
+            ("Table Cache", metrics.table_cache),
+            ("Threads", metrics.threads),
+            ("BP Requests", metrics.buffer_pool_requests),
+            ("Checkpoint", metrics.checkpoint),
+            ("Redo Log", metrics.redo_log),
+            ("AHI", metrics.adaptive_hash_index),
+            ("Temp Objects", metrics.temporary_objects),
+            ("Aborted Connections", metrics.aborted_connections),
+            ("Disk I/O", metrics.disk_io),
+            ("Replication", metrics.replication_lag),
+            ("Connections", metrics.proxysql_connections),
         ]
 
-        for tab_formatted_name, metric_instance, create_switches in metric_tab_labels:
+        for tab_formatted_name, metric_instance in metric_tab_labels:
             metric_tab_name = metric_instance.tab_name
             graph_names = metric_instance.graphs
 
@@ -322,15 +321,18 @@ class TabManager:
                 # Save references to the graphs
                 setattr(tab, graph_name, self.app.query_one(f"#{graph_name}_{tab_id}"))
 
-            if create_switches:
-                for metric, metric_data in metric_instance.__dict__.items():
-                    if isinstance(metric_data, MetricManager.MetricData) and metric_data.graphable:
-                        await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
-                            Label(metric_data.label)
-                        )
-                        await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
-                            Switch(animate=False, id=metric, name=metric_tab_name)
-                        )
+            for metric, metric_data in metric_instance.__dict__.items():
+                if (
+                    isinstance(metric_data, MetricManager.MetricData)
+                    and metric_data.graphable
+                    and metric_data.create_switch
+                ):
+                    await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
+                        Label(metric_data.label)
+                    )
+                    await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
+                        Switch(animate=False, id=metric, name=metric_tab_name)
+                    )
 
         # Save the tab instance to the tabs dictionary
         self.tabs[tab_id] = tab
@@ -414,10 +416,14 @@ class TabManager:
             graph.marker = dolphie.graph_marker
 
         # Set default switches to be toggled on
-        switches = self.app.query(f".switch_container_{tab_id} Switch")
-        switches_to_toggle = [switch for switch in switches if switch.id not in ["Queries", "Threads_connected"]]
-        for switch in switches_to_toggle:
-            switch.toggle()
+        for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
+            for metric, metric_data in metric_instance.__dict__.items():
+                if (
+                    isinstance(metric_data, MetricManager.MetricData)
+                    and metric_data.create_switch
+                    and metric_data.visible
+                ):
+                    self.app.query_one(f"#{metric}", Switch).toggle()
 
         if switch_tab:
             self.switch_tab(tab_id)

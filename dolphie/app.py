@@ -378,7 +378,7 @@ class DolphieApp(App):
                 tab.metric_graph_tabs.hide_tab(graph_tab.id)
 
             tab.metric_graph_tabs.show_tab(f"graph_tab_dml_{tab.id}")
-
+            tab.metric_graph_tabs.show_tab(f"graph_tab_proxysql_connections_{tab.id}")
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
             if panel.visible:
@@ -422,6 +422,7 @@ class DolphieApp(App):
             for graph_tab in tabs:
                 tab.metric_graph_tabs.show_tab(graph_tab.id)
 
+            tab.metric_graph_tabs.hide_tab(f"graph_tab_proxysql_connections_{tab.id}")
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
             if panel.visible:
@@ -573,7 +574,6 @@ class DolphieApp(App):
                 tab.dolphie.panels.replication.name: replication_panel,
                 tab.dolphie.panels.dashboard.name: dashboard_panel,
                 tab.dolphie.panels.processlist.name: processlist_panel,
-                # tab.dolphie.panels.innodb_trx_locks.name: innodb_trx_locks_panel,
                 tab.dolphie.panels.metadata_locks.name: metadata_locks_panel,
                 tab.dolphie.panels.ddl.name: ddl_panel,
             }
@@ -613,6 +613,9 @@ class DolphieApp(App):
             tab.dashboard_binary_log.display = False
             tab.dashboard_replication.display = False
             tab.dashboard_innodb.display = False
+
+            tab.dashboard_host_information.styles.max_width = "45"
+            tab.dashboard_statistics.styles.max_width = "22"
 
             panel_mapping = {
                 tab.dolphie.panels.processlist.name: proxysql_processlist_panel,
@@ -717,6 +720,8 @@ class DolphieApp(App):
         elif key == "3":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_hostgroup_summary.name)
+                dolphie.proxysql_hostgroup_summary_snapshot = {}
+                self.tab_manager.active_tab.proxysql_hostgroup_summary_datatable.clear()
             else:
                 self.toggle_panel(dolphie.panels.replication.name)
 
@@ -1045,14 +1050,11 @@ class DolphieApp(App):
                 self.notify("Processlist will now only show threads that have an active transaction")
 
         elif key == "u":
-            if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
+            if not dolphie.performance_schema_enabled and dolphie.connection_source != ConnectionSource.proxysql:
+                self.notify("User statistics command requires Performance Schema to be enabled")
                 return
 
-            if not dolphie.performance_schema_enabled:
-                self.notify("User statistics command requires Performance Schema to be enabled")
-            else:
-                self.run_command_in_worker(key=key, dolphie=dolphie)
+            self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "v":
 
@@ -1178,7 +1180,7 @@ class DolphieApp(App):
                 "t": "Display details of a thread along with an EXPLAIN of its query",
                 "T": "Transaction view - toggle displaying threads that only have an active transaction",
                 "s": "Toggle sorting for Age in descending/ascending order",
-                "u": "List active connected users and their statistics",
+                "u": "List active connected users and their statistics or List frontend users connected to ProxySQL",
                 "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
                 "z": "Display all entries in the host cache",
                 "space": "Force a manual refresh of all panels except replicas",
@@ -1564,50 +1566,88 @@ class DolphieApp(App):
                 self.call_from_thread(show_thread_screen)
 
             elif key == "u":
-                if dolphie.is_mysql_version_at_least("5.7"):
-                    dolphie.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
-                else:
-                    dolphie.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics_56)
+                if dolphie.connection_source == ConnectionSource.proxysql:
+                    dolphie.secondary_db_connection.execute(ProxySQLQueries.user_stats)
 
-                users = dolphie.secondary_db_connection.fetchall()
+                    users = dolphie.secondary_db_connection.fetchall()
 
-                columns = {
-                    "User": {"field": "user", "format_number": False},
-                    "Active": {"field": "current_connections", "format_number": True},
-                    "Total": {"field": "total_connections", "format_number": True},
-                    "Rows Read": {"field": "rows_examined", "format_number": True},
-                    "Rows Sent": {"field": "rows_sent", "format_number": True},
-                    "Rows Updated": {"field": "rows_affected", "format_number": True},
-                    "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
-                    "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
-                    "Plugin": {"field": "plugin", "format_number": False},
-                    "Password Expire": {"field": "password_expires_in", "format_number": False},
-                }
+                    columns = {
+                        "User": {"field": "username", "format_number": False},
+                        "Active": {"field": "frontend_connections", "format_number": True},
+                        "Max": {"field": "frontend_max_connections", "format_number": True},
+                        "Default HG": {"field": "default_hostgroup", "format_number": False},
+                        "Default Schema": {"field": "default_schema", "format_number": False},
+                        "SSL": {"field": "use_ssl", "format_number": False},
+                    }
 
-                table = Table(
-                    header_style="b",
-                    box=box.SIMPLE_HEAVY,
-                    show_edge=False,
-                    style="table_border",
-                )
-                for column, data in columns.items():
-                    table.add_column(column, no_wrap=True)
-
-                for user in users:
-                    row_values = []
-
+                    table = Table(
+                        header_style="b",
+                        box=box.SIMPLE_HEAVY,
+                        show_edge=False,
+                        style="table_border",
+                    )
                     for column, data in columns.items():
-                        value = user.get(data["field"], "N/A")
+                        table.add_column(column, no_wrap=True)
 
-                        if data["format_number"]:
-                            row_values.append(format_number(value) if value else "0")
-                        else:
-                            row_values.append(value or "")
+                    for user in users:
+                        row_values = []
 
-                    table.add_row(*row_values)
+                        for column, data in columns.items():
+                            value = user.get(data["field"], "N/A")
+
+                            if data["format_number"]:
+                                row_values.append(format_number(value) if value else "0")
+                            elif column == "SSL":
+                                row_values.append("ON" if value == "1" else "OFF")
+                            else:
+                                row_values.append(value or "")
+
+                        table.add_row(*row_values)
+                else:
+                    if dolphie.is_mysql_version_at_least("5.7"):
+                        dolphie.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
+                    else:
+                        dolphie.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics_56)
+
+                    users = dolphie.secondary_db_connection.fetchall()
+
+                    columns = {
+                        "User": {"field": "user", "format_number": False},
+                        "Active": {"field": "current_connections", "format_number": True},
+                        "Total": {"field": "total_connections", "format_number": True},
+                        "Rows Read": {"field": "rows_examined", "format_number": True},
+                        "Rows Sent": {"field": "rows_sent", "format_number": True},
+                        "Rows Updated": {"field": "rows_affected", "format_number": True},
+                        "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
+                        "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
+                        "Plugin": {"field": "plugin", "format_number": False},
+                        "Password Expire": {"field": "password_expires_in", "format_number": False},
+                    }
+
+                    table = Table(
+                        header_style="b",
+                        box=box.SIMPLE_HEAVY,
+                        show_edge=False,
+                        style="table_border",
+                    )
+                    for column, data in columns.items():
+                        table.add_column(column, no_wrap=True)
+
+                    for user in users:
+                        row_values = []
+
+                        for column, data in columns.items():
+                            value = user.get(data["field"], "N/A")
+
+                            if data["format_number"]:
+                                row_values.append(format_number(value) if value else "0")
+                            else:
+                                row_values.append(value or "")
+
+                        table.add_row(*row_values)
 
                 screen_data = Group(
-                    Align.center(f"[b light_blue]Users Connected ([highlight]{len(users)}[/highlight])\n"),
+                    Align.center(f"[b light_blue]Frontend Users Connected ([highlight]{len(users)}[/highlight])\n"),
                     Align.center(table),
                 )
 
