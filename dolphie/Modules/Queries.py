@@ -65,6 +65,27 @@ class ProxySQLQueries:
         ORDER BY
             hostgroup
     """
+    query_rules_summary: str = """
+        SELECT
+            rule_id,
+            hits,
+            match_digest,
+            match_pattern,
+            negate_match_pattern,
+            flagIN,
+            flagOUT,
+            re_modifiers,
+            destination_hostgroup,
+            apply
+        FROM
+            stats_mysql_query_rules
+            JOIN runtime_mysql_query_rules USING (rule_id)
+        WHERE
+            active = 1
+        ORDER BY
+            active DESC,
+            hits DESC
+    """
     variables: str = "SHOW GLOBAL VARIABLES"
 
 

@@ -84,7 +84,7 @@ def create_panel(tab: Tab) -> Table:
     ####################################
     proxysql_queries_network_data = dolphie.metric_manager.metrics.proxysql_queries_data_network
 
-    table = Table(show_header=False, box=None, title="Query Data Rates", title_style=table_title_style)
+    table = Table(show_header=False, box=None, title="Query Data Rates/s", title_style=table_title_style)
 
     table.add_column()
     table.add_column(min_width=7)

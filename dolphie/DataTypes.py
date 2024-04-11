@@ -79,6 +79,7 @@ class Panels:
         self.metadata_locks = Panel("metadata_locks")
         self.ddl = Panel("ddl")
         self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary")
+        self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules")
 
     def get_panel(self, panel_name: str) -> Panel:
         return self.__dict__.get(panel_name, None)

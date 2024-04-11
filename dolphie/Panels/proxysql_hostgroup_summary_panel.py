@@ -47,15 +47,13 @@ def create_panel(tab: Tab) -> DataTable:
 
             # Calculate the values per second for the following columns since the total isn't a great metric
             if column_key in ["Queries", "Bytes_data_sent", "Bytes_data_recv"]:
-                if not dolphie.proxysql_hostgroup_summary_snapshot.get(row_id, {}).get(column_key, 0):
+                if not dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0):
                     column_value = 0
                 else:
-                    value_diff = int(column_value) - dolphie.proxysql_hostgroup_summary_snapshot.get(row_id, {}).get(
-                        column_key, 0
-                    )
+                    value_diff = int(column_value) - dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0)
                     column_value = round(value_diff / dolphie.polling_latency)
 
-                dolphie.proxysql_hostgroup_summary_snapshot.setdefault(row_id, {})[column_key] = int(row[column_key])
+                dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = int(row[column_key])
             if column_format == "time":
                 column_value = f"{round(int(column_value) / 1000, 2)}"
             elif column_format == "bytes":
@@ -68,6 +66,9 @@ def create_panel(tab: Tab) -> DataTable:
                 column_value = "[green]ONLINE" if column_value == "ONLINE" else f"[red]{column_value}"
             elif column_key == "use_ssl":
                 column_value = "ON" if column_value == "1" else "OFF"
+
+            if column_value == "0" or column_value == 0:
+                column_value = "[dark_gray]0"
 
             if row_id in hostgroup_summary_datatable.rows:
                 datatable_value = hostgroup_summary_datatable.get_row(row_id)[column_id]

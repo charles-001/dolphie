@@ -240,6 +240,27 @@ TopBar {
     margin-bottom: 1;
 }
 
+.proxysql_mysql_query_rules_datatable {
+    overflow-x: auto;
+}
+.proxysql_mysql_query_rules {
+    height: auto;
+    background: #0f1525;
+    border: tall #1b233a;
+    margin-bottom: 1;
+}
+.proxysql_mysql_query_rules > Container {
+    height: auto;
+    width: auto;
+}
+.proxysql_mysql_query_rules > Label {
+    width: 100%;
+    color: #bbc8e8;
+    text-style: bold;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
 .pad_bottom_1 {
     padding-bottom: 1;
 }

@@ -135,6 +135,7 @@ class HelpScreen(Screen):
             "2": "Show/hide Processlist",
             "3": "Show/hide Hostgroup Summary",
             "4": "Show/hide Graph Metrics",
+            "5": "Show/hide MySQL Query Rules",
             "`": "Open Host Setup",
             "+": "Create a new tab",
             "-": "Remove the current tab",

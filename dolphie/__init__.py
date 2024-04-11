@@ -89,7 +89,8 @@ class Dolphie:
         self.binlog_transaction_compression_percentage: int = None
         self.host_cache: dict = {}
         self.proxysql_hostgroup_summary: dict = {}
-        self.proxysql_hostgroup_summary_snapshot: dict = {}
+        self.proxysql_mysql_query_rules: dict = {}
+        self.proxysql_per_second_data: dict = {}
         self.proxysql_backend_host_average_latency: float = 0
 
         self.user_filter = None

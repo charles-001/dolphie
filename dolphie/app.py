@@ -37,6 +37,7 @@ from dolphie.Panels import (
     processlist_panel,
     proxysql_dashboard_panel,
     proxysql_hostgroup_summary_panel,
+    proxysql_mysql_query_rules_panel,
     proxysql_processlist_panel,
     replication_panel,
 )
@@ -377,6 +378,10 @@ class DolphieApp(App):
         if dolphie.panels.processlist.visible:
             dolphie.processlist_threads = proxysql_processlist_panel.fetch_data(tab)
 
+        if dolphie.panels.proxysql_mysql_query_rules.visible:
+            dolphie.main_db_connection.execute(ProxySQLQueries.query_rules_summary)
+            dolphie.proxysql_mysql_query_rules = dolphie.main_db_connection.fetchall()
+
         dolphie.metric_manager.refresh_data(
             worker_start_time=dolphie.worker_start_time,
             polling_latency=dolphie.polling_latency,
@@ -571,15 +576,27 @@ class DolphieApp(App):
         panel.display = new_display_status
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
-        if tab.dolphie.connection_source == ConnectionSource.mysql:
-            panel_mapping = {
-                tab.dolphie.panels.replication.name: replication_panel,
-                tab.dolphie.panels.dashboard.name: dashboard_panel,
-                tab.dolphie.panels.processlist.name: processlist_panel,
-                tab.dolphie.panels.metadata_locks.name: metadata_locks_panel,
-                tab.dolphie.panels.ddl.name: ddl_panel,
-            }
+        panel_mapping = {
+            tab.dolphie.panels.replication.name: {ConnectionSource.mysql: replication_panel},
+            tab.dolphie.panels.dashboard.name: {
+                ConnectionSource.mysql: dashboard_panel,
+                ConnectionSource.proxysql: proxysql_dashboard_panel,
+            },
+            tab.dolphie.panels.processlist.name: {
+                ConnectionSource.mysql: processlist_panel,
+                ConnectionSource.proxysql: proxysql_processlist_panel,
+            },
+            tab.dolphie.panels.metadata_locks.name: {ConnectionSource.mysql: metadata_locks_panel},
+            tab.dolphie.panels.ddl.name: {ConnectionSource.mysql: ddl_panel},
+            tab.dolphie.panels.proxysql_hostgroup_summary.name: {
+                ConnectionSource.proxysql: proxysql_hostgroup_summary_panel
+            },
+            tab.dolphie.panels.proxysql_mysql_query_rules.name: {
+                ConnectionSource.proxysql: proxysql_mysql_query_rules_panel
+            },
+        }
 
+        if tab.dolphie.connection_source == ConnectionSource.mysql:
             if toggled or not tab.dolphie.completed_first_loop:
                 # Update the sizes of the panels depending if replication container is visible or not
                 if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
@@ -617,15 +634,16 @@ class DolphieApp(App):
             tab.dashboard_innodb.styles.max_width = "28"
             tab.dashboard_binary_log.styles.max_width = "25"
 
-            panel_mapping = {
-                tab.dolphie.panels.processlist.name: proxysql_processlist_panel,
-                tab.dolphie.panels.dashboard.name: proxysql_dashboard_panel,
-                tab.dolphie.panels.proxysql_hostgroup_summary.name: proxysql_hostgroup_summary_panel,
-            }
+        for panel_map_name, panel_map_connection_sources in panel_mapping.items():
+            panel_map_obj = panel_map_connection_sources.get(tab.dolphie.connection_source)
 
-        for panel_map_name, panel_map_obj in panel_mapping.items():
+            if not panel_map_obj:
+                tab.get_panel_widget(panel_map_name).display = False
+                continue
+
             if panel_name == panel_map_name:
                 panel_map_obj.create_panel(tab)
+
             if panel_name == tab.dolphie.panels.replication.name and toggled and tab.dolphie.replication_status:
                 # When replication panel status is changed, we need to refresh the dashboard panel as well since
                 # it adds/removes it from there
@@ -720,29 +738,31 @@ class DolphieApp(App):
         elif key == "3":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_hostgroup_summary.name)
-                dolphie.proxysql_hostgroup_summary_snapshot = {}
+                dolphie.proxysql_per_second_data = {}
                 self.tab_manager.active_tab.proxysql_hostgroup_summary_datatable.clear()
-            else:
-                self.toggle_panel(dolphie.panels.replication.name)
 
-                tab.replicas_container.display = False
-                if not dolphie.panels.replication.visible:
-                    for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
-                        member.remove()
-                else:
-                    if dolphie.replica_manager.available_replicas:
-                        tab.replicas_container.display = True
-                        tab.replicas_title.update(
-                            f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
-                            " replicas...\n"
-                        )
-                        tab.replicas_loading_indicator.display = True
+                return
+
+            self.toggle_panel(dolphie.panels.replication.name)
+
+            tab.replicas_container.display = False
+            if not dolphie.panels.replication.visible:
+                for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
+                    member.remove()
+            else:
+                if dolphie.replica_manager.available_replicas:
+                    tab.replicas_container.display = True
+                    tab.replicas_title.update(
+                        f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
+                        " replicas...\n"
+                    )
+                    tab.replicas_loading_indicator.display = True
         elif key == "4":
             self.toggle_panel(dolphie.panels.graphs.name)
             self.app.update_graphs("dml")
         elif key == "5":
             if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify("Metadata Locks panel is only available for MySQL connections")
+                self.toggle_panel(dolphie.panels.proxysql_mysql_query_rules.name)
                 return
 
             if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
@@ -752,6 +772,7 @@ class DolphieApp(App):
             query = (
                 "SELECT enabled FROM performance_schema.setup_instruments WHERE name = 'wait/lock/metadata/sql/mdl';"
             )
+
             dolphie.secondary_db_connection.execute(query)
             row = dolphie.secondary_db_connection.fetchone()
             if row and row.get("enabled") == "NO":
