@@ -21,7 +21,7 @@ def create_panel(tab: Tab) -> Table:
     table = Table(show_header=False, box=None, title="Host Information", title_style=table_title_style)
 
     table.add_column()
-    table.add_column(min_width=25)
+    table.add_column(min_width=15)
     table.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
     table.add_row("[label]Uptime", str(timedelta(seconds=global_status["ProxySQL_Uptime"])))
     table.add_row("[label]Runtime", f"{runtime} [dark_gray]({dolphie.refresh_latency}s)")

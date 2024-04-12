@@ -628,14 +628,14 @@ class DolphieApp(App):
                 tab.dashboard_section_5.styles.max_width = "55"
 
         elif tab.dolphie.connection_source == ConnectionSource.proxysql:
-            tab.dashboard_section_1.styles.width = "25vw"
+            tab.dashboard_section_1.styles.width = "23vw"
             tab.dashboard_section_2.styles.width = "20vw"
             tab.dashboard_section_3.styles.width = "22vw"
             tab.dashboard_section_4.styles.width = "13vw"
 
             tab.dashboard_section_5.display = False
 
-            tab.dashboard_section_1.styles.max_width = "45"
+            tab.dashboard_section_1.styles.max_width = "37"
             tab.dashboard_section_2.styles.max_width = "28"
             tab.dashboard_section_3.styles.max_width = "25"
             tab.dashboard_section_4.styles.max_width = "25"
