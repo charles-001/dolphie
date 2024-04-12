@@ -70,7 +70,7 @@ def create_panel(tab: Tab) -> Table:
         ),
     )
 
-    tab.dashboard_host_information.update(table_information)
+    tab.dashboard_section_1.update(table_information)
 
     ###########
     # InnoDB  #
@@ -124,7 +124,7 @@ def create_panel(tab: Tab) -> Table:
     table_innodb.add_row("[label]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
     table_innodb.add_row("[label]History List", format_number(history_list_length))
 
-    tab.dashboard_innodb.update(table_innodb)
+    tab.dashboard_section_2.update(table_innodb)
 
     ##############
     # Binary Log #
@@ -191,16 +191,16 @@ def create_panel(tab: Tab) -> Table:
         if dolphie.binlog_status:
             dolphie.previous_binlog_position = dolphie.binlog_status["Position"]
 
-    tab.dashboard_binary_log.update(table_primary)
+    tab.dashboard_section_3.update(table_primary)
 
     ###############
     # Replication #
     ###############
     if dolphie.replication_status and not dolphie.panels.replication.visible:
-        tab.dashboard_replication.display = True
-        tab.dashboard_replication.update(replication_panel.create_replication_table(tab, dashboard_table=True))
+        tab.dashboard_section_5.display = True
+        tab.dashboard_section_5.update(replication_panel.create_replication_table(tab, dashboard_table=True))
     else:
-        tab.dashboard_replication.display = False
+        tab.dashboard_section_5.display = False
     ###############
     # Statistics #
     ###############
@@ -230,4 +230,4 @@ def create_panel(tab: Tab) -> Table:
         else:
             table_stats.add_row(f"[label]{label}", "0")
 
-    tab.dashboard_statistics.update(table_stats)
+    tab.dashboard_section_4.update(table_stats)

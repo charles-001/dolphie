@@ -30,7 +30,7 @@ def create_panel(tab: Tab) -> Table:
         f"[label]CP Avg[/label] {round(dolphie.proxysql_backend_host_average_latency / 1000, 2)}ms",
     )
     table.add_row("[label]Active TRX", f"{global_status['Active_Transactions']}")
-    tab.dashboard_host_information.update(table)
+    tab.dashboard_section_1.update(table)
 
     ##########################
     # Connection Information #
@@ -77,7 +77,7 @@ def create_panel(tab: Tab) -> Table:
             table.add_row(label, f"{value}")
 
     # Reuse Innodb table for connection information
-    tab.dashboard_innodb.update(table)
+    tab.dashboard_section_2.update(table)
 
     ####################################
     # Query Sent/Recv Rate Information #
@@ -107,7 +107,7 @@ def create_panel(tab: Tab) -> Table:
             table.add_row(label, f"{value}")
 
     # Reuse binary log table for connection information
-    tab.dashboard_binary_log.update(table)
+    tab.dashboard_section_3.update(table)
 
     ###############
     # Statistics #
@@ -138,4 +138,4 @@ def create_panel(tab: Tab) -> Table:
         else:
             table.add_row(f"[label]{label}", "0")
 
-    tab.dashboard_statistics.update(table)
+    tab.dashboard_section_4.update(table)

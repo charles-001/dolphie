@@ -166,7 +166,7 @@ class DolphieApp(App):
                     tab.main_container.display = True
                     tab.sparkline.display = True
 
-                    # Hide all tabs so we can show the ones we want
+                    # Hide all graph tabs so we can show the ones we want
                     tabs = tab.metric_graph_tabs.query(TabPane)
                     for graph_tab in tabs:
                         tab.metric_graph_tabs.hide_tab(graph_tab.id)
@@ -603,39 +603,40 @@ class DolphieApp(App):
             if toggled or not tab.dolphie.completed_first_loop:
                 # Update the sizes of the panels depending if replication container is visible or not
                 if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
-                    tab.dashboard_host_information.styles.width = "25vw"
-                    tab.dashboard_binary_log.styles.width = "21vw"
-                    tab.dashboard_innodb.styles.width = "17vw"
-                    tab.dashboard_replication.styles.width = "25vw"
-                    tab.dashboard_statistics.styles.width = "12vw"
+                    tab.dashboard_section_1.styles.width = "25vw"
+                    tab.dashboard_section_2.styles.width = "17vw"
+                    tab.dashboard_section_3.styles.width = "21vw"
+                    tab.dashboard_section_4.styles.width = "12vw"
+                    tab.dashboard_section_5.styles.width = "25vw"
 
-                    tab.dashboard_replication.display = True
+                    tab.dashboard_section_5.display = True
                 else:
-                    tab.dashboard_host_information.styles.width = "32vw"
-                    tab.dashboard_binary_log.styles.width = "27vw"
-                    tab.dashboard_innodb.styles.width = "24vw"
-                    tab.dashboard_replication.styles.width = "0"
-                    tab.dashboard_statistics.styles.width = "17vw"
+                    tab.dashboard_section_1.styles.width = "32vw"
+                    tab.dashboard_section_2.styles.width = "24vw"
+                    tab.dashboard_section_3.styles.width = "27vw"
+                    tab.dashboard_section_4.styles.width = "17vw"
+                    tab.dashboard_section_5.styles.width = "0"
 
-                    tab.dashboard_replication.display = False
+                    tab.dashboard_section_5.display = False
 
-                tab.dashboard_host_information.styles.max_width = "45"
-                tab.dashboard_binary_log.styles.max_width = "38"
-                tab.dashboard_innodb.styles.max_width = "32"
-                tab.dashboard_replication.styles.max_width = "55"
-                tab.dashboard_statistics.styles.max_width = "22"
+                tab.dashboard_section_1.styles.max_width = "45"
+                tab.dashboard_section_2.styles.max_width = "32"
+                tab.dashboard_section_3.styles.max_width = "38"
+                tab.dashboard_section_4.styles.max_width = "22"
+                tab.dashboard_section_5.styles.max_width = "55"
+
         elif tab.dolphie.connection_source == ConnectionSource.proxysql:
-            tab.dashboard_host_information.styles.width = "25vw"
-            tab.dashboard_statistics.styles.width = "13vw"
-            tab.dashboard_innodb.styles.width = "20vw"
-            tab.dashboard_binary_log.styles.width = "22vw"
+            tab.dashboard_section_1.styles.width = "25vw"
+            tab.dashboard_section_2.styles.width = "20vw"
+            tab.dashboard_section_3.styles.width = "22vw"
+            tab.dashboard_section_4.styles.width = "13vw"
 
-            tab.dashboard_replication.display = False
+            tab.dashboard_section_5.display = False
 
-            tab.dashboard_host_information.styles.max_width = "45"
-            tab.dashboard_statistics.styles.max_width = "25"
-            tab.dashboard_innodb.styles.max_width = "28"
-            tab.dashboard_binary_log.styles.max_width = "25"
+            tab.dashboard_section_1.styles.max_width = "45"
+            tab.dashboard_section_2.styles.max_width = "28"
+            tab.dashboard_section_3.styles.max_width = "25"
+            tab.dashboard_section_4.styles.max_width = "25"
 
         for panel_map_name, panel_map_connection_sources in panel_mapping.items():
             panel_map_obj = panel_map_connection_sources.get(tab.dolphie.connection_source)
@@ -670,7 +671,7 @@ class DolphieApp(App):
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):
-        if len(self.screen_stack) > 1:
+        if len(self.screen_stack) > 1 or not self.tab_manager.active_tab:
             return
 
         metric_instance_name = event.switch.name

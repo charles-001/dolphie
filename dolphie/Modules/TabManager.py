@@ -64,11 +64,11 @@ class Tab:
 
     spinner: SpinnerWidget = None
 
-    dashboard_host_information: Static = None
-    dashboard_innodb: Static = None
-    dashboard_binary_log: Static = None
-    dashboard_statistics: Static = None
-    dashboard_replication: Static = None
+    dashboard_section_1: Static = None
+    dashboard_section_2: Static = None
+    dashboard_section_3: Static = None
+    dashboard_section_4: Static = None
+    dashboard_section_5: Static = None
 
     ddl_title: Label = None
     ddl_datatable: DataTable = None
@@ -189,11 +189,11 @@ class TabManager:
                 VerticalScroll(
                     Container(
                         Center(
-                            Static(id=f"dashboard_host_information_{tab_id}", classes="dashboard_host_information"),
-                            Static(id=f"dashboard_innodb_{tab_id}", classes="dashboard_innodb_information"),
-                            Static(id=f"dashboard_binary_log_{tab_id}", classes="dashboard_binary_log"),
-                            Static(id=f"dashboard_replication_{tab_id}", classes="dashboard_replication"),
-                            Static(id=f"dashboard_statistics_{tab_id}", classes="dashboard_statistics"),
+                            Static(id=f"dashboard_section_1_{tab_id}", classes="dashboard_section_1"),
+                            Static(id=f"dashboard_section_2_{tab_id}", classes="dashboard_section_2_information"),
+                            Static(id=f"dashboard_section_3_{tab_id}", classes="dashboard_section_3"),
+                            Static(id=f"dashboard_section_5_{tab_id}", classes="dashboard_section_5"),
+                            Static(id=f"dashboard_section_4_{tab_id}", classes="dashboard_section_4"),
                         ),
                         Sparkline([], id=f"panel_dashboard_queries_qps_{tab_id}"),
                         id=f"panel_dashboard_{tab_id}",
@@ -359,7 +359,7 @@ class TabManager:
                         Switch(animate=False, id=metric, name=metric_tab_name)
                     )
 
-                    # Toggle the switch if the metric is visible
+                    # Toggle the switch if the metric is visible (means to enable it by default)
                     if metric_data.visible:
                         self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id} #{metric}", Switch).toggle()
 
@@ -410,11 +410,11 @@ class TabManager:
             f"#proxysql_command_stats_datatable_{tab.id}", DataTable
         )
 
-        tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
-        tab.dashboard_innodb = self.app.query_one(f"#dashboard_innodb_{tab.id}", Static)
-        tab.dashboard_binary_log = self.app.query_one(f"#dashboard_binary_log_{tab.id}", Static)
-        tab.dashboard_statistics = self.app.query_one(f"#dashboard_statistics_{tab.id}", Static)
-        tab.dashboard_replication = self.app.query_one(f"#dashboard_replication_{tab.id}", Static)
+        tab.dashboard_section_1 = self.app.query_one(f"#dashboard_section_1_{tab.id}", Static)
+        tab.dashboard_section_2 = self.app.query_one(f"#dashboard_section_2_{tab.id}", Static)
+        tab.dashboard_section_3 = self.app.query_one(f"#dashboard_section_3_{tab.id}", Static)
+        tab.dashboard_section_4 = self.app.query_one(f"#dashboard_section_4_{tab.id}", Static)
+        tab.dashboard_section_5 = self.app.query_one(f"#dashboard_section_5_{tab.id}", Static)
 
         tab.group_replication_container = self.app.query_one(f"#group_replication_container_{tab.id}", Container)
         tab.group_replication_grid = self.app.query_one(f"#group_replication_grid_{tab.id}", Container)
