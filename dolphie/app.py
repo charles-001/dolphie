@@ -20,6 +20,7 @@ from dolphie.DataTypes import (
     ConnectionStatus,
     HotkeyCommands,
     ProcesslistThread,
+    ProxySQLProcesslistThread,
 )
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.Functions import (
@@ -46,6 +47,7 @@ from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
 from dolphie.Widgets.help import HelpScreen
 from dolphie.Widgets.modal import CommandModal
+from dolphie.Widgets.proxysql_thread_screen import ProxySQLThreadScreen
 from dolphie.Widgets.thread_screen import ThreadScreen
 from dolphie.Widgets.topbar import TopBar
 from packaging.version import parse as parse_version
@@ -1049,8 +1051,47 @@ class DolphieApp(App):
 
         elif key == "t":
 
-            def command_get_input(data):
-                self.run_command_in_worker(key=key, dolphie=dolphie, additional_data=data)
+            if dolphie.connection_source == ConnectionSource.proxysql:
+
+                def command_get_input(data):
+                    thread_table = Table(box=None, show_header=False)
+                    thread_table.add_column("")
+                    thread_table.add_column("", overflow="fold")
+
+                    thread_id = data
+                    thread_data: ProxySQLProcesslistThread = dolphie.processlist_threads_snapshot.get(thread_id)
+                    if not thread_data:
+                        self.notify(f"Thread ID [highlight]{thread_id}[/highlight] was not found", severity="error")
+                        return
+
+                    thread_table.add_row("[label]Process ID", thread_id)
+                    thread_table.add_row("[label]Hostgroup", thread_data.hostgroup)
+                    thread_table.add_row("[label]User", thread_data.user)
+                    thread_table.add_row("[label]Frontend Host", thread_data.frontend_host)
+                    thread_table.add_row("[label]Backend Host", thread_data.host)
+                    thread_table.add_row("[label]Database", thread_data.db)
+                    thread_table.add_row("[label]Command", thread_data.command)
+                    thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8))
+
+                    if thread_data.query:
+                        query = sqlformat(thread_data.query, reindent_aligned=True)
+                        formatted_query = format_query(query, minify=False)
+
+                    self.app.push_screen(
+                        ProxySQLThreadScreen(
+                            connection_status=dolphie.connection_status,
+                            app_version=dolphie.app_version,
+                            host=dolphie.host_with_port,
+                            thread_table=thread_table,
+                            query=formatted_query,
+                            extended_info=thread_data.extended_info,
+                        )
+                    )
+
+            else:
+
+                def command_get_input(data):
+                    self.run_command_in_worker(key=key, dolphie=dolphie, additional_data=data)
 
             self.app.push_screen(
                 CommandModal(

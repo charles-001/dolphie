@@ -37,6 +37,7 @@ DataTable > .datatable--odd-row {
 DataTable > .datatable--even-row {
     background: #0f1525;
 }
+
 LoadingIndicator {
     color: #8fb0ee;
     height: auto;

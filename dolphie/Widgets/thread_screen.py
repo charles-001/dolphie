@@ -32,7 +32,7 @@ class ThreadScreen(Screen):
         height: auto;
         layout: horizontal;
     }
-    ThreadScreen Label {
+    ThreadScreen .title {
         width: 100%;
         content-align: center middle;
         color: #bbc8e8;
@@ -144,15 +144,15 @@ class ThreadScreen(Screen):
 
         with Container(id="thread_container", classes="container"):
             with Container():
-                yield Label("Thread Details")
+                yield Label("Thread Details", classes="title")
                 yield ScrollableContainer(Static(id="thread_table"), classes="table")
             with Container():
-                yield Label("Thread Attributes")
+                yield Label("Thread Attributes", classes="title")
                 yield ScrollableContainer(Static(id="user_thread_attributes_table"), classes="table")
 
         with Container(id="query_container", classes="container"):
             yield Rule(line_style="heavy")
-            yield Label("Query Details")
+            yield Label("Query Details", classes="title")
             yield Center(Static(id="query", shrink=True, classes="table"))
 
             yield DataTable(show_cursor=False, id="explain_table", classes="table")
@@ -160,7 +160,7 @@ class ThreadScreen(Screen):
 
         with Container(id="transaction_history_container", classes="container"):
             yield Rule(line_style="heavy")
-            yield Label("Transaction History", id="transaction_history_label")
+            yield Label("Transaction History", id="transaction_history_label", classes="title")
             yield Center(
                 Static(id="transaction_history_table", shrink=True, classes="table"),
                 id="transaction_history_table_center",

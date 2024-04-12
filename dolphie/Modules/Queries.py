@@ -14,7 +14,8 @@ class ProxySQLQueries:
             IFNULL(srv_host, "") AS backend_host,
             IFNULL(command, "") AS command,
             IFNULL(time_ms, "0") AS time,
-            IFNULL(info, "") AS query
+            IFNULL(info, "") AS query,
+            IFNULL(extended_info, "") AS extended_info
         FROM
             stats_mysql_processlist
         WHERE

@@ -6,7 +6,6 @@ from rich.console import Group
 from rich.table import Table
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Center
 from textual.screen import Screen
 from textual.widgets import Label, Static, TabbedContent, TabPane
 
@@ -20,8 +19,16 @@ class HelpScreen(Screen):
             background: #101626;
             border: tall #1d253e;
         }
-        HelpScreen Center {
+        HelpScreen TabbedContent {
+            align: center middle;
+        }
+        HelpScreen ContentSwitcher {
+            width: 60%;
+        }
+        HelpScreen #note {
             margin-top: 1;
+            content-align: center middle;
+            width: 100%;
         }
     """
 
@@ -96,11 +103,11 @@ class HelpScreen(Screen):
             "Read Hit": "The percentage of how many reads are from InnoDB buffer pool compared to from disk",
             "Lag": ("Retrieves metric from: Default -> SHOW SLAVE STATUS, HB -> Heartbeat table"),
             "Chkpt Age": (
-                "This depicts how close InnoDB is before it starts to furiously flush dirty data to disk "
+                "This depicts how close InnoDB is before it starts to furiously flush dirty data\nto disk "
                 "(Lower is better)"
             ),
             "AHI Hit": (
-                "The percentage of how many lookups there are from Adapative Hash Index compared to it not"
+                "The percentage of how many lookups there are from Adapative Hash Index\ncompared to it not"
                 " being used"
             ),
             "Diff": "This is the size difference of the binary log between each refresh interval",
@@ -204,11 +211,10 @@ class HelpScreen(Screen):
     def compose(self) -> ComposeResult:
         yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
         with TabbedContent(id="tabbed_content"):
-            yield TabPane("MySQL", Static(id="mysql_help"), id="tab_mysql", classes="tab")
-            yield TabPane("ProxySQL", Static(id="proxysql_help"), id="tab_proxysql", classes="tab")
-        yield Center(
-            Label(
-                "[light_blue][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
-                " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-copy-text"
-            )
+            yield TabPane("MySQL", Static(id="mysql_help", shrink=True), id="tab_mysql", classes="tab")
+            yield TabPane("ProxySQL", Static(id="proxysql_help", shrink=True), id="tab_proxysql", classes="tab")
+        yield Label(
+            "[light_blue][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
+            " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-copy-text",
+            id="note",
         )

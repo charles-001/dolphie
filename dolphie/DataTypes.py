@@ -170,6 +170,7 @@ class ProxySQLProcesslistThread:
         self.formatted_query = self._get_formatted_query(self.query)
         self.formatted_time = self._get_formatted_time()
         self.command = self._get_formatted_command(thread_data.get("command", ""))
+        self.extended_info = thread_data.get("extended_info", "")
 
     def _get_formatted_time(self) -> str:
         thread_color = self._get_time_color()
