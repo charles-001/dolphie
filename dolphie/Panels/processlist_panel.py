@@ -18,7 +18,7 @@ def create_panel(tab: Tab) -> DataTable:
         dolphie.use_performance_schema = False
 
     columns = [
-        {"name": "Process ID", "field": "id", "width": 11, "format_number": False},
+        {"name": "Process ID", "field": "id", "width": None, "format_number": False},
         {"name": "Protocol", "field": "protocol", "width": 8, "format_number": False},
         {"name": "Username", "field": "user", "width": 20, "format_number": False},
     ]
@@ -84,7 +84,7 @@ def create_panel(tab: Tab) -> DataTable:
             if thread_id in processlist_datatable.rows:
                 datatable_value = processlist_datatable.get_row(thread_id)[column_id]
 
-                # Store the code of the Syntax object if it's a query
+                # Initialize temp values for possible Syntax object comparison below
                 temp_thread_value = thread_value
                 temp_datatable_value = datatable_value
 
@@ -98,7 +98,11 @@ def create_panel(tab: Tab) -> DataTable:
                         temp_datatable_value = datatable_value.code
 
                 # Update the datatable if values differ
-                if temp_thread_value != temp_datatable_value or column_field == "formatted_time":
+                if (
+                    temp_thread_value != temp_datatable_value
+                    or column_field == "formatted_time"
+                    or column_field == "time"
+                ):
                     processlist_datatable.update_cell(thread_id, column_name, thread_value, update_width=update_width)
             else:
                 # Create an array of values to append to the datatable

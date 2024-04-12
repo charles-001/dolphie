@@ -7,7 +7,7 @@ def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
     columns = {
-        "hostgroup": {"name": "Hostgroup", "width": 9, "format": None},
+        "hostgroup": {"name": "Hostgroup", "width": None, "format": None},
         "srv_host": {"name": "Backend Host", "width": 35, "format": None},
         "srv_port": {"name": "Port", "width": 5, "format": None},
         "status": {"name": "Status", "width": 10, "format": None},

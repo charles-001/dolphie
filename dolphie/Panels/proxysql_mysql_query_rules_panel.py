@@ -84,5 +84,5 @@ def create_panel(tab: Tab) -> DataTable:
             mysql_query_rules.clear()
 
     tab.proxysql_mysql_query_rules_title.update(
-        f"Active MySQL Query Rules ([highlight]{mysql_query_rules.row_count}[/highlight])"
+        f"Active Query Rules ([highlight]{mysql_query_rules.row_count}[/highlight])"
     )

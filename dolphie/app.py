@@ -35,6 +35,7 @@ from dolphie.Panels import (
     ddl_panel,
     metadata_locks_panel,
     processlist_panel,
+    proxysql_command_stats_panel,
     proxysql_dashboard_panel,
     proxysql_hostgroup_summary_panel,
     proxysql_mysql_query_rules_panel,
@@ -328,11 +329,6 @@ class DolphieApp(App):
                 # Reset this data so the graph doesn't show old data
                 dolphie.metadata_locks = {}
 
-            # This can cause MySQL to crash: https://bugs.mysql.com/bug.php?id=112035
-            # if dolphie.panels.innodb_trx_locks.visible or dolphie.historical_trx_locks:
-            #     dolphie.main_db_connection.execute(MySQLQueries.locks_query)
-            #     dolphie.lock_transactions = dolphie.main_db_connection.fetchall()
-
             if dolphie.panels.ddl.visible:
                 dolphie.main_db_connection.execute(MySQLQueries.ddls)
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
@@ -355,14 +351,20 @@ class DolphieApp(App):
         dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("mysql_stats")
 
-        # Questions is the same as Queries in MySQL it seems
-        dolphie.global_status["Queries"] = dolphie.global_status.get("Questions", 0)
+        dolphie.main_db_connection.execute(ProxySQLQueries.command_stats)
+        dolphie.proxysql_command_stats = dolphie.main_db_connection.fetchall()
 
-        dolphie.main_db_connection.execute(ProxySQLQueries.mysql_command_counters)
-        data = dolphie.main_db_connection.fetchall()
-        for row in data:
-            # Format the key to match the global status keys of MySQL
-            dolphie.global_status[f"Com_{row['Variable_name'].lower()}"] = int(row["Value"])
+        # Here, we're going to format the command stats to match the global status keys of
+        # MySQL and get total count of queries
+        total_queries_count = 0
+        for row in dolphie.proxysql_command_stats:
+            total_cnt = int(row["Total_cnt"])
+            total_queries_count += total_cnt
+
+            dolphie.global_status[f"Com_{row['Command'].lower()}"] = total_cnt
+
+        # Add the total queries to the global status
+        dolphie.global_status["Queries"] = total_queries_count
 
         if dolphie.panels.dashboard.visible:
             dolphie.proxysql_backend_host_average_latency = int(
@@ -594,6 +596,7 @@ class DolphieApp(App):
             tab.dolphie.panels.proxysql_mysql_query_rules.name: {
                 ConnectionSource.proxysql: proxysql_mysql_query_rules_panel
             },
+            tab.dolphie.panels.proxysql_command_stats.name: {ConnectionSource.proxysql: proxysql_command_stats_panel},
         }
 
         if tab.dolphie.connection_source == ConnectionSource.mysql:
@@ -787,7 +790,7 @@ class DolphieApp(App):
             tab.metadata_locks_title.update("Metadata Locks ([highlight]0[/highlight])")
         elif key == "6":
             if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify("DDL panel is only available for MySQL connections")
+                self.toggle_panel(dolphie.panels.proxysql_command_stats.name)
                 return
 
             if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:

@@ -55,12 +55,12 @@ class Tab:
     panel_dashboard: Container = None
     panel_graphs: Container = None
     panel_replication: Container = None
-    # panel_innodb_trx_locks: Container = None
     panel_metadata_locks: Container = None
     panel_ddl: Container = None
     panel_processlist: Container = None
     panel_proxysql_hostgroup_summary: Container = None
     panel_proxysql_mysql_query_rules: Container = None
+    panel_proxysql_command_stats: Container = None
 
     spinner: SpinnerWidget = None
 
@@ -72,9 +72,6 @@ class Tab:
 
     ddl_title: Label = None
     ddl_datatable: DataTable = None
-
-    # innodb_trx_locks_title: Label = None
-    # innodb_trx_locks_datatable: DataTable = None
 
     metadata_locks_title: Label = None
     metadata_locks_datatable: DataTable = None
@@ -104,6 +101,9 @@ class Tab:
 
     proxysql_mysql_query_rules_title: Static = None
     proxysql_mysql_query_rules_datatable: DataTable = None
+
+    proxysql_command_stats_title: Static = None
+    proxysql_command_stats_datatable: DataTable = None
 
     cluster_data: Static = None
 
@@ -273,6 +273,16 @@ class TabManager:
                         classes="proxysql_mysql_query_rules",
                     ),
                     Container(
+                        Label(id=f"proxysql_command_stats_title_{tab_id}"),
+                        DataTable(
+                            id=f"proxysql_command_stats_datatable_{tab_id}",
+                            classes="proxysql_command_stats_datatable",
+                            show_cursor=False,
+                        ),
+                        id=f"panel_proxysql_command_stats_{tab_id}",
+                        classes="proxysql_command_stats",
+                    ),
+                    Container(
                         Label(id=f"processlist_title_{tab_id}"),
                         DataTable(id=f"processlist_data_{tab_id}", show_cursor=False),
                         id=f"panel_processlist_{tab_id}",
@@ -376,6 +386,7 @@ class TabManager:
         tab.panel_proxysql_mysql_query_rules = self.app.query_one(
             f"#panel_proxysql_mysql_query_rules_{tab.id}", Container
         )
+        tab.panel_proxysql_command_stats = self.app.query_one(f"#panel_proxysql_command_stats_{tab.id}", Container)
 
         tab.spinner = self.app.query_one(f"#spinner_{tab.id}", SpinnerWidget)
         tab.spinner.hide()
@@ -393,6 +404,10 @@ class TabManager:
         tab.proxysql_mysql_query_rules_title = self.app.query_one(f"#proxysql_mysql_query_rules_title_{tab.id}", Static)
         tab.proxysql_mysql_query_rules_datatable = self.app.query_one(
             f"#proxysql_mysql_query_rules_datatable_{tab.id}", DataTable
+        )
+        tab.proxysql_command_stats_title = self.app.query_one(f"#proxysql_command_stats_title_{tab.id}", Static)
+        tab.proxysql_command_stats_datatable = self.app.query_one(
+            f"#proxysql_command_stats_datatable_{tab.id}", DataTable
         )
 
         tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
@@ -423,11 +438,11 @@ class TabManager:
         )
         tab.replication_thread_applier = self.app.query_one(f"#replication_thread_applier_{tab.id}", Static)
 
-        # By default, hide all the panels
         tab.sparkline.display = False
         tab.main_container.display = False
         tab.loading_indicator.display = False
 
+        # By default, hide all the panels
         for panel in tab.dolphie.panels.all():
             self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
 

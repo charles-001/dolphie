@@ -80,6 +80,7 @@ class Panels:
         self.ddl = Panel("ddl")
         self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary")
         self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules")
+        self.proxysql_command_stats = Panel("proxysql_command_stats")
 
     def get_panel(self, panel_name: str) -> Panel:
         return self.__dict__.get(panel_name, None)

@@ -27,13 +27,6 @@ class ProxySQLQueries:
         FROM
             stats_mysql_global
     """
-    mysql_command_counters: str = """
-        SELECT
-            Command as Variable_name,
-            Total_cnt AS Value
-        FROM
-            stats_mysql_commands_counters
-    """
     backend_host_average_latency: str = """
         SELECT
             SUM(Latency_us) / COUNT(*) AS avg_latency
@@ -60,8 +53,8 @@ class ProxySQLQueries:
         SELECT
             *
         FROM
-            stats_mysql_connection_pool
-            LEFT JOIN runtime_mysql_servers ON hostgroup = hostgroup_id AND srv_host = hostname AND srv_port = port
+            stats_mysql_connection_pool LEFT JOIN
+            runtime_mysql_servers ON hostgroup = hostgroup_id AND srv_host = hostname AND srv_port = port
         ORDER BY
             hostgroup
     """
@@ -82,8 +75,18 @@ class ProxySQLQueries:
         WHERE
             active = 1
         ORDER BY
-            active DESC,
             hits DESC
+    """
+    command_stats: str = """
+        SELECT
+            *,
+            Total_cnt AS Total_cnt_s
+        FROM
+            stats_mysql_commands_counters
+        WHERE
+            Total_cnt != 0
+        ORDER BY
+            Total_cnt DESC
     """
     variables: str = "SHOW GLOBAL VARIABLES"
 

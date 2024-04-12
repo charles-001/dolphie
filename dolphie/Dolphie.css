@@ -100,7 +100,6 @@ TopBar {
     width: auto;
 }
 
-
 .metadata_locks {
     height: auto;
     background: #0f1525;
@@ -254,6 +253,27 @@ TopBar {
     width: auto;
 }
 .proxysql_mysql_query_rules > Label {
+    width: 100%;
+    color: #bbc8e8;
+    text-style: bold;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
+.proxysql_command_stats {
+    overflow-x: auto;
+}
+.proxysql_command_stats {
+    height: auto;
+    background: #0f1525;
+    border: tall #1b233a;
+    margin-bottom: 1;
+}
+.proxysql_command_stats > Container {
+    height: auto;
+    width: auto;
+}
+.proxysql_command_stats > Label {
     width: 100%;
     color: #bbc8e8;
     text-style: bold;
