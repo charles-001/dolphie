@@ -144,10 +144,10 @@ class ThreadScreen(Screen):
 
         with Container(id="thread_container", classes="container"):
             with Container():
-                yield Label("Thread Details", classes="title")
+                yield Label("Process Details", classes="title")
                 yield ScrollableContainer(Static(id="thread_table"), classes="table")
             with Container():
-                yield Label("Thread Attributes", classes="title")
+                yield Label("Process Attributes", classes="title")
                 yield ScrollableContainer(Static(id="user_thread_attributes_table"), classes="table")
 
         with Container(id="query_container", classes="container"):

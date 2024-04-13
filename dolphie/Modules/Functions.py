@@ -114,7 +114,7 @@ def format_bytes(bytes_value, color=True):
         formatted_value = formatted_value[:-3]  # Remove ".00" from the end
 
     if bytes_value == 0:
-        return 0
+        return "0"
     elif color:
         return f"{formatted_value}[highlight]{units[unit_index]}[/highlight]"
     else:

@@ -1096,7 +1096,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.show_thread,
-                    message="Thread Details",
+                    message="Process Details",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
