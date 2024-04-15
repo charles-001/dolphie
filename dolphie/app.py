@@ -24,6 +24,7 @@ from dolphie.DataTypes import (
 )
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.Functions import (
+    format_bytes,
     format_number,
     format_query,
     format_sys_table_memory,
@@ -98,7 +99,7 @@ class DolphieApp(App):
                 "light_blue": "#bbc8e8",
                 "b white": "b #e9e9e9",
                 "b highlight": "b #91abec",
-                "b red": "b #fd8383",
+                "bold red": "b #fd8383",
                 "b light_blue": "b #bbc8e8",
                 "panel_border": "#6171a6",
                 "table_border": "#333f62",
@@ -880,7 +881,7 @@ class DolphieApp(App):
 
         elif key == "e":
             if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
+                self.run_command_in_worker(key=key, dolphie=dolphie)
                 return
 
             if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
@@ -985,7 +986,7 @@ class DolphieApp(App):
 
         elif key == "m":
             if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
+                self.run_command_in_worker(key=key, dolphie=dolphie)
                 return
 
             if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
@@ -1303,7 +1304,42 @@ class DolphieApp(App):
 
                 self.call_from_thread(show_command_screen)
 
-            if key == "k":
+            elif key == "e":
+                header_style = Style(bold=True)
+                table = Table(box=box.SIMPLE_HEAVY, style="table_border", show_edge=False)
+                table.add_column("Hostgroup", header_style=header_style)
+                table.add_column("Backend Host", max_width=35, header_style=header_style)
+                table.add_column("Username", header_style=header_style)
+                table.add_column("Schema", header_style=header_style)
+                table.add_column("Error #", header_style=header_style)
+                table.add_column("Count", header_style=header_style)
+                table.add_column("First Seen", header_style=header_style)
+                table.add_column("Last Seen", header_style=header_style)
+                table.add_column("Error", header_style=header_style, overflow="fold")
+
+                dolphie.secondary_db_connection.execute(ProxySQLQueries.query_errors)
+                data = dolphie.secondary_db_connection.fetchall()
+
+                for row in data:
+                    table.add_row(
+                        row["hostgroup"],
+                        f"{dolphie.get_hostname(row['hostname'])}:{row['port']}",
+                        row["username"],
+                        row["schemaname"],
+                        row["errno"],
+                        format_number(int(row["count_star"])),
+                        str(datetime.fromtimestamp(int(row["first_seen"]))),
+                        str(datetime.fromtimestamp(int(row["last_seen"]))),
+                        row["last_error"],
+                    )
+
+                screen_data = Group(
+                    Align.center(f"[b light_blue]Query Errors ([highlight]{table.row_count}[/highlight])\n"),
+                    Align.center(table),
+                )
+
+                self.call_from_thread(show_command_screen)
+            elif key == "k":
                 thread_id = additional_data
                 try:
                     if dolphie.connection_source_alt == ConnectionSource.aws_rds:
@@ -1319,7 +1355,7 @@ class DolphieApp(App):
                 except ManualException as e:
                     self.notify(e.reason, title="Error killing Process ID", severity="error")
 
-            if key == "K":
+            elif key == "K":
 
                 def execute_kill(thread_id):
                     if dolphie.connection_source_alt == ConnectionSource.aws_rds:
@@ -1391,52 +1427,69 @@ class DolphieApp(App):
                 self.call_from_thread(show_command_screen)
 
             elif key == "m":
-                table_grid = Table.grid()
-                table1 = Table(box=box.SIMPLE_HEAVY, style="table_border")
-
                 header_style = Style(bold=True)
-                table1.add_column("User", header_style=header_style)
-                table1.add_column("Current", header_style=header_style)
-                table1.add_column("Total", header_style=header_style)
 
-                dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_user)
-                data = dolphie.secondary_db_connection.fetchall()
-                for row in data:
-                    table1.add_row(
-                        row["user"],
-                        format_sys_table_memory(row["current_allocated"]),
-                        format_sys_table_memory(row["total_allocated"]),
-                    )
+                if dolphie.connection_source == ConnectionSource.proxysql:
+                    table = Table(box=box.SIMPLE_HEAVY, style="table_border", show_edge=False)
+                    table.add_column("Variable", header_style=header_style)
+                    table.add_column("Value", header_style=header_style)
 
-                table2 = Table(box=box.SIMPLE_HEAVY, style="table_border")
-                table2.add_column("Code Area", header_style=header_style)
-                table2.add_column("Current", header_style=header_style)
+                    dolphie.secondary_db_connection.execute(ProxySQLQueries.memory_metrics)
+                    data = dolphie.secondary_db_connection.fetchall()
 
-                dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_code_area)
-                data = dolphie.secondary_db_connection.fetchall()
-                for row in data:
-                    table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
+                    for row in data:
+                        if row["Variable_Name"]:
+                            table.add_row(f"{row['Variable_Name']}", f"{format_bytes(int(row['Variable_Value']))}")
 
-                table3 = Table(box=box.SIMPLE_HEAVY, style="table_border")
-                table3.add_column("Host", header_style=header_style)
-                table3.add_column("Current", header_style=header_style)
-                table3.add_column("Total", header_style=header_style)
+                    screen_data = Group(Align.center("[b light_blue]Memory Usage[/b light_blue]"), Align.center(table))
 
-                dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_host)
-                data = dolphie.secondary_db_connection.fetchall()
-                for row in data:
-                    table3.add_row(
-                        dolphie.get_hostname(row["host"]),
-                        format_sys_table_memory(row["current_allocated"]),
-                        format_sys_table_memory(row["total_allocated"]),
-                    )
+                    self.call_from_thread(show_command_screen)
+                else:
+                    table_grid = Table.grid()
+                    table1 = Table(box=box.SIMPLE_HEAVY, style="table_border")
 
-                table_grid.add_row("", Align.center("[b light_blue]Memory Allocation"), "")
-                table_grid.add_row(table1, table3, table2)
+                    table1.add_column("User", header_style=header_style)
+                    table1.add_column("Current", header_style=header_style)
+                    table1.add_column("Total", header_style=header_style)
 
-                screen_data = Align.center(table_grid)
+                    dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_user)
+                    data = dolphie.secondary_db_connection.fetchall()
+                    for row in data:
+                        table1.add_row(
+                            row["user"],
+                            format_sys_table_memory(row["current_allocated"]),
+                            format_sys_table_memory(row["total_allocated"]),
+                        )
 
-                self.call_from_thread(show_command_screen)
+                    table2 = Table(box=box.SIMPLE_HEAVY, style="table_border")
+                    table2.add_column("Code Area", header_style=header_style)
+                    table2.add_column("Current", header_style=header_style)
+
+                    dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_code_area)
+                    data = dolphie.secondary_db_connection.fetchall()
+                    for row in data:
+                        table2.add_row(row["code_area"], format_sys_table_memory(row["current_allocated"]))
+
+                    table3 = Table(box=box.SIMPLE_HEAVY, style="table_border")
+                    table3.add_column("Host", header_style=header_style)
+                    table3.add_column("Current", header_style=header_style)
+                    table3.add_column("Total", header_style=header_style)
+
+                    dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_host)
+                    data = dolphie.secondary_db_connection.fetchall()
+                    for row in data:
+                        table3.add_row(
+                            dolphie.get_hostname(row["host"]),
+                            format_sys_table_memory(row["current_allocated"]),
+                            format_sys_table_memory(row["total_allocated"]),
+                        )
+
+                    table_grid.add_row("", Align.center("[b light_blue]Memory Allocation"), "")
+                    table_grid.add_row(table1, table3, table2)
+
+                    screen_data = Align.center(table_grid)
+
+                    self.call_from_thread(show_command_screen)
             elif key == "t":
                 formatted_query = ""
                 explain_failure = ""

@@ -89,6 +89,18 @@ class ProxySQLQueries:
         ORDER BY
             Total_cnt DESC
     """
+    memory_metrics: str = """
+        SELECT
+            *
+        FROM
+            stats_memory_metrics
+    """
+    query_errors: str = """
+        SELECT
+            *
+        FROM
+            stats_mysql_errors
+    """
     variables: str = "SHOW GLOBAL VARIABLES"
 
 

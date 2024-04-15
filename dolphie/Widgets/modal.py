@@ -274,7 +274,7 @@ class CommandModal(ModalScreen):
             value = next((thread_id for thread_id in self.processlist_data.keys() if modal_input == thread_id), None)
 
             if not value:
-                self.update_error_response(f"Process ID [b red]{modal_input}[/b red] does not exist")
+                self.update_error_response(f"Process ID [bold red]{modal_input}[/bold red] does not exist")
             else:
                 self.dismiss(modal_input)
         elif self.command == HotkeyCommands.refresh_interval:
