@@ -198,6 +198,7 @@ class MetricSource:
     global_status: str = "global_status"
     innodb_metrics: str = "innodb_metrics"
     disk_io_metrics: str = "disk_io_metrics"
+    proxysql_select_command_stats: str = "proxysql_select_command_stats"
     none: str = "none"
 
 
@@ -209,6 +210,7 @@ class MetricColor:
     red: tuple = (255, 73, 112)
     yellow: tuple = (252, 213, 121)
     purple: tuple = (191, 121, 252)
+    orange: tuple = (252, 121, 121)
 
 
 @dataclass
@@ -455,6 +457,28 @@ class ProxySQLMultiplexEfficiency:
 
 
 @dataclass
+class ProxySQLSELECTStats:
+    cnt_100us: MetricData
+    cnt_500us: MetricData
+    cnt_1ms: MetricData
+    cnt_5ms: MetricData
+    cnt_10ms: MetricData
+    cnt_50ms: MetricData
+    cnt_100ms: MetricData
+    cnt_500ms: MetricData
+    cnt_1s: MetricData
+    cnt_5s: MetricData
+    cnt_10s: MetricData
+    cnt_INFs: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_select_stats"
+    graph_tab_name = "SELECT Stats"
+    metric_source: MetricSource = MetricSource.proxysql_select_command_stats
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+
+
+@dataclass
 class MetricInstances:
     dml: DMLMetrics
     checkpoint: CheckpointMetrics
@@ -474,6 +498,7 @@ class MetricInstances:
     proxysql_multiplex_efficiency: ProxySQLMultiplexEfficiency
     proxysql_connections: ProxySQLConnectionsMetrics
     proxysql_queries_data_network: ProxySQLQueriesDataNetwork
+    proxysql_select_stats: ProxySQLSELECTStats
 
 
 class MetricManager:
@@ -616,6 +641,21 @@ class MetricManager:
                     create_switch=False,
                 ),
             ),
+            proxysql_select_stats=ProxySQLSELECTStats(
+                graphs=["graph_proxysql_select_stats"],
+                cnt_100us=MetricData(label="100us", color=MetricColor.gray, visible=False),
+                cnt_500us=MetricData(label="500us", color=MetricColor.blue, visible=False),
+                cnt_1ms=MetricData(label="1ms", color=MetricColor.green, visible=False),
+                cnt_5ms=MetricData(label="5ms", color=MetricColor.green, visible=False),
+                cnt_10ms=MetricData(label="10ms", color=MetricColor.green),
+                cnt_50ms=MetricData(label="50ms", color=MetricColor.yellow),
+                cnt_100ms=MetricData(label="100ms", color=MetricColor.yellow),
+                cnt_500ms=MetricData(label="500ms", color=MetricColor.orange),
+                cnt_1s=MetricData(label="1s", color=MetricColor.orange),
+                cnt_5s=MetricData(label="5s", color=MetricColor.red),
+                cnt_10s=MetricData(label="10s", color=MetricColor.purple),
+                cnt_INFs=MetricData(label="10s+", color=MetricColor.purple),
+            ),
         )
 
     def refresh_data(
@@ -625,6 +665,7 @@ class MetricManager:
         global_variables: Dict[str, Union[int, str]] = {},
         global_status: Dict[str, int] = {},
         innodb_metrics: Dict[str, int] = {},
+        proxysql_command_stats: Dict[str, int] = {},
         disk_io_metrics: Dict[str, int] = {},
         metadata_lock_metrics: Dict[str, int] = {},
         replication_status: Dict[str, Union[int, str]] = {},
@@ -648,6 +689,7 @@ class MetricManager:
         )
         self.redo_log_size = max(innodb_redo_log_capacity, innodb_log_file_size)
 
+        self.update_proxysql_select_command_stats(proxysql_command_stats)
         self.update_metrics_per_second_values()
 
         self.update_metrics_replication_lag()
@@ -677,6 +719,8 @@ class MetricManager:
                 metric_source = self.innodb_metrics
             elif metric_instance.metric_source == MetricSource.disk_io_metrics:
                 metric_source = self.disk_io_metrics
+            elif metric_instance.metric_source == MetricSource.proxysql_select_command_stats:
+                metric_source = self.proxysql_select_command_stats
 
             if metric_source is None:
                 continue  # Skip if there's no metric source
@@ -698,6 +742,15 @@ class MetricManager:
 
             if added:
                 metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
+
+    def update_proxysql_select_command_stats(self, proxysql_command_stats):
+        # Create a dictionary of proxysql SELECT command stats
+        for row in proxysql_command_stats:
+            if row["Command"] == "SELECT":
+                for key, value in row.items():
+                    if value.isdigit():
+                        row[key] = int(value)
+                self.proxysql_select_command_stats = row
 
     def update_metrics_replication_lag(self):
         if self.replication_status:
@@ -809,6 +862,8 @@ class MetricManager:
                 metrics_data = self.innodb_metrics
             elif metric_instance.metric_source == MetricSource.disk_io_metrics:
                 metrics_data = self.disk_io_metrics
+            elif metric_instance.metric_source == MetricSource.proxysql_select_command_stats:
+                metrics_data = self.proxysql_select_command_stats
 
             for metric_name, metric_data in metric_instance.__dict__.items():
                 if isinstance(metric_data, MetricData) and metric_data.per_second_calculation:

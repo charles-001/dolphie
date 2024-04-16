@@ -371,7 +371,6 @@ class DolphieApp(App):
 
         dolphie.main_db_connection.execute(ProxySQLQueries.connection_pool_data)
         data = dolphie.main_db_connection.fetchone()
-
         dolphie.global_status["proxysql_backend_host_average_latency"] = int(data.get("avg_latency", 0))
         multiplex_efficiency_ratio = round(
             100
@@ -402,6 +401,7 @@ class DolphieApp(App):
             polling_latency=dolphie.polling_latency,
             global_variables=dolphie.global_variables,
             global_status=dolphie.global_status,
+            proxysql_command_stats=dolphie.proxysql_command_stats,
         )
 
     def refresh_screen_proxysql(self, tab: Tab):
