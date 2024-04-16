@@ -95,12 +95,16 @@ class ProxySQLQueries:
             *
         FROM
             stats_memory_metrics
+        ORDER BY
+            CAST(Variable_Value AS DECIMAL) DESC;
     """
     query_errors: str = """
         SELECT
             *
         FROM
             stats_mysql_errors
+        ORDER BY
+            count_star DESC
     """
     variables: str = "SHOW GLOBAL VARIABLES"
 

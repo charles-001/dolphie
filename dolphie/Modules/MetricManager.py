@@ -680,6 +680,7 @@ class MetricManager:
         self.metadata_lock_metrics = metadata_lock_metrics
         self.replication_status = replication_status
         self.replication_lag = replication_lag
+        self.proxysql_select_command_stats = {}
 
         # Support MySQL 8.0.30+ redo log size variable
         innodb_redo_log_capacity = self.global_variables.get("innodb_redo_log_capacity", 0)
@@ -799,7 +800,7 @@ class MetricManager:
         max_checkpoint_age_bytes = self.redo_log_size
 
         if checkpoint_age_bytes == 0:
-            return "N/A"
+            return self.redo_log_size, 0, 0
 
         checkpoint_age_sync_flush_bytes = round(max_checkpoint_age_bytes * 0.825)
         checkpoint_age_ratio = round(checkpoint_age_bytes / max_checkpoint_age_bytes * 100, 2)

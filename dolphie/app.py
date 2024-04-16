@@ -1230,11 +1230,7 @@ class DolphieApp(App):
                 )
 
         elif key == "question_mark":
-            self.app.push_screen(
-                HelpScreen(
-                    dolphie.connection_status, dolphie.app_version, dolphie.host_with_port, dolphie.connection_source
-                )
-            )
+            self.app.push_screen(HelpScreen(dolphie.connection_source))
 
         if screen_data:
             self.app.push_screen(
@@ -1324,10 +1320,9 @@ class DolphieApp(App):
                 table.add_column("Backend Host", max_width=35, header_style=header_style)
                 table.add_column("Username", header_style=header_style)
                 table.add_column("Schema", header_style=header_style)
-                table.add_column("Error #", header_style=header_style)
-                table.add_column("Count", header_style=header_style)
                 table.add_column("First Seen", header_style=header_style)
                 table.add_column("Last Seen", header_style=header_style)
+                table.add_column("Count", header_style=header_style)
                 table.add_column("Error", header_style=header_style, overflow="fold")
 
                 dolphie.secondary_db_connection.execute(ProxySQLQueries.query_errors)
@@ -1339,11 +1334,10 @@ class DolphieApp(App):
                         f"{dolphie.get_hostname(row.get('hostname'))}:{row.get('port')}",
                         row.get("username"),
                         row.get("schemaname"),
-                        row.get("errno", 0),
-                        format_number(int(row.get("count_star", 0))),
                         str(datetime.fromtimestamp(int(row.get("first_seen", 0)))),
                         str(datetime.fromtimestamp(int(row.get("last_seen", 0)))),
-                        row.get("last_error"),
+                        format_number(int(row.get("count_star", 0))),
+                        "[b][highlight]%s[/b][/highlight]: %s" % (row.get("errno", 0), row.get("last_error")),
                     )
 
                 screen_data = Group(

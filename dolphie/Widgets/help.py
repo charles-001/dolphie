@@ -1,29 +1,24 @@
 from dolphie.DataTypes import ConnectionSource
-from dolphie.Widgets.topbar import TopBar
 from rich import box
 from rich.align import Align
 from rich.console import Group
 from rich.table import Table
-from textual import events
 from textual.app import ComposeResult
-from textual.screen import Screen
+from textual.containers import Vertical
+from textual.screen import ModalScreen
 from textual.widgets import Label, Static, TabbedContent, TabPane
 
 
-class HelpScreen(Screen):
+class HelpScreen(ModalScreen):
     CSS = """
-        HelpScreen {
-            background: #0a0e1b;
+        HelpScreen > Vertical {
+            background: #131626;
+            border: tall #384673;
+            height: auto;
+            width: 150;
         }
         HelpScreen .tab {
-            background: #101626;
-            border: tall #1d253e;
-        }
-        HelpScreen TabbedContent {
             align: center middle;
-        }
-        HelpScreen ContentSwitcher {
-            width: 60%;
         }
         HelpScreen #note {
             margin-top: 1;
@@ -32,17 +27,15 @@ class HelpScreen(Screen):
         }
     """
 
-    def __init__(self, connection_status, app_version, host, connection_source):
+    BINDINGS = [
+        ("escape", "dismiss"),
+        ("q", "dismiss"),
+    ]
+
+    def __init__(self, connection_source):
         super().__init__()
 
-        self.connection_status = connection_status
-        self.app_version = app_version
-        self.host = host
         self.connection_source = connection_source
-
-    def on_key(self, event: events.Key):
-        if event.key == "q" and self.screen.is_attached:
-            self.app.pop_screen()
 
     def on_mount(self):
         keys = {
@@ -101,7 +94,6 @@ class HelpScreen(Screen):
         datapoints = {
             "Read Only": "If the host is in read-only mode",
             "Read Hit": "The percentage of how many reads are from InnoDB buffer pool compared to from disk",
-            "Lag": ("Retrieves metric from: Default -> SHOW SLAVE STATUS, HB -> Heartbeat table"),
             "Chkpt Age": (
                 "This depicts how close InnoDB is before it starts to furiously flush dirty data\nto disk "
                 "(Lower is better)"
@@ -110,7 +102,6 @@ class HelpScreen(Screen):
                 "The percentage of how many lookups there are from Adapative Hash Index\ncompared to it not"
                 " being used"
             ),
-            "Diff": "This is the size difference of the binary log between each refresh interval",
             "Cache Hit": "The percentage of how many binary log lookups are from cache instead of from disk",
             "History List": "History list length (number of un-purged row changes in InnoDB's undo logs)",
             "QPS": "Queries per second from Com_queries in SHOW GLOBAL STATUS",
@@ -212,12 +203,12 @@ class HelpScreen(Screen):
             self.query_one("#tabbed_content", TabbedContent).active = "tab_proxysql"
 
     def compose(self) -> ComposeResult:
-        yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
-        with TabbedContent(id="tabbed_content"):
-            yield TabPane("MySQL", Static(id="mysql_help", shrink=True), id="tab_mysql", classes="tab")
-            yield TabPane("ProxySQL", Static(id="proxysql_help", shrink=True), id="tab_proxysql", classes="tab")
-        yield Label(
-            "[light_blue][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
-            " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-copy-text",
-            id="note",
-        )
+        with Vertical():
+            with TabbedContent(id="tabbed_content"):
+                yield TabPane("MySQL", Static(id="mysql_help", shrink=True), id="tab_mysql", classes="tab")
+                yield TabPane("ProxySQL", Static(id="proxysql_help", shrink=True), id="tab_proxysql", classes="tab")
+            yield Label(
+                "[light_blue][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
+                " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-copy-text",
+                id="note",
+            )
