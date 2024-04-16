@@ -25,9 +25,6 @@ def create_panel(tab: Tab) -> DataTable:
     }
 
     command_stats = tab.proxysql_command_stats_datatable
-    # Clear table if columns change
-    if len(command_stats.columns) != len(columns):
-        command_stats.clear(columns=True)
 
     # Add columns to the datatable if it is empty
     if not command_stats.columns:
@@ -42,8 +39,8 @@ def create_panel(tab: Tab) -> DataTable:
 
         for column_id, (column_key, column_data) in enumerate(columns.items()):
             column_name = column_data["name"]
-            column_value = row.get(column_key)
             column_format = column_data["format"]
+            column_value = row.get(column_key)
 
             # Calculate the values per second for the following columns
             if "cnt_" in column_key:

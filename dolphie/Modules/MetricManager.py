@@ -112,30 +112,6 @@ class Graph(Static):
                         color=bar_color,
                     )
                     max_y_value = max(self.metric_instance.redo_log_size, max(y))
-            elif "graph_redo_log_active_count" in self.id:
-                x = self.metric_instance.datetimes
-                y = self.metric_instance.Active_redo_log_count.values
-
-                if y:
-                    plt.hline(1, (10, 14, 27))
-                    plt.hline(34, (252, 121, 121))
-                    plt.text(
-                        "Max Count",
-                        y=34,
-                        x=max(x),
-                        alignment="right",
-                        color=(233, 233, 233),
-                        style="bold",
-                    )
-
-                    plt.plot(
-                        x,
-                        y,
-                        marker=self.marker,
-                        label=self.metric_instance.Active_redo_log_count.label,
-                        color=self.metric_instance.Active_redo_log_count.color,
-                    )
-                    max_y_value = 32
             else:
                 x = self.metric_instance.datetimes
                 y = self.metric_instance.Innodb_lsn_current.values
@@ -149,6 +125,30 @@ class Graph(Static):
                         color=self.metric_instance.Innodb_lsn_current.color,
                     )
                     max_y_value = max(max_y_value, max(y))
+        elif isinstance(self.metric_instance, RedoLogActiveCountMetrics):
+            x = self.metric_instance.datetimes
+            y = self.metric_instance.Active_redo_log_count.values
+
+            if y:
+                plt.hline(1, (10, 14, 27))
+                plt.hline(34, (252, 121, 121))
+                plt.text(
+                    "Max Count",
+                    y=34,
+                    x=max(x),
+                    alignment="right",
+                    color=(233, 233, 233),
+                    style="bold",
+                )
+
+                plt.plot(
+                    x,
+                    y,
+                    marker=self.marker,
+                    label=self.metric_instance.Active_redo_log_count.label,
+                    color=self.metric_instance.Active_redo_log_count.color,
+                )
+                max_y_value = 32
         else:
             for metric_data in self.metric_instance.__dict__.values():
                 if isinstance(metric_data, MetricData) and metric_data.visible:
@@ -167,11 +167,8 @@ class Graph(Static):
         else:
             y_ticks = [i for i in range(int(max_y_value) + 1)]
 
-        if "graph_redo_log_active_count" in self.id:
-            y_labels = [format_number(val, color=False) for val in y_ticks]
-        else:
-            format_function = get_number_format_function(self.metric_instance)
-            y_labels = [format_function(val) for val in y_ticks]
+        format_function = get_number_format_function(self.metric_instance)
+        y_labels = [format_function(val) for val in y_ticks]
 
         plt.yticks(y_ticks, y_labels)
 
@@ -187,7 +184,8 @@ def get_number_format_function(data, color=False):
         ReplicationLagMetrics: lambda val: format_time(val),
         CheckpointMetrics: lambda val: format_bytes(val, color=color),
         RedoLogMetrics: lambda val: format_bytes(val, color=color),
-        AdaptiveHashIndexHitRatioMetrics: lambda val: f"{round(val)}%",
+        AdaptiveHashIndexHitRatio: lambda val: f"{round(val)}%",
+        ProxySQLMultiplexEfficiency: lambda val: f"{round(val)}%",
         DiskIOMetrics: lambda val: format_bytes(val, color=color),
         ProxySQLQueriesDataNetwork: lambda val: format_bytes(val, color=color),
     }
@@ -296,7 +294,7 @@ class AdaptiveHashIndexMetrics:
 
 
 @dataclass
-class AdaptiveHashIndexHitRatioMetrics:
+class AdaptiveHashIndexHitRatio:
     hit_ratio: MetricData
     graphs: List[str]
     smoothed_hit_ratio: float = None
@@ -310,11 +308,21 @@ class AdaptiveHashIndexHitRatioMetrics:
 @dataclass
 class RedoLogMetrics:
     Innodb_lsn_current: MetricData
-    Active_redo_log_count: MetricData
     graphs: List[str]
     tab_name: str = "redo_log"
     graph_tab_name = "Redo Log"
     redo_log_size: int = 0
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+
+
+@dataclass
+class RedoLogActiveCountMetrics:
+    Active_redo_log_count: MetricData
+    graphs: List[str]
+    tab_name: str = "redo_log"
+    graph_tab_name = "Redo Log"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -436,12 +444,24 @@ class ProxySQLActiveTRX:
 
 
 @dataclass
+class ProxySQLMultiplexEfficiency:
+    proxysql_multiplex_efficiency_ratio: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_multiplex_efficiency"
+    graph_tab_name = "Multiplex Efficiency"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+
+
+@dataclass
 class MetricInstances:
     dml: DMLMetrics
     checkpoint: CheckpointMetrics
     buffer_pool_requests: BufferPoolRequestsMetrics
     adaptive_hash_index: AdaptiveHashIndexMetrics
-    adaptive_hash_index_hit_ratio: AdaptiveHashIndexHitRatioMetrics
+    adaptive_hash_index_hit_ratio: AdaptiveHashIndexHitRatio
+    redo_log_active_count: RedoLogActiveCountMetrics
     redo_log: RedoLogMetrics
     table_cache: TableCacheMetrics
     threads: ThreadMetrics
@@ -450,9 +470,10 @@ class MetricInstances:
     disk_io: DiskIOMetrics
     locks: LocksMetrics
     replication_lag: ReplicationLagMetrics
+    proxysql_active_trx: ProxySQLActiveTRX
+    proxysql_multiplex_efficiency: ProxySQLMultiplexEfficiency
     proxysql_connections: ProxySQLConnectionsMetrics
     proxysql_queries_data_network: ProxySQLQueriesDataNetwork
-    proxysql_active_trx: ProxySQLActiveTRX
 
 
 class MetricManager:
@@ -506,15 +527,18 @@ class MetricManager:
                 adaptive_hash_searches=MetricData(label="Hit", color=MetricColor.green),
                 adaptive_hash_searches_btree=MetricData(label="Miss", color=MetricColor.red),
             ),
-            adaptive_hash_index_hit_ratio=AdaptiveHashIndexHitRatioMetrics(
+            adaptive_hash_index_hit_ratio=AdaptiveHashIndexHitRatio(
                 graphs=["graph_adaptive_hash_index_hit_ratio"],
                 hit_ratio=MetricData(
                     label="Hit Ratio", color=MetricColor.green, per_second_calculation=False, create_switch=False
                 ),
             ),
             redo_log=RedoLogMetrics(
-                graphs=["graph_redo_log_data_written", "graph_redo_log_active_count", "graph_redo_log_bar"],
+                graphs=["graph_redo_log_data_written", "graph_redo_log_bar"],
                 Innodb_lsn_current=MetricData(label="Data Written", color=MetricColor.blue, create_switch=False),
+            ),
+            redo_log_active_count=RedoLogActiveCountMetrics(
+                graphs=["graph_redo_log_active_count"],
                 Active_redo_log_count=MetricData(
                     label="Active Count",
                     color=MetricColor.blue,
@@ -580,7 +604,16 @@ class MetricManager:
             proxysql_active_trx=ProxySQLActiveTRX(
                 graphs=["graph_proxysql_active_trx"],
                 Active_Transactions=MetricData(
-                    label="Active TRX", color=MetricColor.blue, per_second_calculation=False
+                    label="Active TRX", color=MetricColor.blue, per_second_calculation=False, create_switch=False
+                ),
+            ),
+            proxysql_multiplex_efficiency=ProxySQLMultiplexEfficiency(
+                graphs=["graph_proxysql_multiplex_efficiency"],
+                proxysql_multiplex_efficiency_ratio=MetricData(
+                    label="Multiplex Efficiency",
+                    color=MetricColor.blue,
+                    per_second_calculation=False,
+                    create_switch=False,
                 ),
             ),
         )

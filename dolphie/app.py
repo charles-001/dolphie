@@ -369,12 +369,22 @@ class DolphieApp(App):
         # Add the total queries to the global status
         dolphie.global_status["Queries"] = total_queries_count
 
-        if dolphie.panels.dashboard.visible:
-            dolphie.main_db_connection.execute(ProxySQLQueries.connection_pool_data)
-            data = dolphie.main_db_connection.fetchone()
+        dolphie.main_db_connection.execute(ProxySQLQueries.connection_pool_data)
+        data = dolphie.main_db_connection.fetchone()
 
-            dolphie.proxysql_backend_host_average_latency = int(data.get("avg_latency", 0))
-            dolphie.proxysql_connection_pool_connections = int(data.get("connection_pool_connections", 0))
+        dolphie.global_status["proxysql_backend_host_average_latency"] = int(data.get("avg_latency", 0))
+        multiplex_efficiency_ratio = round(
+            100
+            - (
+                (
+                    int(data.get("connection_pool_connections", 0))
+                    / dolphie.global_status.get("Client_Connections_connected", 0)
+                )
+                * 100
+            ),
+            2,
+        )
+        dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = multiplex_efficiency_ratio
 
         if dolphie.panels.proxysql_hostgroup_summary.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
@@ -558,9 +568,12 @@ class DolphieApp(App):
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
             if metric_instance.tab_name == tab_metric_instance_name:
                 number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
-                for metric_data in metric_instance.__dict__.values():
+                for metric_name, metric_data in metric_instance.__dict__.items():
                     if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
-                        stat_data[metric_data.label] = number_format_func(metric_data.values[-1])
+                        if f"graph_{metric_name}" in metric_instance.graphs:
+                            stat_data[metric_data.label] = round(metric_data.values[-1])
+                        else:
+                            stat_data[metric_data.label] = number_format_func(metric_data.values[-1])
 
         formatted_stat_data = "  ".join(
             f"[b light_blue]{label}[/b light_blue] {value}" for label, value in stat_data.items()
@@ -629,14 +642,14 @@ class DolphieApp(App):
                 tab.dashboard_section_5.styles.max_width = "55"
 
         elif tab.dolphie.connection_source == ConnectionSource.proxysql:
-            tab.dashboard_section_1.styles.width = "23vw"
+            tab.dashboard_section_1.styles.width = "26vw"
             tab.dashboard_section_2.styles.width = "20vw"
             tab.dashboard_section_3.styles.width = "22vw"
             tab.dashboard_section_4.styles.width = "13vw"
 
             tab.dashboard_section_5.display = False
 
-            tab.dashboard_section_1.styles.max_width = "37"
+            tab.dashboard_section_1.styles.max_width = "40"
             tab.dashboard_section_2.styles.max_width = "28"
             tab.dashboard_section_3.styles.max_width = "25"
             tab.dashboard_section_4.styles.max_width = "25"
@@ -663,7 +676,7 @@ class DolphieApp(App):
             tab.graph_redo_log_bar.styles.width = "12%"
             tab.graph_redo_log_active_count.styles.width = "33%"
             tab.graph_redo_log_active_count.display = True
-            tab.dolphie.metric_manager.metrics.redo_log.Active_redo_log_count.visible = True
+            tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
         else:
             tab.graph_redo_log_data_written.styles.width = "88%"
             tab.graph_redo_log_bar.styles.width = "12%"
@@ -1322,15 +1335,15 @@ class DolphieApp(App):
 
                 for row in data:
                     table.add_row(
-                        row["hostgroup"],
-                        f"{dolphie.get_hostname(row['hostname'])}:{row['port']}",
-                        row["username"],
-                        row["schemaname"],
-                        row["errno"],
-                        format_number(int(row["count_star"])),
-                        str(datetime.fromtimestamp(int(row["first_seen"]))),
-                        str(datetime.fromtimestamp(int(row["last_seen"]))),
-                        row["last_error"],
+                        row.get("hostgroup"),
+                        f"{dolphie.get_hostname(row.get('hostname'))}:{row.get('port')}",
+                        row.get("username"),
+                        row.get("schemaname"),
+                        row.get("errno", 0),
+                        format_number(int(row.get("count_star", 0))),
+                        str(datetime.fromtimestamp(int(row.get("first_seen", 0)))),
+                        str(datetime.fromtimestamp(int(row.get("last_seen", 0)))),
+                        row.get("last_error"),
                     )
 
                 screen_data = Group(
@@ -1662,7 +1675,7 @@ class DolphieApp(App):
                         row_values = []
 
                         for column, data in columns.items():
-                            value = user.get(data["field"], "N/A")
+                            value = user.get(data.get("field"), "N/A")
 
                             if data["format_number"]:
                                 row_values.append(format_number(value) if value else "0")

@@ -25,9 +25,6 @@ def create_panel(tab: Tab) -> DataTable:
     }
 
     hostgroup_summary_datatable = tab.proxysql_hostgroup_summary_datatable
-    # Clear table if columns change
-    if len(hostgroup_summary_datatable.columns) != len(columns):
-        hostgroup_summary_datatable.clear(columns=True)
 
     # Add columns to the datatable if it is empty
     if not hostgroup_summary_datatable.columns:
@@ -42,8 +39,8 @@ def create_panel(tab: Tab) -> DataTable:
 
         for column_id, (column_key, column_data) in enumerate(columns.items()):
             column_name = column_data["name"]
-            column_value = row[column_key]
             column_format = column_data["format"]
+            column_value = row.get(column_key)
 
             # Calculate the values per second for the following columns since the total isn't a great metric
             if column_key in ["Queries", "Bytes_data_sent", "Bytes_data_recv"]:

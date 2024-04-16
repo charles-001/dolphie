@@ -19,9 +19,6 @@ def create_panel(tab: Tab) -> DataTable:
     }
 
     mysql_query_rules = tab.proxysql_mysql_query_rules_datatable
-    # Clear table if columns change
-    if len(mysql_query_rules.columns) != len(columns):
-        mysql_query_rules.clear(columns=True)
 
     # Add columns to the datatable if it is empty
     if not mysql_query_rules.columns:
@@ -36,8 +33,8 @@ def create_panel(tab: Tab) -> DataTable:
 
         for column_id, (column_key, column_data) in enumerate(columns.items()):
             column_name = column_data["name"]
-            column_value = row.get(column_key)
             column_format = column_data["format"]
+            column_value = row.get(column_key)
 
             # Calculate the values per second for the following columns
             if column_key in ["hits_s"]:
