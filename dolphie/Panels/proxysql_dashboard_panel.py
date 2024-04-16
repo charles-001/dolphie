@@ -17,6 +17,11 @@ def create_panel(tab: Tab) -> Table:
     ####################
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
+    multiplexing_efficiency_ratio = round(
+        100 - ((dolphie.proxysql_connection_pool_connections / global_status["Client_Connections_connected"]) * 100),
+        2,
+    )
+
     table_title_style = Style(color="#bbc8e8", bold=True)
     table = Table(show_header=False, box=None, title="Host Information", title_style=table_title_style)
 
@@ -29,6 +34,8 @@ def create_panel(tab: Tab) -> Table:
         "[label]Latency",
         f"[label]CP Avg[/label] {round(dolphie.proxysql_backend_host_average_latency / 1000, 2)}ms",
     )
+    table.add_row("[label]MySQL Workers", f"{global_status['MySQL_Thread_Workers']}")
+    table.add_row("[label]MP Efficiency", f"{multiplexing_efficiency_ratio}%")
     table.add_row("[label]Active TRX", f"{global_status['Active_Transactions']}")
     tab.dashboard_section_1.update(table)
 

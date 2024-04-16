@@ -28,9 +28,10 @@ class ProxySQLQueries:
         FROM
             stats_mysql_global
     """
-    backend_host_average_latency: str = """
+    connection_pool_data: str = """
         SELECT
-            SUM(Latency_us) / COUNT(*) AS avg_latency
+            SUM(Latency_us) / COUNT(*) AS avg_latency,
+            SUM(ConnUsed) AS connection_pool_connections
         FROM
             stats_mysql_connection_pool
     """

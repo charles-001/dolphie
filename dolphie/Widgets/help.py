@@ -190,6 +190,7 @@ class HelpScreen(Screen):
             "BE": "Backend",
             "Conn": "Connection",
             "CP": "Connection Pool",
+            "MP": "Multiplexing",
         }
 
         table_terminology = Table(

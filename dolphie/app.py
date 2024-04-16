@@ -370,11 +370,11 @@ class DolphieApp(App):
         dolphie.global_status["Queries"] = total_queries_count
 
         if dolphie.panels.dashboard.visible:
-            dolphie.proxysql_backend_host_average_latency = int(
-                dolphie.main_db_connection.fetch_value_from_field(
-                    ProxySQLQueries.backend_host_average_latency, "avg_latency"
-                )
-            )
+            dolphie.main_db_connection.execute(ProxySQLQueries.connection_pool_data)
+            data = dolphie.main_db_connection.fetchone()
+
+            dolphie.proxysql_backend_host_average_latency = int(data.get("avg_latency", 0))
+            dolphie.proxysql_connection_pool_connections = int(data.get("connection_pool_connections", 0))
 
         if dolphie.panels.proxysql_hostgroup_summary.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
@@ -659,13 +659,13 @@ class DolphieApp(App):
     def layout_graphs(self, tab: Tab):
         # These variables are dynamically created
         if tab.dolphie.is_mysql_version_at_least("8.0.30"):
-            tab.graph_redo_log.styles.width = "55%"
+            tab.graph_redo_log_data_written.styles.width = "55%"
             tab.graph_redo_log_bar.styles.width = "12%"
             tab.graph_redo_log_active_count.styles.width = "33%"
             tab.graph_redo_log_active_count.display = True
-            tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+            tab.dolphie.metric_manager.metrics.redo_log.Active_redo_log_count.visible = True
         else:
-            tab.graph_redo_log.styles.width = "88%"
+            tab.graph_redo_log_data_written.styles.width = "88%"
             tab.graph_redo_log_bar.styles.width = "12%"
             tab.graph_redo_log_active_count.display = False
 

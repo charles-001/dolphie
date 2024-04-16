@@ -93,6 +93,7 @@ class Dolphie:
         self.proxysql_per_second_data: dict = {}
         self.proxysql_backend_host_average_latency: float = 0
         self.proxysql_command_stats: dict = {}
+        self.proxysql_connection_pool_connections: int = 0
 
         self.user_filter = None
         self.db_filter = None

@@ -70,72 +70,85 @@ class Graph(Static):
                     color=self.metric_instance.Innodb_checkpoint_age.color,
                 )
                 max_y_value = self.metric_instance.checkpoint_age_max
-        elif isinstance(self.metric_instance, RedoLogMetrics) and "graph_redo_log_bar" in self.id:
-            if self.metric_instance.Innodb_lsn_current.values:
-                x = [0]
-                y = [
-                    round(
-                        sum(self.metric_instance.Innodb_lsn_current.values)
-                        * (3600 / len(self.metric_instance.Innodb_lsn_current.values))
+        elif isinstance(self.metric_instance, RedoLogMetrics):
+            if "graph_redo_log_bar" in self.id:
+                if self.metric_instance.Innodb_lsn_current.values:
+                    x = [0]
+                    y = [
+                        round(
+                            sum(self.metric_instance.Innodb_lsn_current.values)
+                            * (3600 / len(self.metric_instance.Innodb_lsn_current.values))
+                        )
+                    ]
+
+                    plt.hline(self.metric_instance.redo_log_size, (252, 121, 121))
+                    plt.text(
+                        "Log Size",
+                        y=self.metric_instance.redo_log_size,
+                        x=0,
+                        alignment="center",
+                        color=(233, 233, 233),
+                        style="bold",
                     )
-                ]
 
-                plt.hline(self.metric_instance.redo_log_size, (252, 121, 121))
-                plt.text(
-                    "Log Size",
-                    y=self.metric_instance.redo_log_size,
-                    x=0,
-                    alignment="center",
-                    color=(233, 233, 233),
-                    style="bold",
-                )
+                    bar_color = (46, 124, 175)
+                    if y[0] >= self.metric_instance.redo_log_size:
+                        bar_color = (252, 121, 121)
 
-                bar_color = (46, 124, 175)
-                if y[0] >= self.metric_instance.redo_log_size:
-                    bar_color = (252, 121, 121)
+                    plt.text(
+                        format_bytes(y[0], color=False) + "/hr",
+                        y=y[0],
+                        x=0,
+                        alignment="center",
+                        color=(233, 233, 233),
+                        style="bold",
+                        background=bar_color,
+                    )
 
-                plt.text(
-                    format_bytes(y[0], color=False) + "/hr",
-                    y=y[0],
-                    x=0,
-                    alignment="center",
-                    color=(233, 233, 233),
-                    style="bold",
-                    background=bar_color,
-                )
+                    plt.bar(
+                        x,
+                        y,
+                        marker="hd",
+                        color=bar_color,
+                    )
+                    max_y_value = max(self.metric_instance.redo_log_size, max(y))
+            elif "graph_redo_log_active_count" in self.id:
+                x = self.metric_instance.datetimes
+                y = self.metric_instance.Active_redo_log_count.values
 
-                plt.bar(
-                    x,
-                    y,
-                    marker="hd",
-                    color=bar_color,
-                )
-                max_y_value = max(self.metric_instance.redo_log_size, max(y))
-        elif isinstance(self.metric_instance, RedoLogActiveCountMetrics):
-            x = self.metric_instance.datetimes
-            y = self.metric_instance.Active_redo_log_count.values
+                if y:
+                    plt.hline(1, (10, 14, 27))
+                    plt.hline(34, (252, 121, 121))
+                    plt.text(
+                        "Max Count",
+                        y=34,
+                        x=max(x),
+                        alignment="right",
+                        color=(233, 233, 233),
+                        style="bold",
+                    )
 
-            if y:
-                plt.hline(1, (10, 14, 27))
-                plt.hline(34, (252, 121, 121))
-                plt.text(
-                    "Max Count",
-                    y=34,
-                    x=max(x),
-                    alignment="right",
-                    color=(233, 233, 233),
-                    style="bold",
-                )
+                    plt.plot(
+                        x,
+                        y,
+                        marker=self.marker,
+                        label=self.metric_instance.Active_redo_log_count.label,
+                        color=self.metric_instance.Active_redo_log_count.color,
+                    )
+                    max_y_value = 32
+            else:
+                x = self.metric_instance.datetimes
+                y = self.metric_instance.Innodb_lsn_current.values
 
-                plt.plot(
-                    x,
-                    y,
-                    marker=self.marker,
-                    label=self.metric_instance.Active_redo_log_count.label,
-                    color=self.metric_instance.Active_redo_log_count.color,
-                )
-                max_y_value = 32
-
+                if y:
+                    plt.plot(
+                        x,
+                        y,
+                        marker=self.marker,
+                        label=self.metric_instance.Innodb_lsn_current.label,
+                        color=self.metric_instance.Innodb_lsn_current.color,
+                    )
+                    max_y_value = max(max_y_value, max(y))
         else:
             for metric_data in self.metric_instance.__dict__.values():
                 if isinstance(metric_data, MetricData) and metric_data.visible:
@@ -154,8 +167,11 @@ class Graph(Static):
         else:
             y_ticks = [i for i in range(int(max_y_value) + 1)]
 
-        format_function = get_number_format_function(self.metric_instance)
-        y_labels = [format_function(val) for val in y_ticks]
+        if "graph_redo_log_active_count" in self.id:
+            y_labels = [format_number(val, color=False) for val in y_ticks]
+        else:
+            format_function = get_number_format_function(self.metric_instance)
+            y_labels = [format_function(val) for val in y_ticks]
 
         plt.yticks(y_ticks, y_labels)
 
@@ -222,6 +238,7 @@ class DMLMetrics:
     Com_rollback: MetricData
     graphs: List[str]
     tab_name: str = "dml"
+    graph_tab_name = "DML"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(
@@ -234,6 +251,7 @@ class ReplicationLagMetrics:
     lag: MetricData
     graphs: List[str]
     tab_name: str = "replication_lag"
+    graph_tab_name = "Replication"
     metric_source: MetricSource = MetricSource.none
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -244,6 +262,7 @@ class CheckpointMetrics:
     Innodb_checkpoint_age: MetricData
     graphs: List[str]
     tab_name: str = "checkpoint"
+    graph_tab_name = "Checkpoint"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     checkpoint_age_max: int = 0
@@ -258,6 +277,7 @@ class BufferPoolRequestsMetrics:
     Innodb_buffer_pool_reads: MetricData
     graphs: List[str]
     tab_name: str = "buffer_pool_requests"
+    graph_tab_name = "BP Requests"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -269,6 +289,7 @@ class AdaptiveHashIndexMetrics:
     adaptive_hash_searches_btree: MetricData
     graphs: List[str]
     tab_name: str = "adaptive_hash_index"
+    graph_tab_name = "AHI"
     metric_source: MetricSource = MetricSource.innodb_metrics
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -280,6 +301,7 @@ class AdaptiveHashIndexHitRatioMetrics:
     graphs: List[str]
     smoothed_hit_ratio: float = None
     tab_name: str = "adaptive_hash_index"
+    graph_tab_name = "AHI"
     metric_source: MetricSource = MetricSource.none
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -288,19 +310,11 @@ class AdaptiveHashIndexHitRatioMetrics:
 @dataclass
 class RedoLogMetrics:
     Innodb_lsn_current: MetricData
-    graphs: List[str]
-    tab_name: str = "redo_log"
-    redo_log_size: int = 0
-    metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
-    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
-
-
-@dataclass
-class RedoLogActiveCountMetrics:
     Active_redo_log_count: MetricData
     graphs: List[str]
     tab_name: str = "redo_log"
+    graph_tab_name = "Redo Log"
+    redo_log_size: int = 0
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -313,6 +327,7 @@ class TableCacheMetrics:
     Table_open_cache_overflows: MetricData
     graphs: List[str]
     tab_name: str = "table_cache"
+    graph_tab_name = "Table Cache"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -324,6 +339,7 @@ class ThreadMetrics:
     Threads_running: MetricData
     graphs: List[str]
     tab_name: str = "threads"
+    graph_tab_name = "Threads"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -336,6 +352,7 @@ class TemporaryObjectMetrics:
     Created_tmp_files: MetricData
     graphs: List[str]
     tab_name: str = "temporary_objects"
+    graph_tab_name = "Temp Objects"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -347,6 +364,7 @@ class AbortedConnectionsMetrics:
     Aborted_connects: MetricData
     graphs: List[str]
     tab_name: str = "aborted_connections"
+    graph_tab_name = "Aborted Connections"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -358,6 +376,7 @@ class DiskIOMetrics:
     io_write: MetricData
     graphs: List[str]
     tab_name: str = "disk_io"
+    graph_tab_name = "Disk I/O"
     metric_source: MetricSource = MetricSource.disk_io_metrics
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -368,6 +387,7 @@ class LocksMetrics:
     metadata_lock_count: MetricData
     graphs: List[str]
     tab_name: str = "locks"
+    graph_tab_name = "Locks"
     metric_source: MetricSource = MetricSource.none
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
@@ -384,6 +404,7 @@ class ProxySQLConnectionsMetrics:
     Access_Denied_Wrong_Password: MetricData
     graphs: List[str]
     tab_name: str = "proxysql_connections"
+    graph_tab_name = "Connections"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
@@ -397,6 +418,18 @@ class ProxySQLQueriesDataNetwork:
     Queries_frontends_bytes_sent: MetricData
     graphs: List[str]
     tab_name: str = "proxysql_queries_data_network"
+    graph_tab_name = "Query Data Rates"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+
+
+@dataclass
+class ProxySQLActiveTRX:
+    Active_Transactions: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_active_trx"
+    graph_tab_name = "Active TRX"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
@@ -405,21 +438,21 @@ class ProxySQLQueriesDataNetwork:
 @dataclass
 class MetricInstances:
     dml: DMLMetrics
-    replication_lag: ReplicationLagMetrics
     checkpoint: CheckpointMetrics
     buffer_pool_requests: BufferPoolRequestsMetrics
     adaptive_hash_index: AdaptiveHashIndexMetrics
     adaptive_hash_index_hit_ratio: AdaptiveHashIndexHitRatioMetrics
     redo_log: RedoLogMetrics
-    redo_log_active_count: RedoLogActiveCountMetrics
     table_cache: TableCacheMetrics
     threads: ThreadMetrics
     temporary_objects: TemporaryObjectMetrics
     aborted_connections: AbortedConnectionsMetrics
     disk_io: DiskIOMetrics
     locks: LocksMetrics
+    replication_lag: ReplicationLagMetrics
     proxysql_connections: ProxySQLConnectionsMetrics
     proxysql_queries_data_network: ProxySQLQueriesDataNetwork
+    proxysql_active_trx: ProxySQLActiveTRX
 
 
 class MetricManager:
@@ -480,11 +513,8 @@ class MetricManager:
                 ),
             ),
             redo_log=RedoLogMetrics(
-                graphs=["graph_redo_log", "graph_redo_log_bar"],
+                graphs=["graph_redo_log_data_written", "graph_redo_log_active_count", "graph_redo_log_bar"],
                 Innodb_lsn_current=MetricData(label="Data Written", color=MetricColor.blue, create_switch=False),
-            ),
-            redo_log_active_count=RedoLogActiveCountMetrics(
-                graphs=["graph_redo_log_active_count"],
                 Active_redo_log_count=MetricData(
                     label="Active Count",
                     color=MetricColor.blue,
@@ -546,6 +576,12 @@ class MetricManager:
                 Queries_backends_bytes_sent=MetricData(label="BE Sent", color=MetricColor.green),
                 Queries_frontends_bytes_recv=MetricData(label="FE Recv", color=MetricColor.purple),
                 Queries_frontends_bytes_sent=MetricData(label="FE Sent", color=MetricColor.yellow),
+            ),
+            proxysql_active_trx=ProxySQLActiveTRX(
+                graphs=["graph_proxysql_active_trx"],
+                Active_Transactions=MetricData(
+                    label="Active TRX", color=MetricColor.blue, per_second_calculation=False
+                ),
             ),
         )
 

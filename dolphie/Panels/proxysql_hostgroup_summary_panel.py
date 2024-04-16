@@ -13,7 +13,7 @@ def create_panel(tab: Tab) -> DataTable:
         "status": {"name": "Status", "width": 10, "format": None},
         "weight": {"name": "Weight", "width": 7, "format": None},
         "use_ssl": {"name": "SSL", "width": 5, "format": None},
-        "ConnUsed": {"name": "Conn Active", "width": 11, "format": "number"},
+        "ConnUsed": {"name": "Conn Used", "width": 11, "format": "number"},
         "ConnFree": {"name": "Conn Free", "width": 10, "format": "number"},
         "ConnOK": {"name": "Conn OK", "width": 10, "format": "number"},
         "ConnERR": {"name": "Conn ERR", "width": 10, "format": "number"},

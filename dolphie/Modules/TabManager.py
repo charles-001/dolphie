@@ -296,53 +296,35 @@ class TabManager:
             ),
         )
 
-        metrics = MetricManager.MetricManager().metrics
-        metric_tab_labels = [
-            ("DML", metrics.dml),
-            ("Locks", metrics.locks),
-            ("Table Cache", metrics.table_cache),
-            ("Threads", metrics.threads),
-            ("BP Requests", metrics.buffer_pool_requests),
-            ("Checkpoint", metrics.checkpoint),
-            ("Redo Log", metrics.redo_log),
-            ("AHI", metrics.adaptive_hash_index),
-            ("Temp Objects", metrics.temporary_objects),
-            ("Aborted Connections", metrics.aborted_connections),
-            ("Disk I/O", metrics.disk_io),
-            ("Replication", metrics.replication_lag),
-            ("Connections", metrics.proxysql_connections),
-            ("Query Data Rates", metrics.proxysql_queries_data_network),
-        ]
-
-        for tab_formatted_name, metric_instance in metric_tab_labels:
+        # Loop the metric instances and create the graph tabs
+        for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
             metric_tab_name = metric_instance.tab_name
             graph_names = metric_instance.graphs
+            graph_tab_name = metric_instance.graph_tab_name
 
-            await self.app.query_one(f"#metric_graph_tabs_{tab_id}", TabbedContent).add_pane(
-                TabPane(
-                    tab_formatted_name,
-                    Label(id=f"stats_{metric_tab_name}_{tab_id}", classes="stats_data"),
-                    Horizontal(id=f"graph_container_{metric_tab_name}_{tab_id}"),
-                    Horizontal(
-                        id=f"switch_container_{metric_tab_name}_{tab_id}",
-                        classes=f"switch_container_{tab_id} switch_container",
-                    ),
-                    id=f"graph_tab_{metric_tab_name}_{tab_id}",
-                    name=metric_tab_name,
+            graph_tab = self.app.query(f"#graph_tab_{metric_tab_name}_{tab_id}")
+            if not graph_tab:
+                await self.app.query_one(f"#metric_graph_tabs_{tab_id}", TabbedContent).add_pane(
+                    TabPane(
+                        graph_tab_name,
+                        Label(id=f"stats_{metric_tab_name}_{tab_id}", classes="stats_data"),
+                        Horizontal(id=f"graph_container_{metric_tab_name}_{tab_id}"),
+                        Horizontal(
+                            id=f"switch_container_{metric_tab_name}_{tab_id}",
+                            classes=f"switch_container_{tab_id} switch_container",
+                        ),
+                        id=f"graph_tab_{metric_tab_name}_{tab_id}",
+                        name=metric_tab_name,
+                    )
                 )
-            )
-            # Save references to the labels
-            setattr(tab, metric_tab_name, self.app.query_one(f"#stats_{metric_tab_name}_{tab_id}"))
-
-            if metric_tab_name == "redo_log":
-                graph_names = ["graph_redo_log", "graph_redo_log_active_count", "graph_redo_log_bar"]
-            elif metric_tab_name == "adaptive_hash_index":
-                graph_names = ["graph_adaptive_hash_index", "graph_adaptive_hash_index_hit_ratio"]
+                # Save references to the labels
+                setattr(tab, metric_tab_name, self.app.query_one(f"#stats_{metric_tab_name}_{tab_id}"))
 
             for graph_name in graph_names:
                 await self.app.query_one(f"#graph_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
                     MetricManager.Graph(id=f"{graph_name}_{tab_id}", classes="panel_data")
                 )
+
                 # Save references to the graphs
                 setattr(tab, graph_name, self.app.query_one(f"#{graph_name}_{tab_id}"))
 
