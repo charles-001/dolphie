@@ -799,23 +799,26 @@ class MetricManager:
         checkpoint_age_bytes = round(self.global_status.get("Innodb_checkpoint_age", 0))
         max_checkpoint_age_bytes = self.redo_log_size
 
-        if checkpoint_age_bytes == 0:
-            return self.redo_log_size, 0, 0
-
         checkpoint_age_sync_flush_bytes = round(max_checkpoint_age_bytes * 0.825)
         checkpoint_age_ratio = round(checkpoint_age_bytes / max_checkpoint_age_bytes * 100, 2)
 
         if format:
-            if checkpoint_age_ratio >= 80:
-                color_code = "red"
-            elif checkpoint_age_ratio >= 60:
-                color_code = "yellow"
+            if checkpoint_age_bytes == 0:
+                return "N/A"
             else:
-                color_code = "green"
+                if checkpoint_age_ratio >= 80:
+                    color_code = "red"
+                elif checkpoint_age_ratio >= 60:
+                    color_code = "yellow"
+                else:
+                    color_code = "green"
 
-            return f"[{color_code}]{checkpoint_age_ratio}%"
+                return f"[{color_code}]{checkpoint_age_ratio}%"
         else:
-            return max_checkpoint_age_bytes, checkpoint_age_sync_flush_bytes, checkpoint_age_bytes
+            if checkpoint_age_bytes == 0:
+                return self.redo_log_size, 0, 0
+            else:
+                return max_checkpoint_age_bytes, checkpoint_age_sync_flush_bytes, checkpoint_age_bytes
 
     def get_metric_adaptive_hash_index(self, format=True):
         if self.global_variables.get("innodb_adaptive_hash_index") == "OFF":
