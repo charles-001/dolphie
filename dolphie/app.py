@@ -1087,8 +1087,8 @@ class DolphieApp(App):
                     thread_table.add_row("[label]Command", thread_data.command)
                     thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8))
 
-                    if thread_data.query:
-                        query = sqlformat(thread_data.query, reindent_aligned=True)
+                    if thread_data.formatted_query.code:
+                        query = sqlformat(thread_data.formatted_query.code, reindent_aligned=True)
                         formatted_query = format_query(query, minify=False)
 
                     self.app.push_screen(
@@ -1530,8 +1530,8 @@ class DolphieApp(App):
                 thread_table.add_row("[label]TRX State", thread_data.trx_state)
                 thread_table.add_row("[label]TRX Operation", thread_data.trx_operation_state)
 
-                if thread_data.query:
-                    query = sqlformat(thread_data.query, reindent_aligned=True)
+                if thread_data.formatted_query.code:
+                    query = sqlformat(thread_data.formatted_query.code, reindent_aligned=True)
                     query_db = thread_data.db
 
                     formatted_query = format_query(query, minify=False)

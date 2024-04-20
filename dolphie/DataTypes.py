@@ -103,7 +103,6 @@ class ProcesslistThread:
         self.user = thread_data.get("user", "")
         self.host = thread_data.get("host", "")
         self.db = thread_data.get("db", "")
-        self.query = thread_data.get("query", "")
         self.time = int(thread_data.get("time", 0))
         self.protocol = self._get_formatted_string(thread_data.get("connection_type", ""))
         self.formatted_query = self._get_formatted_query(thread_data.get("query", ""))
@@ -123,10 +122,10 @@ class ProcesslistThread:
 
     def _get_time_color(self) -> str:
         thread_color = ""
-        if "Group replication" not in self.query:  # Don't color GR threads
-            if "SELECT /*!40001 SQL_NO_CACHE */ *" in self.query:
+        if "Group replication" not in self.formatted_query.code:  # Don't color GR threads
+            if "SELECT /*!40001 SQL_NO_CACHE */ *" in self.formatted_query.code:
                 thread_color = "purple"
-            elif self.query:
+            elif self.formatted_query.code:
                 if self.time >= 10:
                     thread_color = "red"
                 elif self.time >= 5:
@@ -165,9 +164,8 @@ class ProxySQLProcesslistThread:
         self.frontend_host = self._get_formatted_string(thread_data.get("frontend_host", ""))
         self.host = self._get_formatted_string(thread_data.get("backend_host", ""))
         self.db = thread_data.get("db", "")
-        self.query = thread_data.get("query", "").strip(" \t\n\r")
         self.time = int(thread_data.get("time", 0)) / 1000  # Convert to seconds since ProxySQL returns milliseconds
-        self.formatted_query = self._get_formatted_query(self.query)
+        self.formatted_query = self._get_formatted_query(thread_data.get("query", "").strip(" \t\n\r"))
         self.formatted_time = self._get_formatted_time()
         self.command = self._get_formatted_command(thread_data.get("command", ""))
         self.extended_info = thread_data.get("extended_info", "")
@@ -178,7 +176,7 @@ class ProxySQLProcesslistThread:
 
     def _get_time_color(self) -> str:
         thread_color = ""
-        if self.query:
+        if self.formatted_query.code:
             if self.time >= 10:
                 thread_color = "red"
             elif self.time >= 5:
