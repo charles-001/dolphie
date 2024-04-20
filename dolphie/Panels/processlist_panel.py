@@ -1,7 +1,7 @@
 from typing import Dict
 
 from dolphie.DataTypes import ProcesslistThread
-from dolphie.Modules.Functions import format_number
+from dolphie.Modules.Functions import format_number, format_query
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 from rich.syntax import Syntax
@@ -57,6 +57,8 @@ def create_panel(tab: Tab) -> DataTable:
         ]
     )
 
+    # Refresh optimization
+    query_length_max = 300
     processlist_datatable = tab.processlist_datatable
 
     # Clear table if columns change
@@ -94,6 +96,9 @@ def create_panel(tab: Tab) -> DataTable:
                     update_width = True
                     if isinstance(thread_value, Syntax):
                         temp_thread_value = thread_value.code
+
+                        # Only show the first {query_length_max} characters of the query
+                        thread_value = format_query(thread_value.code[:query_length_max])
                     if isinstance(datatable_value, Syntax):
                         temp_datatable_value = datatable_value.code
 
@@ -105,6 +110,10 @@ def create_panel(tab: Tab) -> DataTable:
                 ):
                     processlist_datatable.update_cell(thread_id, column_name, thread_value, update_width=update_width)
             else:
+                # Only show the first {query_length_max} characters of the query
+                if column_field == "formatted_query" and isinstance(thread_value, Syntax):
+                    thread_value = format_query(thread_value.code[:query_length_max])
+
                 # Create an array of values to append to the datatable
                 row_values.append(thread_value)
 

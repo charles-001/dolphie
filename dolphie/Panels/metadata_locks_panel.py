@@ -24,6 +24,8 @@ def create_panel(tab: Tab) -> DataTable:
         "PROCESSLIST_INFO": {"name": "Query", "width": None},
     }
 
+    # Refresh optimization
+    query_length_max = 300
     metadata_locks_datatable = tab.metadata_locks_datatable
 
     if not metadata_locks_datatable.columns:
@@ -68,6 +70,10 @@ def create_panel(tab: Tab) -> DataTable:
 
                     if isinstance(thread_value, Syntax):
                         temp_thread_value = thread_value.code
+
+                        # Only show the first {query_length_max} characters of the query
+                        thread_value = format_query(thread_value.code[:query_length_max])
+
                     if isinstance(datatable_value, Syntax):
                         temp_datatable_value = datatable_value.code
 
@@ -75,6 +81,10 @@ def create_panel(tab: Tab) -> DataTable:
                 if temp_thread_value != temp_datatable_value:
                     metadata_locks_datatable.update_cell(lock_id, column_name, thread_value, update_width=update_width)
             else:
+                # Only show the first {query_length_max} characters of the query
+                if column_name == "Query" and isinstance(thread_value, Syntax):
+                    thread_value = format_query(thread_value.code[:query_length_max])
+
                 # Create an array of values to append to the datatable
                 row_values.append(thread_value)
 
