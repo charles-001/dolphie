@@ -129,8 +129,8 @@ Dolphie's config supports these options under [dolphie] section:
             type=str,
             nargs="?",
             help=(
-                "Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with"
-                f" default {self.config.port})"
+                "Use a URI string for credentials (mysql/proxysql) - format: mysql://user:password@host:port"
+                f" (port is optional with default {self.config.port}, or 6032 for ProxySQL)"
             ),
         )
 
@@ -140,14 +140,14 @@ Dolphie's config supports these options under [dolphie] section:
             action="store_true",
             help="Start Dolphie by showing the Host Setup modal instead of automatically connecting",
         )
-        self.parser.add_argument("-u", "--user", dest="user", type=str, help="Username for MySQL", metavar="")
-        self.parser.add_argument("-p", "--password", dest="password", type=str, help="Password for MySQL", metavar="")
+        self.parser.add_argument("-u", "--user", dest="user", type=str, help="Username", metavar="")
+        self.parser.add_argument("-p", "--password", dest="password", type=str, help="Password", metavar="")
         self.parser.add_argument(
             "-h",
             "--host",
             dest="host",
             type=str,
-            help="Hostname/IP address for MySQL",
+            help="Hostname/IP address",
             metavar="",
         )
         self.parser.add_argument(
@@ -155,7 +155,7 @@ Dolphie's config supports these options under [dolphie] section:
             "--port",
             dest="port",
             type=int,
-            help="Port for MySQL (socket has precendence)",
+            help="Port (socket has precendence)",
             metavar="",
         )
         self.parser.add_argument(
@@ -163,7 +163,7 @@ Dolphie's config supports these options under [dolphie] section:
             "--socket",
             dest="socket",
             type=str,
-            help="Socket file for MySQL",
+            help="Socket file",
             metavar="",
         )
         self.parser.add_argument(
@@ -233,7 +233,7 @@ Dolphie's config supports these options under [dolphie] section:
             dest="heartbeat_table",
             type=str,
             help=(
-                "If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it "
+                "(MySQL only) If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it "
                 "has for replication lag instead of Seconds_Behind_Master from SHOW REPLICA STATUS"
             ),
             metavar="",
@@ -274,7 +274,7 @@ Dolphie's config supports these options under [dolphie] section:
             dest="startup_panels",
             type=str,
             help=(
-                "What panels to display on startup separated by a comma. Supports:"
+                "What panels to display on startup separated by a comma. Supports: "
                 f" {','.join(self.panels.all())} [default: {self.config.startup_panels}]"
             ),
             metavar="",
@@ -317,7 +317,7 @@ Dolphie's config supports these options under [dolphie] section:
             "--show-trxs-only",
             dest="show_trxs_only",
             action="store_true",
-            help="Start with only showing threads that have an active transaction",
+            help="(MySQL only) Start with only showing threads that have an active transaction",
         )
         self.parser.add_argument(
             "--additional-columns",
@@ -325,15 +325,6 @@ Dolphie's config supports these options under [dolphie] section:
             action="store_true",
             help="Start with additional columns in Processlist panel",
         )
-        # self.parser.add_argument(
-        #     "--historical-trx-locks",
-        #     dest="historical_trx_locks",
-        #     action="store_true",
-        #     help=(
-        #         "Always run the InnoDB TRX Locks query so it can save historical data to its graph instead of only "
-        #         "when the panel is open. This query can be expensive in some environments"
-        #     ),
-        # )
         self.parser.add_argument(
             "--debug-options",
             dest="debug_options",
@@ -480,13 +471,18 @@ Dolphie's config supports these options under [dolphie] section:
             try:
                 parsed = urlparse(options["uri"])
 
-                if parsed.scheme != "mysql":
-                    self.exit("Invalid URI scheme: Only 'mysql' is supported (see --help for more information)")
+                if parsed.scheme == "mysql":
+                    self.config.port = parsed.port or 3306
+                elif parsed.scheme == "proxysql":
+                    self.config.port = parsed.port or 6032
+                else:
+                    self.exit(
+                        "Invalid URI scheme: Only 'mysql' or 'proxysql' are supported (see --help for more information)"
+                    )
 
                 self.config.user = parsed.username
                 self.config.password = parsed.password
                 self.config.host = parsed.hostname
-                self.config.port = parsed.port or 3306
             except Exception as e:
                 self.exit(f"Invalid URI: {e} (see --help for more information)")
 

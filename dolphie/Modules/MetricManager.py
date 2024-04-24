@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Dict, List, Union
 
 import plotext as plt
+from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.Functions import format_bytes, format_number, format_time
 from rich.text import Text
 from textual.widgets import Static
@@ -69,47 +70,61 @@ class Graph(Static):
                     color=self.metric_instance.Innodb_checkpoint_age.color,
                 )
                 max_y_value = self.metric_instance.checkpoint_age_max
-        elif isinstance(self.metric_instance, RedoLogMetrics) and "graph_redo_log_bar" in self.id:
-            if self.metric_instance.Innodb_lsn_current.values:
-                x = [0]
-                y = [
-                    round(
-                        sum(self.metric_instance.Innodb_lsn_current.values)
-                        * (3600 / len(self.metric_instance.Innodb_lsn_current.values))
+        elif isinstance(self.metric_instance, RedoLogMetrics):
+            if "graph_redo_log_bar" in self.id:
+                if self.metric_instance.Innodb_lsn_current.values:
+                    x = [0]
+                    y = [
+                        round(
+                            sum(self.metric_instance.Innodb_lsn_current.values)
+                            * (3600 / len(self.metric_instance.Innodb_lsn_current.values))
+                        )
+                    ]
+
+                    plt.hline(self.metric_instance.redo_log_size, (252, 121, 121))
+                    plt.text(
+                        "Log Size",
+                        y=self.metric_instance.redo_log_size,
+                        x=0,
+                        alignment="center",
+                        color=(233, 233, 233),
+                        style="bold",
                     )
-                ]
 
-                plt.hline(self.metric_instance.redo_log_size, (252, 121, 121))
-                plt.text(
-                    "Log Size",
-                    y=self.metric_instance.redo_log_size,
-                    x=0,
-                    alignment="center",
-                    color=(233, 233, 233),
-                    style="bold",
-                )
+                    bar_color = (46, 124, 175)
+                    if y[0] >= self.metric_instance.redo_log_size:
+                        bar_color = (252, 121, 121)
 
-                bar_color = (46, 124, 175)
-                if y[0] >= self.metric_instance.redo_log_size:
-                    bar_color = (252, 121, 121)
+                    plt.text(
+                        format_bytes(y[0], color=False) + "/hr",
+                        y=y[0],
+                        x=0,
+                        alignment="center",
+                        color=(233, 233, 233),
+                        style="bold",
+                        background=bar_color,
+                    )
 
-                plt.text(
-                    format_bytes(y[0], color=False) + "/hr",
-                    y=y[0],
-                    x=0,
-                    alignment="center",
-                    color=(233, 233, 233),
-                    style="bold",
-                    background=bar_color,
-                )
+                    plt.bar(
+                        x,
+                        y,
+                        marker="hd",
+                        color=bar_color,
+                    )
+                    max_y_value = max(self.metric_instance.redo_log_size, max(y))
+            else:
+                x = self.metric_instance.datetimes
+                y = self.metric_instance.Innodb_lsn_current.values
 
-                plt.bar(
-                    x,
-                    y,
-                    marker="hd",
-                    color=bar_color,
-                )
-                max_y_value = max(self.metric_instance.redo_log_size, max(y))
+                if y:
+                    plt.plot(
+                        x,
+                        y,
+                        marker=self.marker,
+                        label=self.metric_instance.Innodb_lsn_current.label,
+                        color=self.metric_instance.Innodb_lsn_current.color,
+                    )
+                    max_y_value = max(max_y_value, max(y))
         elif isinstance(self.metric_instance, RedoLogActiveCountMetrics):
             x = self.metric_instance.datetimes
             y = self.metric_instance.Active_redo_log_count.values
@@ -134,7 +149,6 @@ class Graph(Static):
                     color=self.metric_instance.Active_redo_log_count.color,
                 )
                 max_y_value = 32
-
         else:
             for metric_data in self.metric_instance.__dict__.values():
                 if isinstance(metric_data, MetricData) and metric_data.visible:
@@ -170,8 +184,10 @@ def get_number_format_function(data, color=False):
         ReplicationLagMetrics: lambda val: format_time(val),
         CheckpointMetrics: lambda val: format_bytes(val, color=color),
         RedoLogMetrics: lambda val: format_bytes(val, color=color),
-        AdaptiveHashIndexHitRatioMetrics: lambda val: f"{round(val)}%",
+        AdaptiveHashIndexHitRatio: lambda val: f"{round(val)}%",
+        ProxySQLMultiplexEfficiency: lambda val: f"{round(val)}%",
         DiskIOMetrics: lambda val: format_bytes(val, color=color),
+        ProxySQLQueriesDataNetwork: lambda val: format_bytes(val, color=color),
     }
 
     return data_formatters.get(type(data), lambda val: format_number(val, color=color))
@@ -182,6 +198,8 @@ class MetricSource:
     global_status: str = "global_status"
     innodb_metrics: str = "innodb_metrics"
     disk_io_metrics: str = "disk_io_metrics"
+    proxysql_select_command_stats: str = "proxysql_select_command_stats"
+    proxysql_total_command_stats: str = "proxysql_total_command_stats"
     none: str = "none"
 
 
@@ -192,6 +210,8 @@ class MetricColor:
     green: tuple = (84, 239, 174)
     red: tuple = (255, 73, 112)
     yellow: tuple = (252, 213, 121)
+    purple: tuple = (191, 121, 252)
+    orange: tuple = (252, 121, 121)
 
 
 @dataclass
@@ -203,6 +223,7 @@ class MetricData:
     per_second_calculation: bool = True
     last_value: int = None
     graphable: bool = True
+    create_switch: bool = True
     values: List[int] = field(default_factory=list)
 
 
@@ -218,8 +239,12 @@ class DMLMetrics:
     Com_rollback: MetricData
     graphs: List[str]
     tab_name: str = "dml"
+    graph_tab_name = "DML"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(
+        default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
+    )
 
 
 @dataclass
@@ -227,9 +252,10 @@ class ReplicationLagMetrics:
     lag: MetricData
     graphs: List[str]
     tab_name: str = "replication_lag"
+    graph_tab_name = "Replication"
     metric_source: MetricSource = MetricSource.none
-
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -237,10 +263,12 @@ class CheckpointMetrics:
     Innodb_checkpoint_age: MetricData
     graphs: List[str]
     tab_name: str = "checkpoint"
+    graph_tab_name = "Checkpoint"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
     checkpoint_age_max: int = 0
     checkpoint_age_sync_flush: int = 0
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -250,8 +278,10 @@ class BufferPoolRequestsMetrics:
     Innodb_buffer_pool_reads: MetricData
     graphs: List[str]
     tab_name: str = "buffer_pool_requests"
+    graph_tab_name = "BP Requests"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -260,18 +290,22 @@ class AdaptiveHashIndexMetrics:
     adaptive_hash_searches_btree: MetricData
     graphs: List[str]
     tab_name: str = "adaptive_hash_index"
+    graph_tab_name = "AHI"
     metric_source: MetricSource = MetricSource.innodb_metrics
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
-class AdaptiveHashIndexHitRatioMetrics:
+class AdaptiveHashIndexHitRatio:
     hit_ratio: MetricData
     graphs: List[str]
     smoothed_hit_ratio: float = None
     tab_name: str = "adaptive_hash_index"
+    graph_tab_name = "AHI"
     metric_source: MetricSource = MetricSource.none
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -279,9 +313,11 @@ class RedoLogMetrics:
     Innodb_lsn_current: MetricData
     graphs: List[str]
     tab_name: str = "redo_log"
+    graph_tab_name = "Redo Log"
     redo_log_size: int = 0
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -289,8 +325,10 @@ class RedoLogActiveCountMetrics:
     Active_redo_log_count: MetricData
     graphs: List[str]
     tab_name: str = "redo_log"
+    graph_tab_name = "Redo Log"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -300,8 +338,10 @@ class TableCacheMetrics:
     Table_open_cache_overflows: MetricData
     graphs: List[str]
     tab_name: str = "table_cache"
+    graph_tab_name = "Table Cache"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -310,8 +350,10 @@ class ThreadMetrics:
     Threads_running: MetricData
     graphs: List[str]
     tab_name: str = "threads"
+    graph_tab_name = "Threads"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -321,8 +363,10 @@ class TemporaryObjectMetrics:
     Created_tmp_files: MetricData
     graphs: List[str]
     tab_name: str = "temporary_objects"
+    graph_tab_name = "Temp Objects"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -331,8 +375,10 @@ class AbortedConnectionsMetrics:
     Aborted_connects: MetricData
     graphs: List[str]
     tab_name: str = "aborted_connections"
+    graph_tab_name = "Aborted Connections"
     metric_source: MetricSource = MetricSource.global_status
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
@@ -341,36 +387,143 @@ class DiskIOMetrics:
     io_write: MetricData
     graphs: List[str]
     tab_name: str = "disk_io"
+    graph_tab_name = "Disk I/O"
     metric_source: MetricSource = MetricSource.disk_io_metrics
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
 
 
 @dataclass
 class LocksMetrics:
-    # innodb_trx_lock_count: MetricData
     metadata_lock_count: MetricData
     graphs: List[str]
     tab_name: str = "locks"
+    graph_tab_name = "Locks"
     metric_source: MetricSource = MetricSource.none
     datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+
+
+@dataclass
+class ProxySQLConnectionsMetrics:
+    Client_Connections_non_idle: MetricData
+    Client_Connections_aborted: MetricData
+    Client_Connections_connected: MetricData
+    Client_Connections_created: MetricData
+    Server_Connections_aborted: MetricData
+    Server_Connections_connected: MetricData
+    Server_Connections_created: MetricData
+    Access_Denied_Wrong_Password: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_connections"
+    graph_tab_name = "Connections"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+
+
+@dataclass
+class ProxySQLQueriesDataNetwork:
+    Queries_backends_bytes_recv: MetricData
+    Queries_backends_bytes_sent: MetricData
+    Queries_frontends_bytes_recv: MetricData
+    Queries_frontends_bytes_sent: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_queries_data_network"
+    graph_tab_name = "Query Data Rates"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+
+
+@dataclass
+class ProxySQLActiveTRX:
+    Active_Transactions: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_active_trx"
+    graph_tab_name = "Active TRX"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+
+
+@dataclass
+class ProxySQLMultiplexEfficiency:
+    proxysql_multiplex_efficiency_ratio: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_multiplex_efficiency"
+    graph_tab_name = "Multiplex Efficiency"
+    metric_source: MetricSource = MetricSource.global_status
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+
+
+@dataclass
+class ProxySQLSELECTCommandStats:
+    cnt_100us: MetricData
+    cnt_500us: MetricData
+    cnt_1ms: MetricData
+    cnt_5ms: MetricData
+    cnt_10ms: MetricData
+    cnt_50ms: MetricData
+    cnt_100ms: MetricData
+    cnt_500ms: MetricData
+    cnt_1s: MetricData
+    cnt_5s: MetricData
+    cnt_10s: MetricData
+    cnt_INFs: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_select_command_stats"
+    graph_tab_name = "SELECT Command Stats"
+    metric_source: MetricSource = MetricSource.proxysql_select_command_stats
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+
+
+@dataclass
+class ProxySQLTotalCommandStats:
+    cnt_100us: MetricData
+    cnt_500us: MetricData
+    cnt_1ms: MetricData
+    cnt_5ms: MetricData
+    cnt_10ms: MetricData
+    cnt_50ms: MetricData
+    cnt_100ms: MetricData
+    cnt_500ms: MetricData
+    cnt_1s: MetricData
+    cnt_5s: MetricData
+    cnt_10s: MetricData
+    cnt_INFs: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_total_command_stats"
+    graph_tab_name = "Total Command Stats"
+    metric_source: MetricSource = MetricSource.proxysql_total_command_stats
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
 
 
 @dataclass
 class MetricInstances:
     dml: DMLMetrics
-    replication_lag: ReplicationLagMetrics
     checkpoint: CheckpointMetrics
     buffer_pool_requests: BufferPoolRequestsMetrics
     adaptive_hash_index: AdaptiveHashIndexMetrics
-    adaptive_hash_index_hit_ratio: AdaptiveHashIndexHitRatioMetrics
-    redo_log: RedoLogMetrics
+    adaptive_hash_index_hit_ratio: AdaptiveHashIndexHitRatio
     redo_log_active_count: RedoLogActiveCountMetrics
+    redo_log: RedoLogMetrics
     table_cache: TableCacheMetrics
     threads: ThreadMetrics
     temporary_objects: TemporaryObjectMetrics
     aborted_connections: AbortedConnectionsMetrics
     disk_io: DiskIOMetrics
     locks: LocksMetrics
+    replication_lag: ReplicationLagMetrics
+    proxysql_active_trx: ProxySQLActiveTRX
+    proxysql_multiplex_efficiency: ProxySQLMultiplexEfficiency
+    proxysql_connections: ProxySQLConnectionsMetrics
+    proxysql_queries_data_network: ProxySQLQueriesDataNetwork
+    proxysql_select_command_stats: ProxySQLSELECTCommandStats
+    proxysql_total_command_stats: ProxySQLTotalCommandStats
 
 
 class MetricManager:
@@ -405,12 +558,12 @@ class MetricManager:
             ),
             replication_lag=ReplicationLagMetrics(
                 graphs=["graph_replication_lag"],
-                lag=MetricData(label="Lag", color=MetricColor.blue, per_second_calculation=False),
+                lag=MetricData(label="Lag", color=MetricColor.blue, per_second_calculation=False, create_switch=False),
             ),
             checkpoint=CheckpointMetrics(
                 graphs=["graph_checkpoint"],
                 Innodb_checkpoint_age=MetricData(
-                    label="Uncheckpointed", color=MetricColor.blue, per_second_calculation=False
+                    label="Uncheckpointed", color=MetricColor.blue, per_second_calculation=False, create_switch=False
                 ),
             ),
             buffer_pool_requests=BufferPoolRequestsMetrics(
@@ -424,18 +577,24 @@ class MetricManager:
                 adaptive_hash_searches=MetricData(label="Hit", color=MetricColor.green),
                 adaptive_hash_searches_btree=MetricData(label="Miss", color=MetricColor.red),
             ),
-            adaptive_hash_index_hit_ratio=AdaptiveHashIndexHitRatioMetrics(
+            adaptive_hash_index_hit_ratio=AdaptiveHashIndexHitRatio(
                 graphs=["graph_adaptive_hash_index_hit_ratio"],
-                hit_ratio=MetricData(label="Hit Ratio", color=MetricColor.green, per_second_calculation=False),
+                hit_ratio=MetricData(
+                    label="Hit Ratio", color=MetricColor.green, per_second_calculation=False, create_switch=False
+                ),
             ),
             redo_log=RedoLogMetrics(
-                graphs=["graph_redo_log", "graph_redo_log_bar"],
-                Innodb_lsn_current=MetricData(label="Data Written", color=MetricColor.blue),
+                graphs=["graph_redo_log_data_written", "graph_redo_log_bar"],
+                Innodb_lsn_current=MetricData(label="Data Written", color=MetricColor.blue, create_switch=False),
             ),
             redo_log_active_count=RedoLogActiveCountMetrics(
                 graphs=["graph_redo_log_active_count"],
                 Active_redo_log_count=MetricData(
-                    label="Active Count", color=MetricColor.blue, per_second_calculation=False, visible=False
+                    label="Active Count",
+                    color=MetricColor.blue,
+                    per_second_calculation=False,
+                    visible=False,
+                    create_switch=False,
                 ),
             ),
             table_cache=TableCacheMetrics(
@@ -446,7 +605,9 @@ class MetricManager:
             ),
             threads=ThreadMetrics(
                 graphs=["graph_threads"],
-                Threads_connected=MetricData(label="Connected", color=MetricColor.green, per_second_calculation=False),
+                Threads_connected=MetricData(
+                    label="Connected", color=MetricColor.green, per_second_calculation=False, visible=False
+                ),
                 Threads_running=MetricData(label="Running", color=MetricColor.blue, per_second_calculation=False),
             ),
             temporary_objects=TemporaryObjectMetrics(
@@ -467,10 +628,76 @@ class MetricManager:
             ),
             locks=LocksMetrics(
                 graphs=["graph_locks"],
-                # innodb_trx_lock_count=MetricData(
-                #     label="InnoDB TRX", color=MetricColor.blue, per_second_calculation=False
-                # ),
                 metadata_lock_count=MetricData(label="Metadata", color=MetricColor.red, per_second_calculation=False),
+            ),
+            proxysql_connections=ProxySQLConnectionsMetrics(
+                graphs=["graph_proxysql_connections"],
+                Client_Connections_aborted=MetricData(label="FE (aborted)", color=MetricColor.gray),
+                Client_Connections_connected=MetricData(
+                    label="FE (connected)", color=MetricColor.green, per_second_calculation=False, visible=False
+                ),
+                Client_Connections_created=MetricData(label="FE (created)", color=MetricColor.yellow),
+                Server_Connections_aborted=MetricData(label="BE (aborted)", color=MetricColor.red),
+                Server_Connections_connected=MetricData(
+                    label="BE (connected)", color=MetricColor.green, per_second_calculation=False, visible=False
+                ),
+                Server_Connections_created=MetricData(label="BE (created)", color=MetricColor.blue),
+                Access_Denied_Wrong_Password=MetricData(label="Wrong Password", color=MetricColor.purple),
+                Client_Connections_non_idle=MetricData(
+                    label="FE (non-idle)", color=MetricColor.green, per_second_calculation=False, visible=True
+                ),
+            ),
+            proxysql_queries_data_network=ProxySQLQueriesDataNetwork(
+                graphs=["graph_proxysql_queries_data_network"],
+                Queries_backends_bytes_recv=MetricData(label="BE Recv", color=MetricColor.blue),
+                Queries_backends_bytes_sent=MetricData(label="BE Sent", color=MetricColor.green),
+                Queries_frontends_bytes_recv=MetricData(label="FE Recv", color=MetricColor.purple),
+                Queries_frontends_bytes_sent=MetricData(label="FE Sent", color=MetricColor.yellow),
+            ),
+            proxysql_active_trx=ProxySQLActiveTRX(
+                graphs=["graph_proxysql_active_trx"],
+                Active_Transactions=MetricData(
+                    label="Active TRX", color=MetricColor.blue, per_second_calculation=False, create_switch=False
+                ),
+            ),
+            proxysql_multiplex_efficiency=ProxySQLMultiplexEfficiency(
+                graphs=["graph_proxysql_multiplex_efficiency"],
+                proxysql_multiplex_efficiency_ratio=MetricData(
+                    label="Multiplex Efficiency",
+                    color=MetricColor.blue,
+                    per_second_calculation=False,
+                    create_switch=False,
+                ),
+            ),
+            proxysql_select_command_stats=ProxySQLSELECTCommandStats(
+                graphs=["graph_proxysql_select_command_stats"],
+                cnt_100us=MetricData(label="100us", color=MetricColor.gray, visible=False),
+                cnt_500us=MetricData(label="500us", color=MetricColor.blue, visible=False),
+                cnt_1ms=MetricData(label="1ms", color=MetricColor.green, visible=False),
+                cnt_5ms=MetricData(label="5ms", color=MetricColor.green, visible=False),
+                cnt_10ms=MetricData(label="10ms", color=MetricColor.green),
+                cnt_50ms=MetricData(label="50ms", color=MetricColor.yellow),
+                cnt_100ms=MetricData(label="100ms", color=MetricColor.yellow),
+                cnt_500ms=MetricData(label="500ms", color=MetricColor.orange),
+                cnt_1s=MetricData(label="1s", color=MetricColor.orange),
+                cnt_5s=MetricData(label="5s", color=MetricColor.red),
+                cnt_10s=MetricData(label="10s", color=MetricColor.purple),
+                cnt_INFs=MetricData(label="10s+", color=MetricColor.purple),
+            ),
+            proxysql_total_command_stats=ProxySQLTotalCommandStats(
+                graphs=["graph_proxysql_total_command_stats"],
+                cnt_100us=MetricData(label="100us", color=MetricColor.gray, visible=False),
+                cnt_500us=MetricData(label="500us", color=MetricColor.blue, visible=False),
+                cnt_1ms=MetricData(label="1ms", color=MetricColor.green, visible=False),
+                cnt_5ms=MetricData(label="5ms", color=MetricColor.green, visible=False),
+                cnt_10ms=MetricData(label="10ms", color=MetricColor.green),
+                cnt_50ms=MetricData(label="50ms", color=MetricColor.yellow),
+                cnt_100ms=MetricData(label="100ms", color=MetricColor.yellow),
+                cnt_500ms=MetricData(label="500ms", color=MetricColor.orange),
+                cnt_1s=MetricData(label="1s", color=MetricColor.orange),
+                cnt_5s=MetricData(label="5s", color=MetricColor.red),
+                cnt_10s=MetricData(label="10s", color=MetricColor.purple),
+                cnt_INFs=MetricData(label="10s+", color=MetricColor.purple),
             ),
         )
 
@@ -478,14 +705,14 @@ class MetricManager:
         self,
         worker_start_time: datetime,
         polling_latency: float,
-        global_variables: Dict[str, Union[int, str]],
-        global_status: Dict[str, int],
-        innodb_metrics: Dict[str, int],
-        disk_io_metrics: Dict[str, int],
-        # innodb_trx_lock_metrics: Dict[str, int],
-        metadata_lock_metrics: Dict[str, int],
-        replication_status: Dict[str, Union[int, str]],
-        replication_lag: int,  # this can be from SHOW SLAVE Status/heartbeat table
+        global_variables: Dict[str, Union[int, str]] = {},
+        global_status: Dict[str, int] = {},
+        innodb_metrics: Dict[str, int] = {},
+        proxysql_command_stats: Dict[str, int] = {},
+        disk_io_metrics: Dict[str, int] = {},
+        metadata_lock_metrics: Dict[str, int] = {},
+        replication_status: Dict[str, Union[int, str]] = {},
+        replication_lag: int = 0,  # this can be from SHOW SLAVE Status/heartbeat table
     ):
         self.worker_start_time = worker_start_time
         self.polling_latency = polling_latency
@@ -493,10 +720,11 @@ class MetricManager:
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
         self.disk_io_metrics = disk_io_metrics
-        # self.innodb_trx_lock_metrics = innodb_trx_lock_metrics
         self.metadata_lock_metrics = metadata_lock_metrics
         self.replication_status = replication_status
         self.replication_lag = replication_lag
+        self.proxysql_total_command_stats = {}
+        self.proxysql_select_command_stats = {}
 
         # Support MySQL 8.0.30+ redo log size variable
         innodb_redo_log_capacity = self.global_variables.get("innodb_redo_log_capacity", 0)
@@ -506,6 +734,7 @@ class MetricManager:
         )
         self.redo_log_size = max(innodb_redo_log_capacity, innodb_log_file_size)
 
+        self.update_proxysql_command_stats(proxysql_command_stats)
         self.update_metrics_per_second_values()
 
         self.update_metrics_replication_lag()
@@ -523,39 +752,73 @@ class MetricManager:
         else:
             metric_data.values = [value]
 
+    def get_metric_source_data(self, metric_source):
+        if metric_source == MetricSource.global_status:
+            metric_source_data = self.global_status
+        elif metric_source == MetricSource.innodb_metrics:
+            metric_source_data = self.innodb_metrics
+        elif metric_source == MetricSource.disk_io_metrics:
+            metric_source_data = self.disk_io_metrics
+        elif metric_source == MetricSource.proxysql_select_command_stats:
+            metric_source_data = self.proxysql_select_command_stats
+        elif metric_source == MetricSource.proxysql_total_command_stats:
+            metric_source_data = self.proxysql_total_command_stats
+        else:
+            metric_source_data = None
+
+        return metric_source_data
+
     def update_metrics_per_second_values(self):
         for metric_instance in self.metrics.__dict__.values():
-            added = False
+            metrics_updated = False
 
-            metric_source = None  # Initialize as None
-
-            if metric_instance.metric_source == MetricSource.global_status:
-                metric_source = self.global_status
-            elif metric_instance.metric_source == MetricSource.innodb_metrics:
-                metric_source = self.innodb_metrics
-            elif metric_instance.metric_source == MetricSource.disk_io_metrics:
-                metric_source = self.disk_io_metrics
-
-            if metric_source is None:
+            metric_source_data = self.get_metric_source_data(metric_instance.metric_source)
+            if metric_source_data is None:
                 continue  # Skip if there's no metric source
 
             for metric_name, metric_data in metric_instance.__dict__.items():
                 if isinstance(metric_data, MetricData):
+                    current_metric_source_value = metric_source_data.get(metric_name, 0)
+
                     if metric_data.last_value is None:
-                        metric_data.last_value = metric_source.get(metric_name, 0)
+                        metric_data.last_value = current_metric_source_value
                     else:
                         if metric_data.per_second_calculation:
-                            metric_status_per_sec = self.get_metric_calculate_per_sec(
-                                metric_name, metric_source, format=False
-                            )
+                            metric_diff = current_metric_source_value - metric_data.last_value
+                            metric_status_per_sec = round(metric_diff / self.polling_latency)
                         else:
-                            metric_status_per_sec = metric_source.get(metric_name, 0)
+                            metric_status_per_sec = current_metric_source_value
 
                         self.add_metric(metric_data, metric_status_per_sec)
-                        added = True
+                        metrics_updated = True
 
-            if added:
+            if metrics_updated:
                 metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
+
+    def update_metrics_last_value(self):
+        # We set the last value for specific metrics that need it so they can get per second values
+        for metric_instance in self.metrics.__dict__.values():
+            metric_source_data = self.get_metric_source_data(metric_instance.metric_source)
+
+            for metric_name, metric_data in metric_instance.__dict__.items():
+                if isinstance(metric_data, MetricData) and metric_data.per_second_calculation:
+                    metric_data.last_value = metric_source_data.get(metric_name, 0)
+
+    def update_proxysql_command_stats(self, proxysql_command_stats):
+        for row in proxysql_command_stats:
+            # Convert all values to integers if they are a number for SELECT command
+            if row["Command"] == "SELECT":
+                self.proxysql_select_command_stats = {
+                    key: int(value) if value.isdigit() else value for key, value in row.items()
+                }
+
+            for key, value in row.items():
+                if key.startswith("cnt_") and value.isdigit():
+                    # If the key exists, add to it; otherwise, initialize with the integer value
+                    if key in self.proxysql_total_command_stats:
+                        self.proxysql_total_command_stats[key] += int(value)
+                    else:
+                        self.proxysql_total_command_stats[key] = int(value)
 
     def update_metrics_replication_lag(self):
         if self.replication_status:
@@ -580,32 +843,18 @@ class MetricManager:
 
     def update_metrics_locks(self):
         metric_instance = self.metrics.locks
-        # self.add_metric(metric_instance.innodb_trx_lock_count, len(self.innodb_trx_lock_metrics))
         self.add_metric(metric_instance.metadata_lock_count, len(self.metadata_lock_metrics))
         metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
-
-    def get_metric_calculate_per_sec(self, metric_name, metric_source=None, format=True):
-        if not metric_source:
-            metric_source = self.global_status
-
-        for metric_instance in self.metrics.__dict__.values():
-            if hasattr(metric_instance, metric_name):
-                metric_data: MetricData = getattr(metric_instance, metric_name)
-
-                metric_diff = metric_source.get(metric_name, 0) - metric_data.last_value
-                metric_per_sec = round(metric_diff / self.polling_latency)
-
-                if format:
-                    return format_number(metric_per_sec)
-                else:
-                    return metric_per_sec
 
     def get_metric_checkpoint_age(self, format):
         checkpoint_age_bytes = round(self.global_status.get("Innodb_checkpoint_age", 0))
         max_checkpoint_age_bytes = self.redo_log_size
 
-        if checkpoint_age_bytes + max_checkpoint_age_bytes == 0:
-            return "N/A"
+        if checkpoint_age_bytes == 0:
+            if format:
+                return "N/A"
+            else:
+                return self.redo_log_size, 0, 0
 
         checkpoint_age_sync_flush_bytes = round(max_checkpoint_age_bytes * 0.825)
         checkpoint_age_ratio = round(checkpoint_age_bytes / max_checkpoint_age_bytes * 100, 2)
@@ -658,17 +907,3 @@ class MetricManager:
         self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio = smoothed_hit_ratio
 
         return smoothed_hit_ratio
-
-    def update_metrics_last_value(self):
-        # We set the last value for specific metrics that need it so they can get per second values
-        for metric_instance in self.metrics.__dict__.values():
-            if metric_instance.metric_source == MetricSource.global_status:
-                metrics_data = self.global_status
-            elif metric_instance.metric_source == MetricSource.innodb_metrics:
-                metrics_data = self.innodb_metrics
-            elif metric_instance.metric_source == MetricSource.disk_io_metrics:
-                metrics_data = self.disk_io_metrics
-
-            for metric_name, metric_data in metric_instance.__dict__.items():
-                if isinstance(metric_data, MetricData) and metric_data.per_second_calculation:
-                    metric_data.last_value = metrics_data.get(metric_name, 0)

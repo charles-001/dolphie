@@ -2,8 +2,9 @@ import time
 from ssl import SSLError
 
 import pymysql
+from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.Queries import MySQLQueries
+from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
 from textual.app import App
 
 
@@ -35,6 +36,7 @@ class Database:
         self.max_reconnect_attempts: int = 3
         self.running_query: bool = False
         self.using_ssl: str = None
+        self.source: ConnectionSource = None
 
         if auto_connect:
             self.connect()
@@ -55,12 +57,24 @@ class Database:
             )
             self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
 
+            # If the query is successful, then the connection is to ProxySQL
+            try:
+                self.cursor.execute("SELECT @@admin-version")
+                self.source = ConnectionSource.proxysql
+            except Exception:
+                self.source = ConnectionSource.mysql
+
             # Get connection ID for processlist filtering
             if self.save_connection_id:
-                self.connection_id = self.fetch_value_from_field("SELECT CONNECTION_ID()")
+                self.connection_id = self.connection.thread_id()
 
             # Determine if SSL is being used
-            self.using_ssl = "ON" if self.fetch_value_from_field("SHOW STATUS LIKE 'Ssl_cipher'", "Value") else "OFF"
+            self.using_ssl = (
+                "ON"
+                if self.source == ConnectionSource.mysql
+                and self.fetch_value_from_field("SHOW STATUS LIKE 'Ssl_cipher'", "Value")
+                else "OFF"
+            )
         except pymysql.Error as e:
             if len(e.args) == 1:
                 raise ManualException(e.args[0])
@@ -97,7 +111,8 @@ class Database:
         error_message = None
 
         # Prefix all queries with dolphie so they can be identified in the processlist from other people
-        query = "/* dolphie */ " + query
+        if self.source != ConnectionSource.proxysql:
+            query = "/* dolphie */ " + query
 
         for _ in range(self.max_reconnect_attempts):
             self.running_query = True
@@ -167,7 +182,10 @@ class Database:
 
         for field, value in row.items():
             if isinstance(value, (bytes, bytearray)):
-                processed_row[field] = value.decode()
+                try:
+                    processed_row[field] = value.decode()
+                except UnicodeDecodeError:
+                    processed_row[field] = "/* Dolphie can't decode query with utf-8 */"
             else:
                 processed_row[field] = value
 
@@ -219,10 +237,14 @@ class Database:
 
         command_data = {}
 
-        self.execute(getattr(MySQLQueries, command))
+        if self.source == ConnectionSource.proxysql:
+            self.execute(getattr(ProxySQLQueries, command))
+        else:
+            self.execute(getattr(MySQLQueries, command))
+
         data = self.fetchall()
 
-        if command in {"status", "variables"}:
+        if command in {"status", "variables", "mysql_stats"}:
             for row in data:
                 variable = row["Variable_name"]
                 value = row["Value"]

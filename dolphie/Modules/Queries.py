@@ -2,6 +2,107 @@ from dataclasses import dataclass
 
 
 @dataclass
+class ProxySQLQueries:
+
+    processlist: str = """/* dolphie */
+        SELECT
+            SessionID AS id,
+            user AS user,
+            db AS db,
+            cli_host AS frontend_host,
+            hostgroup AS hostgroup,
+            srv_host AS backend_host,
+            command AS command,
+            time_ms AS time,
+            IFNULL(info, "") AS query,
+            IFNULL(extended_info, "") AS extended_info
+        FROM
+            stats_mysql_processlist
+        WHERE
+            $1
+    """
+    mysql_stats: str = """
+        SELECT
+            Variable_Name as Variable_name,
+            Variable_Value as Value
+        FROM
+            stats_mysql_global
+    """
+    connection_pool_data: str = """
+        SELECT
+            SUM(Latency_us) / COUNT(*) AS avg_latency,
+            SUM(ConnUsed) AS connection_pool_connections
+        FROM
+            stats_mysql_connection_pool
+    """
+    user_stats: str = """
+        SELECT DISTINCT
+            su.username,
+            frontend_connections,
+            frontend_max_connections,
+            default_hostgroup,
+            default_schema,
+            use_ssl
+        FROM
+            stats_mysql_users su JOIN
+            runtime_mysql_users ru ON su.username = ru.username
+        WHERE
+            frontend_connections > 0
+        ORDER BY
+            frontend_connections DESC
+    """
+    hostgroup_summary: str = """
+        SELECT
+            *
+        FROM
+            stats_mysql_connection_pool LEFT JOIN
+            runtime_mysql_servers ON hostgroup = hostgroup_id AND srv_host = hostname AND srv_port = port
+        ORDER BY
+            hostgroup
+    """
+    query_rules_summary: str = """
+        SELECT
+            *,
+            hits AS hits_s
+        FROM
+            stats_mysql_query_rules
+            JOIN runtime_mysql_query_rules USING (rule_id)
+        WHERE
+            active = 1
+        ORDER BY
+            hits DESC
+    """
+    command_stats: str = """
+        SELECT
+            *,
+            Total_cnt AS Total_cnt_s
+        FROM
+            stats_mysql_commands_counters
+        WHERE
+            Total_cnt != 0
+        ORDER BY
+            Total_cnt DESC
+    """
+    memory_metrics: str = """
+        SELECT
+            *
+        FROM
+            stats_memory_metrics
+        ORDER BY
+            CAST(Variable_Value AS DECIMAL) DESC;
+    """
+    query_errors: str = """
+        SELECT
+            *
+        FROM
+            stats_mysql_errors
+        ORDER BY
+            count_star DESC
+    """
+    variables: str = "SHOW GLOBAL VARIABLES"
+
+
+@dataclass
 class MySQLQueries:
     pl_query: str = """
         SELECT

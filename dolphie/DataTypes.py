@@ -2,8 +2,16 @@ from dataclasses import dataclass
 from typing import Dict, List
 
 from dolphie.Modules.Functions import format_query, format_time
-from dolphie.Modules.MySQL import Database
 from rich.table import Table
+
+
+@dataclass
+class ConnectionSource:
+    mysql = "mysql"
+    proxysql = "proxysql"
+    mariadb = "mariadb"
+    aws_rds = "aws_rds"
+    azure_mysql = "azure_mysql"
 
 
 @dataclass
@@ -18,7 +26,7 @@ class ConnectionStatus:
 class Replica:
     thread_id: int
     host: str
-    connection: Database = None
+    connection: str = None
     table: Table = None
     replication_status: Dict[str, str] = None
     lag_source: str = None
@@ -68,9 +76,11 @@ class Panels:
         self.processlist = Panel("processlist")
         self.graphs = Panel("graphs")
         self.replication = Panel("replication")
-        # self.innodb_trx_locks = Panel("innodb_trx_locks")
         self.metadata_locks = Panel("metadata_locks")
         self.ddl = Panel("ddl")
+        self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary")
+        self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules")
+        self.proxysql_command_stats = Panel("proxysql_command_stats")
 
     def get_panel(self, panel_name: str) -> Panel:
         return self.__dict__.get(panel_name, None)
@@ -93,7 +103,6 @@ class ProcesslistThread:
         self.user = thread_data.get("user", "")
         self.host = thread_data.get("host", "")
         self.db = thread_data.get("db", "")
-        self.query = thread_data.get("query", "")
         self.time = int(thread_data.get("time", 0))
         self.protocol = self._get_formatted_string(thread_data.get("connection_type", ""))
         self.formatted_query = self._get_formatted_query(thread_data.get("query", ""))
@@ -113,16 +122,67 @@ class ProcesslistThread:
 
     def _get_time_color(self) -> str:
         thread_color = ""
-        if "Group replication" not in self.query:  # Don't color GR threads
-            if "SELECT /*!40001 SQL_NO_CACHE */ *" in self.query:
+        if "Group replication" not in self.formatted_query.code:  # Don't color GR threads
+            if "SELECT /*!40001 SQL_NO_CACHE */ *" in self.formatted_query.code:
                 thread_color = "purple"
-            elif self.query:
+            elif self.formatted_query.code:
                 if self.time >= 10:
                     thread_color = "red"
                 elif self.time >= 5:
                     thread_color = "yellow"
                 else:
                     thread_color = "green"
+        return thread_color
+
+    def _get_formatted_command(self, command: str):
+        return "[red]Killed[/red]" if command == "Killed" else command
+
+    def _get_formatted_trx_time(self, trx_time: str):
+        return format_time(int(trx_time)) if trx_time else "[dark_gray]N/A"
+
+    def _get_formatted_query(self, query: str):
+        return format_query(query)
+
+    def _get_formatted_string(self, string: str):
+        if not string:
+            return "[dark_gray]N/A"
+
+        return string
+
+    def _get_formatted_number(self, number):
+        if not number or number == "0":
+            return "[dark_gray]0"
+
+        return number
+
+
+class ProxySQLProcesslistThread:
+    def __init__(self, thread_data: Dict[str, str]):
+        self.id = str(thread_data.get("id", ""))
+        self.hostgroup = thread_data.get("hostgroup")
+        self.user = thread_data.get("user", "")
+        self.frontend_host = self._get_formatted_string(thread_data.get("frontend_host", ""))
+        self.host = self._get_formatted_string(thread_data.get("backend_host", ""))
+        self.db = thread_data.get("db", "")
+        self.time = int(thread_data.get("time", 0)) / 1000  # Convert to seconds since ProxySQL returns milliseconds
+        self.formatted_query = self._get_formatted_query(thread_data.get("query", "").strip(" \t\n\r"))
+        self.formatted_time = self._get_formatted_time()
+        self.command = self._get_formatted_command(thread_data.get("command", ""))
+        self.extended_info = thread_data.get("extended_info", "")
+
+    def _get_formatted_time(self) -> str:
+        thread_color = self._get_time_color()
+        return f"[{thread_color}]{format_time(self.time)}[/{thread_color}]" if thread_color else format_time(self.time)
+
+    def _get_time_color(self) -> str:
+        thread_color = ""
+        if self.formatted_query.code:
+            if self.time >= 10:
+                thread_color = "red"
+            elif self.time >= 5:
+                thread_color = "yellow"
+            else:
+                thread_color = "green"
         return thread_color
 
     def _get_formatted_command(self, command: str):

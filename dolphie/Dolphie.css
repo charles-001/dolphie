@@ -37,6 +37,7 @@ DataTable > .datatable--odd-row {
 DataTable > .datatable--even-row {
     background: #0f1525;
 }
+
 LoadingIndicator {
     color: #8fb0ee;
     height: auto;
@@ -98,20 +99,6 @@ TopBar {
     border: tall #1b233a;
     height: 11;
     width: auto;
-}
-
-.innodb_trx_locks {
-    height: auto;
-    background: #0f1525;
-    border: tall #1b233a;
-    margin-bottom: 1;
-}
-.innodb_trx_locks > Label {
-    width: 100%;
-    text-style: bold;
-    color: #bbc8e8;
-    content-align: center middle;
-    margin-bottom: 1;
 }
 
 .metadata_locks {
@@ -232,6 +219,69 @@ TopBar {
     content-align: center middle;
 }
 
+.proxysql_hostgroup_summary_datatable {
+    overflow-x: auto;
+}
+.proxysql_hostgroup_summary {
+    height: auto;
+    background: #0f1525;
+    border: tall #1b233a;
+    margin-bottom: 1;
+}
+.proxysql_hostgroup_summary > Container {
+    height: auto;
+    width: auto;
+}
+.proxysql_hostgroup_summary > Label {
+    width: 100%;
+    color: #bbc8e8;
+    text-style: bold;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
+.proxysql_mysql_query_rules_datatable {
+    overflow-x: auto;
+}
+.proxysql_mysql_query_rules {
+    height: auto;
+    background: #0f1525;
+    border: tall #1b233a;
+    margin-bottom: 1;
+}
+.proxysql_mysql_query_rules > Container {
+    height: auto;
+    width: auto;
+}
+.proxysql_mysql_query_rules > Label {
+    width: 100%;
+    color: #bbc8e8;
+    text-style: bold;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
+.proxysql_command_stats {
+    overflow-x: auto;
+}
+.proxysql_command_stats {
+    height: auto;
+    background: #0f1525;
+    border: tall #1b233a;
+    margin-bottom: 1;
+}
+.proxysql_command_stats > Container {
+    height: auto;
+    width: auto;
+}
+.proxysql_command_stats > Label {
+    width: 100%;
+    color: #bbc8e8;
+    text-style: bold;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
 .pad_bottom_1 {
     padding-bottom: 1;
 }
@@ -289,6 +339,7 @@ Input>.input--placeholder {
     height: auto;
 }
 .button_container {
+    height: auto;
     width: 100%;
     align-horizontal: center;
 }

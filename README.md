@@ -1,7 +1,7 @@
 # Dolphie
 <p align="center">
   <img src="https://user-images.githubusercontent.com/13244625/187600748-19d2ad15-42e8-4f9c-ada5-a153cdcf4070.png" width="120"><br>
-  Echolocate your MySQL health with real-time monitoring in the terminal<br><br>
+  Your single pane of glass for real-time analytics into MySQL & ProxySQL<br><br>
   <img src="https://github.com/charles-001/dolphie/assets/13244625/88a41290-f52c-4b8e-97f8-3b7ef5096eae" width="30">
   <img src="https://github.com/charles-001/dolphie/assets/13244625/1d94502a-9abf-4436-a7d0-cb2b08c105c1" width="30">
   <img src="https://github.com/charles-001/dolphie/assets/13244625/9b1aadc8-cabb-4256-92f9-fe4d04451b83" width="30">
@@ -67,16 +67,16 @@ $ docker exec -it dolphie dolphie -h host.docker.internal -u root --ask-pass
 ## Usage
 ```
 positional arguments:
-  uri                   Use a URI string for credentials - format: mysql://user:password@host:port (port is optional with default 3306)
+  uri                   Use a URI string for credentials (mysql/proxysql) - format: mysql://user:password@host:port (port is optional with default 3306, or 6032 for ProxySQL)
 
 options:
   --help                show this help message and exit
   --host-setup          Start Dolphie by showing the Host Setup modal instead of automatically connecting
-  -u , --user           Username for MySQL
-  -p , --password       Password for MySQL
-  -h , --host           Hostname/IP address for MySQL
-  -P , --port           Port for MySQL (Socket has precendence)
-  -S , --socket         Socket file for MySQL
+  -u , --user           Username
+  -p , --password       Password
+  -h , --host           Hostname/IP address
+  -P , --port           Port(Socket has precendence)
+  -S , --socket         Socket file
   --config-file         Dolphie's config file to use. Options are read from these files in the given order: /etc/dolphie.cnf, ~/.dolphie.cnf
   --mycnf-file          MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
   -f , --host-cache-file
@@ -87,16 +87,16 @@ options:
   -r , --refresh_interval
                         How much time to wait in seconds between each refresh [default: 1]
   -H , --heartbeat-table
-                        If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW REPLICA STATUS
+                        (MySQL only) If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW REPLICA STATUS
   --ssl-mode            Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
   --ssl-ca              Path to the file that contains a CA (certificate authority)
   --ssl-cert            Path to the file that contains a certificate
   --ssl-key             Path to the file that contains a private key for the certificate
-  --panels              What panels to display on startup separated by a comma. Supports: dashboard,processlist,graphs,replication,metadata_locks,ddl [default: dashboard,processlist]
+  --panels              What panels to display on startup separated by a comma. Supports:  dashboard,processlist,graphs,replication,metadata_locks,ddl,proxysql_hostgroup_summary,proxysql_mysql_query_rules,proxysql_command_stats [default: dashboard,processlist]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
   --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
-  --show-trxs-only      Start with only showing threads that have an active transaction
+  --show-trxs-only      (MySQL only) Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
   --debug-options       Display options that are set and what they're set by (command-line, dolphie config, etc) then exit
   -V, --version         Display version and exit
@@ -154,6 +154,9 @@ Dolphie's config supports these options under [dolphie] section:
 ## Supported MySQL versions
 - MySQL/Percona Server 5.6/5.7/8.0+
 - RDS & Aurora + Azure
+
+## Supported ProxySQL versions
+- ProxySQL 2.6+ (could work on previous versions but not tested)
 
 ## Grants required
 #### Least privilege

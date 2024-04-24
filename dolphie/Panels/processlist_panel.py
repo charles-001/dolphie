@@ -1,7 +1,7 @@
 from typing import Dict
 
 from dolphie.DataTypes import ProcesslistThread
-from dolphie.Modules.Functions import format_number
+from dolphie.Modules.Functions import format_number, format_query
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 from rich.syntax import Syntax
@@ -18,7 +18,7 @@ def create_panel(tab: Tab) -> DataTable:
         dolphie.use_performance_schema = False
 
     columns = [
-        {"name": "Process ID", "field": "id", "width": 11, "format_number": False},
+        {"name": "Process ID", "field": "id", "width": None, "format_number": False},
         {"name": "Protocol", "field": "protocol", "width": 8, "format_number": False},
         {"name": "Username", "field": "user", "width": 20, "format_number": False},
     ]
@@ -57,6 +57,8 @@ def create_panel(tab: Tab) -> DataTable:
         ]
     )
 
+    # Refresh optimization
+    query_length_max = 300
     processlist_datatable = tab.processlist_datatable
 
     # Clear table if columns change
@@ -84,7 +86,7 @@ def create_panel(tab: Tab) -> DataTable:
             if thread_id in processlist_datatable.rows:
                 datatable_value = processlist_datatable.get_row(thread_id)[column_id]
 
-                # Store the code of the Syntax object if it's a query
+                # Initialize temp values for possible Syntax object comparison below
                 temp_thread_value = thread_value
                 temp_datatable_value = datatable_value
 
@@ -94,13 +96,24 @@ def create_panel(tab: Tab) -> DataTable:
                     update_width = True
                     if isinstance(thread_value, Syntax):
                         temp_thread_value = thread_value.code
+
+                        # Only show the first {query_length_max} characters of the query
+                        thread_value = format_query(thread_value.code[:query_length_max])
                     if isinstance(datatable_value, Syntax):
                         temp_datatable_value = datatable_value.code
 
                 # Update the datatable if values differ
-                if temp_thread_value != temp_datatable_value or column_field == "formatted_time":
+                if (
+                    temp_thread_value != temp_datatable_value
+                    or column_field == "formatted_time"
+                    or column_field == "time"
+                ):
                     processlist_datatable.update_cell(thread_id, column_name, thread_value, update_width=update_width)
             else:
+                # Only show the first {query_length_max} characters of the query
+                if column_field == "formatted_query" and isinstance(thread_value, Syntax):
+                    thread_value = format_query(thread_value.code[:query_length_max])
+
                 # Create an array of values to append to the datatable
                 row_values.append(thread_value)
 

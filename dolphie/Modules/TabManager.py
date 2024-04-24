@@ -55,24 +55,23 @@ class Tab:
     panel_dashboard: Container = None
     panel_graphs: Container = None
     panel_replication: Container = None
-    # panel_innodb_trx_locks: Container = None
     panel_metadata_locks: Container = None
     panel_ddl: Container = None
     panel_processlist: Container = None
+    panel_proxysql_hostgroup_summary: Container = None
+    panel_proxysql_mysql_query_rules: Container = None
+    panel_proxysql_command_stats: Container = None
 
     spinner: SpinnerWidget = None
 
-    dashboard_host_information: Static = None
-    dashboard_innodb: Static = None
-    dashboard_binary_log: Static = None
-    dashboard_statistics: Static = None
-    dashboard_replication: Static = None
+    dashboard_section_1: Static = None
+    dashboard_section_2: Static = None
+    dashboard_section_3: Static = None
+    dashboard_section_4: Static = None
+    dashboard_section_5: Static = None
 
     ddl_title: Label = None
     ddl_datatable: DataTable = None
-
-    # innodb_trx_locks_title: Label = None
-    # innodb_trx_locks_datatable: DataTable = None
 
     metadata_locks_title: Label = None
     metadata_locks_datatable: DataTable = None
@@ -96,6 +95,15 @@ class Tab:
     replicas_grid: Container = None
     replicas_loading_indicator: LoadingIndicator = None
     replicas_title: Label = None
+
+    proxysql_hostgroup_summary_title: Static = None
+    proxysql_hostgroup_summary_datatable: DataTable = None
+
+    proxysql_mysql_query_rules_title: Static = None
+    proxysql_mysql_query_rules_datatable: DataTable = None
+
+    proxysql_command_stats_title: Static = None
+    proxysql_command_stats_datatable: DataTable = None
 
     cluster_data: Static = None
 
@@ -126,7 +134,7 @@ class TabManager:
         if tab.id == self.active_tab.id:
             if dolphie.connection_status:
                 self.topbar.connection_status = dolphie.connection_status
-                self.topbar.host = dolphie.mysql_host
+                self.topbar.host = dolphie.host_with_port
             else:
                 self.topbar.connection_status = None
                 self.topbar.host = ""
@@ -181,11 +189,11 @@ class TabManager:
                 VerticalScroll(
                     Container(
                         Center(
-                            Static(id=f"dashboard_host_information_{tab_id}", classes="dashboard_host_information"),
-                            Static(id=f"dashboard_innodb_{tab_id}", classes="dashboard_innodb_information"),
-                            Static(id=f"dashboard_binary_log_{tab_id}", classes="dashboard_binary_log"),
-                            Static(id=f"dashboard_replication_{tab_id}", classes="dashboard_replication"),
-                            Static(id=f"dashboard_statistics_{tab_id}", classes="dashboard_statistics"),
+                            Static(id=f"dashboard_section_1_{tab_id}", classes="dashboard_section_1"),
+                            Static(id=f"dashboard_section_2_{tab_id}", classes="dashboard_section_2_information"),
+                            Static(id=f"dashboard_section_3_{tab_id}", classes="dashboard_section_3"),
+                            Static(id=f"dashboard_section_5_{tab_id}", classes="dashboard_section_5"),
+                            Static(id=f"dashboard_section_4_{tab_id}", classes="dashboard_section_4"),
                         ),
                         Sparkline([], id=f"panel_dashboard_queries_qps_{tab_id}"),
                         id=f"panel_dashboard_{tab_id}",
@@ -232,12 +240,6 @@ class TabManager:
                         id=f"panel_replication_{tab_id}",
                         classes="panel_container replication_panel",
                     ),
-                    # Container(
-                    #     Label(id=f"innodb_trx_locks_title_{tab_id}"),
-                    #     DataTable(id=f"innodb_trx_locks_datatable_{tab_id}", show_cursor=False),
-                    #     id=f"panel_innodb_trx_locks_{tab_id}",
-                    #     classes="innodb_trx_locks",
-                    # ),
                     Container(
                         Label(id=f"metadata_locks_title_{tab_id}"),
                         DataTable(id=f"metadata_locks_datatable_{tab_id}", show_cursor=False, zebra_stripes=True),
@@ -249,6 +251,36 @@ class TabManager:
                         DataTable(id=f"ddl_datatable_{tab_id}", show_cursor=False),
                         id=f"panel_ddl_{tab_id}",
                         classes="ddl",
+                    ),
+                    Container(
+                        Label(id=f"proxysql_hostgroup_summary_title_{tab_id}"),
+                        DataTable(
+                            id=f"proxysql_hostgroup_summary_datatable_{tab_id}",
+                            classes="proxysql_hostgroup_summary_datatable",
+                            show_cursor=False,
+                        ),
+                        id=f"panel_proxysql_hostgroup_summary_{tab_id}",
+                        classes="proxysql_hostgroup_summary",
+                    ),
+                    Container(
+                        Label(id=f"proxysql_mysql_query_rules_title_{tab_id}"),
+                        DataTable(
+                            id=f"proxysql_mysql_query_rules_datatable_{tab_id}",
+                            classes="proxysql_mysql_query_rules_datatable",
+                            show_cursor=False,
+                        ),
+                        id=f"panel_proxysql_mysql_query_rules_{tab_id}",
+                        classes="proxysql_mysql_query_rules",
+                    ),
+                    Container(
+                        Label(id=f"proxysql_command_stats_title_{tab_id}"),
+                        DataTable(
+                            id=f"proxysql_command_stats_datatable_{tab_id}",
+                            classes="proxysql_command_stats_datatable",
+                            show_cursor=False,
+                        ),
+                        id=f"panel_proxysql_command_stats_{tab_id}",
+                        classes="proxysql_command_stats",
                     ),
                     Container(
                         Label(id=f"processlist_title_{tab_id}"),
@@ -264,63 +296,54 @@ class TabManager:
             ),
         )
 
-        metrics = MetricManager.MetricManager().metrics
-        metric_tab_labels = [
-            ("DML", metrics.dml, True),
-            ("Locks", metrics.locks, True),
-            ("Table Cache", metrics.table_cache, True),
-            ("Threads", metrics.threads, True),
-            ("BP Requests", metrics.buffer_pool_requests, True),
-            ("Checkpoint", metrics.checkpoint, False),
-            ("Redo Log", metrics.redo_log, False),
-            ("AHI", metrics.adaptive_hash_index, True),
-            ("Temp Objects", metrics.temporary_objects, True),
-            ("Aborted Connections", metrics.aborted_connections, True),
-            ("Disk I/O", metrics.disk_io, True),
-            ("Replication", metrics.replication_lag, False),
-        ]
-
-        for tab_formatted_name, metric_instance, create_switches in metric_tab_labels:
+        # Loop the metric instances and create the graph tabs
+        for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
             metric_tab_name = metric_instance.tab_name
             graph_names = metric_instance.graphs
+            graph_tab_name = metric_instance.graph_tab_name
 
-            await self.app.query_one(f"#metric_graph_tabs_{tab_id}", TabbedContent).add_pane(
-                TabPane(
-                    tab_formatted_name,
-                    Label(id=f"stats_{metric_tab_name}_{tab_id}", classes="stats_data"),
-                    Horizontal(id=f"graph_container_{metric_tab_name}_{tab_id}"),
-                    Horizontal(
-                        id=f"switch_container_{metric_tab_name}_{tab_id}",
-                        classes=f"switch_container_{tab_id} switch_container",
-                    ),
-                    id=f"graph_tab_{metric_tab_name}_{tab_id}",
-                    name=metric_tab_name,
+            graph_tab = self.app.query(f"#graph_tab_{metric_tab_name}_{tab_id}")
+            if not graph_tab:
+                await self.app.query_one(f"#metric_graph_tabs_{tab_id}", TabbedContent).add_pane(
+                    TabPane(
+                        graph_tab_name,
+                        Label(id=f"stats_{metric_tab_name}_{tab_id}", classes="stats_data"),
+                        Horizontal(id=f"graph_container_{metric_tab_name}_{tab_id}"),
+                        Horizontal(
+                            id=f"switch_container_{metric_tab_name}_{tab_id}",
+                            classes=f"switch_container_{tab_id} switch_container",
+                        ),
+                        id=f"graph_tab_{metric_tab_name}_{tab_id}",
+                        name=metric_tab_name,
+                    )
                 )
-            )
-            # Save references to the labels
-            setattr(tab, metric_tab_name, self.app.query_one(f"#stats_{metric_tab_name}_{tab_id}"))
-
-            if metric_tab_name == "redo_log":
-                graph_names = ["graph_redo_log", "graph_redo_log_active_count", "graph_redo_log_bar"]
-            elif metric_tab_name == "adaptive_hash_index":
-                graph_names = ["graph_adaptive_hash_index", "graph_adaptive_hash_index_hit_ratio"]
+                # Save references to the labels
+                setattr(tab, metric_tab_name, self.app.query_one(f"#stats_{metric_tab_name}_{tab_id}"))
 
             for graph_name in graph_names:
                 await self.app.query_one(f"#graph_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
                     MetricManager.Graph(id=f"{graph_name}_{tab_id}", classes="panel_data")
                 )
+
                 # Save references to the graphs
                 setattr(tab, graph_name, self.app.query_one(f"#{graph_name}_{tab_id}"))
 
-            if create_switches:
-                for metric, metric_data in metric_instance.__dict__.items():
-                    if isinstance(metric_data, MetricManager.MetricData) and metric_data.graphable:
-                        await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
-                            Label(metric_data.label)
-                        )
-                        await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
-                            Switch(animate=False, id=metric, name=metric_tab_name)
-                        )
+            for metric, metric_data in metric_instance.__dict__.items():
+                if (
+                    isinstance(metric_data, MetricManager.MetricData)
+                    and metric_data.graphable
+                    and metric_data.create_switch
+                ):
+                    await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
+                        Label(metric_data.label)
+                    )
+                    await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
+                        Switch(animate=False, id=metric, name=metric_tab_name)
+                    )
+
+                    # Toggle the switch if the metric is visible (means to enable it by default)
+                    if metric_data.visible:
+                        self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id} #{metric}", Switch).toggle()
 
         # Save the tab instance to the tabs dictionary
         self.tabs[tab_id] = tab
@@ -336,10 +359,16 @@ class TabManager:
         tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)
         tab.panel_graphs = self.app.query_one(f"#panel_graphs_{tab.id}", Container)
         tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
-        # tab.panel_innodb_trx_locks = self.app.query_one(f"#panel_innodb_trx_locks_{tab.id}", Container)
         tab.panel_metadata_locks = self.app.query_one(f"#panel_metadata_locks_{tab.id}", Container)
         tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", Container)
         tab.panel_ddl = self.app.query_one(f"#panel_ddl_{tab.id}", Container)
+        tab.panel_proxysql_hostgroup_summary = self.app.query_one(
+            f"#panel_proxysql_hostgroup_summary_{tab.id}", Container
+        )
+        tab.panel_proxysql_mysql_query_rules = self.app.query_one(
+            f"#panel_proxysql_mysql_query_rules_{tab.id}", Container
+        )
+        tab.panel_proxysql_command_stats = self.app.query_one(f"#panel_proxysql_command_stats_{tab.id}", Container)
 
         tab.spinner = self.app.query_one(f"#spinner_{tab.id}", SpinnerWidget)
         tab.spinner.hide()
@@ -348,16 +377,26 @@ class TabManager:
         tab.ddl_datatable = self.app.query_one(f"#ddl_datatable_{tab.id}", DataTable)
         tab.processlist_title = self.app.query_one(f"#processlist_title_{tab.id}", Label)
         tab.processlist_datatable = self.app.query_one(f"#processlist_data_{tab.id}", DataTable)
-        # tab.innodb_trx_locks_title = self.app.query_one(f"#innodb_trx_locks_title_{tab.id}", Label)
-        # tab.innodb_trx_locks_datatable = self.app.query_one(f"#innodb_trx_locks_datatable_{tab.id}", DataTable)
         tab.metadata_locks_title = self.app.query_one(f"#metadata_locks_title_{tab.id}", Label)
         tab.metadata_locks_datatable = self.app.query_one(f"#metadata_locks_datatable_{tab.id}", DataTable)
+        tab.proxysql_hostgroup_summary_title = self.app.query_one(f"#proxysql_hostgroup_summary_title_{tab.id}", Static)
+        tab.proxysql_hostgroup_summary_datatable = self.app.query_one(
+            f"#proxysql_hostgroup_summary_datatable_{tab.id}", DataTable
+        )
+        tab.proxysql_mysql_query_rules_title = self.app.query_one(f"#proxysql_mysql_query_rules_title_{tab.id}", Static)
+        tab.proxysql_mysql_query_rules_datatable = self.app.query_one(
+            f"#proxysql_mysql_query_rules_datatable_{tab.id}", DataTable
+        )
+        tab.proxysql_command_stats_title = self.app.query_one(f"#proxysql_command_stats_title_{tab.id}", Static)
+        tab.proxysql_command_stats_datatable = self.app.query_one(
+            f"#proxysql_command_stats_datatable_{tab.id}", DataTable
+        )
 
-        tab.dashboard_host_information = self.app.query_one(f"#dashboard_host_information_{tab.id}", Static)
-        tab.dashboard_innodb = self.app.query_one(f"#dashboard_innodb_{tab.id}", Static)
-        tab.dashboard_binary_log = self.app.query_one(f"#dashboard_binary_log_{tab.id}", Static)
-        tab.dashboard_statistics = self.app.query_one(f"#dashboard_statistics_{tab.id}", Static)
-        tab.dashboard_replication = self.app.query_one(f"#dashboard_replication_{tab.id}", Static)
+        tab.dashboard_section_1 = self.app.query_one(f"#dashboard_section_1_{tab.id}", Static)
+        tab.dashboard_section_2 = self.app.query_one(f"#dashboard_section_2_{tab.id}", Static)
+        tab.dashboard_section_3 = self.app.query_one(f"#dashboard_section_3_{tab.id}", Static)
+        tab.dashboard_section_4 = self.app.query_one(f"#dashboard_section_4_{tab.id}", Static)
+        tab.dashboard_section_5 = self.app.query_one(f"#dashboard_section_5_{tab.id}", Static)
 
         tab.group_replication_container = self.app.query_one(f"#group_replication_container_{tab.id}", Container)
         tab.group_replication_grid = self.app.query_one(f"#group_replication_grid_{tab.id}", Container)
@@ -381,11 +420,11 @@ class TabManager:
         )
         tab.replication_thread_applier = self.app.query_one(f"#replication_thread_applier_{tab.id}", Static)
 
-        # By default, hide all the panels
         tab.sparkline.display = False
         tab.main_container.display = False
         tab.loading_indicator.display = False
 
+        # By default, hide all the panels
         for panel in tab.dolphie.panels.all():
             self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
 
@@ -398,12 +437,6 @@ class TabManager:
         graphs = self.app.query(MetricManager.Graph)
         for graph in graphs:
             graph.marker = dolphie.graph_marker
-
-        # Set default switches to be toggled on
-        switches = self.app.query(f".switch_container_{tab_id} Switch")
-        switches_to_toggle = [switch for switch in switches if switch.id not in ["Queries", "Threads_connected"]]
-        for switch in switches_to_toggle:
-            switch.toggle()
 
         if switch_tab:
             self.switch_tab(tab_id)
@@ -423,8 +456,8 @@ class TabManager:
 
     def rename_tab(self, tab: Tab, new_name: str = None):
         if not new_name and not tab.manual_tab_name:
-            # mysql_host is the full host:port string, we want to split & truncate it to 24 characters
-            host = tab.dolphie.mysql_host.split(":")[0][:24]
+            # host_with_port is the full host:port string, we want to split & truncate it to 24 characters
+            host = tab.dolphie.host_with_port.split(":")[0][:24]
             if not host:
                 return
 
