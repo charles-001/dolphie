@@ -75,7 +75,7 @@ options:
   -u , --user           Username
   -p , --password       Password
   -h , --host           Hostname/IP address
-  -P , --port           Port(Socket has precendence)
+  -P , --port           Port (Socket has precendence)
   -S , --socket         Socket file
   --config-file         Dolphie's config file to use. Options are read from these files in the given order: /etc/dolphie.cnf, ~/.dolphie.cnf
   --mycnf-file          MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
@@ -150,15 +150,16 @@ Dolphie's config supports these options under [dolphie] section:
 	(bool) show_trxs_only
 	(bool) show_additional_query_columns
 ```
+## Supported ProxySQL versions
+- ProxySQL 2.6+ (could work on previous versions but not tested)
+
+Note: Use `admin` user instead of `stats` user so you can use all features
 
 ## Supported MySQL versions
 - MySQL/Percona Server 5.6/5.7/8.0+
 - RDS & Aurora + Azure
 
-## Supported ProxySQL versions
-- ProxySQL 2.6+ (could work on previous versions but not tested)
-
-## Grants required
+## MySQL Grants required
 #### Least privilege
 1. PROCESS (only if you switch to using processlist via `P` command)
 2. SELECT to `performance_schema` + `pt-heartbeat table` (if used)
