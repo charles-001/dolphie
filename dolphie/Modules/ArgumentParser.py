@@ -140,14 +140,14 @@ Dolphie's config supports these options under [dolphie] section:
             action="store_true",
             help="Start Dolphie by showing the Host Setup modal instead of automatically connecting",
         )
-        self.parser.add_argument("-u", "--user", dest="user", type=str, help="Username for MySQL", metavar="")
-        self.parser.add_argument("-p", "--password", dest="password", type=str, help="Password for MySQL", metavar="")
+        self.parser.add_argument("-u", "--user", dest="user", type=str, help="Username", metavar="")
+        self.parser.add_argument("-p", "--password", dest="password", type=str, help="Password", metavar="")
         self.parser.add_argument(
             "-h",
             "--host",
             dest="host",
             type=str,
-            help="Hostname/IP address for MySQL",
+            help="Hostname/IP address",
             metavar="",
         )
         self.parser.add_argument(
@@ -155,7 +155,7 @@ Dolphie's config supports these options under [dolphie] section:
             "--port",
             dest="port",
             type=int,
-            help="Port for MySQL (socket has precendence)",
+            help="Port (socket has precendence)",
             metavar="",
         )
         self.parser.add_argument(
@@ -163,7 +163,7 @@ Dolphie's config supports these options under [dolphie] section:
             "--socket",
             dest="socket",
             type=str,
-            help="Socket file for MySQL",
+            help="Socket file",
             metavar="",
         )
         self.parser.add_argument(

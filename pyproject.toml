@@ -14,7 +14,7 @@ myloginpath = "^0.0.4"
 packaging = "^24.0"
 requests = "^2.31.0"
 sqlparse = "^0.4.4"
-textual = {extras = ["syntax"], version = "^0.56.4"}
+textual = {extras = ["syntax"], version = "^0.57.1"}
 textual-autocomplete = "^2.1.0b0"
 charset-normalizer = "^3.3.2"
 plotext = "^5.2.8"

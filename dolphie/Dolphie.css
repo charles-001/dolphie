@@ -339,6 +339,7 @@ Input>.input--placeholder {
     height: auto;
 }
 .button_container {
+    height: auto;
     width: 100%;
     align-horizontal: center;
 }

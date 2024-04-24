@@ -391,7 +391,7 @@ class DolphieApp(App):
         dolphie.main_db_connection.execute(ProxySQLQueries.connection_pool_data)
         data = dolphie.main_db_connection.fetchone()
         dolphie.global_status["proxysql_backend_host_average_latency"] = int(data.get("avg_latency", 0))
-        multiplex_efficiency_ratio = round(
+        dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = round(
             100
             - (
                 (
@@ -402,7 +402,6 @@ class DolphieApp(App):
             ),
             2,
         )
-        dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = multiplex_efficiency_ratio
 
         if dolphie.panels.proxysql_hostgroup_summary.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
@@ -661,14 +660,14 @@ class DolphieApp(App):
                 tab.dashboard_section_5.styles.max_width = "55"
 
         elif tab.dolphie.connection_source == ConnectionSource.proxysql:
-            tab.dashboard_section_1.styles.width = "26vw"
+            tab.dashboard_section_1.styles.width = "24vw"
             tab.dashboard_section_2.styles.width = "20vw"
             tab.dashboard_section_3.styles.width = "22vw"
             tab.dashboard_section_4.styles.width = "13vw"
 
             tab.dashboard_section_5.display = False
 
-            tab.dashboard_section_1.styles.max_width = "40"
+            tab.dashboard_section_1.styles.max_width = "35"
             tab.dashboard_section_2.styles.max_width = "28"
             tab.dashboard_section_3.styles.max_width = "25"
             tab.dashboard_section_4.styles.max_width = "25"

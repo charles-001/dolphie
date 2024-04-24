@@ -3,10 +3,11 @@ from rich import box
 from rich.align import Align
 from rich.console import Group
 from rich.table import Table
+from textual import on
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Label, Static, TabbedContent, TabPane
+from textual.widgets import Button, Label, Static, TabbedContent, TabPane
 
 
 class HelpScreen(ModalScreen):
@@ -24,6 +25,9 @@ class HelpScreen(ModalScreen):
             margin-top: 1;
             content-align: center middle;
             width: 100%;
+        }
+        HelpScreen Button {
+            margin-top: 1;
         }
     """
 
@@ -212,3 +216,9 @@ class HelpScreen(ModalScreen):
                 " text.\nTo see how to select text on your terminal, visit: https://tinyurl.com/dolphie-copy-text",
                 id="note",
             )
+            with Vertical(classes="button_container"):
+                yield Button("Close")
+
+    @on(Button.Pressed)
+    def on_cancel_pressed(self, event: Button.Pressed) -> None:
+        self.app.pop_screen()

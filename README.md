@@ -72,11 +72,11 @@ positional arguments:
 options:
   --help                show this help message and exit
   --host-setup          Start Dolphie by showing the Host Setup modal instead of automatically connecting
-  -u , --user           Username for MySQL
-  -p , --password       Password for MySQL
-  -h , --host           Hostname/IP address for MySQL
-  -P , --port           Port for MySQL (Socket has precendence)
-  -S , --socket         Socket file for MySQL
+  -u , --user           Username
+  -p , --password       Password
+  -h , --host           Hostname/IP address
+  -P , --port           Port(Socket has precendence)
+  -S , --socket         Socket file
   --config-file         Dolphie's config file to use. Options are read from these files in the given order: /etc/dolphie.cnf, ~/.dolphie.cnf
   --mycnf-file          MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
   -f , --host-cache-file
