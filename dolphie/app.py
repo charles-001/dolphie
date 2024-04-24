@@ -187,9 +187,21 @@ class DolphieApp(App):
                     self.refresh_screen_proxysql(tab)
 
                     # If we have a lot of client connections, increase the refresh interval based on the
-                    # proxysql process execution time. René asked for this to be added
-                    if dolphie.global_status.get("Client_Connections_connected", 0) > 10000:
-                        refresh_interval = dolphie.refresh_interval + (dolphie.proxysql_process_execution_time * 0.50)
+                    # proxysql process execution time. René asked for this to be added to reduce load on ProxySQL
+                    client_connections = dolphie.global_status.get("Client_Connections_connected", 0)
+                    if client_connections > 30000:
+                        percentage = 0.60
+                    elif client_connections > 20000:
+                        percentage = 0.50
+                    elif client_connections > 10000:
+                        percentage = 0.40
+                    else:
+                        percentage = 0
+
+                    if percentage:
+                        refresh_interval = dolphie.refresh_interval + (
+                            dolphie.proxysql_process_execution_time * percentage
+                        )
 
                 tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
@@ -1607,8 +1619,9 @@ class DolphieApp(App):
 
             elif key == "u":
                 if dolphie.connection_source == ConnectionSource.proxysql:
-                    dolphie.secondary_db_connection.execute(ProxySQLQueries.user_stats)
+                    title = "Frontend Users"
 
+                    dolphie.secondary_db_connection.execute(ProxySQLQueries.user_stats)
                     users = dolphie.secondary_db_connection.fetchall()
 
                     columns = {
@@ -1644,6 +1657,8 @@ class DolphieApp(App):
 
                         table.add_row(*row_values)
                 else:
+                    title = "Users"
+
                     if dolphie.is_mysql_version_at_least("5.7"):
                         dolphie.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
                     else:
@@ -1687,7 +1702,7 @@ class DolphieApp(App):
                         table.add_row(*row_values)
 
                 screen_data = Group(
-                    Align.center(f"[b light_blue]Frontend Users Connected ([highlight]{len(users)}[/highlight])\n"),
+                    Align.center(f"[b light_blue]{title} Connected ([highlight]{len(users)}[/highlight])\n"),
                     Align.center(table),
                 )
 
