@@ -83,7 +83,11 @@ class ProxySQLThreadScreen(Screen):
 
     def on_mount(self):
         self.query_one("#thread_table").update(self.thread_table)
-        self.query_one("#query").update(self.formatted_query)
+
+        if self.formatted_query:
+            self.query_one("#query").update(self.formatted_query)
+        else:
+            self.query_one("#query_container").display = False
 
         if not self.extended_info:
             self.query_one("#extended_info_container").display = False

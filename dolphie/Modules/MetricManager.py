@@ -199,6 +199,7 @@ class MetricSource:
     innodb_metrics: str = "innodb_metrics"
     disk_io_metrics: str = "disk_io_metrics"
     proxysql_select_command_stats: str = "proxysql_select_command_stats"
+    proxysql_total_command_stats: str = "proxysql_total_command_stats"
     none: str = "none"
 
 
@@ -405,6 +406,7 @@ class LocksMetrics:
 
 @dataclass
 class ProxySQLConnectionsMetrics:
+    Client_Connections_non_idle: MetricData
     Client_Connections_aborted: MetricData
     Client_Connections_connected: MetricData
     Client_Connections_created: MetricData
@@ -457,7 +459,7 @@ class ProxySQLMultiplexEfficiency:
 
 
 @dataclass
-class ProxySQLSELECTStats:
+class ProxySQLSELECTCommandStats:
     cnt_100us: MetricData
     cnt_500us: MetricData
     cnt_1ms: MetricData
@@ -471,9 +473,31 @@ class ProxySQLSELECTStats:
     cnt_10s: MetricData
     cnt_INFs: MetricData
     graphs: List[str]
-    tab_name: str = "proxysql_select_stats"
-    graph_tab_name = "SELECT Stats"
+    tab_name: str = "proxysql_select_command_stats"
+    graph_tab_name = "SELECT Command Stats"
     metric_source: MetricSource = MetricSource.proxysql_select_command_stats
+    datetimes: List[str] = field(default_factory=list)
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+
+
+@dataclass
+class ProxySQLTotalCommandStats:
+    cnt_100us: MetricData
+    cnt_500us: MetricData
+    cnt_1ms: MetricData
+    cnt_5ms: MetricData
+    cnt_10ms: MetricData
+    cnt_50ms: MetricData
+    cnt_100ms: MetricData
+    cnt_500ms: MetricData
+    cnt_1s: MetricData
+    cnt_5s: MetricData
+    cnt_10s: MetricData
+    cnt_INFs: MetricData
+    graphs: List[str]
+    tab_name: str = "proxysql_total_command_stats"
+    graph_tab_name = "Total Command Stats"
+    metric_source: MetricSource = MetricSource.proxysql_total_command_stats
     datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
 
@@ -498,7 +522,8 @@ class MetricInstances:
     proxysql_multiplex_efficiency: ProxySQLMultiplexEfficiency
     proxysql_connections: ProxySQLConnectionsMetrics
     proxysql_queries_data_network: ProxySQLQueriesDataNetwork
-    proxysql_select_stats: ProxySQLSELECTStats
+    proxysql_select_command_stats: ProxySQLSELECTCommandStats
+    proxysql_total_command_stats: ProxySQLTotalCommandStats
 
 
 class MetricManager:
@@ -618,6 +643,9 @@ class MetricManager:
                 ),
                 Server_Connections_created=MetricData(label="BE (created)", color=MetricColor.blue),
                 Access_Denied_Wrong_Password=MetricData(label="Wrong Password", color=MetricColor.purple),
+                Client_Connections_non_idle=MetricData(
+                    label="FE (non-idle)", color=MetricColor.green, per_second_calculation=False, visible=True
+                ),
             ),
             proxysql_queries_data_network=ProxySQLQueriesDataNetwork(
                 graphs=["graph_proxysql_queries_data_network"],
@@ -641,8 +669,23 @@ class MetricManager:
                     create_switch=False,
                 ),
             ),
-            proxysql_select_stats=ProxySQLSELECTStats(
-                graphs=["graph_proxysql_select_stats"],
+            proxysql_select_command_stats=ProxySQLSELECTCommandStats(
+                graphs=["graph_proxysql_select_command_stats"],
+                cnt_100us=MetricData(label="100us", color=MetricColor.gray, visible=False),
+                cnt_500us=MetricData(label="500us", color=MetricColor.blue, visible=False),
+                cnt_1ms=MetricData(label="1ms", color=MetricColor.green, visible=False),
+                cnt_5ms=MetricData(label="5ms", color=MetricColor.green, visible=False),
+                cnt_10ms=MetricData(label="10ms", color=MetricColor.green),
+                cnt_50ms=MetricData(label="50ms", color=MetricColor.yellow),
+                cnt_100ms=MetricData(label="100ms", color=MetricColor.yellow),
+                cnt_500ms=MetricData(label="500ms", color=MetricColor.orange),
+                cnt_1s=MetricData(label="1s", color=MetricColor.orange),
+                cnt_5s=MetricData(label="5s", color=MetricColor.red),
+                cnt_10s=MetricData(label="10s", color=MetricColor.purple),
+                cnt_INFs=MetricData(label="10s+", color=MetricColor.purple),
+            ),
+            proxysql_total_command_stats=ProxySQLTotalCommandStats(
+                graphs=["graph_proxysql_total_command_stats"],
                 cnt_100us=MetricData(label="100us", color=MetricColor.gray, visible=False),
                 cnt_500us=MetricData(label="500us", color=MetricColor.blue, visible=False),
                 cnt_1ms=MetricData(label="1ms", color=MetricColor.green, visible=False),
@@ -680,6 +723,7 @@ class MetricManager:
         self.metadata_lock_metrics = metadata_lock_metrics
         self.replication_status = replication_status
         self.replication_lag = replication_lag
+        self.proxysql_total_command_stats = {}
         self.proxysql_select_command_stats = {}
 
         # Support MySQL 8.0.30+ redo log size variable
@@ -690,7 +734,7 @@ class MetricManager:
         )
         self.redo_log_size = max(innodb_redo_log_capacity, innodb_log_file_size)
 
-        self.update_proxysql_select_command_stats(proxysql_command_stats)
+        self.update_proxysql_command_stats(proxysql_command_stats)
         self.update_metrics_per_second_values()
 
         self.update_metrics_replication_lag()
@@ -708,50 +752,73 @@ class MetricManager:
         else:
             metric_data.values = [value]
 
+    def get_metric_source_data(self, metric_source):
+        if metric_source == MetricSource.global_status:
+            metric_source_data = self.global_status
+        elif metric_source == MetricSource.innodb_metrics:
+            metric_source_data = self.innodb_metrics
+        elif metric_source == MetricSource.disk_io_metrics:
+            metric_source_data = self.disk_io_metrics
+        elif metric_source == MetricSource.proxysql_select_command_stats:
+            metric_source_data = self.proxysql_select_command_stats
+        elif metric_source == MetricSource.proxysql_total_command_stats:
+            metric_source_data = self.proxysql_total_command_stats
+        else:
+            metric_source_data = None
+
+        return metric_source_data
+
     def update_metrics_per_second_values(self):
         for metric_instance in self.metrics.__dict__.values():
-            added = False
+            metrics_updated = False
 
-            metric_source = None  # Initialize as None
-
-            if metric_instance.metric_source == MetricSource.global_status:
-                metric_source = self.global_status
-            elif metric_instance.metric_source == MetricSource.innodb_metrics:
-                metric_source = self.innodb_metrics
-            elif metric_instance.metric_source == MetricSource.disk_io_metrics:
-                metric_source = self.disk_io_metrics
-            elif metric_instance.metric_source == MetricSource.proxysql_select_command_stats:
-                metric_source = self.proxysql_select_command_stats
-
-            if metric_source is None:
+            metric_source_data = self.get_metric_source_data(metric_instance.metric_source)
+            if metric_source_data is None:
                 continue  # Skip if there's no metric source
 
             for metric_name, metric_data in metric_instance.__dict__.items():
                 if isinstance(metric_data, MetricData):
+                    current_metric_source_value = metric_source_data.get(metric_name, 0)
+
                     if metric_data.last_value is None:
-                        metric_data.last_value = metric_source.get(metric_name, 0)
+                        metric_data.last_value = current_metric_source_value
                     else:
                         if metric_data.per_second_calculation:
-                            metric_status_per_sec = self.get_metric_calculate_per_sec(
-                                metric_name, metric_source, format=False
-                            )
+                            metric_diff = current_metric_source_value - metric_data.last_value
+                            metric_status_per_sec = round(metric_diff / self.polling_latency)
                         else:
-                            metric_status_per_sec = metric_source.get(metric_name, 0)
+                            metric_status_per_sec = current_metric_source_value
 
                         self.add_metric(metric_data, metric_status_per_sec)
-                        added = True
+                        metrics_updated = True
 
-            if added:
+            if metrics_updated:
                 metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
-    def update_proxysql_select_command_stats(self, proxysql_command_stats):
-        # Create a dictionary of proxysql SELECT command stats
+    def update_metrics_last_value(self):
+        # We set the last value for specific metrics that need it so they can get per second values
+        for metric_instance in self.metrics.__dict__.values():
+            metric_source_data = self.get_metric_source_data(metric_instance.metric_source)
+
+            for metric_name, metric_data in metric_instance.__dict__.items():
+                if isinstance(metric_data, MetricData) and metric_data.per_second_calculation:
+                    metric_data.last_value = metric_source_data.get(metric_name, 0)
+
+    def update_proxysql_command_stats(self, proxysql_command_stats):
         for row in proxysql_command_stats:
+            # Convert all values to integers if they are a number for SELECT command
             if row["Command"] == "SELECT":
-                for key, value in row.items():
-                    if value.isdigit():
-                        row[key] = int(value)
-                self.proxysql_select_command_stats = row
+                self.proxysql_select_command_stats = {
+                    key: int(value) if value.isdigit() else value for key, value in row.items()
+                }
+
+            for key, value in row.items():
+                if key.startswith("cnt_") and value.isdigit():
+                    # If the key exists, add to it; otherwise, initialize with the integer value
+                    if key in self.proxysql_total_command_stats:
+                        self.proxysql_total_command_stats[key] += int(value)
+                    else:
+                        self.proxysql_total_command_stats[key] = int(value)
 
     def update_metrics_replication_lag(self):
         if self.replication_status:
@@ -778,22 +845,6 @@ class MetricManager:
         metric_instance = self.metrics.locks
         self.add_metric(metric_instance.metadata_lock_count, len(self.metadata_lock_metrics))
         metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
-
-    def get_metric_calculate_per_sec(self, metric_name, metric_source=None, format=True):
-        if not metric_source:
-            metric_source = self.global_status
-
-        for metric_instance in self.metrics.__dict__.values():
-            if hasattr(metric_instance, metric_name):
-                metric_data: MetricData = getattr(metric_instance, metric_name)
-
-                metric_diff = metric_source.get(metric_name, 0) - metric_data.last_value
-                metric_per_sec = round(metric_diff / self.polling_latency)
-
-                if format:
-                    return format_number(metric_per_sec)
-                else:
-                    return metric_per_sec
 
     def get_metric_checkpoint_age(self, format):
         checkpoint_age_bytes = round(self.global_status.get("Innodb_checkpoint_age", 0))
@@ -856,19 +907,3 @@ class MetricManager:
         self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio = smoothed_hit_ratio
 
         return smoothed_hit_ratio
-
-    def update_metrics_last_value(self):
-        # We set the last value for specific metrics that need it so they can get per second values
-        for metric_instance in self.metrics.__dict__.values():
-            if metric_instance.metric_source == MetricSource.global_status:
-                metrics_data = self.global_status
-            elif metric_instance.metric_source == MetricSource.innodb_metrics:
-                metrics_data = self.innodb_metrics
-            elif metric_instance.metric_source == MetricSource.disk_io_metrics:
-                metrics_data = self.disk_io_metrics
-            elif metric_instance.metric_source == MetricSource.proxysql_select_command_stats:
-                metrics_data = self.proxysql_select_command_stats
-
-            for metric_name, metric_data in metric_instance.__dict__.items():
-                if isinstance(metric_data, MetricData) and metric_data.per_second_calculation:
-                    metric_data.last_value = metrics_data.get(metric_name, 0)

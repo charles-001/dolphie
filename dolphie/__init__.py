@@ -92,6 +92,7 @@ class Dolphie:
         self.proxysql_mysql_query_rules: dict = {}
         self.proxysql_per_second_data: dict = {}
         self.proxysql_command_stats: dict = {}
+        self.proxysql_process_execution_time: float = 0
 
         self.user_filter = None
         self.db_filter = None

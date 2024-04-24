@@ -4,16 +4,16 @@ from dataclasses import dataclass
 @dataclass
 class ProxySQLQueries:
 
-    processlist: str = """
+    processlist: str = """/* dolphie */
         SELECT
-            IFNULL(SessionID, "") AS id,
-            IFNULL(user, "") AS user,
-            IFNULL(db, "") AS db,
-            IFNULL(cli_host, "") AS frontend_host,
-            IFNULL(hostgroup, "") AS hostgroup,
-            IFNULL(srv_host, "") AS backend_host,
-            IFNULL(command, "") AS command,
-            IFNULL(time_ms, "0") AS time,
+            SessionID AS id,
+            user AS user,
+            db AS db,
+            cli_host AS frontend_host,
+            hostgroup AS hostgroup,
+            srv_host AS backend_host,
+            command AS command,
+            time_ms AS time,
             IFNULL(info, "") AS query,
             IFNULL(extended_info, "") AS extended_info
         FROM
@@ -62,15 +62,8 @@ class ProxySQLQueries:
     """
     query_rules_summary: str = """
         SELECT
-            rule_id,
-            hits,
-            hits AS hits_s,
-            match_digest,
-            match_pattern,
-            flagIN,
-            flagOUT,
-            destination_hostgroup,
-            apply
+            *,
+            hits AS hits_s
         FROM
             stats_mysql_query_rules
             JOIN runtime_mysql_query_rules USING (rule_id)

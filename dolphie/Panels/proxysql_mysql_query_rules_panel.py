@@ -18,7 +18,17 @@ def create_panel(tab: Tab) -> DataTable:
         "match_digest": {"name": "Match Digest", "width": None, "format": None},
     }
 
+    if dolphie.show_additional_query_columns:
+        all_columns = [i for i in dolphie.proxysql_mysql_query_rules[0]]
+        for column in all_columns:
+            if column not in columns:
+                columns[column] = {"name": column, "width": None, "format": None}
+
     mysql_query_rules = tab.proxysql_mysql_query_rules_datatable
+
+    # Clear table if columns change
+    if len(mysql_query_rules.columns) != len(columns):
+        mysql_query_rules.clear(columns=True)
 
     # Add columns to the datatable if it is empty
     if not mysql_query_rules.columns:

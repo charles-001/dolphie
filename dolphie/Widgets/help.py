@@ -139,7 +139,7 @@ class HelpScreen(ModalScreen):
             "+": "Create a new tab",
             "-": "Remove the current tab",
             "=": "Rename the current tab",
-            "a": "Toggle additional processlist columns",
+            "a": "Toggle additional processlist/query rule columns",
             "c": "Clear all filters set",
             "D": "Disconnect from the tab's host",
             "e": "Display errors reported by backend servers during query execution",
@@ -181,7 +181,7 @@ class HelpScreen(ModalScreen):
             "BE": "Backend",
             "Conn": "Connection",
             "CP": "Connection Pool",
-            "MP": "Multiplexing",
+            "MP": "Multiplex",
         }
 
         table_terminology = Table(

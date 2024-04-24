@@ -136,6 +136,7 @@ class DolphieApp(App):
                 self.process_mysql_data(tab)
             elif dolphie.connection_source == ConnectionSource.proxysql:
                 self.process_proxysql_data(tab)
+                dolphie.proxysql_process_execution_time = (datetime.now() - dolphie.worker_start_time).total_seconds()
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
@@ -179,12 +180,18 @@ class DolphieApp(App):
                         if dolphie.connection_source in metric_instance.connection_source:
                             tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}_{tab.id}")
 
+                refresh_interval = dolphie.refresh_interval
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
                 elif dolphie.connection_source == ConnectionSource.proxysql:
                     self.refresh_screen_proxysql(tab)
 
-                tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_main, tab.id))
+                    # If we have a lot of client connections, increase the refresh interval based on the
+                    # proxysql process execution time. René asked for this to be added
+                    if dolphie.global_status.get("Client_Connections_connected", 0) > 10000:
+                        refresh_interval = dolphie.refresh_interval + (dolphie.proxysql_process_execution_time * 0.50)
+
+                tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
@@ -963,7 +970,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.thread_kill_by_id,
-                    message="Kill Thread",
+                    message="Kill Process",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -977,7 +984,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.thread_kill_by_parameter,
-                    message="Kill threads based around parameters",
+                    message="Kill processes based around parameters",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -1087,6 +1094,7 @@ class DolphieApp(App):
                     thread_table.add_row("[label]Command", thread_data.command)
                     thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8))
 
+                    formatted_query = None
                     if thread_data.formatted_query.code:
                         query = sqlformat(thread_data.formatted_query.code, reindent_aligned=True)
                         formatted_query = format_query(query, minify=False)
