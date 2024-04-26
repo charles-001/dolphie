@@ -155,7 +155,7 @@ Dolphie's config supports these options under [dolphie] section:
             "--port",
             dest="port",
             type=int,
-            help="Port (socket has precendence)",
+            help="Port (socket has precedence)",
             metavar="",
         )
         self.parser.add_argument(
