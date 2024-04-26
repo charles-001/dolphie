@@ -391,17 +391,21 @@ class DolphieApp(App):
         dolphie.main_db_connection.execute(ProxySQLQueries.connection_pool_data)
         data = dolphie.main_db_connection.fetchone()
         dolphie.global_status["proxysql_backend_host_average_latency"] = int(data.get("avg_latency", 0))
-        dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = round(
-            100
-            - (
-                (
-                    int(data.get("connection_pool_connections", 0))
-                    / dolphie.global_status.get("Client_Connections_connected", 0)
-                )
-                * 100
-            ),
-            2,
-        )
+
+        if dolphie.global_status.get("Client_Connections_connected", 0):  # Don't divide by 0
+            dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = round(
+                100
+                - (
+                    (
+                        int(data.get("connection_pool_connections", 0))
+                        / dolphie.global_status.get("Client_Connections_connected", 0)
+                    )
+                    * 100
+                ),
+                2,
+            )
+        else:
+            dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = 100
 
         if dolphie.panels.proxysql_hostgroup_summary.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
