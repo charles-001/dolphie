@@ -75,7 +75,7 @@ options:
   -u , --user           Username
   -p , --password       Password
   -h , --host           Hostname/IP address
-  -P , --port           Port (Socket has precendence)
+  -P , --port           Port (Socket has precedence)
   -S , --socket         Socket file
   --config-file         Dolphie's config file to use. Options are read from these files in the given order: /etc/dolphie.cnf, ~/.dolphie.cnf
   --mycnf-file          MySQL/MariaDB config file path to use. This should use [client] section [default: ~/.my.cnf]
@@ -83,7 +83,7 @@ options:
                         Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format ip=hostname [default: ~/dolphie_host_cache]
   -q , --host-setup-file
                         Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
-  -l , --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supercedes config file [default: client]
+  -l , --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supersedes config file [default: client]
   -r , --refresh_interval
                         How much time to wait in seconds between each refresh [default: 1]
   -H , --heartbeat-table
