@@ -179,19 +179,19 @@ class Dolphie:
             self.host_distro = "Percona Server"
         elif "mariadb cluster" in version_comment:
             self.host_distro = "MariaDB Cluster"
-            self.connection_source_alt == ConnectionSource.mariadb
+            self.connection_source_alt = ConnectionSource.mariadb
         elif "mariadb" in version_comment or "mariadb" in version:
             self.host_distro = "MariaDB"
-            self.connection_source_alt == ConnectionSource.mariadb
+            self.connection_source_alt = ConnectionSource.mariadb
         elif aurora_version:
             self.host_distro = "Amazon Aurora"
-            self.connection_source_alt == ConnectionSource.aws_rds
+            self.connection_source_alt = ConnectionSource.aws_rds
         elif "rdsdb" in basedir:
             self.host_distro = "Amazon RDS"
-            self.connection_source_alt == ConnectionSource.aws_rds
+            self.connection_source_alt = ConnectionSource.aws_rds
         elif global_variables.get("aad_auth_only"):
             self.host_distro = "Azure MySQL"
-            self.connection_source_alt == ConnectionSource.azure_mysql
+            self.connection_source_alt = ConnectionSource.azure_mysql
         else:
             self.host_distro = "MySQL"
 
@@ -212,8 +212,7 @@ class Dolphie:
             self.performance_schema_enabled = True
 
         # Check to see if the host is in a Galera cluster
-        galera_matches = any(key.startswith("wsrep_") for key in global_variables.keys())
-        if galera_matches:
+        if global_variables.get("wsrep_on") == "ON" or global_variables.get("wsrep_cluster_address"):
             self.galera_cluster = True
 
         # Check to get information on what cluster type it is

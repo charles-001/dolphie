@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.MetricManager import MetricData
+from dolphie.Modules.MySQL import ConnectionSource
 from dolphie.Modules.TabManager import Tab
 from dolphie.Panels import replication_panel
 from rich.style import Style
@@ -33,7 +34,10 @@ def create_panel(tab: Tab) -> Table:
     elif dolphie.galera_cluster:
         host_type = "Galera Cluster"
     else:
-        host_type = "MySQL"
+        if dolphie.connection_source_alt == ConnectionSource.mariadb:
+            host_type = "MariaDB"
+        else:
+            host_type = "MySQL"
 
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
@@ -47,7 +51,7 @@ def create_panel(tab: Tab) -> Table:
     table_information.add_row(
         "[label]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
     )
-    table_information.add_row("[label]Type", f"{host_type} [label]SSL[/label] {dolphie.main_db_connection.using_ssl}")
+    table_information.add_row("[label]Type", host_type)
     table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
     table_information.add_row("[label]Runtime", f"{runtime} [dark_gray]({dolphie.refresh_latency}s)")
     table_information.add_row("[label]Replicas", "%s" % replicas)
@@ -107,12 +111,9 @@ def create_panel(tab: Tab) -> Table:
     table_innodb.add_row("[label]Chkpt Age", dolphie.metric_manager.get_metric_checkpoint_age(format=True))
     table_innodb.add_row("[label]AHI Hit", dolphie.metric_manager.get_metric_adaptive_hash_index())
 
-    bp_instances = global_variables.get("innodb_buffer_pool_instances", "N/A")
-    if bp_instances != "N/A":
-        plural = "s" if bp_instances > 1 else ""
-        table_innodb.add_row("[label]BP Instance" + plural, format_number(bp_instances))
-    else:
-        table_innodb.add_row("[label]BP Instance", bp_instances)
+    bp_instances = global_variables.get("innodb_buffer_pool_instances", 1)
+    plural = "s" if bp_instances > 1 else ""
+    table_innodb.add_row(f"[label]BP Instance{plural}", format_number(bp_instances))
 
     table_innodb.add_row("[label]BP Size", format_bytes(global_variables["innodb_buffer_pool_size"]))
     table_innodb.add_row(
@@ -174,18 +175,20 @@ def create_panel(tab: Tab) -> Table:
         else:
             table_primary.add_row("[label]Format", binlog_format, binlog_row_image)
 
-        gtid_mode = global_variables.get("gtid_mode", "N/A")
-        table_primary.add_row("[label]GTID", gtid_mode)
+        if dolphie.connection_source_alt == ConnectionSource.mariadb:
+            table_primary.add_row("[label]Encrypt", global_variables.get("encrypt_binlog", "N/A"))
+        else:
+            table_primary.add_row("[label]GTID", global_variables.get("gtid_mode", "N/A"))
 
-        binlog_compression = global_variables.get("binlog_transaction_compression", "N/A")
-        # binlog_compression_percentage = ""
-        # if binlog_compression == "ON":
-        #     if dolphie.binlog_transaction_compression_percentage:
-        #         binlog_compression_percentage = f" ({dolphie.binlog_transaction_compression_percentage}% gain)"
-        #     else:
-        #         binlog_compression_percentage = " (N/A gain)"
+            binlog_compression = global_variables.get("binlog_transaction_compression", "N/A")
+            # binlog_compression_percentage = ""
+            # if binlog_compression == "ON":
+            #     if dolphie.binlog_transaction_compression_percentage:
+            #         binlog_compression_percentage = f" ({dolphie.binlog_transaction_compression_percentage}% gain)"
+            #     else:
+            #         binlog_compression_percentage = " (N/A gain)"
 
-        table_primary.add_row("[label]Compression", binlog_compression)
+            table_primary.add_row("[label]Compression", binlog_compression)
 
         # Save some global_variables to be used in next refresh
         if dolphie.binlog_status:

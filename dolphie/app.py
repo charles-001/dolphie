@@ -820,7 +820,7 @@ class DolphieApp(App):
             if row and row.get("enabled") == "NO":
                 self.notify(
                     "Metadata Locks panel requires Performance Schema to have"
-                    " [highlight]wait/lock/metadata/sql/mdl[/highlight] enabled"
+                    " [highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table"
                 )
                 return
 
@@ -830,23 +830,24 @@ class DolphieApp(App):
         elif key == "6":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_command_stats.name)
-                return
-
-            if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
-                self.notify("DDL panel requires MySQL 5.7+ with Performance Schema enabled")
-                return
-
-            query = "SELECT enabled FROM performance_schema.setup_instruments WHERE name LIKE 'stage/innodb/alter%';"
-            dolphie.secondary_db_connection.execute(query)
-            data = dolphie.secondary_db_connection.fetchall()
-            for row in data:
-                if row.get("enabled") == "NO":
-                    self.notify("DDL panel requires Performance Schema to have 'stage/innodb/alter%' enabled")
+            else:
+                if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
+                    self.notify("DDL panel requires MySQL 5.7+ with Performance Schema enabled")
                     return
 
-            self.toggle_panel(dolphie.panels.ddl.name)
-            self.tab_manager.active_tab.ddl_datatable.clear()
-            tab.ddl_title.update("DDL ([highlight]0[/highlight])")
+                query = (
+                    "SELECT enabled FROM performance_schema.setup_instruments WHERE name LIKE 'stage/innodb/alter%';"
+                )
+                dolphie.secondary_db_connection.execute(query)
+                data = dolphie.secondary_db_connection.fetchall()
+                for row in data:
+                    if row.get("enabled") == "NO":
+                        self.notify("DDL panel requires Performance Schema to have 'stage/innodb/alter%' enabled")
+                        return
+
+                self.toggle_panel(dolphie.panels.ddl.name)
+                self.tab_manager.active_tab.ddl_datatable.clear()
+                tab.ddl_title.update("DDL ([highlight]0[/highlight])")
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)
         elif key == "space":
@@ -915,21 +916,22 @@ class DolphieApp(App):
             await self.tab_manager.disconnect_tab(tab)
 
         elif key == "e":
-            if dolphie.connection_source == ConnectionSource.proxysql:
+            if dolphie.connection_source_alt == ConnectionSource.mariadb:
+                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
+            elif dolphie.connection_source == ConnectionSource.proxysql:
                 self.run_command_in_worker(key=key, dolphie=dolphie)
-                return
-
-            if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
-                self.app.push_screen(
-                    EventLog(
-                        dolphie.connection_status,
-                        dolphie.app_version,
-                        dolphie.host_with_port,
-                        dolphie.secondary_db_connection,
-                    )
-                )
             else:
-                self.notify("Error log command requires MySQL 8+ with Performance Schema enabled")
+                if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
+                    self.app.push_screen(
+                        EventLog(
+                            dolphie.connection_status,
+                            dolphie.app_version,
+                            dolphie.host_with_port,
+                            dolphie.secondary_db_connection,
+                        )
+                    )
+                else:
+                    self.notify("Error log command requires MySQL 8+ with Performance Schema enabled")
 
         elif key == "f":
 
@@ -1679,7 +1681,6 @@ class DolphieApp(App):
                         "Tmp Tables": {"field": "created_tmp_tables", "format_number": True},
                         "Tmp Disk Tables": {"field": "created_tmp_disk_tables", "format_number": True},
                         "Plugin": {"field": "plugin", "format_number": False},
-                        "Password Expire": {"field": "password_expires_in", "format_number": False},
                     }
 
                     table = Table(

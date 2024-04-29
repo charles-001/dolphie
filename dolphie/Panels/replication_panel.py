@@ -1,6 +1,6 @@
 import re
 
-from dolphie.DataTypes import Replica
+from dolphie.DataTypes import ConnectionSource, Replica
 from dolphie.Modules.Functions import format_number, format_time
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
@@ -124,19 +124,6 @@ def create_panel(tab: Tab):
 
         tab.replication_container.display = True
 
-        replication_variables = ""
-        available_replication_variables = {
-            "binlog_transaction_dependency_tracking": "dependency_tracking",
-            "slave_parallel_type": "parallel_type",
-            "slave_parallel_workers": "parallel_workers",
-            "slave_preserve_commit_order": "preserve_commit_order",
-        }
-
-        for setting_variable, setting_display_name in available_replication_variables.items():
-            value = dolphie.global_variables.get(setting_variable, "N/A")
-            replication_variables += f"[b light_blue]{setting_display_name}[/b light_blue] {value}  "
-        replication_variables = replication_variables.strip()
-
         if dolphie.replication_applier_status:
             table_thread_applier_status = Table(box=None, header_style="#c5c7d2")
             table_thread_applier_status.add_column("Worker", justify="center")
@@ -168,7 +155,30 @@ def create_panel(tab: Tab):
         else:
             tab.replication_thread_applier_container.display = False
 
+        if tab.dolphie.connection_source_alt == ConnectionSource.mariadb:
+            available_replication_variables = {
+                "gtid_domain_id": "gtid_domain_id",
+                "slave_parallel_mode": "parallel_mode",
+                "slave_parallel_workers": "parallel_workers",
+                "slave_parallel_threads": "parallel_threads",
+                "slave_domain_parallel_threads": "domain_parallel_threads",
+            }
+        else:
+            available_replication_variables = {
+                "binlog_transaction_dependency_tracking": "dependency_tracking",
+                "slave_parallel_type": "parallel_type",
+                "slave_parallel_workers": "parallel_workers",
+                "slave_preserve_commit_order": "preserve_commit_order",
+            }
+
+        replication_variables = ""
+        for setting_variable, setting_display_name in available_replication_variables.items():
+            value = dolphie.global_variables.get(setting_variable, "N/A")
+            replication_variables += f"[b light_blue]{setting_display_name}[/b light_blue] {value}  "
+        replication_variables = replication_variables.strip()
+
         tab.replication_variables.update(replication_variables)
+
         tab.replication_status.update(create_replication_table(tab))
 
     create_replication_panel()

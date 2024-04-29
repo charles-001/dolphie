@@ -13,15 +13,22 @@ def create_panel(tab: Tab) -> DataTable:
 
     if not dolphie.performance_schema_enabled and dolphie.use_performance_schema:
         dolphie.app.notify(
-            "Performance Schema is not enabled on this host, using Information Schema instead for processlist"
+            "Performance Schema is not enabled on this host, using Information Schema instead for Processlist"
         )
         dolphie.use_performance_schema = False
 
     columns = [
         {"name": "Process ID", "field": "id", "width": None, "format_number": False},
-        {"name": "Protocol", "field": "protocol", "width": 8, "format_number": False},
-        {"name": "Username", "field": "user", "width": 20, "format_number": False},
     ]
+
+    if dolphie.use_performance_schema:
+        columns.extend([{"name": "Protocol", "field": "protocol", "width": 8, "format_number": False}])
+
+    columns.extend(
+        [
+            {"name": "Username", "field": "user", "width": 20, "format_number": False},
+        ]
+    )
 
     if dolphie.show_additional_query_columns:
         columns.extend(

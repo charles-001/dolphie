@@ -244,22 +244,14 @@ class MySQLQueries:
     ps_user_statisitics: str = """
         SELECT
             u.user AS user,
-            ANY_VALUE(total_connections) AS total_connections,
-            ANY_VALUE(current_connections) AS current_connections,
+            total_connections AS total_connections,
+            current_connections AS current_connections,
             CONVERT(SUM(sum_rows_affected), UNSIGNED) AS rows_affected,
             CONVERT(SUM(sum_rows_sent), UNSIGNED) AS rows_sent,
             CONVERT(SUM(sum_rows_examined), UNSIGNED) AS rows_examined,
             CONVERT(SUM(sum_created_tmp_disk_tables), UNSIGNED) AS created_tmp_disk_tables,
             CONVERT(SUM(sum_created_tmp_tables), UNSIGNED) AS created_tmp_tables,
-            ANY_VALUE(plugin) AS plugin,
-            ANY_VALUE(CASE
-                WHEN (password_lifetime IS NULL OR password_lifetime = 0) AND @@default_password_lifetime = 0 THEN "N/A"
-                ELSE CONCAT(
-                    CAST(IFNULL(password_lifetime, @@default_password_lifetime) as signed) +
-                    CAST(DATEDIFF(password_last_changed, NOW()) as signed),
-                    " days"
-                )
-            END) AS password_expires_in
+            plugin AS plugin
         FROM
             performance_schema.users u
             JOIN performance_schema.events_statements_summary_by_user_by_event_name ess ON u.user = ess.user
@@ -308,14 +300,14 @@ class MySQLQueries:
     ddls: str = """
         SELECT
             t.processlist_id,
-            ANY_VALUE(stmt.sql_text) AS sql_text,
-            ANY_VALUE(stage.event_name) AS state,
-            ANY_VALUE(CONCAT(ROUND(100 * stage.work_completed / stage.work_estimated, 2), "%")) AS percentage_completed,
-            ANY_VALUE(stmt.timer_wait) AS started_ago,
-            ANY_VALUE(CONVERT(stmt.timer_wait / ROUND(100 * stage.work_completed / stage.work_estimated, 2) * 100,
-                UNSIGNED)) AS estimated_full_time,
-            ANY_VALUE(CONVERT((stmt.timer_wait / ROUND(100 * stage.work_completed / stage.work_estimated, 2) * 100)
-                - stmt.timer_wait, UNSIGNED)) AS estimated_remaining_time,
+            stmt.sql_text AS sql_text,
+            stage.event_name AS state,
+            CONCAT(ROUND(100 * stage.work_completed / stage.work_estimated, 2), "%") AS percentage_completed,
+            stmt.timer_wait AS started_ago,
+            CONVERT(stmt.timer_wait / ROUND(100 * stage.work_completed / stage.work_estimated, 2) * 100,
+                UNSIGNED) AS estimated_full_time,
+            CONVERT((stmt.timer_wait / ROUND(100 * stage.work_completed / stage.work_estimated, 2) * 100)
+                - stmt.timer_wait, UNSIGNED) AS estimated_remaining_time,
             CONVERT(SUM(`mt`.`CURRENT_NUMBER_OF_BYTES_USED`), UNSIGNED) AS memory
         FROM
             `performance_schema`.`events_statements_current` stmt JOIN
@@ -329,18 +321,18 @@ class MySQLQueries:
     """
     metadata_locks: str = """
         SELECT
-            ANY_VALUE(OBJECT_INSTANCE_BEGIN) AS id,
+            OBJECT_INSTANCE_BEGIN AS id,
             OBJECT_TYPE,
-            ANY_VALUE(OBJECT_SCHEMA) AS OBJECT_SCHEMA,
+            OBJECT_SCHEMA AS OBJECT_SCHEMA,
             GROUP_CONCAT(OBJECT_NAME ORDER BY OBJECT_NAME) AS OBJECT_NAME,
             LOCK_TYPE,
             LOCK_STATUS,
-            ANY_VALUE(SOURCE) AS CODE_SOURCE,
-            ANY_VALUE(NAME) AS THREAD_SOURCE,
-            ANY_VALUE(PROCESSLIST_ID) AS PROCESSLIST_ID,
-            ANY_VALUE(PROCESSLIST_USER) AS PROCESSLIST_USER,
-            ANY_VALUE(PROCESSLIST_TIME) AS PROCESSLIST_TIME,
-            ANY_VALUE(PROCESSLIST_INFO) AS PROCESSLIST_INFO
+            SOURCE AS CODE_SOURCE,
+            NAME AS THREAD_SOURCE,
+            PROCESSLIST_ID AS PROCESSLIST_ID,
+            PROCESSLIST_USER AS PROCESSLIST_USER,
+            PROCESSLIST_TIME AS PROCESSLIST_TIME,
+            PROCESSLIST_INFO AS PROCESSLIST_INFO
         FROM
             `performance_schema`.`metadata_locks` mlb JOIN
             `performance_schema`.`threads` t ON mlb.OWNER_THREAD_ID = t.THREAD_ID
