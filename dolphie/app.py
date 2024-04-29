@@ -279,7 +279,10 @@ class DolphieApp(App):
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
         if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
-            find_replicas_query = MySQLQueries.ps_find_replicas
+            if dolphie.connection_source_alt == ConnectionSource.mariadb:
+                find_replicas_query = MySQLQueries.mariadb_find_replicas
+            else:
+                find_replicas_query = MySQLQueries.ps_find_replicas
         else:
             find_replicas_query = MySQLQueries.pl_find_replicas
 
@@ -292,7 +295,12 @@ class DolphieApp(App):
             dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
             replica_data = dolphie.main_db_connection.fetchall()
             for row in replica_data:
-                dolphie.replica_manager.ports[row["Slave_UUID"]] = row["Port"]
+                if dolphie.connection_source_alt == ConnectionSource.mariadb:
+                    key = "Server_id"
+                else:
+                    key = "Slave_UUID"
+
+                dolphie.replica_manager.ports[row.get(key)] = {"port": row.get("Port"), "in_use": False}
 
             dolphie.replica_manager.available_replicas = available_replicas
 

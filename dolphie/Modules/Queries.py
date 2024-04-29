@@ -215,6 +215,16 @@ class MySQLQueries:
         FROM
             $1
     """
+    mariadb_find_replicas: str = """
+        SELECT
+            t.THREAD_ID AS id,
+            t.PROCESSLIST_USER AS user,
+            t.PROCESSLIST_HOST AS host
+        FROM
+            `performance_schema`.threads AS t
+        WHERE
+            t.PROCESSLIST_COMMAND LIKE 'Binlog Dump%'
+    """
     ps_find_replicas: str = """
         SELECT
             t.THREAD_ID AS id,

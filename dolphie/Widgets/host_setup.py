@@ -61,10 +61,11 @@ class HostSetupModal(ModalScreen):
             height: auto;
         }
         HostSetupModal #password {
-            width: 84%;
+            width: 88%;
         }
         HostSetupModal #show_password {
-            max-width: 12%;
+            max-width: 13%;
+            height: 3;
             background:  #262c4b;
             border: blank #344063;
         }

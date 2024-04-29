@@ -1,4 +1,5 @@
 import re
+import socket
 
 from dolphie.DataTypes import ConnectionSource, Replica
 from dolphie.Modules.Functions import format_number, format_time
@@ -157,7 +158,6 @@ def create_panel(tab: Tab):
 
         if tab.dolphie.connection_source_alt == ConnectionSource.mariadb:
             available_replication_variables = {
-                "gtid_domain_id": "gtid_domain_id",
                 "slave_parallel_mode": "parallel_mode",
                 "slave_parallel_workers": "parallel_workers",
                 "slave_parallel_threads": "parallel_threads",
@@ -456,7 +456,35 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             table.add_row("[label]Retrieved GTID", "%s" % retrieved_gtid_set)
             table.add_row("[label]Executed GTID", "%s" % executed_gtid_set)
         elif mariadb_gtid_enabled:
-            table.add_row("[label]GTID IO Pos", "%s" % data.get("Gtid_IO_Pos"))
+            primary_id = data.get("Master_Server_Id")
+
+            table.add_row("[label]Parallel Mode", data.get("Parallel_Mode", ""))
+            table.add_row("[label]GTID", gtid_status)
+
+            # Check if GTID IO position exists
+            gtid_io_pos = data.get("Gtid_IO_Pos")
+            # gtid_io_pos = "1-1-3323,1-2-32,1-3-5543,1-4-554454"
+            if gtid_io_pos:
+                # If this is a replica, use its primary server ID, else use its own server ID
+                if replica:
+                    replica_primary_server_id = dolphie.replication_status.get("Master_Server_Id")
+                    if replica_primary_server_id:
+                        primary_id = replica_primary_server_id
+                    else:
+                        primary_id = dolphie.global_variables.get("server_id")
+
+                gtids = gtid_io_pos.split(",")
+                for idx, gtid in enumerate(gtids):
+                    server_id = gtid.split("-")[1]
+
+                    if str(server_id) == str(primary_id):
+                        # Highlight GTID if it matches the primary ID
+                        gtids[idx] = f"[highlight]{gtid}[/highlight]"
+                    else:
+                        # Otherwise, darken GTID
+                        gtids[idx] = f"[dark_gray]{gtid}[/dark_gray]"
+
+                table.add_row("[label]GTID IO Pos", "\n".join(gtids))
 
     return table
 
@@ -570,7 +598,31 @@ def fetch_replicas(tab: Tab):
         thread_id = row["id"]
 
         host = dolphie.get_hostname(row["host"].split(":")[0])
-        port = dolphie.replica_manager.ports.get(row["replica_uuid"], 3306)
+
+        # MariaDB has no way of knowing what port a replica is using, so we have to manage it ourselves
+        if dolphie.connection_source_alt == ConnectionSource.mariadb:
+            # Loop through available ports
+            for port_data in dolphie.replica_manager.ports.values():
+                port = port_data.get("port", 3306)
+
+                # If the port is not in use, check to see if we can connect to it
+                if not port_data.get("in_use"):
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(2)
+
+                    try:
+                        # Try to connect to the host and port
+                        sock.connect((host, port))
+                        port_data["in_use"] = True
+                        break
+                    except (socket.timeout, socket.error, ConnectionRefusedError):
+                        continue  # Continue to the next available port
+                    finally:
+                        sock.close()
+                else:
+                    break
+        else:
+            port = dolphie.replica_manager.ports.get(row["replica_uuid"], {}).get("port", 3306)
 
         # This lets us connect to replicas on the same host as the primary if we're connecting remotely
         if host == "localhost" or host == "127.0.0.1":
