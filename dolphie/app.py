@@ -292,13 +292,20 @@ class DolphieApp(App):
         if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
             dolphie.replica_manager.ports = {}
 
-            dolphie.main_db_connection.execute(MySQLQueries.get_replicas)
+            if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
+                dolphie.main_db_connection.execute(MySQLQueries.show_replicas)
+            else:
+                dolphie.main_db_connection.execute(MySQLQueries.show_slave_hosts)
+
             replica_data = dolphie.main_db_connection.fetchall()
             for row in replica_data:
                 if dolphie.connection_source_alt == ConnectionSource.mariadb:
                     key = "Server_id"
                 else:
-                    key = "Slave_UUID"
+                    if dolphie.is_mysql_version_at_least("8.0"):
+                        key = "Replica_UUID"
+                    else:
+                        key = "Slave_UUID"
 
                 dolphie.replica_manager.ports[row.get(key)] = {"port": row.get("Port"), "in_use": False}
 
@@ -316,7 +323,7 @@ class DolphieApp(App):
         if (
             dolphie.is_mysql_version_at_least("8.0")
             and dolphie.panels.replication.visible
-            and dolphie.global_variables.get("slave_parallel_workers", 0) > 1
+            and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
         ):
             dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
             dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
@@ -339,7 +346,10 @@ class DolphieApp(App):
                     break
 
         if dolphie.panels.dashboard.visible:
-            dolphie.main_db_connection.execute(MySQLQueries.binlog_status)
+            if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
+                dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
+            else:
+                dolphie.main_db_connection.execute(MySQLQueries.show_master_status)
             dolphie.binlog_status = dolphie.main_db_connection.fetchone()
 
             # This can cause MySQL to crash: https://perconadev.atlassian.net/browse/PS-9066

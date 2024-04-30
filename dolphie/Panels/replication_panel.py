@@ -161,15 +161,23 @@ def create_panel(tab: Tab):
                 "slave_parallel_mode": "parallel_mode",
                 "slave_parallel_workers": "parallel_workers",
                 "slave_parallel_threads": "parallel_threads",
-                "slave_domain_parallel_threads": "domain_parallel_threads",
+                "log_slave_updates": "log_slave_updates",
             }
         else:
-            available_replication_variables = {
-                "binlog_transaction_dependency_tracking": "dependency_tracking",
-                "slave_parallel_type": "parallel_type",
-                "slave_parallel_workers": "parallel_workers",
-                "slave_preserve_commit_order": "preserve_commit_order",
-            }
+            if dolphie.is_mysql_version_at_least("8.0"):
+                available_replication_variables = {
+                    "replica_parallel_type": "parallel_type",
+                    "replica_parallel_workers": "parallel_workers",
+                    "replica_preserve_commit_order": "preserve_commit_order",
+                    "log_replica_updates": "log_replica_updates",
+                }
+            else:
+                available_replication_variables = {
+                    "slave_parallel_type": "parallel_type",
+                    "slave_parallel_workers": "parallel_workers",
+                    "slave_preserve_commit_order": "preserve_commit_order",
+                    "log_slave_updates": "log_slave_updates",
+                }
 
         replication_variables = ""
         for setting_variable, setting_display_name in available_replication_variables.items():
@@ -267,7 +275,38 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
 
         lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
 
-    data["Master_Host"] = dolphie.get_hostname(data["Master_Host"])
+    if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
+        primary_uuid = data["Source_UUID"]
+        primary_host = dolphie.get_hostname(data["Source_Host"])
+        primary_user = data["Source_User"]
+        primary_log_file = data["Source_Log_File"]
+        primary_ssl_allowed = data.get("Source_SSL_Allowed")
+        relay_primary_log_file = data["Relay_Source_Log_File"]
+        replica_sql_running_state = data["Replica_SQL_Running_State"]
+        replica_io_state = data["Replica_IO_State"]
+        read_primary_log_pos = data["Read_Source_Log_Pos"]
+        exec_primary_log_pos = data["Exec_Source_Log_Pos"]
+        io_thread_running = "[green]ON[/green]" if data.get("Replica_IO_Running").lower() == "yes" else "[red]OFF[/red]"
+        sql_thread_running = (
+            "[green]ON[/green]" if data.get("Replica_SQL_Running").lower() == "yes" else "[red]OFF[/red]"
+        )
+
+    else:
+        if dolphie.connection_source_alt != ConnectionSource.mariadb:
+            primary_uuid = data["Master_UUID"]
+
+        primary_host = dolphie.get_hostname(data["Master_Host"])
+        primary_user = data["Master_User"]
+        primary_log_file = data["Master_Log_File"]
+        primary_ssl_allowed = data.get("Master_SSL_Allowed")
+        relay_primary_log_file = data["Relay_Master_Log_File"]
+        replica_sql_running_state = data["Slave_SQL_Running_State"]
+        replica_io_state = data["Slave_IO_State"]
+        read_primary_log_pos = data["Read_Master_Log_Pos"]
+        exec_primary_log_pos = data["Exec_Master_Log_Pos"]
+        io_thread_running = "[green]ON[/green]" if data.get("Slave_IO_Running").lower() == "yes" else "[red]OFF[/red]"
+        sql_thread_running = "[green]ON[/green]" if data.get("Slave_SQL_Running").lower() == "yes" else "[red]OFF[/red]"
+
     mysql_gtid_enabled = False
     mariadb_gtid_enabled = False
     gtid_status = "OFF"
@@ -300,13 +339,11 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         table.add_row("[b][light_blue]Host", "[light_blue]%s" % replica.host)
         table.add_row("[label]Version", "%s" % replica.mysql_version)
     else:
-        table.add_row("[label]Primary", "%s" % data["Master_Host"])
+        table.add_row("[label]Primary", "%s" % primary_host)
 
     if not dashboard_table:
-        table.add_row("[label]User", "%s" % data["Master_User"])
+        table.add_row("[label]User", "%s" % primary_user)
 
-    io_thread_running = "[green]ON[/green]" if data.get("Slave_IO_Running").lower() == "yes" else "[red]OFF[/red]"
-    sql_thread_running = "[green]ON[/green]" if data.get("Slave_SQL_Running").lower() == "yes" else "[red]OFF[/red]"
     table.add_row(
         "[label]Thread",
         f"[label]IO[/label] {io_thread_running} [label]SQL[/label] {sql_thread_running}",
@@ -320,7 +357,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             replication_delay = f"[dark_yellow]Delay[/dark_yellow] {format_time(data['SQL_Delay'])}"
 
     lag_source = f"Lag ({replica_sbm_source})" if replica_sbm_source else "Lag"
-    if lag is None or data["Slave_SQL_Running"].lower() == "no":
+    if lag is None or sql_thread_running == "[red]OFF[/red]":
         table.add_row(f"[label]{lag_source}", "")
     else:
         table.add_row(
@@ -329,23 +366,19 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         )
 
     if dashboard_table:
-        table.add_row("[label]Binlog IO", "%s" % (data["Master_Log_File"]))
-        table.add_row("[label]Binlog SQL", "%s" % (data["Relay_Master_Log_File"]))
-        table.add_row("[label]Relay Log ", "%s" % (data["Relay_Log_File"]))
+        table.add_row("[label]Binlog IO", "%s" % primary_log_file)
+        table.add_row("[label]Binlog SQL", "%s" % relay_primary_log_file)
+        table.add_row("[label]Relay Log ", "%s" % data["Relay_Log_File"])
         table.add_row("[label]GTID", "%s" % gtid_status)
-        table.add_row("[label]State", "%s" % data["Slave_SQL_Running_State"])
+        table.add_row("[label]State", "%s" % replica_sql_running_state)
     else:
         table.add_row(
             "[label]Binlog IO",
-            "%s ([dark_gray]%s[/dark_gray])" % (data["Master_Log_File"], data["Read_Master_Log_Pos"]),
+            "%s ([dark_gray]%s[/dark_gray])" % (primary_log_file, read_primary_log_pos),
         )
         table.add_row(
             "[label]Binlog SQL",
-            "%s ([dark_gray]%s[/dark_gray])"
-            % (
-                data["Relay_Master_Log_File"],
-                data["Exec_Master_Log_Pos"],
-            ),
+            "%s ([dark_gray]%s[/dark_gray])" % (relay_primary_log_file, exec_primary_log_pos),
         )
         table.add_row(
             "[label]Relay Log",
@@ -354,9 +387,9 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
 
     if dashboard_table:
         table.add_row("[label]GTID", "%s" % gtid_status)
-        table.add_row("[label]State", "%s" % data["Slave_SQL_Running_State"])
+        table.add_row("[label]State", "%s" % replica_sql_running_state)
     else:
-        ssl_enabled = "ON" if data.get("Master_SSL_Allowed") == "Yes" else "OFF"
+        ssl_enabled = "ON" if primary_ssl_allowed == "Yes" else "OFF"
         table.add_row("[label]SSL", "%s" % ssl_enabled)
 
         replication_status_filtering = [
@@ -383,11 +416,10 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             for error_type, error_message in errors:
                 table.add_row("[label]%s" % error_type.replace("_", " "), "[red]%s[/red]" % error_message)
         else:
-            table.add_row("[label]IO State", "%s" % data["Slave_IO_State"])
-            table.add_row("[label]SQL State", "%s" % data["Slave_SQL_Running_State"])
+            table.add_row("[label]IO State", "%s" % replica_io_state)
+            table.add_row("[label]SQL State", "%s" % replica_sql_running_state)
 
         if mysql_gtid_enabled:
-            primary_uuid = data["Master_UUID"]
             executed_gtid_set = data["Executed_Gtid_Set"]
             retrieved_gtid_set = data["Retrieved_Gtid_Set"]
 
@@ -458,7 +490,6 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         elif mariadb_gtid_enabled:
             primary_id = data.get("Master_Server_Id")
 
-            table.add_row("[label]Parallel Mode", data.get("Parallel_Mode", ""))
             table.add_row("[label]GTID", gtid_status)
 
             # Check if GTID IO position exists
@@ -557,15 +588,22 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
 
     connection = dolphie.main_db_connection if not replica else replica.connection
 
+    # Determine which query to use based on MySQL version and connection source
+    replication_status_query = (
+        MySQLQueries.show_replica_status
+        if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mariadb
+        else MySQLQueries.show_slave_status
+    )
+
     # Determine which replication lag source and query to use
     if dolphie.heartbeat_table:
         replica_lag_source = "HB"
         replica_lag_query = MySQLQueries.heartbeat_replica_lag
     else:
         replica_lag_source = None
-        replica_lag_query = MySQLQueries.replication_status
+        replica_lag_query = replication_status_query
 
-    connection.execute(MySQLQueries.replication_status)
+    connection.execute(replication_status_query)
     replica_lag_data = connection.fetchone()
     replication_status = replica_lag_data
 
@@ -574,9 +612,15 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
         connection.execute(replica_lag_query)
         replica_lag_data = connection.fetchone()
 
-    # Extract lag value from fetched data
-    replica_lag = replica_lag_data.get("Seconds_Behind_Master") if replica_lag_data else None
-    replica_lag = int(replica_lag) if replica_lag is not None else 0
+    # Determine which key to use for fetching the seconds behind
+    seconds_behind_key = (
+        "Seconds_Behind_Source"
+        if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mariadb
+        else "Seconds_Behind_Master"
+    )
+
+    seconds_behind = replica_lag_data.get(seconds_behind_key)
+    replica_lag = int(seconds_behind) if seconds_behind is not None else 0
 
     return replica_lag_source, replica_lag, replication_status
 
