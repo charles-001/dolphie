@@ -1626,13 +1626,11 @@ class DolphieApp(App):
                         transaction_history_table.add_column("Query", overflow="fold")
 
                         for query in transaction_history:
-                            trx_history_formatted_query = query["sql_text"]
-                            if trx_history_formatted_query:
-                                trx_history_formatted_query = sqlformat(
-                                    trx_history_formatted_query, reindent_aligned=True
+                            trx_history_formatted_query = ""
+                            if query["sql_text"]:
+                                trx_history_formatted_query = format_query(
+                                    sqlformat(query["sql_text"], reindent_aligned=True), minify=False
                                 )
-
-                            trx_history_formatted_query = format_query(trx_history_formatted_query, minify=False)
 
                             transaction_history_table.add_row(
                                 query["start_time"].strftime("%Y-%m-%d %H:%M:%S"), trx_history_formatted_query
