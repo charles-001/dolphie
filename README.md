@@ -160,7 +160,7 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 - RDS MariaDB
 
 ## Supported MySQL versions
-- MySQL/Percona Server 5.6/5.7/8.0+
+- MySQL/Percona Server 5.6/5.7/8.0+/8.4+
 - RDS MySQL & Aurora + Azure
 
 ## MySQL Grants required
