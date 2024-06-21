@@ -29,7 +29,7 @@ Rule {
 }
 DataTable {
     overflow-x: hidden;
-    max-height: 100vh;
+    max-height: 98%;
 }
 DataTable > .datatable--odd-row {
     background: #131a2c;
@@ -103,6 +103,7 @@ TopBar {
 
 .metadata_locks {
     height: auto;
+    max-height: 100%;
     background: #0f1525;
     border: tall #1b233a;
     margin-bottom: 1;
@@ -117,6 +118,7 @@ TopBar {
 
 .processlist {
     height: auto;
+    max-height: 100%;
     background: #0f1525;
     border: tall #1b233a;
 }
@@ -204,6 +206,7 @@ TopBar {
 
 .ddl {
     height: auto;
+    max-height: 100%;
     background: #0f1525;
     border: tall #1b233a;
     margin-bottom: 1;
@@ -224,6 +227,7 @@ TopBar {
 }
 .proxysql_hostgroup_summary {
     height: auto;
+    max-height: 100%;
     background: #0f1525;
     border: tall #1b233a;
     margin-bottom: 1;
@@ -245,6 +249,7 @@ TopBar {
 }
 .proxysql_mysql_query_rules {
     height: auto;
+    max-height: 100%;
     background: #0f1525;
     border: tall #1b233a;
     margin-bottom: 1;
@@ -266,6 +271,7 @@ TopBar {
 }
 .proxysql_command_stats {
     height: auto;
+    max-height: 100%;
     background: #0f1525;
     border: tall #1b233a;
     margin-bottom: 1;

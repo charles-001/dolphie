@@ -16,7 +16,7 @@ class HelpScreen(ModalScreen):
             background: #131626;
             border: tall #384673;
             height: auto;
-            width: 150;
+            width: 110;
         }
         HelpScreen .tab {
             align: center middle;

@@ -23,7 +23,7 @@ class Config:
     user: str = None
     password: str = None
     host: str = "localhost"
-    port: int = 3306
+    port: int = None
     socket: str = None
     ssl: Dict = field(default_factory=dict)
     ssl_mode: str = None
@@ -465,6 +465,10 @@ Dolphie's config supports these options under [dolphie] section:
             # Use command-line arguments if specified
             if options.get(option):
                 self.set_config_value("command-line", option, options[option])
+
+            # Set default port if not specified
+            if option == "port" and not self.config.port:
+                self.set_config_value("default", option, 3306)
 
         # Lastly, parse URI if specified
         if options["uri"]:

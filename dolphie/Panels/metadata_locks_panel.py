@@ -64,10 +64,7 @@ def create_panel(tab: Tab) -> DataTable:
                 temp_datatable_value = datatable_value
 
                 # If the column is the query, we need to compare the code of the Syntax object
-                update_width = False
                 if column_key == "PROCESSLIST_INFO":
-                    update_width = True
-
                     if isinstance(thread_value, Syntax):
                         temp_thread_value = thread_value.code
 
@@ -79,7 +76,7 @@ def create_panel(tab: Tab) -> DataTable:
 
                 # Update the datatable if values differ
                 if temp_thread_value != temp_datatable_value:
-                    metadata_locks_datatable.update_cell(lock_id, column_name, thread_value, update_width=update_width)
+                    metadata_locks_datatable.update_cell(lock_id, column_name, thread_value)
             else:
                 # Only show the first {query_length_max} characters of the query
                 if column_name == "Query" and isinstance(thread_value, Syntax):

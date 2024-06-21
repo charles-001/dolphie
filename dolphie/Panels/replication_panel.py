@@ -164,7 +164,7 @@ def create_panel(tab: Tab):
                 "log_slave_updates": "log_slave_updates",
             }
         else:
-            if dolphie.is_mysql_version_at_least("8.0"):
+            if dolphie.is_mysql_version_at_least("8.0.22"):
                 available_replication_variables = {
                     "replica_parallel_type": "parallel_type",
                     "replica_parallel_workers": "parallel_workers",
@@ -275,7 +275,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
 
         lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
 
-    if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
+    if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb:
         primary_uuid = data.get("Source_UUID")
         primary_host = dolphie.get_hostname(data.get("Source_Host"))
         primary_user = data.get("Source_User")
@@ -593,7 +593,7 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
     # Determine which query to use based on MySQL version and connection source
     replication_status_query = (
         MySQLQueries.show_replica_status
-        if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mariadb
+        if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb
         else MySQLQueries.show_slave_status
     )
 
@@ -617,7 +617,7 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
     # Determine which key to use for fetching the seconds behind
     seconds_behind_key = (
         "Seconds_Behind_Source"
-        if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mariadb
+        if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb
         else "Seconds_Behind_Master"
     )
 

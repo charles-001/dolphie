@@ -292,7 +292,10 @@ class DolphieApp(App):
         if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
             dolphie.replica_manager.ports = {}
 
-            if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
+            if (
+                dolphie.is_mysql_version_at_least("8.0.22")
+                and dolphie.connection_source_alt != ConnectionSource.mariadb
+            ):
                 dolphie.main_db_connection.execute(MySQLQueries.show_replicas)
             else:
                 dolphie.main_db_connection.execute(MySQLQueries.show_slave_hosts)
@@ -302,7 +305,7 @@ class DolphieApp(App):
                 if dolphie.connection_source_alt == ConnectionSource.mariadb:
                     key = "Server_id"
                 else:
-                    if dolphie.is_mysql_version_at_least("8.0"):
+                    if dolphie.is_mysql_version_at_least("8.0.22"):
                         key = "Replica_UUID"
                     else:
                         key = "Slave_UUID"
