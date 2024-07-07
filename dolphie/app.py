@@ -713,20 +713,21 @@ class DolphieApp(App):
                 dashboard_panel.create_panel(tab)
 
     def layout_graphs(self, tab: Tab):
+        return
         # These variables are dynamically created
-        if tab.dolphie.is_mysql_version_at_least("8.0.30"):
-            tab.graph_redo_log_data_written.styles.width = "55%"
-            tab.graph_redo_log_bar.styles.width = "12%"
-            tab.graph_redo_log_active_count.styles.width = "33%"
-            tab.graph_redo_log_active_count.display = True
-            tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
-        else:
-            tab.graph_redo_log_data_written.styles.width = "88%"
-            tab.graph_redo_log_bar.styles.width = "12%"
-            tab.graph_redo_log_active_count.display = False
+        # if tab.dolphie.is_mysql_version_at_least("8.0.30"):
+        #     tab.graph_redo_log_data_written.styles.width = "55%"
+        #     tab.graph_redo_log_bar.styles.width = "12%"
+        #     tab.graph_redo_log_active_count.styles.width = "33%"
+        #     tab.graph_redo_log_active_count.display = True
+        #     tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+        # else:
+        #     tab.graph_redo_log_data_written.styles.width = "88%"
+        #     tab.graph_redo_log_bar.styles.width = "12%"
+        #     tab.graph_redo_log_active_count.display = False
 
-        tab.graph_adaptive_hash_index.styles.width = "50%"
-        tab.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
+        # tab.graph_adaptive_hash_index.styles.width = "50%"
+        # tab.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):

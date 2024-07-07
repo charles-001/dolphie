@@ -6,6 +6,7 @@ from dolphie.Widgets.spinner import SpinnerWidget
 from dolphie.Widgets.topbar import TopBar
 from textual import events, on, work
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Container, Horizontal
 from textual.screen import Screen
 from textual.widgets import DataTable, Input, Label, Switch
@@ -53,6 +54,10 @@ class EventLog(Screen):
         }
     """
 
+    BINDINGS = [
+        Binding("q", "dismiss", "", show=False),
+    ]
+
     def __init__(self, connection_status, app_version, host, db_connection: Database):
         super().__init__()
 
@@ -83,10 +88,7 @@ class EventLog(Screen):
 
     @on(events.Key)
     def on_keypress(self, event: events.Key):
-        if event.key == "q":
-            if self.screen.is_attached:
-                self.app.pop_screen()
-        elif event.key == "1":
+        if event.key == "1":
             self.datatable.move_cursor(row=0)
         elif event.key == "2":
             self.datatable.move_cursor(row=self.datatable.row_count - 1)

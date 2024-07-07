@@ -1,7 +1,7 @@
 from dolphie.Modules.Functions import format_number
 from dolphie.Widgets.topbar import TopBar
-from textual import events, on
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Center, Container, ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import DataTable, Label, Rule, Static
@@ -9,59 +9,63 @@ from textual.widgets import DataTable, Label, Rule, Static
 
 class ThreadScreen(Screen):
     CSS = """
-    ThreadScreen {
-        background: #0a0e1b;
-    }
-    ThreadScreen #explain_table {
-        margin-top: 1;
-        background: #101626;
-        border: tall #1d253e;
-        overflow-x: auto;
-        min-height: 5;
-        max-height: 15;
-        width: 100%;
-    }
-    ThreadScreen #explain_failure {
-        margin-top: 1;
-    }
-    ThreadScreen Container {
-        height: auto;
-    }
-    ThreadScreen #thread_container {
-        margin-top: 1;
-        height: auto;
-        layout: horizontal;
-    }
-    ThreadScreen .title {
-        width: 100%;
-        content-align: center middle;
-        color: #bbc8e8;
-        text-style: bold;
-    }
-    ThreadScreen Center {
-        height: auto;
-    }
-    ThreadScreen #query {
-        width: auto;
-    }
-    ThreadScreen .container > Center {
-        layout: horizontal;
-    }
-    ThreadScreen ScrollableContainer {
-        height: auto;
-        width: 50vw;
-        max-height: 16;
-    }
+        ThreadScreen {
+            background: #0a0e1b;
+        }
+        ThreadScreen #explain_table {
+            margin-top: 1;
+            background: #101626;
+            border: tall #1d253e;
+            overflow-x: auto;
+            min-height: 5;
+            max-height: 15;
+            width: 100%;
+        }
+        ThreadScreen #explain_failure {
+            margin-top: 1;
+        }
+        ThreadScreen Container {
+            height: auto;
+        }
+        ThreadScreen #thread_container {
+            margin-top: 1;
+            height: auto;
+            layout: horizontal;
+        }
+        ThreadScreen .title {
+            width: 100%;
+            content-align: center middle;
+            color: #bbc8e8;
+            text-style: bold;
+        }
+        ThreadScreen Center {
+            height: auto;
+        }
+        ThreadScreen #query {
+            width: auto;
+        }
+        ThreadScreen .container > Center {
+            layout: horizontal;
+        }
+        ThreadScreen ScrollableContainer {
+            height: auto;
+            width: 50vw;
+            max-height: 16;
+        }
 
-    ThreadScreen .table {
-        content-align: center middle;
-        background: #101626;
-        border: tall #1d253e;
-        padding-left: 1;
-        padding-right: 1;
-        height: auto;
-    }
+        ThreadScreen .table {
+            content-align: center middle;
+            background: #101626;
+            border: tall #1d253e;
+            padding-left: 1;
+            padding-right: 1;
+            height: auto;
+        }
     """
+
+    BINDINGS = [
+        Binding("q", "dismiss", "", show=False),
+    ]
 
     def __init__(
         self,
@@ -165,9 +169,3 @@ class ThreadScreen(Screen):
                 Static(id="transaction_history_table", shrink=True, classes="table"),
                 id="transaction_history_table_center",
             )
-
-    @on(events.Key)
-    def on_keypress(self, event: events.Key):
-        if event.key == "q":
-            if self.screen.is_attached:
-                self.app.pop_screen()

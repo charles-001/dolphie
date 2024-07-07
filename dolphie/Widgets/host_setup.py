@@ -11,6 +11,7 @@ from textual.widgets import (
     Label,
     RadioButton,
     RadioSet,
+    Rule,
     Select,
     Static,
 )
@@ -40,6 +41,10 @@ class HostSetupModal(ModalScreen):
             content-align: center middle;
             padding-bottom: 1;
         }
+        HostSetupModal Rule {
+            width: 100%;
+            margin-bottom: 1;
+        }
         HostSetupModal Input {
             width: 100%;
             content-align: center middle;
@@ -66,7 +71,7 @@ class HostSetupModal(ModalScreen):
         HostSetupModal #show_password {
             max-width: 13%;
             height: 3;
-            background:  #262c4b;
+            background: #262c4b;
             border: blank #344063;
         }
         HostSetupModal #show_password:hover {
@@ -214,16 +219,12 @@ class HostSetupModal(ModalScreen):
         with Vertical():
             with Vertical(classes="main_container"):
                 yield Label("Host Setup")
-                yield Select(
-                    options=self.hostgroups,
-                    id="hostgroup",
-                    prompt="Select a hostgroup (optional)",
-                )
+
                 yield AutoComplete(
                     Input(
                         value=self.host,
                         id="host",
-                        placeholder="Start typing to search for a host - format is host:port",
+                        placeholder="Host (format is host:port)",
                     ),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
                 )
@@ -247,6 +248,12 @@ class HostSetupModal(ModalScreen):
                     yield Input(id="ssl_ca", placeholder="CA File (optional)")
                     yield Input(id="ssl_cert", placeholder="Client Certificate File (optional)")
                     yield Input(id="ssl_key", placeholder="Client Key File (optional)")
+                yield Rule(line_style="heavy")
+                yield Select(
+                    options=self.hostgroups,
+                    id="hostgroup",
+                    prompt="Select a hostgroup (optional)",
+                )
             with Horizontal(classes="button_container"):
                 yield Button("Submit", id="submit", variant="primary")
                 yield Button("Cancel", id="cancel")

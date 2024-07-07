@@ -166,8 +166,6 @@ class Dolphie:
     def setup_connection_mysql(self):
         global_variables = self.main_db_connection.fetch_status_and_variables("variables")
 
-        basedir = global_variables.get("basedir")
-        aurora_version = global_variables.get("aurora_version")
         version = global_variables.get("version").lower()
         version_comment = global_variables.get("version_comment").lower()
         version_split = version.split(".")
@@ -183,10 +181,10 @@ class Dolphie:
         elif "mariadb" in version_comment or "mariadb" in version:
             self.host_distro = "MariaDB"
             self.connection_source_alt = ConnectionSource.mariadb
-        elif aurora_version:
+        elif global_variables.get("aurora_version"):
             self.host_distro = "Amazon Aurora"
             self.connection_source_alt = ConnectionSource.aws_rds
-        elif "rdsdb" in basedir:
+        elif "rdsdb" in global_variables.get("basedir"):
             self.host_distro = "Amazon RDS"
             self.connection_source_alt = ConnectionSource.aws_rds
         elif global_variables.get("aad_auth_only"):
@@ -282,26 +280,14 @@ class Dolphie:
         return hostname
 
     def massage_metrics_data(self):
-        if self.is_mysql_version_at_least("8.0"):
-            # If we're using MySQL 8, we need to fetch the checkpoint age from the performance schema if it's not
-            # available in global status
-            # On Azure/Aurora MySQL there is no BACKUP_ADMIN privilege so we can't fetch the checkpoint age from them
-            if (
-                not self.global_status.get("Innodb_checkpoint_age")
-                and self.connection_source_alt == ConnectionSource.mysql
-            ):
-                self.global_status["Innodb_checkpoint_age"] = self.main_db_connection.fetch_value_from_field(
-                    MySQLQueries.checkpoint_age, "checkpoint_age"
-                )
-
-            if self.is_mysql_version_at_least("8.0.30"):
-                active_redo_logs_count = self.main_db_connection.fetch_value_from_field(
-                    MySQLQueries.active_redo_logs, "count"
-                )
-                self.global_status["Active_redo_log_count"] = active_redo_logs_count
+        if self.is_mysql_version_at_least("8.0.30") and self.connection_source_alt != ConnectionSource.mariadb:
+            active_redo_logs_count = self.main_db_connection.fetch_value_from_field(
+                MySQLQueries.active_redo_logs, "count"
+            )
+            self.global_status["Active_redo_log_count"] = active_redo_logs_count
 
         # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
-        # which has less precision, but it's good enough
+        # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
         if not self.global_status.get("Innodb_lsn_current"):
             self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
 

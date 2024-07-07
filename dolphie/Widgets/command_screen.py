@@ -1,5 +1,5 @@
 from dolphie.Widgets.topbar import TopBar
-from textual import events
+from textual.binding import Binding
 from textual.containers import Center
 from textual.screen import Screen
 from textual.widgets import Static
@@ -19,16 +19,16 @@ class CommandScreen(Screen):
         }
     """
 
+    BINDINGS = [
+        Binding("q", "dismiss", "", show=False),
+    ]
+
     def __init__(self, connection_status, app_version, host, data):
         super().__init__()
         self.connection_status = connection_status
         self.app_version = app_version
         self.host = host
         self.data = data
-
-    def on_key(self, event: events.Key):
-        if event.key == "q" and self.screen.is_attached:
-            self.app.pop_screen()
 
     def compose(self):
         yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)

@@ -1,7 +1,7 @@
 from dolphie.Widgets.topbar import TopBar
 from rich.style import Style
-from textual import events, on
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import Center, Container
 from textual.screen import Screen
 from textual.widgets import Label, Rule, Static, TextArea
@@ -43,6 +43,10 @@ class ProxySQLThreadScreen(Screen):
             height: 35;
         }
     """
+
+    BINDINGS = [
+        Binding("q", "dismiss", "", show=False),
+    ]
 
     def __init__(
         self,
@@ -108,9 +112,3 @@ class ProxySQLThreadScreen(Screen):
             yield Rule(line_style="heavy")
             yield Label("Extended Information", classes="title")
             yield Center(self.extended_info_text_area)
-
-    @on(events.Key)
-    def on_keypress(self, event: events.Key):
-        if event.key == "q":
-            if self.screen.is_attached:
-                self.app.pop_screen()

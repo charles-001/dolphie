@@ -1,4 +1,5 @@
 import asyncio
+import uuid
 from dataclasses import dataclass
 from typing import List
 
@@ -118,7 +119,6 @@ class TabManager:
 
         self.active_tab: Tab = None
         self.tabs: dict = {}
-        self.tab_id_counter: int = 1
 
         self.host_tabs = self.app.query_one("#host_tabs", TabbedContent)
         self.host_tabs.display = False
@@ -140,10 +140,10 @@ class TabManager:
                 self.topbar.host = ""
 
     async def create_tab(self, tab_name: str, use_hostgroup: bool = False, switch_tab: bool = True) -> Tab:
-        tab_id = self.tab_id_counter
-
         if len(self.app.screen_stack) > 1:
             return
+
+        tab_id = str(uuid.uuid4()).replace("-", "")
 
         # Create our new tab instance
         tab = Tab(id=tab_id, name=tab_name)
@@ -443,9 +443,6 @@ class TabManager:
 
         # Set the sparkline data to 0
         tab.sparkline.data = [0]
-
-        # Increment the tab id counter
-        self.tab_id_counter += 1
 
         self.host_tabs.display = True
 

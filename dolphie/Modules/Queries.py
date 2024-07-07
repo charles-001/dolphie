@@ -423,12 +423,6 @@ class MySQLQueries:
         WHERE
             name IN ('adaptive_hash_searches', 'adaptive_hash_searches_btree', 'trx_rseg_history_len')
     """
-    checkpoint_age: str = """
-        SELECT
-            STORAGE_ENGINES ->> '$."InnoDB"."LSN"' - STORAGE_ENGINES ->> '$."InnoDB"."LSN_checkpoint"' AS checkpoint_age
-        FROM
-            performance_schema.log_status
-    """
     active_redo_logs: str = """
         SELECT
             COUNT(*) AS count

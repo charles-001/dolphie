@@ -58,7 +58,7 @@ class CommandModal(ModalScreen):
         }
     """
     BINDINGS = [
-        Binding("escape", "app.pop_screen", "", show=False),
+        Binding("escape", "dismiss", "", show=False),
     ]
 
     def __init__(
