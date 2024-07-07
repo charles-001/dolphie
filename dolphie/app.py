@@ -1750,7 +1750,7 @@ class DolphieApp(App):
                 # Compare the current version with the latest version
                 if parse_version(latest_version) > parse_version(__version__):
                     self.notify(
-                        f":tada:  [b]New version [highlight]v{latest_version}[/highlight] is available![/b] :tada:\n\n"
+                        f":tada:  [b]New version [highlight]{latest_version}[/highlight] is available![/b] :tada:\n\n"
                         f"Please update at your earliest convenience\n"
                         f"[dark_gray]Find more details at https://github.com/charles-001/dolphie",
                         title="",

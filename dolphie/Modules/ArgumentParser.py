@@ -5,7 +5,7 @@ import sys
 from configparser import ConfigParser
 from dataclasses import dataclass, field, fields
 from typing import Dict, List
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 import myloginpath
 from dolphie.DataTypes import Panels
@@ -23,7 +23,7 @@ class Config:
     user: str = None
     password: str = None
     host: str = "localhost"
-    port: int = None
+    port: int = 3306
     socket: str = None
     ssl: Dict = field(default_factory=dict)
     ssl_mode: str = None
@@ -45,12 +45,12 @@ class Config:
     hostgroup_hosts: Dict[str, List[str]] = field(default_factory=dict)
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
-    # historical_trx_locks: bool = False
 
 
 class ArgumentParser:
     def __init__(self, app_version: str):
-        self.config_options = {}
+        self.config_object_options = {}
+
         for variable in fields(Config):
             # Exclude these options since we handle them differently
             if variable.name not in [
@@ -60,10 +60,10 @@ class ArgumentParser:
                 "ssl",
                 "hostgroup_hosts",
             ]:
-                self.config_options[variable.name] = variable.type
+                self.config_object_options[variable.name] = variable.type
 
         self.formatted_options = "\n\t".join(
-            [f"({data_type.__name__}) {option}" for option, data_type in self.config_options.items()]
+            [f"({data_type.__name__}) {option}" for option, data_type in self.config_object_options.items()]
         )
         epilog = f"""
 Order of precedence for methods that pass options to Dolphie:
@@ -329,7 +329,10 @@ Dolphie's config supports these options under [dolphie] section:
             "--debug-options",
             dest="debug_options",
             action="store_true",
-            help="Display options that are set and what they're set by (command-line, dolphie config, etc) then exit",
+            help=(
+                "Display options that are set and what they're set by (command-line, dolphie config, etc) then exit. "
+                "WARNING: This will show passwords and other sensitive information in plain text"
+            ),
         )
         self.parser.add_argument(
             "-V",
@@ -366,6 +369,14 @@ Dolphie's config supports these options under [dolphie] section:
         if options["config_file"]:
             config_files = [options["config_file"]]
 
+        for option in self.config_object_options.keys():
+            if self.debug_options:
+                self.debug_options_table.add_row("default", option, str(getattr(self.config, option)))
+
+                # If last option, add a separator
+                if option == list(self.config_object_options.keys())[-1]:
+                    self.debug_options_table.add_row("", "", "")
+
         # Loop through config files to find the supplied options
         for config_file in config_files:
             if os.path.isfile(config_file):
@@ -373,7 +384,7 @@ Dolphie's config supports these options under [dolphie] section:
                 cfg.read(config_file)
 
                 # Loop through all of available options
-                for option, data_type in self.config_options.items():
+                for option, data_type in self.config_object_options.items():
                     # If the option is in the config file
                     if cfg.has_option("dolphie", option):
                         # Check if the value is of the correct data type
@@ -413,17 +424,10 @@ Dolphie's config supports these options under [dolphie] section:
         # Save the hostgroups found to the config object
         self.config.hostgroup_hosts = hostgroups
 
-        # If the options are not set from Dolphie configs, set them to what command-line is or default
-        for option in self.config_options.keys():
-            value = getattr(self.config, option)
-
-            # Override the option with command-line arguments if the option isn't for login
-            if option not in login_options and options[option] and value != options[option]:
+        # We need to loop through all options and set non-login options so we can use them for the logic below
+        for option in self.config_object_options.keys():
+            if option not in login_options and options[option] and getattr(self.config, option) != options[option]:
                 self.set_config_value("command-line", option, options[option])
-
-            # If the option is not set, set it to the default from Config's dataclass
-            if not options[option]:
-                options[option] = value
 
         # Use MySQL's my.cnf file for login options if specified
         if os.path.isfile(self.config.mycnf_file):
@@ -449,44 +453,41 @@ Dolphie's config supports these options under [dolphie] section:
                 if self.config.login_path != "client":
                     self.exit(f"Problem reading login path file: {e}")
 
-        # Update login options based on precedence
+        # Loop through all login options and set them in order of precedence
         for option in login_options:
             # Update config object with Dolphie config
             dolphie_value = dolphie_config_login_options_used.get(option)
-            if dolphie_value is not None:
+            if dolphie_value:
                 self.set_config_value("dolphie config", option, dolphie_value)
 
             # Use environment variables if specified
             environment_var = f"DOLPHIE_{option.upper()}"
             env_value = os.environ.get(environment_var)
-            if env_value is not None:
+            if env_value:
                 self.set_config_value("environment", option, env_value)
 
             # Use command-line arguments if specified
-            if options.get(option):
+            if options[option]:
                 self.set_config_value("command-line", option, options[option])
-
-            # Set default port if not specified
-            if option == "port" and not self.config.port:
-                self.set_config_value("default", option, 3306)
 
         # Lastly, parse URI if specified
         if options["uri"]:
             try:
-                parsed = urlparse(options["uri"])
+                parsed_result: ParseResult = urlparse(options["uri"])
 
-                if parsed.scheme == "mysql":
-                    self.config.port = parsed.port or 3306
-                elif parsed.scheme == "proxysql":
-                    self.config.port = parsed.port or 6032
+                if parsed_result.scheme == "mysql":
+                    port = parsed_result.port or 3306
+                elif parsed_result.scheme == "proxysql":
+                    port = parsed_result.port or 6032
                 else:
                     self.exit(
                         "Invalid URI scheme: Only 'mysql' or 'proxysql' are supported (see --help for more information)"
                     )
 
-                self.config.user = parsed.username
-                self.config.password = parsed.password
-                self.config.host = parsed.hostname
+                self.set_config_value("uri", "user", parsed_result.username)
+                self.set_config_value("uri", "password", parsed_result.password)
+                self.set_config_value("uri", "host", parsed_result.hostname)
+                self.set_config_value("uri", "port", port)
             except Exception as e:
                 self.exit(f"Invalid URI: {e} (see --help for more information)")
 
