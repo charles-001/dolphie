@@ -30,7 +30,9 @@ class Config:
     ssl_ca: str = None
     ssl_cert: str = None
     ssl_key: str = None
-    config_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/.dolphie.cnf")
+    config_file: List[str] = field(
+        default_factory=lambda: ["/etc/dolphie.cnf", f"{os.path.expanduser('~')}/.dolphie.cnf"]
+    )
     mycnf_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/.my.cnf")
     login_path: str = "client"
     host_cache_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_host_cache")
@@ -55,7 +57,6 @@ class ArgumentParser:
             # Exclude these options since we handle them differently
             if variable.name not in [
                 "app_version",
-                "config_file",
                 "host_setup_available_hosts",
                 "ssl",
                 "hostgroup_hosts",
@@ -172,7 +173,7 @@ Dolphie's config supports these options under [dolphie] section:
             type=str,
             help=(
                 f"Dolphie's config file to use. Options are read from these files in the given order: "
-                f"/etc/dolphie.cnf, {self.config.config_file}"
+                f"{self.config.config_file}"
             ),
             metavar="",
         )
@@ -365,10 +366,6 @@ Dolphie's config supports these options under [dolphie] section:
             self.debug_options_table.add_column("Option", style="#91abec")
             self.debug_options_table.add_column("Value", style="#bbc8e8")
 
-        config_files = ["/etc/dolphie.cnf", self.config.config_file]
-        if options["config_file"]:
-            config_files = [options["config_file"]]
-
         for option in self.config_object_options.keys():
             if self.debug_options:
                 self.debug_options_table.add_row("default", option, str(getattr(self.config, option)))
@@ -377,8 +374,11 @@ Dolphie's config supports these options under [dolphie] section:
                 if option == list(self.config_object_options.keys())[-1]:
                     self.debug_options_table.add_row("", "", "")
 
+        if options["config_file"]:
+            self.config.config_file = [options["config_file"]]
+
         # Loop through config files to find the supplied options
-        for config_file in config_files:
+        for config_file in self.config.config_file:
             if os.path.isfile(config_file):
                 cfg = ConfigParser()
                 cfg.read(config_file)
@@ -390,11 +390,11 @@ Dolphie's config supports these options under [dolphie] section:
                         # Check if the value is of the correct data type
                         value = self.verify_config_value(option, cfg.get("dolphie", option), data_type)
 
-                        # Set the option to the value from the config file
-                        self.set_config_value(f"dolphie config {config_file}", option, value)
-
-                        # Save the login option to be used later
-                        if option in login_options:
+                        # If the option is not a login option, save it to the config object
+                        if option not in login_options and value:
+                            self.set_config_value("dolphie config", option, value)
+                        else:
+                            # Save the login option to be used later
                             dolphie_config_login_options_used[option] = value
 
                 # Save all hostgroups found to the config object
@@ -426,7 +426,7 @@ Dolphie's config supports these options under [dolphie] section:
 
         # We need to loop through all options and set non-login options so we can use them for the logic below
         for option in self.config_object_options.keys():
-            if option not in login_options and options[option] and getattr(self.config, option) != options[option]:
+            if option not in login_options and options[option]:
                 self.set_config_value("command-line", option, options[option])
 
         # Use MySQL's my.cnf file for login options if specified
@@ -464,7 +464,7 @@ Dolphie's config supports these options under [dolphie] section:
             environment_var = f"DOLPHIE_{option.upper()}"
             env_value = os.environ.get(environment_var)
             if env_value:
-                self.set_config_value("environment", option, env_value)
+                self.set_config_value("env variable", option, env_value)
 
             # Use command-line arguments if specified
             if options[option]:
