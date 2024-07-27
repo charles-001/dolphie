@@ -169,14 +169,11 @@ class DolphieApp(App):
         )
 
         # Metrics data is already calculated in the replay event data so we just need to update the values
+        dolphie.metric_manager.datetimes = replay_event_data.metric_manager.get("datetimes")
         for metric_name, metric_data in replay_event_data.metric_manager.items():
             metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
             if metric_instance:
-                metric_instance.datetimes = metric_data.get("datetimes", [])
                 for metric_name, metric_values in metric_data.items():
-                    if metric_name == "datetimes":
-                        continue
-
                     metric_instance.__dict__[metric_name].values = metric_values
 
     @work(thread=True, group="main")
@@ -743,9 +740,7 @@ class DolphieApp(App):
         # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
         tab.replay_manager.current_index -= 2
 
-        if tab.worker.state != WorkerState.RUNNING:
-            tab.worker_timer.stop()
-            self.run_worker_replay(tab.id, manual_control=True)
+        self.force_refresh_for_replay()
 
     @on(Button.Pressed, ".replay_forward")
     def replay_forward(self):
@@ -756,9 +751,7 @@ class DolphieApp(App):
 
         # get_next_refresh_interval will increment the index so we don't need to do it here
 
-        if tab.worker.state != WorkerState.RUNNING:
-            tab.worker_timer.stop()
-            self.run_worker_replay(tab.id, manual_control=True)
+        self.force_refresh_for_replay()
 
     @on(Button.Pressed, ".replay_pause")
     def replay_pause(self, event: Button.Pressed):
@@ -780,9 +773,8 @@ class DolphieApp(App):
                 tab = self.tab_manager.active_tab
                 response = tab.replay_manager.seek_to_timestamp(timestamp)
 
-                if response and tab.worker.state != WorkerState.RUNNING:
-                    tab.worker_timer.stop()
-                    self.run_worker_replay(tab.id, manual_control=True)
+                if response:
+                    self.force_refresh_for_replay()
 
         self.app.push_screen(
             CommandModal(command=HotkeyCommands.replay_seek, message="What time would you like to seek to?"),
@@ -807,7 +799,9 @@ class DolphieApp(App):
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
             if tab_metric_instance_name == metric_instance.tab_name:
                 for graph_name in metric_instance.graphs:
-                    getattr(self.tab_manager.active_tab, graph_name).render_graph(metric_instance)
+                    getattr(self.tab_manager.active_tab, graph_name).render_graph(
+                        metric_instance, self.tab_manager.active_tab.dolphie.metric_manager.datetimes
+                    )
 
         self.update_stats_label(tab_metric_instance_name)
 
@@ -841,6 +835,18 @@ class DolphieApp(App):
             self.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
 
         panel.display = new_display_status
+
+    def force_refresh_for_replay(self, need_current_data: bool = False):
+        tab = self.tab_manager.active_tab
+
+        if tab.dolphie.replay_file and tab.worker.state != WorkerState.RUNNING:
+            tab.worker_timer.stop()
+
+            if need_current_data:
+                # We subtract 1 because get_next_refresh_interval will increment the index
+                tab.replay_manager.current_index -= 1
+
+            self.run_worker_replay(tab.id, manual_control=True)
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         panel_mapping = {
@@ -1144,6 +1150,8 @@ class DolphieApp(App):
             dolphie.query_time_filter = ""
             dolphie.query_filter = ""
 
+            self.force_refresh_for_replay(need_current_data=True)
+
             self.notify("Cleared all filters", severity="success")
 
         elif key == "d":
@@ -1196,6 +1204,8 @@ class DolphieApp(App):
                     )
                 else:
                     self.notify(f"Invalid filter name {filter_name}", severity="error")
+
+                self.force_refresh_for_replay(need_current_data=True)
 
             self.app.push_screen(
                 CommandModal(

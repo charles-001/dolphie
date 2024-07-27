@@ -150,6 +150,7 @@ def create_panel(tab: Tab) -> DataTable:
         if row_values:
             processlist_datatable.add_row(*row_values, key=thread_id)
 
+    # Remove threads that were filtered out
     for thread_id in filter_threads:
         dolphie.processlist_threads.pop(thread_id)
 

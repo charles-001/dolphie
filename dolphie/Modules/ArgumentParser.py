@@ -52,7 +52,7 @@ class Config:
     daemon_mode_log_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_daemon.log")
     replay_file: str = None
     replay_dir: str = None
-    replay_retention_days: int = 7
+    replay_retention_days: int = 2
 
 
 class ArgumentParser:
@@ -345,18 +345,6 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "--show-trxs-only",
-            dest="show_trxs_only",
-            action="store_true",
-            help="(MySQL only) Start with only showing threads that have an active transaction",
-        )
-        self.parser.add_argument(
-            "--additional-columns",
-            dest="show_additional_query_columns",
-            action="store_true",
-            help="Start with additional columns in Processlist panel",
-        )
-        self.parser.add_argument(
             "--daemon",
             dest="daemon_mode",
             action="store_true",
@@ -377,6 +365,18 @@ Dolphie's config supports these options under [dolphie] section:
             type=str,
             help="Full path of the log file for daemon mode",
             metavar="",
+        )
+        self.parser.add_argument(
+            "--show-trxs-only",
+            dest="show_trxs_only",
+            action="store_true",
+            help="(MySQL only) Start with only showing threads that have an active transaction",
+        )
+        self.parser.add_argument(
+            "--additional-columns",
+            dest="show_additional_query_columns",
+            action="store_true",
+            help="Start with additional columns in Processlist panel",
         )
         self.parser.add_argument(
             "--debug-options",

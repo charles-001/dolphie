@@ -103,6 +103,9 @@ def minify_query(query: str) -> str:
 
 
 def format_bytes(bytes_value, color=True):
+    if isinstance(bytes_value, str):
+        return bytes_value
+
     units = ["B", "KB", "MB", "GB", "TB"]
     unit_index = 0
 
