@@ -160,6 +160,7 @@ class HelpScreen(ModalScreen):
                     "f": "Filter processlist by a supported option",
                     "p": "Pause refreshing of panels",
                     "q": "Quit",
+                    "r": "Set the refresh interval",
                     "t": "Display details of a process",
                     "T": "Transaction view - toggle displaying process that only have an active transaction",
                     "s": "Toggle sorting for Age in descending/ascending order",

@@ -5,17 +5,17 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 
 import zstandard as zstd
-from dolphie import Dolphie
 from dolphie.DataTypes import ConnectionSource, ProcesslistThread
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import minify_query
 from loguru import logger
 
+from dolphie import Dolphie
+
 
 @dataclass
 class ReplayData:
     timestamp: str
-    refresh_interval: int
     global_status: dict
     global_variables: dict
     binlog_status: dict
@@ -81,7 +81,6 @@ class ReplayManager:
                 CREATE TABLE IF NOT EXISTS replay_data (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp DATETIME,
-                    refresh_interval INTEGER,
                     data BLOB
                 )"""
             )
@@ -275,7 +274,6 @@ class ReplayManager:
                 if v.values:
                     metric_entry[k] = v.values
 
-        print(metrics)
         return metrics
 
     def capture_state(self):
@@ -311,12 +309,11 @@ class ReplayManager:
 
         state = ReplayData(
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            refresh_interval=self.dolphie.refresh_interval,
             global_status=self.dolphie.global_status,
             global_variables=self.dolphie.global_variables,
             binlog_status=self.dolphie.binlog_status,
             innodb_metrics=self.dolphie.innodb_metrics,
-            replica_manager={"available_replicas": self.dolphie.replica_manager.available_replicas},
+            replica_manager=self.dolphie.replica_manager.available_replicas,
             replication_status=self.dolphie.replication_status,
             processlist=processlist,
             metric_manager=self._condition_metrics(self.dolphie.metric_manager),
@@ -325,10 +322,9 @@ class ReplayManager:
         with sqlite3.connect(self.replay_file) as conn:
             c = conn.cursor()
             c.execute(
-                "INSERT INTO replay_data (timestamp, refresh_interval, data) VALUES (?, ?, ?)",
+                "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
                 (
                     state.timestamp,
-                    state.refresh_interval,
                     self._compress_data(json.dumps(asdict(state))),
                 ),
             )
@@ -358,7 +354,7 @@ class ReplayManager:
 
             # Get the next row
             c.execute(
-                "SELECT id, timestamp, refresh_interval, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
+                "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
                 (self.current_index,),
             )
             row = c.fetchone()
@@ -368,7 +364,7 @@ class ReplayManager:
             self.current_index = row[0]
 
             # Decompress and decode the data field
-            data = json.loads(self._decompress_data(row[3]))
+            data = json.loads(self._decompress_data(row[2]))
 
             # Create a ProcesslistThread object for each thread in the processlist
             processlist = {}
@@ -377,7 +373,6 @@ class ReplayManager:
 
             replay_data = ReplayData(
                 timestamp=row[1],
-                refresh_interval=row[2],
                 global_status=data.get("global_status", {}),
                 global_variables=data.get("global_variables", {}),
                 binlog_status=data.get("binlog_status", {}),

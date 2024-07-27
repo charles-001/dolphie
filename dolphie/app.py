@@ -14,7 +14,6 @@ from importlib import metadata
 
 import dolphie.Modules.MetricManager as MetricManager
 import requests
-from dolphie import Dolphie
 from dolphie.DataTypes import (
     ConnectionSource,
     ConnectionStatus,
@@ -65,6 +64,8 @@ from textual import events, on, work
 from textual.app import App
 from textual.widgets import Button, Switch, TabbedContent, TabPane
 from textual.worker import Worker, WorkerState, get_current_worker
+
+from dolphie import Dolphie
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -124,11 +125,6 @@ class DolphieApp(App):
 
         dolphie = tab.dolphie
 
-        dolphie.worker_start_time = datetime.now()
-        dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
-        dolphie.refresh_latency = round(dolphie.polling_latency - dolphie.refresh_interval, 2)
-        dolphie.worker_previous_start_time = dolphie.worker_start_time
-
         tab.replay_manual_control = manual_control
         if len(self.screen_stack) > 1 or (dolphie.pause_refresh and not manual_control):
             return
@@ -156,8 +152,7 @@ class DolphieApp(App):
         dolphie.global_variables = replay_event_data.global_variables
         dolphie.binlog_status = replay_event_data.binlog_status
         dolphie.innodb_metrics = replay_event_data.innodb_metrics
-        dolphie.replica_manager.available_replicas = replay_event_data.replica_manager.get("available_replicas", [])
-        dolphie.refresh_interval = replay_event_data.refresh_interval
+        dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
         dolphie.processlist_threads = replay_event_data.processlist
         dolphie.replication_status = replay_event_data.replication_status
 
@@ -487,7 +482,16 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
             else:
                 dolphie.main_db_connection.execute(MySQLQueries.show_master_status)
+
+            previous_position = dolphie.binlog_status.get("Position")
             dolphie.binlog_status = dolphie.main_db_connection.fetchone()
+
+            if previous_position is None:
+                dolphie.binlog_status["Diff_Position"] = 0
+            elif previous_position > dolphie.binlog_status["Position"]:
+                dolphie.binlog_status["Diff_Position"] = "Binlog Rotated"
+            else:
+                dolphie.binlog_status["Diff_Position"] = dolphie.binlog_status["Position"] - previous_position
 
             # This can cause MySQL to crash: https://perconadev.atlassian.net/browse/PS-9066
             # if dolphie.global_variables.get("binlog_transaction_compression") == "ON":
@@ -960,7 +964,7 @@ class DolphieApp(App):
         if not tab:
             return
 
-        replay_allowed_keys = ["1", "2", "3", "a", "c", "f", "p", "s", "t", "T", "v"]
+        replay_allowed_keys = ["1", "2", "3", "a", "c", "f", "p", "r", "s", "t", "T", "v"]
 
         exclude_keys = [
             "up",

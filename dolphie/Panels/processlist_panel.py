@@ -79,6 +79,7 @@ def create_panel(tab: Tab) -> DataTable:
             column_width = column_data["width"]
             processlist_datatable.add_column(column_name, key=column_name, width=column_width)
 
+    filter_threads = []
     # Iterate through processlist_threads
     for thread_id, thread in dolphie.processlist_threads.items():
         row_values = []
@@ -86,19 +87,22 @@ def create_panel(tab: Tab) -> DataTable:
         thread: ProcesslistThread
         # We use filter here for replays since the original way requires changing WHERE clause
         if dolphie.replay_file:
-            if dolphie.show_trxs_only:
-                # trx_state is color formatted
-                if thread.trx_state == "[dark_gray]N/A":
-                    continue
-            if dolphie.user_filter and dolphie.user_filter != thread.user:
-                continue
-            if dolphie.db_filter and dolphie.db_filter != thread.db:
-                continue
-            if dolphie.host_filter and dolphie.host_filter not in thread.host:
-                continue
-            if dolphie.query_time_filter and dolphie.query_time_filter >= thread.time:
-                continue
-            if dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
+            found = False
+            if dolphie.show_trxs_only and thread.trx_state == "[dark_gray]N/A":
+                found = True
+            elif dolphie.user_filter and dolphie.user_filter != thread.user:
+                found = True
+            elif dolphie.db_filter and dolphie.db_filter != thread.db:
+                found = True
+            elif dolphie.host_filter and dolphie.host_filter not in thread.host:
+                found = True
+            elif dolphie.query_time_filter and dolphie.query_time_filter >= thread.time:
+                found = True
+            elif dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
+                found = True
+
+            if found:
+                filter_threads.append(thread_id)
                 continue
 
         for column_id, (column_data) in enumerate(columns):
@@ -145,6 +149,9 @@ def create_panel(tab: Tab) -> DataTable:
         # Add a new row to the datatable
         if row_values:
             processlist_datatable.add_row(*row_values, key=thread_id)
+
+    for thread_id in filter_threads:
+        dolphie.processlist_threads.pop(thread_id)
 
     # Remove rows from processlist_datatable that no longer exist in processlist_threads
     if dolphie.processlist_threads:

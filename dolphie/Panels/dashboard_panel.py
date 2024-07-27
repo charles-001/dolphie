@@ -39,8 +39,6 @@ def create_panel(tab: Tab) -> Table:
         else:
             host_type = "MySQL"
 
-    runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
-
     replicas = 0
     if dolphie.replica_manager.available_replicas:
         replicas = len(dolphie.replica_manager.available_replicas)
@@ -53,7 +51,9 @@ def create_panel(tab: Tab) -> Table:
     )
     table_information.add_row("[label]Type", host_type)
     table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
-    table_information.add_row("[label]Runtime", f"{runtime} [dark_gray]({dolphie.refresh_latency}s)")
+    if not dolphie.replay_file:
+        runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
+        table_information.add_row("[label]Runtime", f"{runtime} [dark_gray]({dolphie.refresh_latency}s)")
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
         "[label]Threads",
@@ -139,13 +139,6 @@ def create_panel(tab: Tab) -> Table:
         table_primary.add_column()
         table_primary.add_column(max_width=40)
 
-        if dolphie.previous_binlog_position == 0:
-            diff_binlog_position = 0
-        elif dolphie.previous_binlog_position > binlog_status["Position"]:
-            diff_binlog_position = "Binlog Rotated"
-        else:
-            diff_binlog_position = format_bytes(binlog_status["Position"] - dolphie.previous_binlog_position)
-
         binlog_cache = 100
         binlog_cache_disk = global_status["Binlog_cache_disk_use"]
         binlog_cache_mem = global_status["Binlog_cache_use"]
@@ -164,7 +157,7 @@ def create_panel(tab: Tab) -> Table:
             "[label]Size",
             "%s" % format_bytes(binlog_status["Position"]),
         )
-        table_primary.add_row("[label]Diff", str(diff_binlog_position))
+        table_primary.add_row("[label]Diff", format_bytes(binlog_status["Diff_Position"]))
         table_primary.add_row("[label]Cache Hit", f"{binlog_cache}%")
 
         binlog_format = global_variables.get("binlog_format", "N/A")

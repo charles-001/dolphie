@@ -249,15 +249,10 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     else:
         data = dolphie.replication_status
 
-    replica_previous_replica_sbm = data.get("Previous_Seconds_Behind", 0)
     replica_sbm = data.get("Seconds_Behind", 0)
 
-    speed = 0
     lag = None
     if replica_sbm is not None:
-        if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
-            speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.polling_latency)
-
         replica_lag = replica_sbm
         if data.get("SQL_Delay"):
             replica_lag -= data["SQL_Delay"]
@@ -358,7 +353,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     else:
         table.add_row(
             "[label]Lag",
-            "%s [label]Speed[/label] %s %s" % (lag, speed, replication_delay),
+            "%s [label]Speed[/label] %s %s" % (lag, data["Replica_Speed"], replication_delay),
         )
 
     if dashboard_table:
@@ -627,7 +622,10 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
             previous_sbm = replica.replication_status.get("Seconds_Behind", 0)
         else:
             previous_sbm = dolphie.replication_status.get("Seconds_Behind", 0)
-        replication_status["Previous_Seconds_Behind"] = previous_sbm
+
+        replication_status["Replica_Speed"] = 0
+        if previous_sbm and replica_lag < previous_sbm:
+            replication_status["Replica_Speed"] = round((previous_sbm - replica_lag) / dolphie.polling_latency)
 
     return replication_status
 

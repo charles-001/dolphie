@@ -140,7 +140,7 @@ class CommandModal(ModalScreen):
             input.placeholder = "Input a Process ID"
             input.focus()
         elif self.command == HotkeyCommands.refresh_interval:
-            input.placeholder = "Input a refresh interval (seconds)"
+            input.placeholder = "Input a refresh interval"
             input.focus()
         elif self.command == HotkeyCommands.replay_seek:
             input.placeholder = "Format: 2024-07-25 13:00:00"
@@ -281,12 +281,13 @@ class CommandModal(ModalScreen):
             else:
                 self.dismiss(modal_input)
         elif self.command == HotkeyCommands.refresh_interval:
-            if not modal_input.isnumeric():
-                self.update_error_response("Input must be an integer")
+            try:
+                modal_input = float(modal_input)
+            except ValueError:
+                self.update_error_response("Input must be a number")
                 return
 
-            modal_input = int(modal_input)
-            if modal_input < 1:
+            if modal_input <= 0:
                 self.update_error_response("Input must be greater than 0")
                 return
 
