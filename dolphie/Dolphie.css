@@ -83,6 +83,13 @@ TopBar {
     color: #8f9fc1;
 }
 
+
+.dashboard_replay {
+    height: auto;
+    width: 100%;
+    content-align: center middle;
+}
+
 .connection_loading_indicator {
     margin-top: 3;
 }
@@ -410,6 +417,34 @@ Button:focus {
     border-top: tall #69709a;
     border-bottom: tall #171922;
     text-style: bold;
+}
+.replay_button {
+    text-style: none;
+    background: #20283b;
+    border-top: tall #192033;
+    border-bottom: tall #192033;
+}
+.replay_button:hover {
+    background: #20283b;
+    color: #91abec;
+    border-top: tall #192033;
+    border-bottom: tall #192033;
+    text-style: bold;
+}
+.replay_button:focus {
+    background: #2d3954;
+    color: #91abec;
+    border-top: tall #192033;
+    border-bottom: tall #192033;
+    text-style: bold;
+}
+.replay_button.-active {
+    background: #273148;
+    color: #91abec;
+    border-top: tall #192033;
+    border-bottom: tall #192033;
+    text-style: bold;
+    tint: #252f45 0%;
 }
 
 Switch {

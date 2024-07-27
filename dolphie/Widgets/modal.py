@@ -142,6 +142,9 @@ class CommandModal(ModalScreen):
         elif self.command == HotkeyCommands.refresh_interval:
             input.placeholder = "Input a refresh interval (seconds)"
             input.focus()
+        elif self.command == HotkeyCommands.replay_seek:
+            input.placeholder = "Format: 2024-07-25 13:00:00"
+            input.focus()
         else:
             input.focus()
 
@@ -285,6 +288,12 @@ class CommandModal(ModalScreen):
             modal_input = int(modal_input)
             if modal_input < 1:
                 self.update_error_response("Input must be greater than 0")
+                return
+
+            self.dismiss(modal_input)
+        elif self.command == HotkeyCommands.replay_seek:
+            if not re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", modal_input):
+                self.update_error_response("Invalid timestamp format")
                 return
 
             self.dismiss(modal_input)

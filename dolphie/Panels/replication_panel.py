@@ -246,16 +246,11 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     # When replica is specified, that means we're creating a table for a replica and not replication
     if replica:
         data = replica.replication_status
-        replica_previous_replica_sbm = replica.previous_sbm
-
-        replica_sbm_source = replica.lag_source
-        replica_sbm = replica.lag
     else:
         data = dolphie.replication_status
-        replica_previous_replica_sbm = dolphie.previous_replica_sbm
 
-        replica_sbm_source = dolphie.replica_lag_source
-        replica_sbm = dolphie.replica_lag
+    replica_previous_replica_sbm = data.get("Previous_Seconds_Behind", 0)
+    replica_sbm = data.get("Seconds_Behind", 0)
 
     speed = 0
     lag = None
@@ -358,12 +353,11 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         else:
             replication_delay = f"[dark_yellow]Delay[/dark_yellow] {format_time(data['SQL_Delay'])}"
 
-    lag_source = f"Lag ({replica_sbm_source})" if replica_sbm_source else "Lag"
     if lag is None or sql_thread_running == "[red]OFF[/red]":
-        table.add_row(f"[label]{lag_source}", "")
+        table.add_row("[label]Lag", "")
     else:
         table.add_row(
-            "[label]%s" % lag_source,
+            "[label]Lag",
             "%s [label]Speed[/label] %s %s" % (lag, speed, replication_delay),
         )
 
@@ -624,7 +618,18 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
     seconds_behind = replica_lag_data.get(seconds_behind_key)
     replica_lag = int(seconds_behind) if seconds_behind is not None else 0
 
-    return replica_lag_source, replica_lag, replication_status
+    if replication_status:
+        # Update the replication lag with the alternative method if available
+        replication_status["Seconds_Behind"] = replica_lag
+
+        previous_sbm = 0
+        if replica:
+            previous_sbm = replica.replication_status.get("Seconds_Behind", 0)
+        else:
+            previous_sbm = dolphie.replication_status.get("Seconds_Behind", 0)
+        replication_status["Previous_Seconds_Behind"] = previous_sbm
+
+    return replication_status
 
 
 def fetch_replicas(tab: Tab):
@@ -706,8 +711,7 @@ def fetch_replicas(tab: Tab):
         # If we have a replica connection, we fetch its replication status
         if replica.connection:
             try:
-                replica.previous_sbm = replica.lag
-                replica.lag_source, replica.lag, replica.replication_status = fetch_replication_data(tab, replica)
+                replica.replication_status = fetch_replication_data(tab, replica)
                 if replica.replication_status:
                     replica.table = create_replication_table(tab, replica=replica)
             except ManualException as e:

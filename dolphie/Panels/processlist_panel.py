@@ -11,7 +11,7 @@ from textual.widgets import DataTable
 def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
-    if not dolphie.performance_schema_enabled and dolphie.use_performance_schema:
+    if not dolphie.performance_schema_enabled and dolphie.use_performance_schema and not dolphie.replay_file:
         dolphie.app.notify(
             "Performance Schema is not enabled on this host, using Information Schema instead for Processlist"
         )
@@ -82,6 +82,24 @@ def create_panel(tab: Tab) -> DataTable:
     # Iterate through processlist_threads
     for thread_id, thread in dolphie.processlist_threads.items():
         row_values = []
+
+        thread: ProcesslistThread
+        # We use filter here for replays since the original way requires changing WHERE clause
+        if dolphie.replay_file:
+            if dolphie.show_trxs_only:
+                # trx_state is color formatted
+                if thread.trx_state == "[dark_gray]N/A":
+                    continue
+            if dolphie.user_filter and dolphie.user_filter != thread.user:
+                continue
+            if dolphie.db_filter and dolphie.db_filter != thread.db:
+                continue
+            if dolphie.host_filter and dolphie.host_filter not in thread.host:
+                continue
+            if dolphie.query_time_filter and dolphie.query_time_filter >= thread.time:
+                continue
+            if dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
+                continue
 
         for column_id, (column_data) in enumerate(columns):
             column_name = column_data["name"]
@@ -239,6 +257,9 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
 
         host = thread["host"].split(":")[0]
         thread["host"] = dolphie.get_hostname(host)
+
+        # Remove trx_query from the thread data since it's not needed
+        thread.pop("trx_query", None)
 
         processlist_threads[str(thread["id"])] = ProcesslistThread(thread)
 

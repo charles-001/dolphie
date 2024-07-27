@@ -47,6 +47,12 @@ class Config:
     hostgroup_hosts: Dict[str, List[str]] = field(default_factory=dict)
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
+    daemon_mode: bool = False
+    daemon_mode_debug: bool = False
+    daemon_mode_log_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_daemon.log")
+    replay_file: str = None
+    replay_dir: str = None
+    replay_retention_days: int = 7
 
 
 class ArgumentParser:
@@ -315,6 +321,30 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
+            "--replay-file",
+            dest="replay_file",
+            type=str,
+            help="Specify the full path of sqlite database file to replay data from",
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--replay-dir",
+            dest="replay_dir",
+            type=str,
+            help=(
+                "Directory of the sqlite database file to save replay data to for later playback. "
+                "Note, this will enable replays and can use up a lot of disk space"
+            ),
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--replay-retention-days",
+            dest="replay_retention_days",
+            type=int,
+            help=f"Number of days to keep replay data [default: {self.config.replay_retention_days}]",
+            metavar="",
+        )
+        self.parser.add_argument(
             "--show-trxs-only",
             dest="show_trxs_only",
             action="store_true",
@@ -325,6 +355,28 @@ Dolphie's config supports these options under [dolphie] section:
             dest="show_additional_query_columns",
             action="store_true",
             help="Start with additional columns in Processlist panel",
+        )
+        self.parser.add_argument(
+            "--daemon",
+            dest="daemon_mode",
+            action="store_true",
+            help=(
+                "Starts Dolphie in daemon mode so replays are readily available. This will not show "
+                "the TUI and should be put into the background with whatever solution you decide to use"
+            ),
+        )
+        self.parser.add_argument(
+            "--debug-daemon",
+            dest="daemon_mode_debug",
+            action="store_true",
+            help="Enables debug mode for daemon mode. This will show additional information in the logs",
+        )
+        self.parser.add_argument(
+            "--daemon-log-file",
+            dest="daemon_mode_log_file",
+            type=str,
+            help="Full path of the log file for daemon mode",
+            metavar="",
         )
         self.parser.add_argument(
             "--debug-options",
@@ -523,6 +575,14 @@ Dolphie's config supports these options under [dolphie] section:
             self.console.print(self.debug_options_table)
             self.console.print("[#969aad]Note: Options are set by their source in the order they appear")
             sys.exit()
+
+        if self.config.daemon_mode:
+            if not self.config.replay_dir:
+                self.exit("Daemon mode requires --replay-dir to be specified")
+
+        if self.config.replay_file:
+            if not os.path.isfile(self.config.replay_file):
+                self.exit(f"Replay file {self.config.replay_file} does not exist")
 
     def parse_ssl_options(self, data):
         if isinstance(data, ConfigParser):

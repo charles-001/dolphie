@@ -40,6 +40,10 @@ class Dolphie:
         self.graph_marker = config.graph_marker
         self.hostgroup = config.hostgroup
         self.hostgroup_hosts = config.hostgroup_hosts
+        self.daemon_mode = config.daemon_mode
+        self.replay_file = config.replay_file
+        self.replay_dir = config.replay_dir
+        self.replay_retention_days = config.replay_retention_days
 
         self.reset_runtime_variables()
 
@@ -56,7 +60,7 @@ class Dolphie:
         self.sort_by_time_descending: bool = True
 
     def reset_runtime_variables(self):
-        self.metric_manager = MetricManager.MetricManager()
+        self.metric_manager = MetricManager.MetricManager(self.replay_file, self.daemon_mode)
         self.replica_manager = DataTypes.ReplicaManager()
 
         self.dolphie_start_time: datetime = datetime.now()
@@ -73,7 +77,6 @@ class Dolphie:
         self.ddl: list = []
         self.pause_refresh: bool = False
         self.previous_binlog_position: int = 0
-        self.previous_replica_sbm: int = 0
         self.innodb_metrics: dict = {}
         self.disk_io_metrics: dict = {}
         self.global_variables: dict = {}
@@ -82,8 +85,6 @@ class Dolphie:
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
         self.replication_applier_status: dict = {}
-        self.replica_lag_source: str = None
-        self.replica_lag: int = None
         self.active_redo_logs: int = None
         self.host_with_port: str = f"{self.host}:{self.port}"
         self.binlog_transaction_compression_percentage: int = None
@@ -142,7 +143,8 @@ class Dolphie:
 
     def db_connect(self):
         self.main_db_connection.connect()
-        self.secondary_db_connection.connect()
+        if not self.daemon_mode:
+            self.secondary_db_connection.connect()
 
         version = self.main_db_connection.fetch_value_from_field("SELECT @@version")
         version_split = version.split(".")
@@ -159,6 +161,8 @@ class Dolphie:
             self.host_with_port = f"{self.host}:{self.port}"
         elif self.connection_source == ConnectionSource.mysql:
             self.setup_connection_mysql()
+
+        self.metric_manager.connection_source = self.connection_source
 
         # Add host to host setup file if it doesn't exist
         self.add_host_to_host_cache_file()
@@ -278,18 +282,6 @@ class Dolphie:
             hostname = host
 
         return hostname
-
-    def massage_metrics_data(self):
-        if self.is_mysql_version_at_least("8.0.30") and self.connection_source_alt != ConnectionSource.mariadb:
-            active_redo_logs_count = self.main_db_connection.fetch_value_from_field(
-                MySQLQueries.active_redo_logs, "count"
-            )
-            self.global_status["Active_redo_log_count"] = active_redo_logs_count
-
-        # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
-        # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
-        if not self.global_status.get("Innodb_lsn_current"):
-            self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
 
     def update_switches_after_reset(self):
         # Set the graph switches to what they're currently selected to after a reset

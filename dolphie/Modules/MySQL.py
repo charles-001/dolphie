@@ -5,6 +5,7 @@ import pymysql
 from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
+from loguru import logger
 from textual.app import App
 
 
@@ -112,6 +113,7 @@ class Database:
 
         for _ in range(self.max_reconnect_attempts):
             self.running_query = True
+            error_message = None
 
             try:
                 rows = self.cursor.execute(query, values)
@@ -145,6 +147,7 @@ class Database:
                         # 2013: Lost connection to MySQL server during query
                         # 2055: Lost connection to MySQL server at hostname
 
+                        logger.error("MySQL connection lost, reconnecting...")
                         self.app.notify(
                             f"[b light_blue]{self.host}:{self.port}[/b light_blue]: {error_message}",
                             title="MySQL Connection Lost",
@@ -155,6 +158,7 @@ class Database:
                         self.close()
                         self.connect()
 
+                        logger.success("Reconnected!")
                         self.app.notify(
                             f"[b light_blue]{self.host}:{self.port}[/b light_blue]: Successfully reconnected",
                             title="MySQL Connection Created",

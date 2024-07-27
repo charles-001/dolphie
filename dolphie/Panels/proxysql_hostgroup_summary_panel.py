@@ -57,6 +57,8 @@ def create_panel(tab: Tab) -> DataTable:
                 column_value = format_bytes(column_value)
             elif column_format == "number":
                 column_value = format_number(column_value)
+            elif column_key == "hostgroup":
+                column_value = int(column_value)
             elif column_key == "srv_host":
                 column_value = dolphie.get_hostname(column_value)
             elif column_key == "status":
@@ -94,6 +96,8 @@ def create_panel(tab: Tab) -> DataTable:
     else:
         if hostgroup_summary_datatable.row_count:
             hostgroup_summary_datatable.clear()
+
+    hostgroup_summary_datatable.sort("hostgroup")
 
     tab.proxysql_hostgroup_summary_title.update(
         f"Hostgroups ([highlight]{hostgroup_summary_datatable.row_count}[/highlight])"

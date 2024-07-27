@@ -8,6 +8,7 @@ from dolphie import Dolphie
 from dolphie.DataTypes import ConnectionStatus
 from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Widgets.host_setup import HostSetupModal
 from dolphie.Widgets.spinner import SpinnerWidget
 from dolphie.Widgets.topbar import TopBar
@@ -21,6 +22,7 @@ from textual.containers import (
 )
 from textual.timer import Timer
 from textual.widgets import (
+    Button,
     DataTable,
     Label,
     LoadingIndicator,
@@ -40,10 +42,14 @@ class Tab:
     dolphie: Dolphie = None
     manual_tab_name: str = None
 
+    replay_manager: ReplayManager = None
+
     worker: Worker = None
     worker_timer: Timer = None
     worker_cancel_error: ManualException = None
     worker_running: bool = False
+
+    replay_manual_control: bool = False
 
     replicas_worker: Worker = None
     replicas_worker_timer: Timer = None
@@ -65,6 +71,9 @@ class Tab:
 
     spinner: SpinnerWidget = None
 
+    dashboard_replay_container: Container = None
+    dashboard_replay_start_end: Static = None
+    dashboard_replay: Static = None
     dashboard_section_1: Static = None
     dashboard_section_2: Static = None
     dashboard_section_3: Static = None
@@ -175,6 +184,7 @@ class TabManager:
 
         # Save the Dolphie instance to the tab
         tab.dolphie = dolphie
+        tab.replay_manager = ReplayManager(dolphie)
 
         # Revert the port back to its original value
         if use_hostgroup and self.config.hostgroup_hosts and len(tab_host_split) > 1:
@@ -187,6 +197,31 @@ class TabManager:
                 LoadingIndicator(id=f"loading_indicator_{tab_id}", classes="connection_loading_indicator"),
                 SpinnerWidget(id=f"spinner_{tab_id}", text="Processing command"),
                 VerticalScroll(
+                    Container(
+                        Static(id=f"dashboard_replay_{tab_id}", classes="dashboard_replay"),
+                        Static(id=f"dashboard_replay_start_end_{tab_id}", classes="dashboard_replay"),
+                        Horizontal(
+                            Button(
+                                ":fast_reverse_button: Back",
+                                id=f"back_button_{tab_id}",
+                                classes="replay_button replay_back",
+                            ),
+                            Button("⏸️  Pause", id=f"pause_button_{tab_id}", classes="replay_button replay_pause"),
+                            Button(
+                                ":fast-forward_button: Forward",
+                                id=f"forward_button_{tab_id}",
+                                classes="replay_button replay_forward",
+                            ),
+                            Button(
+                                ":mag: Seek",
+                                id=f"seek_button_{tab_id}",
+                                classes="replay_button replay_seek",
+                            ),
+                            classes="button_container",
+                        ),
+                        id=f"dashboard_replay_container_{tab_id}",
+                        classes="dashboard_replay",
+                    ),
                     Container(
                         Center(
                             Static(id=f"dashboard_section_1_{tab_id}", classes="dashboard_section_1"),
@@ -392,6 +427,9 @@ class TabManager:
             f"#proxysql_command_stats_datatable_{tab.id}", DataTable
         )
 
+        tab.dashboard_replay_container = self.app.query_one(f"#dashboard_replay_container_{tab.id}", Container)
+        tab.dashboard_replay_start_end = self.app.query_one(f"#dashboard_replay_start_end_{tab.id}", Static)
+        tab.dashboard_replay = self.app.query_one(f"#dashboard_replay_{tab.id}", Static)
         tab.dashboard_section_1 = self.app.query_one(f"#dashboard_section_1_{tab.id}", Static)
         tab.dashboard_section_2 = self.app.query_one(f"#dashboard_section_2_{tab.id}", Static)
         tab.dashboard_section_3 = self.app.query_one(f"#dashboard_section_3_{tab.id}", Static)
@@ -432,6 +470,11 @@ class TabManager:
         for panel in dolphie.startup_panels:
             self.app.query_one(f"#panel_{panel}_{tab.id}").display = True
             setattr(getattr(dolphie.panels, panel), "visible", True)
+
+        if dolphie.replay_file:
+            tab.dashboard_replay_container.display = True
+        else:
+            tab.dashboard_replay_container.display = False
 
         # Set what marker we use for graphs
         graphs = self.app.query(MetricManager.Graph)
@@ -553,6 +596,10 @@ class TabManager:
                 while True:
                     if not tab.worker_running and not tab.replicas_worker_running:
                         tab.worker_cancel_error = ""
+
+                        # Edge case if a user switches from a replay to connecting
+                        dolphie.replay_file = None
+                        tab.dashboard_replay_container.display = False
 
                         dolphie.reset_runtime_variables()
                         dolphie.app.run_worker_main(tab.id)

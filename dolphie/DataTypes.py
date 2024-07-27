@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List
 
 from dolphie.Modules.Functions import format_query, format_time
@@ -28,10 +28,7 @@ class Replica:
     host: str
     connection: str = None
     table: Table = None
-    replication_status: Dict[str, str] = None
-    lag_source: str = None
-    lag: int = None
-    previous_sbm: int = 0
+    replication_status: Dict[str, str] = field(default_factory=dict)
     mysql_version: str = None
 
 
@@ -98,6 +95,8 @@ class Panels:
 
 class ProcesslistThread:
     def __init__(self, thread_data: Dict[str, str]):
+        self.thread_data = thread_data
+
         self.id = str(thread_data.get("id", ""))
         self.mysql_thread_id = thread_data.get("mysql_thread_id")
         self.user = thread_data.get("user", "")
@@ -215,3 +214,4 @@ class HotkeyCommands:
     variable_search = "variable_search"
     rename_tab = "rename_tab"
     refresh_interval = "refresh_interval"
+    replay_seek = "replay_seek"
