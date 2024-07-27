@@ -262,7 +262,6 @@ class ReplayManager:
                 if v.values:
                     metric_entry[k] = v.values
 
-        print(metrics)
         return metrics
 
     def capture_state(self):
