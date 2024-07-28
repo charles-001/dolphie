@@ -6,11 +6,10 @@ from datetime import datetime, timedelta
 
 import zstandard as zstd
 from dolphie.DataTypes import ConnectionSource, ProcesslistThread
+from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
-from dolphie.Modules.Functions import minify_query
+from dolphie.Modules.Functions import format_bytes, minify_query
 from loguru import logger
-
-from dolphie import Dolphie
 
 
 @dataclass
@@ -57,26 +56,25 @@ class ReplayManager:
             # No options specified for replaying, skip initialization
             return
 
-        logger.info(f"Replay database file: {self.replay_file} ({dolphie.replay_retention_days} days retention)")
+        logger.info(f"Replay database file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)")
 
-        # Ensure the directory for the replay file exists
-        os.makedirs(os.path.dirname(self.replay_file), exist_ok=True)
-
-        # Initialize SQLite database
-        self.conn = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
-        self.cursor = self.conn.cursor()
-
-        self._initialize_database()
+        self._initialize_sqlite()
 
         if dolphie.replay_file:
             self._get_metadata()
 
-        self.purge_old_data()
-
-    def _initialize_database(self):
+    def _initialize_sqlite(self):
         """
         Initializes the SQLite database and creates the necessary tables.
         """
+
+        # Ensure the directory for the replay file exists
+        os.makedirs(os.path.dirname(self.replay_file), exist_ok=True)
+
+        # Connect to the SQLite database
+        self.conn = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
+        self.cursor = self.conn.cursor()
+
         self.cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS replay_data (
@@ -96,9 +94,12 @@ class ReplayManager:
             )"""
         )
 
+        # Start the purge process
+        self.purge_old_data()
+
     def purge_old_data(self):
         """
-        Purges data older than the retention period specified by days_of_retention and performs a vacuum.
+        Purges data older than the retention period specified by hours_of_retention and performs a vacuum.
         Only runs if at least an hour has passed since the last purge.
         """
         if not self.dolphie.replay_dir or self.dolphie.replay_file:
@@ -108,18 +109,21 @@ class ReplayManager:
         if current_time - self.last_purge_time < timedelta(hours=1):
             return  # Skip purging if less than an hour has passed
 
-        retention_date = (current_time - timedelta(days=self.dolphie.replay_retention_days)).strftime(
+        retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
 
-        rows_deleted = 0
         self.cursor.execute("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
         rows_deleted = self.cursor.rowcount
 
+        # This will rebuild the database file and reduce its size
         self.cursor.execute("VACUUM")
 
         if rows_deleted:
-            logger.info(f"Purged {rows_deleted} rows from replay data older than {retention_date}")
+            logger.info(
+                f"Purged {rows_deleted} rows from replay data older than {retention_date}. "
+                f"Database file size is now {format_bytes(os.path.getsize(self.replay_file), color=False)}"
+            )
 
         self.last_purge_time = current_time
 
@@ -184,9 +188,21 @@ class ReplayManager:
                 ),
             )
         else:
+            app_version = row[3]
             logger.info(
-                f"Replay database metadata - Host: {row[0]}, MySQL: {row[1]} ({row[2]}), Dolphie version: {row[3]}"
+                f"Replay database metadata - Host: {row[0]}, MySQL: {row[1]} ({row[2]}), Dolphie version: {app_version}"
             )
+
+            if self.dolphie.daemon_mode and app_version != self.dolphie.app_version:
+                logger.warning(
+                    f"The version of Dolphie ({self.dolphie.app_version}) differs from the version of the "
+                    f"daemon's replay file ({app_version}). To avoid potential compatibility issues, the current "
+                    f"database file will be renamed to: {self.replay_file}_v{app_version}"
+                )
+                os.rename(self.replay_file, f"{self.replay_file}_v{app_version}")
+
+                self._initialize_sqlite()
+                self.update_metadata()
 
     def _get_metadata(self):
         """

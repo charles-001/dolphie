@@ -43,7 +43,7 @@ class Dolphie:
         self.daemon_mode = config.daemon_mode
         self.replay_file = config.replay_file
         self.replay_dir = config.replay_dir
-        self.replay_retention_days = config.replay_retention_days
+        self.replay_retention_hours = config.replay_retention_hours
 
         self.reset_runtime_variables()
 

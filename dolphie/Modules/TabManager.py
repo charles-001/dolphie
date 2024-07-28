@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import List
 
 import dolphie.Modules.MetricManager as MetricManager
-from dolphie import Dolphie
 from dolphie.DataTypes import ConnectionStatus
 from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.ManualException import ManualException
@@ -33,6 +32,8 @@ from textual.widgets import (
     TabPane,
 )
 from textual.worker import Worker
+
+from dolphie.Dolphie import Dolphie
 
 
 @dataclass

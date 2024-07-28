@@ -64,8 +64,7 @@ from textual import events, on, work
 from textual.app import App
 from textual.widgets import Button, Switch, TabbedContent, TabPane
 from textual.worker import Worker, WorkerState, get_current_worker
-
-from dolphie import Dolphie
+from dolphie.Dolphie import Dolphie
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]

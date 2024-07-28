@@ -52,7 +52,7 @@ class Config:
     daemon_mode_log_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_daemon.log")
     replay_file: str = None
     replay_dir: str = None
-    replay_retention_days: int = 2
+    replay_retention_hours: int = 48
 
 
 class ArgumentParser:
@@ -338,10 +338,10 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "--replay-retention-days",
-            dest="replay_retention_days",
+            "--replay-retention-hourss",
+            dest="replay_retention_hours",
             type=int,
-            help=f"Number of days to keep replay data [default: {self.config.replay_retention_days}]",
+            help=f"Number of hours to keep replay data [default: {self.config.replay_retention_hours}]",
             metavar="",
         )
         self.parser.add_argument(
