@@ -174,7 +174,6 @@ class DolphieApp(App):
             dolphie.proxysql_command_stats = replay_event_data.command_stats
             dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
             dolphie.processlist_threads = replay_event_data.processlist
-            dolphie.proxysql_per_second_data = replay_event_data.per_second_data
 
             # Refresh the metric manager metrics to the state of the replay event
             dolphie.metric_manager.refresh_data(
@@ -491,7 +490,7 @@ class DolphieApp(App):
                     dolphie.is_group_replication_primary = True
                     break
 
-        if dolphie.panels.dashboard.visible:
+        if dolphie.panels.dashboard.visible or dolphie.replay_dir:
             if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
                 dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
             else:
@@ -514,7 +513,7 @@ class DolphieApp(App):
             #         "compression_percentage"
             #     )
 
-        if dolphie.panels.processlist.visible:
+        if dolphie.panels.processlist.visible or dolphie.replay_dir:
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
         if dolphie.is_mysql_version_at_least("5.7"):
@@ -538,6 +537,8 @@ class DolphieApp(App):
             metadata_lock_metrics=dolphie.metadata_locks,
             replication_status=dolphie.replication_status,
         )
+
+        tab.replay_manager.capture_state()
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -579,7 +580,7 @@ class DolphieApp(App):
         else:
             dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = 100
 
-        if dolphie.panels.proxysql_hostgroup_summary.visible or dolphie.daemon_mode:
+        if dolphie.panels.proxysql_hostgroup_summary.visible or dolphie.replay_dir:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
 
             previous_values = {}
@@ -605,9 +606,9 @@ class DolphieApp(App):
                         current_value = int(row.get(column_key, 0))
 
                         value_per_sec = (current_value - previous_value) / dolphie.polling_latency
-                        dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = round(value_per_sec)
+                        row[f"{column_key}_per_sec"] = round(value_per_sec)
 
-        if dolphie.panels.processlist.visible:
+        if dolphie.panels.processlist.visible or dolphie.replay_dir:
             dolphie.processlist_threads = proxysql_processlist_panel.fetch_data(tab)
 
         if dolphie.panels.proxysql_mysql_query_rules.visible:
@@ -622,10 +623,12 @@ class DolphieApp(App):
             proxysql_command_stats=dolphie.proxysql_command_stats,
         )
 
+        tab.replay_manager.capture_state()
+
     def refresh_screen_proxysql(self, tab: Tab):
         dolphie = tab.dolphie
 
-        if tab.loading_indicator.display:
+        if tab.loading_indicator.display or dolphie.replay_file:
             tab.loading_indicator.display = False
             self.tab_manager.update_topbar(tab=tab, connection_status="ONLINE")
 
@@ -647,8 +650,6 @@ class DolphieApp(App):
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
-        tab.replay_manager.capture_state()
-
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
         if not dolphie.daemon_mode:
@@ -656,8 +657,6 @@ class DolphieApp(App):
 
         # This denotes that we've gone through the first loop of the worker thread
         dolphie.completed_first_loop = True
-
-        tab.replay_manager.capture_state()
 
     def refresh_screen_mysql(self, tab: Tab):
         dolphie = tab.dolphie
@@ -691,8 +690,6 @@ class DolphieApp(App):
 
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
-
-        tab.replay_manager.capture_state()
 
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
@@ -1019,9 +1016,9 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if dolphie.connection_source == ConnectionSource.mysql:
-            replay_allowed_keys = ["1", "2", "3", "a", "c", "f", "p", "r", "s", "t", "T", "v"]
+            replay_allowed_keys = ["1", "2", "3", "a", "c", "f", "p", "r", "s", "S", "t", "T", "v"]
         elif dolphie.connection_source == ConnectionSource.proxysql:
-            replay_allowed_keys = ["1", "2", "3", "4", "a", "c", "f", "p", "r", "s", "t", "T", "v"]
+            replay_allowed_keys = ["1", "2", "3", "4", "a", "c", "f", "p", "r", "s", "S", "t"]
 
         exclude_keys = [
             "up",
@@ -1171,6 +1168,12 @@ class DolphieApp(App):
 
                 self.notify(f"Tab [highlight]{tab.name}[/highlight] [white]has been removed", severity="success")
                 self.tab_manager.tabs.pop(tab.id, None)
+        elif key == "left":
+            if dolphie.replay_file:
+                self.query_one(f"#back_button_{tab.id}", Button).press()
+        elif key == "right":
+            if dolphie.replay_file:
+                self.query_one(f"#forward_button_{tab.id}", Button).press()
 
         elif key == "ctrl+a" or key == "ctrl+d":
             all_tabs = [tab.id for tab in self.tab_manager.get_all_tabs()]
@@ -1233,6 +1236,9 @@ class DolphieApp(App):
         elif key == "f":
 
             def command_get_input(filter_data):
+                if not filter_data:
+                    return
+
                 filter_name, filter_value = filter_data[0], filter_data[1]
                 filters_mapping = {
                     "User": "user_filter",
@@ -1245,11 +1251,12 @@ class DolphieApp(App):
 
                 attribute = filters_mapping.get(filter_name)
                 if attribute:
-                    setattr(dolphie, attribute, int(filter_value) if attribute == "query_time_filter" else filter_value)
+                    setattr(dolphie, attribute, filter_value)
                     self.notify(
                         f"Filtering [b]{filter_name.capitalize()}[/b] by [b highlight]{filter_value}[/b highlight]",
                         severity="success",
                     )
+
                 else:
                     self.notify(f"Invalid filter name {filter_name}", severity="error")
 
@@ -1389,6 +1396,12 @@ class DolphieApp(App):
                 dolphie.sort_by_time_descending = True
                 self.notify("Processlist will now sort threads by time in descending order")
 
+            self.force_refresh_for_replay(need_current_data=True)
+
+        elif key == "S":
+            if dolphie.replay_file:
+                self.query_one(f"#seek_button_{tab.id}", Button).press()
+
         elif key == "t":
 
             if dolphie.connection_source == ConnectionSource.proxysql:
@@ -1405,7 +1418,7 @@ class DolphieApp(App):
                         return
 
                     thread_table.add_row("[label]Process ID", thread_id)
-                    thread_table.add_row("[label]Hostgroup", thread_data.hostgroup)
+                    thread_table.add_row("[label]Hostgroup", str(thread_data.hostgroup))
                     thread_table.add_row("[label]User", thread_data.user)
                     thread_table.add_row("[label]Frontend Host", thread_data.frontend_host)
                     thread_table.add_row("[label]Backend Host", thread_data.host)

@@ -37,7 +37,6 @@ class ProxySQLReplayData:
     global_variables: dict
     command_stats: dict
     hostgroup_summary: dict
-    per_second_data: dict
     processlist: dict
     metric_manager: dict
 
@@ -208,22 +207,33 @@ class ReplayManager:
                 ),
             )
         else:
+            connection_source = row[3]
             app_version = row[4]
             logger.info(
                 f"Replay database metadata - Host: {row[0]}, Version: {row[1]} ({row[2]}), "
                 f"Dolphie version: {app_version}"
             )
 
-            if self.dolphie.daemon_mode and app_version != self.dolphie.app_version:
-                logger.warning(
-                    f"The version of Dolphie ({self.dolphie.app_version}) differs from the version of the "
-                    f"daemon's replay file ({app_version}). To avoid potential compatibility issues, the current "
-                    f"database file will be renamed to: {self.replay_file}_v{app_version}"
-                )
-                os.rename(self.replay_file, f"{self.replay_file}_v{app_version}")
+            if self.dolphie.daemon_mode:
+                # Avoid mixing Dolphie versions in the same replay file. Never know what I might change in the future :)
+                if app_version != self.dolphie.app_version:
+                    logger.warning(
+                        f"The version of Dolphie ({self.dolphie.app_version}) differs from the version of the "
+                        f"daemon's replay file ({app_version}). To avoid potential compatibility issues, the current "
+                        f"database file will be renamed to: {self.replay_file}_v{app_version}"
+                    )
+                    os.rename(self.replay_file, f"{self.replay_file}_v{app_version}")
 
-                self._initialize_sqlite()
-                self.update_metadata()
+                    self._initialize_sqlite()
+                    self.update_metadata()
+
+                # Avoid mixing connection sources in the same replay file
+                if connection_source != self.dolphie.connection_source:
+                    logger.critical(
+                        f"The connection source of the daemon's replay file ({connection_source}) "
+                        f"differs from the current connection source ({self.dolphie.connection_source}). You should "
+                        "never mix connection sources in the same replay file."
+                    )
 
     def _get_metadata(self):
         """
@@ -352,7 +362,6 @@ class ReplayManager:
                 global_variables=self.dolphie.global_variables,
                 command_stats=self.dolphie.proxysql_command_stats,
                 hostgroup_summary=self.dolphie.proxysql_hostgroup_summary,
-                per_second_data=self.dolphie.proxysql_per_second_data,
                 processlist=processlist,
                 metric_manager=self._condition_metrics(self.dolphie.metric_manager),
             )
@@ -426,7 +435,6 @@ class ReplayManager:
                 global_variables=data.get("global_variables", {}),
                 command_stats=data.get("command_stats", {}),
                 hostgroup_summary=data.get("hostgroup_summary", {}),
-                per_second_data=data.get("per_second_data", {}),
                 processlist=processlist,
                 metric_manager=data.get("metric_manager", {}),
             )

@@ -119,6 +119,7 @@ class CommandModal(ModalScreen):
 
             if self.connection_source != ConnectionSource.proxysql:
                 self.query_one("#filter_radio_buttons #hostgroup", RadioButton).display = False
+                self.query_one("#filter_radio_buttons #hostgroup", RadioButton).disabled = True
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
             sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
             sleeping_queries_checkbox.toggle()
@@ -156,7 +157,7 @@ class CommandModal(ModalScreen):
 
         if field:
             sorted_array = sorted(set(getattr(thread, field) for thread in self.processlist_data.values()))
-            self.dropdown_items = [DropdownItem(value) for value in sorted_array]
+            self.dropdown_items = [DropdownItem(str(value)) for value in sorted_array]
 
         self.query_one("#dropdown_items", Dropdown).items = self.dropdown_items
 
@@ -230,7 +231,9 @@ class CommandModal(ModalScreen):
                     self.dismiss([filter_label, modal_input])
                 else:
                     if filter_id == "host":
-                        value = next((ip for ip, addr in self.host_cache_data.items() if modal_input == addr), None)
+                        value = next(
+                            (ip for ip, addr in self.host_cache_data.items() if modal_input == addr), modal_input
+                        )
                         modal_input = value
                     else:
                         value = next(

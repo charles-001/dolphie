@@ -18,9 +18,9 @@ def create_panel(tab: Tab) -> DataTable:
         "ConnOK": {"name": "Conn OK", "width": 10, "format": "number"},
         "ConnERR": {"name": "Conn ERR", "width": 10, "format": "number"},
         "MaxConnUsed": {"name": "Max Conn", "width": 11, "format": "number"},
-        "Queries": {"name": "Queries/s", "width": 10, "format": "number"},
-        "Bytes_data_sent": {"name": "Data Sent/s", "width": 11, "format": "bytes"},
-        "Bytes_data_recv": {"name": "Data Recvd/s", "width": 12, "format": "bytes"},
+        "Queries_per_sec": {"name": "Queries/s", "width": 10, "format": "number"},
+        "Bytes_data_sent_per_sec": {"name": "Data Sent/s", "width": 11, "format": "bytes"},
+        "Bytes_data_recv_per_sec": {"name": "Data Recvd/s", "width": 12, "format": "bytes"},
         "Latency_us": {"name": "Latency (ms)", "width": 12, "format": "time"},
     }
 
@@ -40,12 +40,7 @@ def create_panel(tab: Tab) -> DataTable:
         for column_id, (column_key, column_data) in enumerate(columns.items()):
             column_name = column_data["name"]
             column_format = column_data["format"]
-            column_value = row.get(column_key)
-
-            # Check if there is a per second value for the column
-            column_key_per_sec = dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key)
-            if column_key_per_sec is not None:
-                column_value = column_key_per_sec
+            column_value = row.get(column_key, 0)
 
             if column_format == "time":
                 column_value = f"{round(int(column_value) / 1000, 2)}"

@@ -50,9 +50,31 @@ def create_panel(tab: Tab) -> DataTable:
             column_width = column_data["width"]
             processlist_datatable.add_column(column_name, key=column_name, width=column_width)
 
+    filter_threads = []
     # Iterate through processlist_threads
     for thread_id, thread in dolphie.processlist_threads.items():
         row_values = []
+
+        thread: ProxySQLProcesslistThread
+        # We use filter here for replays since the original way requires changing WHERE clause
+        if dolphie.replay_file:
+            found = False
+            if dolphie.user_filter and dolphie.user_filter != thread.user:
+                found = True
+            elif dolphie.db_filter and dolphie.db_filter != thread.db:
+                found = True
+            elif dolphie.host_filter and dolphie.host_filter not in thread.host:
+                found = True
+            elif dolphie.query_time_filter and dolphie.query_time_filter >= thread.time:
+                found = True
+            elif dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
+                found = True
+            elif dolphie.hostgroup_filter and dolphie.hostgroup_filter != thread.hostgroup:
+                found = True
+
+            if found:
+                filter_threads.append(thread_id)
+                continue
 
         for column_id, (column_data) in enumerate(columns):
             column_name = column_data["name"]
@@ -98,6 +120,10 @@ def create_panel(tab: Tab) -> DataTable:
         # Add a new row to the datatable
         if row_values:
             processlist_datatable.add_row(*row_values, key=thread_id)
+
+    # Remove threads that were filtered out
+    for thread_id in filter_threads:
+        dolphie.processlist_threads.pop(thread_id)
 
     # Remove rows from processlist_datatable that no longer exist in processlist_threads
     if dolphie.processlist_threads:

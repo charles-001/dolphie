@@ -160,7 +160,7 @@ class ProxySQLProcesslistThread:
         self.thread_data = thread_data
 
         self.id = str(thread_data.get("id", ""))
-        self.hostgroup = thread_data.get("hostgroup")
+        self.hostgroup = int(thread_data.get("hostgroup"))
         self.user = thread_data.get("user", "")
         self.frontend_host = self._get_formatted_string(thread_data.get("frontend_host", ""))
         self.host = self._get_formatted_string(thread_data.get("backend_host", ""))

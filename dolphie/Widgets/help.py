@@ -73,7 +73,7 @@ class HelpScreen(ModalScreen):
                     "r": "Set the refresh interval",
                     "R": "Reset all metrics",
                     "t": "Display details of a process along with an EXPLAIN of its query",
-                    "T": "Transaction view - toggle displaying process that only have an active transaction",
+                    "T": "Toggle displaying process that only have an active transaction",
                     "s": "Toggle sorting for Age in descending/ascending order",
                     "u": "List active connected users and their statistics",
                     "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
@@ -146,7 +146,7 @@ class HelpScreen(ModalScreen):
                     "MP": "Multiplex",
                 },
             },
-            "replay": {
+            "mysql_replay": {
                 "Commands": {
                     "1": "Show/hide Dashboard",
                     "2": "Show/hide Processlist",
@@ -158,13 +158,41 @@ class HelpScreen(ModalScreen):
                     "a": "Toggle additional processlist columns",
                     "c": "Clear all filters set",
                     "f": "Filter processlist by a supported option",
-                    "p": "Pause refreshing of panels",
+                    "p": "Pause replay",
                     "q": "Quit",
                     "r": "Set the refresh interval",
                     "t": "Display details of a process",
-                    "T": "Transaction view - toggle displaying process that only have an active transaction",
+                    "T": "Toggle displaying process that only have an active transaction",
                     "s": "Toggle sorting for Age in descending/ascending order",
+                    "S": "Seek to a specific time in the replay",
                     "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
+                    "left": "Seek to the previous refresh interval",
+                    "right": "Seek to the next refresh interval",
+                    "ctrl+a": "Switch to the previous tab",
+                    "ctrl+d": "Switch to the next tab",
+                }
+            },
+            "proxysql_replay": {
+                "Commands": {
+                    "1": "Show/hide Dashboard",
+                    "2": "Show/hide Processlist",
+                    "3": "Show/hide Graph Metrics",
+                    "4": "Show/hide Hostgroup Summary",
+                    "`": "Open Host Setup",
+                    "+": "Create a new tab",
+                    "-": "Remove the current tab",
+                    "=": "Rename the current tab",
+                    "a": "Toggle additional processlist columns",
+                    "c": "Clear all filters set",
+                    "f": "Filter processlist by a supported option",
+                    "p": "Pause replay",
+                    "q": "Quit",
+                    "r": "Set the refresh interval",
+                    "t": "Display details of a process",
+                    "s": "Toggle sorting for Age in descending/ascending order",
+                    "S": "Seek to a specific time in the replay",
+                    "left": "Seek to the previous refresh interval",
+                    "right": "Seek to the next refresh interval",
                     "ctrl+a": "Switch to the previous tab",
                     "ctrl+d": "Switch to the next tab",
                 }
@@ -180,14 +208,21 @@ class HelpScreen(ModalScreen):
                 self.query_one("#mysql_help").update(Group(Align.center(commands), "", Align.center(terminology)))
             elif source == ConnectionSource.proxysql:
                 self.query_one("#proxysql_help").update(Group(Align.center(commands), "", Align.center(terminology)))
-            elif source == "replay":
+            elif source == "mysql_replay":
                 self.query_one("#mysql_replay_help").update(Group(Align.center(commands)))
+            elif source == "proxysql_replay":
+                self.query_one("#proxysql_replay_help").update(Group(Align.center(commands)))
 
         # Activate appropriate tab based on connection source
-        if self.connection_source == ConnectionSource.proxysql:
-            self.query_one("#tabbed_content", TabbedContent).active = "tab_proxysql"
-        elif self.replay_file:
-            self.query_one("#tabbed_content", TabbedContent).active = "tab_mysql_replay"
+        tabbed_content = self.query_one("#tabbed_content", TabbedContent)
+        if self.replay_file:
+            if self.connection_source == ConnectionSource.proxysql:
+                tabbed_content.active = "tab_proxysql_replay"
+            else:
+                tabbed_content.active = "tab_mysql_replay"
+        else:
+            if self.connection_source == ConnectionSource.proxysql:
+                tabbed_content.active = "tab_proxysql"
 
     def _create_table(self, title: str, data: dict):
         table = Table(
@@ -218,6 +253,12 @@ class HelpScreen(ModalScreen):
                     "MySQL Replay", Static(id="mysql_replay_help", shrink=True), id="tab_mysql_replay", classes="tab"
                 )
                 yield TabPane("ProxySQL", Static(id="proxysql_help", shrink=True), id="tab_proxysql", classes="tab")
+                yield TabPane(
+                    "ProxySQL Replay",
+                    Static(id="proxysql_replay_help", shrink=True),
+                    id="tab_proxysql_replay",
+                    classes="tab",
+                )
 
             yield Label(
                 "[light_blue][b]Note[/b]: Textual puts your terminal in application mode which disables selecting"
