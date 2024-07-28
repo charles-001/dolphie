@@ -3,9 +3,14 @@ import os
 import sqlite3
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
+from typing import Union
 
 import zstandard as zstd
-from dolphie.DataTypes import ConnectionSource, ProcesslistThread
+from dolphie.DataTypes import (
+    ConnectionSource,
+    ProcesslistThread,
+    ProxySQLProcesslistThread,
+)
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
@@ -13,7 +18,7 @@ from loguru import logger
 
 
 @dataclass
-class ReplayData:
+class MySQLReplayData:
     timestamp: str
     global_status: dict
     global_variables: dict
@@ -21,6 +26,18 @@ class ReplayData:
     innodb_metrics: dict
     replica_manager: dict
     replication_status: dict
+    processlist: dict
+    metric_manager: dict
+
+
+@dataclass
+class ProxySQLReplayData:
+    timestamp: str
+    global_status: dict
+    global_variables: dict
+    command_stats: dict
+    hostgroup_summary: dict
+    per_second_data: dict
     processlist: dict
     metric_manager: dict
 
@@ -90,6 +107,7 @@ class ReplayManager:
                 hostname VARCHAR(255),
                 host_version VARCHAR(255),
                 host_distro VARCHAR(255),
+                connection_source VARCHAR(255),
                 dolphie_version VARCHAR(255)
             )"""
         )
@@ -179,18 +197,21 @@ class ReplayManager:
         row = self.cursor.fetchone()
         if row is None:
             self.cursor.execute(
-                "INSERT INTO metadata (hostname, host_version, host_distro, dolphie_version) " "VALUES (?, ?, ?, ?)",
+                "INSERT INTO metadata (hostname, host_version, host_distro, connection_source, dolphie_version) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (
                     self.dolphie.host_with_port,
                     self.dolphie.host_version,
                     self.dolphie.host_distro,
+                    self.dolphie.connection_source,
                     self.dolphie.app_version,
                 ),
             )
         else:
-            app_version = row[3]
+            app_version = row[4]
             logger.info(
-                f"Replay database metadata - Host: {row[0]}, MySQL: {row[1]} ({row[2]}), Dolphie version: {app_version}"
+                f"Replay database metadata - Host: {row[0]}, Version: {row[1]} ({row[2]}), "
+                f"Dolphie version: {app_version}"
             )
 
             if self.dolphie.daemon_mode and app_version != self.dolphie.app_version:
@@ -206,7 +227,7 @@ class ReplayManager:
 
     def _get_metadata(self):
         """
-        Retrieves the metadata from the metadata table.
+        Retrieves the replay's metadata from the metadata table.
         """
         self.cursor.execute("SELECT * FROM metadata")
         row = self.cursor.fetchone()
@@ -214,6 +235,7 @@ class ReplayManager:
             self.dolphie.host_with_port = row[0]
             self.dolphie.host_version = row[1]
             self.dolphie.host_distro = row[2]
+            self.dolphie.connection_source = row[3]
         else:
             raise Exception("Metadata not found in replay file.")
 
@@ -293,35 +315,47 @@ class ReplayManager:
             for thread_data in (v.thread_data for v in self.dolphie.processlist_threads.values())
         ]
 
-        # Remove some global status variables that are not useful for replaying
-        keys_to_remove = []
-        for var_name in self.dolphie.global_status.keys():
-            exclude_vars = [
-                "Mysqlx",
-                "Ssl",
-                "Performance_schema",
-                "Rsa_public_key",
-                "Caching_sha2_password_rsa_public_key",
-            ]
-            for exclude_var in exclude_vars:
-                if exclude_var in var_name:
-                    keys_to_remove.append(var_name)
-                    break
+        if self.dolphie.connection_source == ConnectionSource.mysql:
+            # Remove some global status variables that are not useful for replaying
+            keys_to_remove = []
+            for var_name in self.dolphie.global_status.keys():
+                exclude_vars = [
+                    "Mysqlx",
+                    "Ssl",
+                    "Performance_schema",
+                    "Rsa_public_key",
+                    "Caching_sha2_password_rsa_public_key",
+                ]
+                for exclude_var in exclude_vars:
+                    if exclude_var in var_name:
+                        keys_to_remove.append(var_name)
+                        break
 
-        for key in keys_to_remove:
-            self.dolphie.global_status.pop(key)
+            for key in keys_to_remove:
+                self.dolphie.global_status.pop(key)
 
-        state = ReplayData(
-            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            global_status=self.dolphie.global_status,
-            global_variables=self.dolphie.global_variables,
-            binlog_status=self.dolphie.binlog_status,
-            innodb_metrics=self.dolphie.innodb_metrics,
-            replica_manager=self.dolphie.replica_manager.available_replicas,
-            replication_status=self.dolphie.replication_status,
-            processlist=processlist,
-            metric_manager=self._condition_metrics(self.dolphie.metric_manager),
-        )
+            state = MySQLReplayData(
+                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                global_status=self.dolphie.global_status,
+                global_variables=self.dolphie.global_variables,
+                binlog_status=self.dolphie.binlog_status,
+                innodb_metrics=self.dolphie.innodb_metrics,
+                replica_manager=self.dolphie.replica_manager.available_replicas,
+                replication_status=self.dolphie.replication_status,
+                processlist=processlist,
+                metric_manager=self._condition_metrics(self.dolphie.metric_manager),
+            )
+        else:
+            state = ProxySQLReplayData(
+                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                global_status=self.dolphie.global_status,
+                global_variables=self.dolphie.global_variables,
+                command_stats=self.dolphie.proxysql_command_stats,
+                hostgroup_summary=self.dolphie.proxysql_hostgroup_summary,
+                per_second_data=self.dolphie.proxysql_per_second_data,
+                processlist=processlist,
+                metric_manager=self._condition_metrics(self.dolphie.metric_manager),
+            )
 
         self.cursor.execute(
             "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
@@ -333,7 +367,7 @@ class ReplayManager:
 
         self.purge_old_data()
 
-    def get_next_refresh_interval(self) -> ReplayData:
+    def get_next_refresh_interval(self) -> Union[MySQLReplayData, ProxySQLReplayData, None]:
         """
         Gets the next refresh interval's data from the SQLite database and returns it as a ReplayData object.
 
@@ -361,25 +395,43 @@ class ReplayManager:
 
         self.current_index = row[0]
 
-        # Decompress and decode the data field
+        # Decompress and parse the JSON data
         data = json.loads(self._decompress_data(row[2]))
 
-        # Create a ProcesslistThread object for each thread in the processlist
         processlist = {}
-        for thread_data in data["processlist"]:
-            processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
+        if self.dolphie.connection_source == ConnectionSource.mysql:
+            # Re-create the ProcesslistThread object for each thread in the JSON's processlist
+            for thread_data in data["processlist"]:
+                processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
 
-        replay_data = ReplayData(
-            timestamp=row[1],
-            global_status=data.get("global_status", {}),
-            global_variables=data.get("global_variables", {}),
-            binlog_status=data.get("binlog_status", {}),
-            innodb_metrics=data.get("innodb_metrics", {}),
-            replica_manager=data.get("replica_manager", {}),
-            replication_status=data.get("replication_status", {}),
-            processlist=processlist,
-            metric_manager=data.get("metric_manager", {}),
-        )
+            replay_data = MySQLReplayData(
+                timestamp=row[1],
+                global_status=data.get("global_status", {}),
+                global_variables=data.get("global_variables", {}),
+                binlog_status=data.get("binlog_status", {}),
+                innodb_metrics=data.get("innodb_metrics", {}),
+                replica_manager=data.get("replica_manager", {}),
+                replication_status=data.get("replication_status", {}),
+                processlist=processlist,
+                metric_manager=data.get("metric_manager", {}),
+            )
+        elif self.dolphie.connection_source == ConnectionSource.proxysql:
+            # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist
+            for thread_data in data["processlist"]:
+                processlist[str(thread_data["id"])] = ProxySQLProcesslistThread(thread_data)
+
+            replay_data = ProxySQLReplayData(
+                timestamp=row[1],
+                global_status=data.get("global_status", {}),
+                global_variables=data.get("global_variables", {}),
+                command_stats=data.get("command_stats", {}),
+                hostgroup_summary=data.get("hostgroup_summary", {}),
+                per_second_data=data.get("per_second_data", {}),
+                processlist=processlist,
+                metric_manager=data.get("metric_manager", {}),
+            )
+        else:
+            self.dolphie.app.notify("Invalid connection source for replay data", severity="error")
 
         return replay_data
 

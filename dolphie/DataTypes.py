@@ -157,6 +157,8 @@ class ProcesslistThread:
 
 class ProxySQLProcesslistThread:
     def __init__(self, thread_data: Dict[str, str]):
+        self.thread_data = thread_data
+
         self.id = str(thread_data.get("id", ""))
         self.hostgroup = thread_data.get("hostgroup")
         self.user = thread_data.get("user", "")

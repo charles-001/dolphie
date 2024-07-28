@@ -21,6 +21,7 @@ from dolphie.DataTypes import (
     ProcesslistThread,
     ProxySQLProcesslistThread,
 )
+from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.Functions import (
     format_bytes,
@@ -64,7 +65,6 @@ from textual import events, on, work
 from textual.app import App
 from textual.widgets import Button, Switch, TabbedContent, TabPane
 from textual.worker import Worker, WorkerState, get_current_worker
-from dolphie.Dolphie import Dolphie
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -146,26 +146,44 @@ class DolphieApp(App):
             f"{tab.replay_manager.min_timestamp}[b highlight] →[/b highlight] {tab.replay_manager.max_timestamp}"
         )
 
-        # Update our variables with the replay event data
-        dolphie.global_status = replay_event_data.global_status
-        dolphie.global_variables = replay_event_data.global_variables
-        dolphie.binlog_status = replay_event_data.binlog_status
-        dolphie.innodb_metrics = replay_event_data.innodb_metrics
-        dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
-        dolphie.processlist_threads = replay_event_data.processlist
-        dolphie.replication_status = replay_event_data.replication_status
+        if dolphie.connection_source == ConnectionSource.mysql:
+            # Update our variables with the replay event data
+            dolphie.global_status = replay_event_data.global_status
+            dolphie.global_variables = replay_event_data.global_variables
+            dolphie.binlog_status = replay_event_data.binlog_status
+            dolphie.innodb_metrics = replay_event_data.innodb_metrics
+            dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
+            dolphie.processlist_threads = replay_event_data.processlist
+            dolphie.replication_status = replay_event_data.replication_status
 
-        # Refresh the metric manager metrics to the state of the replay event
-        dolphie.metric_manager.refresh_data(
-            worker_start_time=dolphie.worker_start_time,
-            polling_latency=dolphie.polling_latency,
-            global_variables=dolphie.global_variables,
-            global_status=dolphie.global_status,
-            innodb_metrics=dolphie.innodb_metrics,
-            disk_io_metrics=dolphie.disk_io_metrics,
-            metadata_lock_metrics=dolphie.metadata_locks,
-            replication_status=dolphie.replication_status,
-        )
+            # Refresh the metric manager metrics to the state of the replay event
+            dolphie.metric_manager.refresh_data(
+                worker_start_time=dolphie.worker_start_time,
+                polling_latency=dolphie.polling_latency,
+                global_variables=dolphie.global_variables,
+                global_status=dolphie.global_status,
+                innodb_metrics=dolphie.innodb_metrics,
+                disk_io_metrics=dolphie.disk_io_metrics,
+                metadata_lock_metrics=dolphie.metadata_locks,
+                replication_status=dolphie.replication_status,
+            )
+        elif dolphie.connection_source == ConnectionSource.proxysql:
+            # Update our variables with the replay event data
+            dolphie.global_status = replay_event_data.global_status
+            dolphie.global_variables = replay_event_data.global_variables
+            dolphie.proxysql_command_stats = replay_event_data.command_stats
+            dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
+            dolphie.processlist_threads = replay_event_data.processlist
+            dolphie.proxysql_per_second_data = replay_event_data.per_second_data
+
+            # Refresh the metric manager metrics to the state of the replay event
+            dolphie.metric_manager.refresh_data(
+                worker_start_time=dolphie.worker_start_time,
+                polling_latency=dolphie.polling_latency,
+                global_variables=dolphie.global_variables,
+                global_status=dolphie.global_status,
+                proxysql_command_stats=dolphie.proxysql_command_stats,
+            )
 
         # Metrics data is already calculated in the replay event data so we just need to update the values
         dolphie.metric_manager.datetimes = replay_event_data.metric_manager.get("datetimes")
@@ -521,8 +539,6 @@ class DolphieApp(App):
             replication_status=dolphie.replication_status,
         )
 
-        tab.replay_manager.capture_state()
-
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
@@ -563,9 +579,33 @@ class DolphieApp(App):
         else:
             dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = 100
 
-        if dolphie.panels.proxysql_hostgroup_summary.visible:
+        if dolphie.panels.proxysql_hostgroup_summary.visible or dolphie.daemon_mode:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
+
+            previous_values = {}
+            columns_to_calculate_per_sec = ["Queries", "Bytes_data_sent", "Bytes_data_recv"]
+
+            # Store previous values for each row
+            for row in dolphie.proxysql_hostgroup_summary:
+                row_id = f"{row['hostgroup']}_{row['srv_host']}_{row['srv_port']}"
+
+                for column_key in columns_to_calculate_per_sec:
+                    previous_values.setdefault(row_id, {})[column_key] = int(row.get(column_key, 0))
+
+            # Fetch the updated hostgroup summary
             dolphie.proxysql_hostgroup_summary = dolphie.main_db_connection.fetchall()
+
+            # Calculate the values per second
+            for row in dolphie.proxysql_hostgroup_summary:
+                row_id = f"{row['hostgroup']}_{row['srv_host']}_{row['srv_port']}"
+
+                if row_id in previous_values:  # Ensure we have previous values for this row_id
+                    for column_key in columns_to_calculate_per_sec:
+                        previous_value = previous_values[row_id].get(column_key, 0)
+                        current_value = int(row.get(column_key, 0))
+
+                        value_per_sec = (current_value - previous_value) / dolphie.polling_latency
+                        dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = round(value_per_sec)
 
         if dolphie.panels.processlist.visible:
             dolphie.processlist_threads = proxysql_processlist_panel.fetch_data(tab)
@@ -581,8 +621,6 @@ class DolphieApp(App):
             global_status=dolphie.global_status,
             proxysql_command_stats=dolphie.proxysql_command_stats,
         )
-
-        # tab.replay_manager.capture_state()
 
     def refresh_screen_proxysql(self, tab: Tab):
         dolphie = tab.dolphie
@@ -609,12 +647,17 @@ class DolphieApp(App):
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
+        tab.replay_manager.capture_state()
+
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
-        dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
+        if not dolphie.daemon_mode:
+            dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
         # This denotes that we've gone through the first loop of the worker thread
         dolphie.completed_first_loop = True
+
+        tab.replay_manager.capture_state()
 
     def refresh_screen_mysql(self, tab: Tab):
         dolphie = tab.dolphie
@@ -649,9 +692,12 @@ class DolphieApp(App):
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
+        tab.replay_manager.capture_state()
+
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
-        dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
+        if not dolphie.daemon_mode:
+            dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
         # This denotes that we've gone through the first loop of the worker thread
         dolphie.completed_first_loop = True
@@ -969,7 +1015,13 @@ class DolphieApp(App):
         if not tab:
             return
 
-        replay_allowed_keys = ["1", "2", "3", "a", "c", "f", "p", "r", "s", "t", "T", "v"]
+        screen_data = None
+        dolphie = tab.dolphie
+
+        if dolphie.connection_source == ConnectionSource.mysql:
+            replay_allowed_keys = ["1", "2", "3", "a", "c", "f", "p", "r", "s", "t", "T", "v"]
+        elif dolphie.connection_source == ConnectionSource.proxysql:
+            replay_allowed_keys = ["1", "2", "3", "4", "a", "c", "f", "p", "r", "s", "t", "T", "v"]
 
         exclude_keys = [
             "up",
@@ -991,9 +1043,6 @@ class DolphieApp(App):
             "ctrl+a",
             "ctrl+d",
         ]
-
-        screen_data = None
-        dolphie = tab.dolphie
 
         if dolphie.replay_file:
             if key not in replay_allowed_keys and key not in exclude_keys:
