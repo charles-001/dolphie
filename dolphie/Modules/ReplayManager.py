@@ -77,7 +77,7 @@ class ReplayManager:
         self._initialize_sqlite()
 
         if dolphie.replay_file:
-            self._get_metadata()
+            self._get_replay_file_metadata()
 
     def _initialize_sqlite(self):
         """
@@ -133,10 +133,10 @@ class ReplayManager:
         self.cursor.execute("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
         rows_deleted = self.cursor.rowcount
 
-        # This will rebuild the database file and reduce its size
-        self.cursor.execute("VACUUM")
-
         if rows_deleted:
+            # This will rebuild the database file and reduce its size
+            self.cursor.execute("VACUUM")
+
             logger.info(
                 f"Purged {rows_deleted} rows from replay data older than {retention_date}. "
                 f"Database file size is now {format_bytes(os.path.getsize(self.replay_file), color=False)}"
@@ -217,13 +217,14 @@ class ReplayManager:
             if self.dolphie.daemon_mode:
                 # Avoid mixing Dolphie versions in the same replay file. Never know what I might change in the future :)
                 if app_version != self.dolphie.app_version:
+                    new_replay_file = f"{self.replay_file}_v{app_version}"
                     logger.warning(
                         f"The version of Dolphie ({self.dolphie.app_version}) differs from the version of the "
                         f"daemon's replay file ({app_version}). To avoid potential compatibility issues, the current "
-                        f"database file will be renamed to: {self.replay_file}_v{app_version}"
+                        f"database file will be renamed to: {new_replay_file}"
                     )
-                    os.rename(self.replay_file, f"{self.replay_file}_v{app_version}")
 
+                    os.rename(self.replay_file, new_replay_file)
                     self._initialize_sqlite()
                     self.update_metadata()
 
@@ -235,7 +236,7 @@ class ReplayManager:
                         "never mix connection sources in the same replay file."
                     )
 
-    def _get_metadata(self):
+    def _get_replay_file_metadata(self):
         """
         Retrieves the replay's metadata from the metadata table.
         """

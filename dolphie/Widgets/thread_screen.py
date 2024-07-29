@@ -1,10 +1,20 @@
 from dolphie.Modules.Functions import format_number
 from dolphie.Widgets.topbar import TopBar
+from rich.style import Style
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Container, ScrollableContainer
 from textual.screen import Screen
-from textual.widgets import DataTable, Label, Rule, Static
+from textual.widgets import (
+    DataTable,
+    Label,
+    Rule,
+    Static,
+    TabbedContent,
+    TabPane,
+    TextArea,
+)
+from textual.widgets.text_area import TextAreaTheme
 
 
 class ThreadScreen(Screen):
@@ -61,6 +71,11 @@ class ThreadScreen(Screen):
             padding-right: 1;
             height: auto;
         }
+        ThreadScreen TextArea {
+            border: tall #1d253e;
+            max-height: 25;
+        }
+
     """
 
     BINDINGS = [
@@ -76,6 +91,7 @@ class ThreadScreen(Screen):
         user_thread_attributes_table: str,
         query: str,
         explain_data: str,
+        explain_json_data: str,
         explain_failure: str,
         transaction_history_table: str,
     ):
@@ -89,8 +105,23 @@ class ThreadScreen(Screen):
         self.user_thread_attributes_table = user_thread_attributes_table
         self.formatted_query = query
         self.explain_data = explain_data
+        self.explain_json_data = explain_json_data
         self.explain_failure = explain_failure
         self.transaction_history_table = transaction_history_table
+
+        dracula = TextAreaTheme.get_builtin_theme("dracula")
+        dracula.base_style = Style(bgcolor="#101626")
+        dracula.gutter_style = Style(color="#606e88")
+        dracula.cursor_line_gutter_style = Style(color="#95a7c7", bgcolor="#20243b")
+        dracula.cursor_line_style = Style(bgcolor="#20243b")
+        dracula.selection_style = Style(bgcolor="#293c71")
+        dracula.cursor_style = Style(bgcolor="#7a8ab2", color="#121e3a")
+        dracula.syntax_styles = {
+            "json.label": Style(color="#879bca", bold=True),
+            "number": Style(color="#ca87a5"),
+        }
+
+        self.explain_json_text_area = TextArea(language="json", theme="dracula", show_line_numbers=True, read_only=True)
 
     def on_mount(self):
         self.query_one("#thread_table").update(self.thread_table)
@@ -108,7 +139,7 @@ class ThreadScreen(Screen):
 
         if self.formatted_query:
             if self.explain_failure:
-                self.query_one("#explain_table").display = False
+                self.query_one("#explain_tabbed_content").display = False
                 self.query_one("#explain_failure").update(self.explain_failure)
             elif self.explain_data:
                 self.query_one("#explain_failure").display = False
@@ -143,6 +174,11 @@ class ThreadScreen(Screen):
         else:
             self.query_one("#query_container").display = False
 
+        if self.explain_json_data:
+            self.explain_json_text_area.text = self.explain_json_data
+        else:
+            self.query_one("#explain_tabbed_content").display = False
+
     def compose(self) -> ComposeResult:
         yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
 
@@ -159,8 +195,13 @@ class ThreadScreen(Screen):
             yield Label("Query Details", classes="title")
             yield Center(Static(id="query", shrink=True, classes="table"))
 
-            yield DataTable(show_cursor=False, id="explain_table", classes="table")
-            yield Label("", id="explain_failure")
+            yield Center(Label("", id="explain_failure"))
+            with TabbedContent(id="explain_tabbed_content", classes="container"):
+                with TabPane("Table", id="table_explain_tab", classes="container"):
+                    yield DataTable(show_cursor=False, id="explain_table", classes="table")
+
+                with TabPane("JSON", id="json_explain_tab", classes="container"):
+                    yield Center(self.explain_json_text_area)
 
         with Container(id="transaction_history_container", classes="container"):
             yield Rule(line_style="heavy")

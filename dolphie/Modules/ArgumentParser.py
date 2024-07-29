@@ -70,8 +70,12 @@ class ArgumentParser:
                 self.config_object_options[variable.name] = variable.type
 
         self.formatted_options = "\n\t".join(
-            [f"({data_type.__name__}) {option}" for option, data_type in self.config_object_options.items()]
+            [
+                f"({data_type.__name__}) {option}" if hasattr(data_type, "__name__") else f"(str) {option}"
+                for option, data_type in self.config_object_options.items()
+            ]
         )
+
         epilog = f"""
 Order of precedence for methods that pass options to Dolphie:
 \t1. Command-line

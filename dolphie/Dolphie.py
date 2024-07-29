@@ -68,7 +68,6 @@ class Dolphie:
         self.worker_previous_start_time: datetime = datetime.now()
         self.completed_first_loop: bool = False
         self.polling_latency: float = 0
-        self.refresh_latency: str = "0"
         self.connection_status: DataTypes.ConnectionStatus = None
         self.processlist_threads: dict = {}
         self.processlist_threads_snapshot: dict = {}

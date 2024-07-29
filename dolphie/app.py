@@ -214,7 +214,6 @@ class DolphieApp(App):
 
             dolphie.worker_start_time = datetime.now()
             dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
-            dolphie.refresh_latency = round(dolphie.polling_latency - dolphie.refresh_interval, 2)
             dolphie.worker_previous_start_time = dolphie.worker_start_time
 
             if dolphie.connection_source == ConnectionSource.mysql:
@@ -319,8 +318,6 @@ class DolphieApp(App):
 
                 tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
-                # logger.critical(tab.worker_cancel_error.reason)
-
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
                     if self.tab_manager.active_tab.id != tab.id or self.loading_hostgroups:
@@ -506,13 +503,6 @@ class DolphieApp(App):
             else:
                 dolphie.binlog_status["Diff_Position"] = dolphie.binlog_status["Position"] - previous_position
 
-            # This can cause MySQL to crash: https://perconadev.atlassian.net/browse/PS-9066
-            # if dolphie.global_variables.get("binlog_transaction_compression") == "ON":
-            #     dolphie.main_db_connection.execute(MySQLQueries.get_binlog_transaction_compression_percentage)
-            #     dolphie.binlog_transaction_compression_percentage = dolphie.main_db_connection.fetchone().get(
-            #         "compression_percentage"
-            #     )
-
         if dolphie.panels.processlist.visible or dolphie.replay_dir:
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
@@ -552,9 +542,11 @@ class DolphieApp(App):
         # Here, we're going to format the command stats to match the global status keys of
         # MySQL and get total count of queries
         total_queries_count = 0
+        query_types_for_total = ["SELECT", "INSERT", "UPDATE", "DELETE", "REPLACE", "SET", "CALL"]
         for row in dolphie.proxysql_command_stats:
-            total_cnt = int(row["Total_cnt"])
-            total_queries_count += total_cnt
+            if row["Command"] in query_types_for_total:
+                total_cnt = int(row["Total_cnt"])
+                total_queries_count += total_cnt
 
             dolphie.global_status[f"Com_{row['Command'].lower()}"] = total_cnt
 
@@ -755,7 +747,7 @@ class DolphieApp(App):
             if self.config.host_setup:
                 self.tab_manager.setup_host_tab(tab)
             elif self.tab_manager.active_tab.dolphie.replay_file:
-                self.notify(f"Starting replay for file [highlight]{tab.dolphie.replay_file}[/highlight]")
+                self.notify(f"Starting replay for file [highlight]{tab.dolphie.replay_file}[/highlight]", timeout=10)
 
                 self.tab_manager.rename_tab(tab)
                 self.tab_manager.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
@@ -834,7 +826,7 @@ class DolphieApp(App):
         if metric_instance_name:
             self.update_graphs(metric_instance_name)
 
-    def update_graphs(self, tab_metric_instance_name):
+    def update_graphs(self, tab_metric_instance_name: str):
         if not self.tab_manager.active_tab or not self.tab_manager.active_tab.panel_graphs.display:
             return
 
@@ -847,7 +839,7 @@ class DolphieApp(App):
 
         self.update_stats_label(tab_metric_instance_name)
 
-    def update_stats_label(self, tab_metric_instance_name):
+    def update_stats_label(self, tab_metric_instance_name: str):
         stat_data = {}
 
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
@@ -865,7 +857,7 @@ class DolphieApp(App):
         )
         getattr(self.tab_manager.active_tab, tab_metric_instance_name).update(formatted_stat_data)
 
-    def toggle_panel(self, panel_name):
+    def toggle_panel(self, panel_name: str):
         # We store the panel objects in the tab object (i.e. tab.panel_dashboard, tab.panel_processlist, etc.)
         panel = self.tab_manager.active_tab.get_panel_widget(panel_name)
 
@@ -878,7 +870,10 @@ class DolphieApp(App):
 
         panel.display = new_display_status
 
+        self.force_refresh_for_replay(need_current_data=True)
+
     def force_refresh_for_replay(self, need_current_data: bool = False):
+        # This function lets us force a refresh of the worker thread when we're in replay mode
         tab = self.tab_manager.active_tab
 
         if tab.dolphie.replay_file and tab.worker.state != WorkerState.RUNNING:
@@ -1193,6 +1188,7 @@ class DolphieApp(App):
                 dolphie.show_additional_query_columns = True
                 self.notify("Processlist will now show additional columns")
 
+            self.force_refresh_for_replay(need_current_data=True)
         elif key == "c":
             dolphie.user_filter = ""
             dolphie.db_filter = ""
@@ -1470,6 +1466,7 @@ class DolphieApp(App):
                 dolphie.show_idle_threads = True
                 self.notify("Processlist will now only show threads that have an active transaction")
 
+            self.force_refresh_for_replay(need_current_data=True)
         elif key == "u":
             if not dolphie.performance_schema_enabled and dolphie.connection_source != ConnectionSource.proxysql:
                 self.notify("User statistics command requires Performance Schema to be enabled")
@@ -1597,6 +1594,7 @@ class DolphieApp(App):
                     user_thread_attributes_table=user_thread_attributes_table,
                     query=formatted_query,
                     explain_data=explain_data,
+                    explain_json_data=explain_json_data,
                     explain_failure=explain_failure,
                     transaction_history_table=transaction_history_table,
                 )
@@ -1841,6 +1839,7 @@ class DolphieApp(App):
                 formatted_query = ""
                 explain_failure = ""
                 explain_data = ""
+                explain_json_data = ""
 
                 thread_table = Table(box=None, show_header=False)
                 thread_table.add_column("")
@@ -1879,9 +1878,14 @@ class DolphieApp(App):
                     if query_db:
                         try:
                             dolphie.secondary_db_connection.execute("USE %s" % query_db)
-                            dolphie.secondary_db_connection.execute("EXPLAIN %s" % query)
 
+                            dolphie.secondary_db_connection.execute("EXPLAIN %s" % query)
                             explain_data = dolphie.secondary_db_connection.fetchall()
+
+                            dolphie.secondary_db_connection.execute("EXPLAIN FORMAT=JSON %s" % query)
+                            explain_fetched_json_data = dolphie.secondary_db_connection.fetchone()
+                            if explain_fetched_json_data:
+                                explain_json_data = explain_fetched_json_data.get("EXPLAIN")
                         except ManualException as e:
                             explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.reason
 

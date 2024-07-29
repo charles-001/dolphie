@@ -53,7 +53,9 @@ def create_panel(tab: Tab) -> Table:
     table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
     if not dolphie.replay_file:
         runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
-        table_information.add_row("[label]Runtime", f"{runtime} [dark_gray]({dolphie.refresh_latency}s)")
+        table_information.add_row(
+            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.polling_latency - dolphie.refresh_interval, 2)}s)"
+        )
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
         "[label]Threads",
