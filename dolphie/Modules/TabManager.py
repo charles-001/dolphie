@@ -137,6 +137,10 @@ class TabManager:
     def update_topbar(self, tab: Tab, connection_status: ConnectionStatus):
         dolphie = tab.dolphie
 
+        # If we're in daemon mode, don't waste time on this
+        if dolphie.daemon_mode:
+            return
+
         dolphie.connection_status = connection_status
 
         # Only update the topbar if we're on the active tab
@@ -144,8 +148,12 @@ class TabManager:
             if dolphie.connection_status:
                 self.topbar.connection_status = dolphie.connection_status
                 self.topbar.host = dolphie.host_with_port
+
+                if dolphie.replay_dir and tab.replay_manager:
+                    self.topbar.replay_file_size = tab.replay_manager.replay_file_size
             else:
                 self.topbar.connection_status = None
+                self.topbar.replay_file_size = None
                 self.topbar.host = ""
 
     async def create_tab(self, tab_name: str, use_hostgroup: bool = False, switch_tab: bool = True) -> Tab:
@@ -184,7 +192,6 @@ class TabManager:
 
         # Save the Dolphie instance to the tab
         tab.dolphie = dolphie
-        tab.replay_manager = ReplayManager(dolphie)
 
         # Revert the port back to its original value
         if use_hostgroup and self.config.hostgroup_hosts and len(tab_host_split) > 1:
@@ -540,6 +547,9 @@ class TabManager:
         return all_tabs
 
     async def disconnect_tab(self, tab: Tab, update_topbar: bool = True):
+        if tab.replay_manager:
+            tab.replay_manager.replay_file_size = None
+
         if tab.worker_timer:
             tab.worker_timer.stop()
         if tab.replicas_worker_timer:

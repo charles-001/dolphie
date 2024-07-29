@@ -60,6 +60,7 @@ class ReplayManager:
         self.min_id = None
         self.max_id = None
         self.last_purge_time = datetime.now() - timedelta(hours=1)  # Initialize to an hour ago
+        self.replay_file_size = 0
 
         # Determine filename used for replay file
         if dolphie.replay_file:
@@ -68,6 +69,9 @@ class ReplayManager:
             self.replay_file = f"{dolphie.replay_dir}/{dolphie.host}/daemon.db"
         elif dolphie.replay_dir:
             self.replay_file = f"{dolphie.replay_dir}/{dolphie.host}/{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.db"
+            dolphie.app.notify(
+                f"File: [highlight]{self.replay_file}[/highlight]", title="Recording data for Replay", timeout=10
+            )
         else:
             # No options specified for replaying, skip initialization
             return
@@ -75,6 +79,7 @@ class ReplayManager:
         logger.info(f"Replay database file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)")
 
         self._initialize_sqlite()
+        self._manage_metadata()
 
         if dolphie.replay_file:
             self._get_replay_file_metadata()
@@ -111,6 +116,8 @@ class ReplayManager:
             )"""
         )
 
+        logger.info("Connected to SQLite")
+
         # Start the purge process
         self.purge_old_data()
 
@@ -137,9 +144,10 @@ class ReplayManager:
             # This will rebuild the database file and reduce its size
             self.cursor.execute("VACUUM")
 
+            self.replay_file_size = os.path.getsize(self.replay_file)
             logger.info(
                 f"Purged {rows_deleted} rows from replay data older than {retention_date}. "
-                f"Database file size is now {format_bytes(os.path.getsize(self.replay_file), color=False)}"
+                f"Database file size is now {format_bytes(self.replay_file_size, color=False)}"
             )
 
         self.last_purge_time = current_time
@@ -185,9 +193,9 @@ class ReplayManager:
                 )
                 return False
 
-    def update_metadata(self):
+    def _manage_metadata(self):
         """
-        Updates the metadata table with information we care about.
+        Manages the metadata table with information we care about.
         """
         if not self.dolphie.replay_dir:
             return
@@ -226,14 +234,15 @@ class ReplayManager:
 
                     os.rename(self.replay_file, new_replay_file)
                     self._initialize_sqlite()
-                    self.update_metadata()
+                    self._manage_metadata()
 
                 # Avoid mixing connection sources in the same replay file
                 if connection_source != self.dolphie.connection_source:
                     logger.critical(
                         f"The connection source of the daemon's replay file ({connection_source}) "
                         f"differs from the current connection source ({self.dolphie.connection_source}). You should "
-                        "never mix connection sources in the same replay file."
+                        "never mix connection sources in the same replay file. Please rename the daemon's replay file "
+                        "and restart the daemon."
                     )
 
     def _get_replay_file_metadata(self):
@@ -376,6 +385,9 @@ class ReplayManager:
         )
 
         self.purge_old_data()
+
+        if not self.dolphie.daemon_mode:
+            self.replay_file_size = os.path.getsize(self.replay_file)
 
     def get_next_refresh_interval(self) -> Union[MySQLReplayData, ProxySQLReplayData, None]:
         """

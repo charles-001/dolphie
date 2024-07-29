@@ -96,12 +96,11 @@ options:
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
   --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
-  --replay-file         Specify the full path of sqlite database file to replay data from
-  --replay-dir          Directory of the sqlite database file to save replay data to for later playback. Note, this will enable replays and can use up a lot of disk space
+  --replay-file         Specify the full path of SQLite database file to replay data from
+  --replay-dir          Directory of the SQLite database file to save replay data to for later playback. Note, this will enable replays and can use up a lot of disk space
   --replay-retention-hours
                         Number of hours to keep replay data [default: 48]
   --daemon              Starts Dolphie in daemon mode so replays are readily available. This will not show the TUI and should be put into the background with whatever solution you decide to use
-  --debug-daemon        Enables debug mode for daemon mode. This will show additional information in the logs
   --daemon-log-file     Full path of the log file for daemon mode
   --show-trxs-only      (MySQL only) Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
@@ -164,7 +163,6 @@ Dolphie's config supports these options under [dolphie] section:
 	(bool) show_trxs_only
 	(bool) show_additional_query_columns
 	(bool) daemon_mode
-	(bool) daemon_mode_debug
 	(str) daemon_mode_log_file
 	(str) replay_file
 	(str) replay_dir
@@ -198,12 +196,14 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 6. BACKUP_ADMIN (MySQL 8 only)
 
 ## Replay
-Have you ever wished you could view the process list from a specific moment in time? Perhaps during a database stall that led to an incident, and your monitoring tools failed to identify the root cause? Well, you're in luck! Dolphie introduces a powerful Replay feature that lets you do just that.
+Have you ever wished you could view the process list and various other related statistics from a specific moment in time? Perhaps during a database stall that led to an incident, and your monitoring tools failed to identify the root cause? Well, you're in luck! Dolphie has a Replay feature that lets you do just that.
 
-Starting with version 5.1.0, you can instruct Dolphie to record its data into a local SQLite database file that's compressed with ZSTD by using the `--relay-dir` option. When you're ready to replay this data, simply pass the `--replay-file` option, and you can interact with it as if you were watching it live! Within the Replay interface, you can navigate with the controls: back, forward, play/pause, or seek to a specific datetime. While some features are disabled during replay, the essential functionalities remain intact. For a complete list of available commands, just press `?` to access the help menu.
+Starting with version 5.1.0, you can instruct Dolphie to record its data (via `--replay-dir`) into a local SQLite database file that's compressed with ZSTD. When you're ready to replay this data, simply pass the `--replay-file` option, and you can interact with it as if you were watching it live! Within the Replay interface, you can navigate with the controls: back, forward, play/pause, or seek to a specific datetime. While some features are disabled during replay, the essential functionalities remain intact. For a complete list of available commands, just press `?` to access the help menu.
+
+Note that this feature can incur a significant amount of disk space depending on how busy your server is and what you set `--replay-retention-hours` + `--refresh-interval`. Adjust these values to suit your needs and monitor the disk space usage accordingly.
 
 ## Daemon Mode
-Also introduced in version 5.1.0 is the ability to run Dolphie in daemon mode using the `--daemon` option. This mode does not load the TUI and creates a log file for messages, focusing solely on recording data to a replay file. You can manage the amount of retained data by setting the `--replay-retention-hours` option. It’s up to you how you’d like to run Dolphie in the background; I personally prefer using `systemctl`, but you can also utilize `nohup`, `tmux`, etc. If Dolphie gets disconnected, it will attempt to reconnect 3 times before exiting.
+Also introduced in version 5.1.0 is the ability to run Dolphie in daemon mode using the `--daemon` option. This mode does not load the TUI and creates a log file for messages. This mode's purpose is solely for recording data to a replay file. It’s up to you how you’d like to run Dolphie in the background; I personally prefer using `systemctl`, but you can also utilize `nohup`, `tmux`, etc. If Dolphie gets disconnected, it will attempt to reconnect 3 times before exiting.
 
 ## Hostgroups
 Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format `key=host` (keys have no meaning). Hosts support optional port (default is whatever `port` parameter is) in the format `host:port`. You can also name the tabs by suffixing `~tab_name` to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!

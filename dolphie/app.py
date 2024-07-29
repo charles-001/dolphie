@@ -31,6 +31,7 @@ from dolphie.Modules.Functions import (
 )
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
+from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Modules.TabManager import Tab, TabManager
 from dolphie.Panels import (
     dashboard_panel,
@@ -212,7 +213,8 @@ class DolphieApp(App):
 
                 dolphie.db_connect()
                 self.tab_manager.rename_tab(tab)
-                tab.replay_manager.update_metadata()
+
+                tab.replay_manager = ReplayManager(dolphie)
 
             dolphie.worker_start_time = datetime.now()
             dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -223,6 +225,10 @@ class DolphieApp(App):
             elif dolphie.connection_source == ConnectionSource.proxysql:
                 self.process_proxysql_data(tab)
                 dolphie.proxysql_process_execution_time = (datetime.now() - dolphie.worker_start_time).total_seconds()
+
+            # Update the topbar with the latest replay file size
+            if dolphie.replay_dir:
+                self.tab_manager.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
@@ -753,8 +759,8 @@ class DolphieApp(App):
             elif self.tab_manager.active_tab.dolphie.replay_file:
                 self.notify(f"Starting replay for file [highlight]{tab.dolphie.replay_file}[/highlight]", timeout=10)
 
+                self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
                 self.tab_manager.rename_tab(tab)
-                self.tab_manager.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
                 self.run_worker_replay(self.tab_manager.active_tab.id)
             else:
                 self.run_worker_main(self.tab_manager.active_tab.id)
@@ -2089,7 +2095,7 @@ def setup_logger(config: Config):
     logger.level("ERROR", color="<red>")
     log_format = "<dim>{time:MM-DD-YYYY HH:mm:ss}</dim> <b><level>[{level}]</level></b> {message}"
 
-    log_level = "DEBUG" if config.daemon_mode_debug else "INFO"
+    log_level = "INFO"
 
     # Add terminal & file logging
     logger.add(sys.stdout, format=log_format, backtrace=True, colorize=True, level=log_level)

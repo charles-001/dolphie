@@ -48,7 +48,6 @@ class Config:
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
     daemon_mode: bool = False
-    daemon_mode_debug: bool = False
     daemon_mode_log_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_daemon.log")
     replay_file: str = None
     replay_dir: str = None
@@ -357,12 +356,6 @@ Dolphie's config supports these options under [dolphie] section:
                 "Starts Dolphie in daemon mode so replays are readily available. This will not show "
                 "the TUI and should be put into the background with whatever solution you decide to use"
             ),
-        )
-        self.parser.add_argument(
-            "--debug-daemon",
-            dest="daemon_mode_debug",
-            action="store_true",
-            help="Enables debug mode for daemon mode. This will show additional information in the logs",
         )
         self.parser.add_argument(
             "--daemon-log-file",
