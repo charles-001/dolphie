@@ -73,6 +73,7 @@ class ArgumentParser:
             [
                 f"({data_type.__name__}) {option}" if hasattr(data_type, "__name__") else f"(str) {option}"
                 for option, data_type in self.config_object_options.items()
+                if option != "config_file"
             ]
         )
 
@@ -342,7 +343,7 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "--replay-retention-hourss",
+            "--replay-retention-hours",
             dest="replay_retention_hours",
             type=int,
             help=f"Number of hours to keep replay data [default: {self.config.replay_retention_hours}]",

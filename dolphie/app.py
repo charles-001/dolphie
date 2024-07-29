@@ -195,6 +195,8 @@ class DolphieApp(App):
     @work(thread=True, group="main")
     async def run_worker_main(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
+        if not tab:
+            return
 
         # Get our worker thread
         tab.worker = get_current_worker()
@@ -233,6 +235,8 @@ class DolphieApp(App):
     @work(thread=True, group="replicas")
     def run_worker_replicas(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
+        if not tab:
+            return
 
         # Get our worker thread
         tab.replicas_worker = get_current_worker()
@@ -1158,6 +1162,10 @@ class DolphieApp(App):
             if len(self.tab_manager.tabs) == 1:
                 self.notify("Removing all tabs is not permitted", severity="error")
             else:
+                if not self.tab_manager.active_tab:
+                    self.notify("No active tab to remove", severity="error")
+                    return
+
                 await self.tab_manager.remove_tab(tab)
                 await self.tab_manager.disconnect_tab(tab=tab, update_topbar=False)
 

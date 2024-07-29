@@ -75,15 +75,15 @@ options:
   -u , --user           Username
   -p , --password       Password
   -h , --host           Hostname/IP address
-  -P , --port           Port (Socket has precedence)
+  -P , --port           Port (socket has precedence)
   -S , --socket         Socket file
-  --config-file         Dolphie's config file to use. Options are read from these files in the given order: /etc/dolphie.cnf, ~/.dolphie.cnf
-  --mycnf-file          MySQL/MariaDB config file path to use. This should use [client] section [default: ~/.my.cnf]
+  --config-file         Dolphie's config file to use. Options are read from these files in the given order: ['/etc/dolphie.cnf', '~/.dolphie.cnf']
+  --mycnf-file          MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
   -f , --host-cache-file
                         Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format ip=hostname [default: ~/dolphie_host_cache]
   -q , --host-setup-file
                         Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
-  -l , --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials. Supersedes config file [default: client]
+  -l , --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials [default: client]
   -r , --refresh_interval
                         How much time to wait in seconds between each refresh [default: 1]
   -H , --heartbeat-table
@@ -96,12 +96,26 @@ options:
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repository     What PyPi repository to use when checking for a new version. If not specified, it will use Dolphie's PyPi repository
   --hostgroup           This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
+  --replay-file         Specify the full path of sqlite database file to replay data from
+  --replay-dir          Directory of the sqlite database file to save replay data to for later playback. Note, this will enable replays and can use up a lot of disk space
+  --replay-retention-hours
+                        Number of hours to keep replay data [default: 48]
+  --daemon              Starts Dolphie in daemon mode so replays are readily available. This will not show the TUI and should be put into the background with whatever solution you decide to use
+  --debug-daemon        Enables debug mode for daemon mode. This will show additional information in the logs
+  --daemon-log-file     Full path of the log file for daemon mode
   --show-trxs-only      (MySQL only) Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
-  --debug-options       Display options that are set and what they're set by (command-line, dolphie config, etc) then exit
+  --debug-options       Display options that are set and what they're set by (command-line, dolphie config, etc) then exit. WARNING: This will show passwords and other sensitive information in plain text
   -V, --version         Display version and exit
 
-MySQL/MariaDB my.cnf file supports these options under [client] section:
+Order of precedence for methods that pass options to Dolphie:
+	1. Command-line
+	2. Environment variables
+	3. Dolphie's config (set by --config-file)
+	4. ~/.mylogin.cnf (mysql_config_editor)
+	5. ~/.my.cnf (set by --mycnf-file)
+
+MySQL my.cnf file supports these options under [client] section:
 	host
 	user
 	password
@@ -149,6 +163,12 @@ Dolphie's config supports these options under [dolphie] section:
 	(str) hostgroup
 	(bool) show_trxs_only
 	(bool) show_additional_query_columns
+	(bool) daemon_mode
+	(bool) daemon_mode_debug
+	(str) daemon_mode_log_file
+	(str) replay_file
+	(str) replay_dir
+	(int) replay_retention_hours
 ```
 ## Supported ProxySQL versions
 - ProxySQL 2.6+ (could work on previous versions but not tested)
@@ -177,21 +197,13 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 5. SUPER (required if you want to kill queries)
 6. BACKUP_ADMIN (MySQL 8 only)
 
-## Features
-- Tabs docked at the top to seamlessly switch between connected hosts
-- Hostgroups to make it easy for connecting to multiple hosts at once
-- Dolphie uses panels to present groups of data. They can all be turned on/off to have a view of your database server that you prefer
-- Graphs for many metrics that can give you great insight into how your database is performing
-- Sparkline to show queries per second in a live view
-- 2 options for finding replica lag in this order of precedence:
-  - `pt-heartbeat table` (specified by `--heartbeat-table`)
-  - `SHOW SLAVE STATUS`
-- Keeps a history of the servers you connect to that provides autocompletion for hostnames in the Host Setup modal
-- Host cache file. This provides users a way to specify hostnames for IPs when their network's DNS can't resolve them. An example use case for this is when you connect to your work's VPN and DNS isn't available to resolve IPs. In my opinion, it's a lot easier to look at hostnames than IPs!
-- Supports encrypted login credentials via `mysql_config_editor`
-- Automatic conversion of large numbers & bytes to human-readable
-- Notifies when new version is available
-- Many commands at your fingertips with autocompletion for their input
+## Replay
+Have you ever wished you could view the process list from a specific moment in time? Perhaps during a database stall that led to an incident, and your monitoring tools failed to identify the root cause? Well, you're in luck! Dolphie introduces a powerful Replay feature that lets you do just that.
+
+Starting with version 5.1.0, you can instruct Dolphie to record its data into a local SQLite database file that's compressed with ZSTD by using the `--relay-dir` option. When you're ready to replay this data, simply pass the `--replay-file` option, and you can interact with it as if you were watching it live! Within the Replay interface, you can navigate with the controls: back, forward, play/pause, or seek to a specific datetime. While some features are disabled during replay, the essential functionalities remain intact. For a complete list of available commands, just press `?` to access the help menu.
+
+## Daemon Mode
+Also introduced in version 5.1.0 is the ability to run Dolphie in daemon mode using the `--daemon` option. This mode does not load the TUI and creates a log file for messages, focusing solely on recording data to a replay file. You can manage the amount of retained data by setting the `--replay-retention-hours` option. It’s up to you how you’d like to run Dolphie in the background; I personally prefer using `systemctl`, but you can also utilize `nohup`, `tmux`, etc. If Dolphie gets disconnected, it will attempt to reconnect 3 times before exiting.
 
 ## Hostgroups
 Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format `key=host` (keys have no meaning). Hosts support optional port (default is whatever `port` parameter is) in the format `host:port`. You can also name the tabs by suffixing `~tab_name` to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
