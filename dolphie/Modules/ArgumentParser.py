@@ -47,6 +47,7 @@ class Config:
     hostgroup_hosts: Dict[str, List[str]] = field(default_factory=dict)
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
+    record_for_replay: bool = False
     daemon_mode: bool = False
     daemon_mode_log_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_daemon.log")
     replay_file: str = None
@@ -328,17 +329,14 @@ Dolphie's config supports these options under [dolphie] section:
             "--replay-file",
             dest="replay_file",
             type=str,
-            help="Specify the full path of sqlite database file to replay data from",
+            help="Specify the full path of the replay file to load and enable replay mode",
             metavar="",
         )
         self.parser.add_argument(
             "--replay-dir",
             dest="replay_dir",
             type=str,
-            help=(
-                "Directory of the sqlite database file to save replay data to for later playback. "
-                "Note, this will enable replays and can use up a lot of disk space"
-            ),
+            help="Directory to store replay data files",
             metavar="",
         )
         self.parser.add_argument(
@@ -349,12 +347,22 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
+            "--record",
+            dest="record_for_replay",
+            action="store_true",
+            help=(
+                "Enables recording of Dolphie's data to a replay file. "
+                "Note: This can use significant disk space. Monitor accordingly!"
+            ),
+        )
+        self.parser.add_argument(
             "--daemon",
             dest="daemon_mode",
             action="store_true",
             help=(
-                "Starts Dolphie in daemon mode so replays are readily available. This will not show "
-                "the TUI and should be put into the background with whatever solution you decide to use"
+                "Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the "
+                "background with whatever solution you decide to use. Automatically enables --record. "
+                "This mode is solely for managing replay files"
             ),
         )
         self.parser.add_argument(
@@ -575,12 +583,12 @@ Dolphie's config supports these options under [dolphie] section:
             sys.exit()
 
         if self.config.daemon_mode:
+            self.config.record_for_replay = True
             if not self.config.replay_dir:
                 self.exit("Daemon mode requires --replay-dir to be specified")
 
-        if self.config.replay_file:
-            if not os.path.isfile(self.config.replay_file):
-                self.exit(f"Replay file {self.config.replay_file} does not exist")
+        if self.config.replay_file and not os.path.isfile(self.config.replay_file):
+            self.exit(f"Replay file {self.config.replay_file} does not exist")
 
     def parse_ssl_options(self, data):
         if isinstance(data, ConfigParser):

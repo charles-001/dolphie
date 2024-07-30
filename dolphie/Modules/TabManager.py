@@ -149,7 +149,7 @@ class TabManager:
                 self.topbar.connection_status = dolphie.connection_status
                 self.topbar.host = dolphie.host_with_port
 
-                if dolphie.replay_dir and tab.replay_manager:
+                if dolphie.record_for_replay and tab.replay_manager:
                     self.topbar.replay_file_size = tab.replay_manager.replay_file_size
             else:
                 self.topbar.connection_status = None

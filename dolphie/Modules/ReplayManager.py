@@ -67,7 +67,7 @@ class ReplayManager:
             self.replay_file = dolphie.replay_file
         elif dolphie.daemon_mode:
             self.replay_file = f"{dolphie.replay_dir}/{dolphie.host}/daemon.db"
-        elif dolphie.replay_dir:
+        elif dolphie.record_for_replay:
             self.replay_file = f"{dolphie.replay_dir}/{dolphie.host}/{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.db"
             dolphie.app.notify(
                 f"File: [highlight]{self.replay_file}[/highlight]", title="Recording data for Replay", timeout=10
@@ -126,7 +126,7 @@ class ReplayManager:
         Purges data older than the retention period specified by hours_of_retention and performs a vacuum.
         Only runs if at least an hour has passed since the last purge.
         """
-        if not self.dolphie.replay_dir or self.dolphie.replay_file:
+        if not self.dolphie.record_for_replay:
             return
 
         current_time = datetime.now()
@@ -197,7 +197,7 @@ class ReplayManager:
         """
         Manages the metadata table with information we care about.
         """
-        if not self.dolphie.replay_dir:
+        if not self.dolphie.record_for_replay:
             return
 
         self.cursor.execute("SELECT * FROM metadata")
@@ -326,7 +326,7 @@ class ReplayManager:
         """
         Captures the current state of the Dolphie instance and stores it in the SQLite database.
         """
-        if not self.dolphie.replay_dir:
+        if not self.dolphie.record_for_replay:
             return
 
         # Convert the dictionary of processlist threads to a list of dictionaries

@@ -228,7 +228,7 @@ class DolphieApp(App):
                 dolphie.proxysql_process_execution_time = (datetime.now() - dolphie.worker_start_time).total_seconds()
 
             # Update the topbar with the latest replay file size
-            if dolphie.replay_dir:
+            if dolphie.record_for_replay:
                 self.tab_manager.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
@@ -498,7 +498,7 @@ class DolphieApp(App):
                     dolphie.is_group_replication_primary = True
                     break
 
-        if dolphie.panels.dashboard.visible or dolphie.replay_dir:
+        if dolphie.panels.dashboard.visible or dolphie.record_for_replay:
             if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
                 dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
             else:
@@ -514,7 +514,7 @@ class DolphieApp(App):
             else:
                 dolphie.binlog_status["Diff_Position"] = dolphie.binlog_status["Position"] - previous_position
 
-        if dolphie.panels.processlist.visible or dolphie.replay_dir:
+        if dolphie.panels.processlist.visible or dolphie.record_for_replay:
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
         if dolphie.is_mysql_version_at_least("5.7"):
@@ -583,7 +583,7 @@ class DolphieApp(App):
         else:
             dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = 100
 
-        if dolphie.panels.proxysql_hostgroup_summary.visible or dolphie.replay_dir:
+        if dolphie.panels.proxysql_hostgroup_summary.visible or dolphie.record_for_replay:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
 
             previous_values = {}
@@ -611,7 +611,7 @@ class DolphieApp(App):
                         value_per_sec = (current_value - previous_value) / dolphie.polling_latency
                         row[f"{column_key}_per_sec"] = round(value_per_sec)
 
-        if dolphie.panels.processlist.visible or dolphie.replay_dir:
+        if dolphie.panels.processlist.visible or dolphie.record_for_replay:
             dolphie.processlist_threads = proxysql_processlist_panel.fetch_data(tab)
 
         if dolphie.panels.proxysql_mysql_query_rules.visible:
