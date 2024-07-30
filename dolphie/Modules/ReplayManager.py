@@ -90,11 +90,14 @@ class ReplayManager:
         """
 
         # Ensure the directory for the replay file exists
-        os.makedirs(os.path.dirname(self.replay_file), exist_ok=True)
+        os.makedirs(os.path.dirname(self.replay_file), mode=0o770, exist_ok=True)
 
         # Connect to the SQLite database
         self.conn = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
         self.cursor = self.conn.cursor()
+
+        # Set the database file permissions to 660
+        os.chmod(self.replay_file, 0o660)
 
         self.cursor.execute(
             """
