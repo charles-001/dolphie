@@ -6,6 +6,7 @@
 # ****************************
 
 
+import os
 import re
 import sys
 from datetime import datetime, timedelta
@@ -2106,6 +2107,10 @@ def setup_logger(config: Config):
 
 
 def main():
+    # Set environment variables for better color support
+    os.environ["TERM"] = "xterm-256color"
+    os.environ["COLORTERM"] = "truecolor"
+
     arg_parser = ArgumentParser(__version__)
 
     setup_logger(arg_parser.config)
