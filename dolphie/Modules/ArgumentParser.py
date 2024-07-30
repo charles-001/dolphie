@@ -31,7 +31,11 @@ class Config:
     ssl_cert: str = None
     ssl_key: str = None
     config_file: List[str] = field(
-        default_factory=lambda: ["/etc/dolphie.cnf", f"{os.path.expanduser('~')}/.dolphie.cnf"]
+        default_factory=lambda: [
+            "/etc/dolphie.cnf",
+            "/etc/dolphie/dolphie.cnf",
+            f"{os.path.expanduser('~')}/.dolphie.cnf",
+        ]
     )
     mycnf_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/.my.cnf")
     login_path: str = "client"
