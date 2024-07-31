@@ -21,6 +21,7 @@ class Database:
         ssl: str,
         save_connection_id: bool = True,
         auto_connect: bool = True,
+        daemon_mode: bool = False,
     ):
         self.connection: pymysql.Connection = None
         self.connection_id: int = None
@@ -33,8 +34,13 @@ class Database:
         self.port = port
         self.ssl = ssl
         self.save_connection_id = save_connection_id
+        self.daemon_mode = daemon_mode
 
-        self.max_reconnect_attempts: int = 3
+        if daemon_mode:
+            self.max_reconnect_attempts: int = 999999999
+        else:
+            self.max_reconnect_attempts: int = 3
+
         self.running_query: bool = False
         self.source: ConnectionSource = None
 
@@ -75,7 +81,13 @@ class Database:
             logger.info(f"Connected to {self.source} with Process ID {self.connection_id}")
         except pymysql.Error as e:
             if reconnect_attempt:
-                logger.error(f"Failed to reconnect to {self.source}: {e}")
+                logger.error(f"Failed to reconnect to {self.source}: {e.args[1]}")
+                self.app.notify(
+                    f"[b light_blue]{self.host}:{self.port}[/b light_blue]: Failed to reconnect to MySQL: {e.args[1]}",
+                    title="MySQL Reconnection Failed",
+                    severity="error",
+                    timeout=10,
+                )
             else:
                 if len(e.args) == 1:
                     raise ManualException(e.args[0])
@@ -113,8 +125,7 @@ class Database:
         if self.source != ConnectionSource.proxysql:
             query = "/* dolphie */ " + query
 
-        attempt_number = 0
-        while True:
+        for attempt_number in range(self.max_reconnect_attempts):
             self.running_query = True
             error_message = None
 
@@ -141,7 +152,8 @@ class Database:
                         error_code = e.args[0]
                     else:
                         error_code = e.args[0]
-                        error_message = e.args[1]
+                        if e.args[1]:
+                            error_message = e.args[1]
 
                     # Check if the error is due to a connection issue
                     if error_code in (0, 2006, 2013, 2055):
@@ -150,17 +162,19 @@ class Database:
                         # 2013: Lost connection to MySQL server during query
                         # 2055: Lost connection to MySQL server at hostname
 
-                        logger.error(f"{self.source} is disconnected, attempting to reconnect...")
-                        self.app.notify(
-                            f"[b light_blue]{self.host}:{self.port}[/b light_blue]: {error_message}",
-                            title="MySQL Connection Lost",
-                            severity="error",
-                            timeout=10,
-                        )
+                        if error_message:
+                            logger.error(
+                                f"{self.source} has lost its connection: {error_message}, attempting to reconnect..."
+                            )
+                            self.app.notify(
+                                f"[b light_blue]{self.host}:{self.port}[/b light_blue]: {error_message}",
+                                title="MySQL Connection Lost",
+                                severity="error",
+                                timeout=10,
+                            )
 
                         self.close()
                         self.connect(reconnect_attempt=True)
-                        attempt_number += 1
 
                         # Exponential backoff
                         time.sleep(min(1 * (2**attempt_number), 20))  # Cap the wait time at 20 seconds
@@ -180,6 +194,12 @@ class Database:
                         return self.execute(query, values)
                     else:
                         raise ManualException(error_message, query=query)
+
+        if not self.connection.open:
+            raise ManualException(
+                f"Failed to execute query after {self.max_reconnect_attempts} reconnection attempts",
+                query=query,
+            )
 
     def _process_row(self, row):
         processed_row = {}

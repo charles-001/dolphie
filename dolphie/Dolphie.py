@@ -127,6 +127,7 @@ class Dolphie:
             "port": self.port,
             "ssl": self.ssl,
             "auto_connect": False,
+            "daemon_mode": self.daemon_mode,
         }
         self.main_db_connection = Database(**db_connection_args)
         # Secondary connection is for ad-hoc commands that are not a part of the worker thread
@@ -317,19 +318,25 @@ class Dolphie:
         return refresh_interval
 
     def detect_global_variable_change(self, old_data: dict, new_data: dict):
-        if old_data:
-            for variable, value in new_data.items():
-                if "gtid" in variable:
-                    continue
+        if not old_data:
+            return
 
-                old_value = old_data.get(variable)
-                if old_value != value:
-                    self.app.notify(
-                        f"[highlight]{variable}[/highlight] has changed from "
-                        f"[highlight]{old_value}[/highlight] to "
-                        f"[highlight]{value}[/highlight]",
-                        title="Global Variable Change",
-                        severity="warning",
-                        timeout=10,
-                    )
-                    logger.warning(f"Global variable {variable} has changed from " f"{old_value} to {value}")
+        # gtid is always changing so we don't want to alert on that
+        # read_only is managed by monitor_read_only_change in app.py
+        exclude_values = {"gtid", "read_only"}
+
+        for variable, new_value in new_data.items():
+            if any(item in variable.lower() for item in exclude_values):
+                continue
+
+            old_value = old_data.get(variable)
+            if old_value != new_value:
+                self.app.notify(
+                    f"[highlight]{variable}[/highlight] has changed from "
+                    f"[highlight]{old_value}[/highlight] to "
+                    f"[highlight]{new_value}[/highlight]",
+                    title="Global Variable Change",
+                    severity="warning",
+                    timeout=10,
+                )
+                logger.warning(f"Global variable {variable} change: {old_value} -> {new_value}")

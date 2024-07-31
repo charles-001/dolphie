@@ -716,7 +716,7 @@ class DolphieApp(App):
         formatted_ro_status = ConnectionStatus.read_only if current_ro_status == "ON" else ConnectionStatus.read_write
         status = "read-only" if current_ro_status == "ON" else "read/write"
 
-        message = f"Host [light_blue]{dolphie.host_with_port}[/light_blue] is now [b highlight]{status}[/b highlight]"
+        message = f"Host [highlight]{dolphie.host_with_port}[/highlight] is now [b highlight]{status}[/b highlight]"
 
         if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
             message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
@@ -727,7 +727,7 @@ class DolphieApp(App):
             dolphie.connection_status in [ConnectionStatus.read_write, ConnectionStatus.read_only]
             and dolphie.connection_status != formatted_ro_status
         ):
-            logger.info(f"Read-only mode change detected: {message}")
+            logger.warning(f"Read-only mode change: {dolphie.connection_status} -> {formatted_ro_status}")
             self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
             self.tab_manager.update_topbar(tab=tab, connection_status=formatted_ro_status)

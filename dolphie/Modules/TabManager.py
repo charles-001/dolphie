@@ -164,7 +164,6 @@ class TabManager:
 
         # Create our new tab instance
         tab = Tab(id=tab_id, name=tab_name)
-        self.tabs[tab_id] = tab
 
         # If we're using hostgroups
         if use_hostgroup and self.config.hostgroup_hosts:
@@ -203,6 +202,7 @@ class TabManager:
         # create all the widgets for the tab as that wastes resources
         if dolphie.daemon_mode:
             self.active_tab = tab
+            self.tabs[tab_id] = tab
 
             return tab
 
@@ -494,13 +494,14 @@ class TabManager:
         for graph in graphs:
             graph.marker = dolphie.graph_marker
 
-        if switch_tab:
-            self.switch_tab(tab_id)
-
         # Set the sparkline data to 0
         tab.sparkline.data = [0]
 
         self.host_tabs.display = True
+        self.tabs[tab_id] = tab
+
+        if switch_tab:
+            self.switch_tab(tab_id)
 
         return tab
 
