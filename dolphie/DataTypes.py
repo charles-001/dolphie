@@ -7,11 +7,11 @@ from rich.table import Table
 
 @dataclass
 class ConnectionSource:
-    mysql = "mysql"
-    proxysql = "proxysql"
-    mariadb = "mariadb"
-    aws_rds = "aws_rds"
-    azure_mysql = "azure_mysql"
+    mysql = "MySQL"
+    proxysql = "ProxySQL"
+    mariadb = "MariaDB"
+    aws_rds = "AWS RDS"
+    azure_mysql = "Azure MySQL"
 
 
 @dataclass
