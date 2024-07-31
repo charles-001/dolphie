@@ -72,6 +72,7 @@ class Database:
             if self.source == ConnectionSource.mysql:
                 self.execute("SET SESSION sql_mode=''")
 
+            logger.info(f"Connected to MySQL with Process ID {self.connection_id}")
         except pymysql.Error as e:
             if len(e.args) == 1:
                 raise ManualException(e.args[0])
@@ -158,7 +159,6 @@ class Database:
                         self.close()
                         self.connect()
 
-                        logger.success("Reconnected!")
                         self.app.notify(
                             f"[b light_blue]{self.host}:{self.port}[/b light_blue]: Successfully reconnected",
                             title="MySQL Connection Created",

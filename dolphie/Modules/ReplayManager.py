@@ -1,7 +1,7 @@
 import json
 import os
 import sqlite3
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Union
 
@@ -76,7 +76,7 @@ class ReplayManager:
             # No options specified for replaying, skip initialization
             return
 
-        logger.info(f"Replay database file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)")
+        logger.info(f"Replay SQLite file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)")
 
         self._initialize_sqlite()
         self._manage_metadata()
@@ -338,52 +338,61 @@ class ReplayManager:
             for thread_data in (v.thread_data for v in self.dolphie.processlist_threads.values())
         ]
 
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Prepare data dictionary
+        data_dict = {
+            "timestamp": timestamp,
+            "global_status": self.dolphie.global_status,
+            "global_variables": self.dolphie.global_variables,
+            "processlist": processlist,
+            "metric_manager": self._condition_metrics(self.dolphie.metric_manager),
+        }
+
         if self.dolphie.connection_source == ConnectionSource.mysql:
             # Remove some global status variables that are not useful for replaying
-            keys_to_remove = []
-            for var_name in self.dolphie.global_status.keys():
-                exclude_vars = [
-                    "Mysqlx",
-                    "Ssl",
-                    "Performance_schema",
-                    "Rsa_public_key",
-                    "Caching_sha2_password_rsa_public_key",
-                ]
-                for exclude_var in exclude_vars:
-                    if exclude_var in var_name:
-                        keys_to_remove.append(var_name)
-                        break
+            keys_to_remove = [
+                var_name
+                for var_name in self.dolphie.global_status.keys()
+                if any(
+                    exclude_var in var_name
+                    for exclude_var in [
+                        "Mysqlx",
+                        "Ssl",
+                        "Performance_schema",
+                        "Rsa_public_key",
+                        "Caching_sha2_password_rsa_public_key",
+                    ]
+                )
+            ]
 
             for key in keys_to_remove:
                 self.dolphie.global_status.pop(key)
 
-            state = MySQLReplayData(
-                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                global_status=self.dolphie.global_status,
-                global_variables=self.dolphie.global_variables,
-                binlog_status=self.dolphie.binlog_status,
-                innodb_metrics=self.dolphie.innodb_metrics,
-                replica_manager=self.dolphie.replica_manager.available_replicas,
-                replication_status=self.dolphie.replication_status,
-                processlist=processlist,
-                metric_manager=self._condition_metrics(self.dolphie.metric_manager),
+            # Add MySQL specific data to the dictionary
+            data_dict.update(
+                {
+                    "binlog_status": self.dolphie.binlog_status,
+                    "innodb_metrics": self.dolphie.innodb_metrics,
+                    "replica_manager": self.dolphie.replica_manager.available_replicas,
+                    "replication_status": self.dolphie.replication_status,
+                }
             )
         else:
-            state = ProxySQLReplayData(
-                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                global_status=self.dolphie.global_status,
-                global_variables=self.dolphie.global_variables,
-                command_stats=self.dolphie.proxysql_command_stats,
-                hostgroup_summary=self.dolphie.proxysql_hostgroup_summary,
-                processlist=processlist,
-                metric_manager=self._condition_metrics(self.dolphie.metric_manager),
+            # Add ProxySQL specific data to the dictionary
+            data_dict.update(
+                {
+                    "command_stats": self.dolphie.proxysql_command_stats,
+                    "hostgroup_summary": self.dolphie.proxysql_hostgroup_summary,
+                }
             )
 
+        # Execute the SQL insert using the constructed dictionary
         self.cursor.execute(
             "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
             (
-                state.timestamp,
-                self._compress_data(json.dumps(asdict(state))),
+                timestamp,
+                self._compress_data(json.dumps(data_dict)),
             ),
         )
 

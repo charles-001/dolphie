@@ -112,7 +112,10 @@ class DolphieApp(App):
         self.console.set_window_title(self.TITLE)
 
         if config.daemon_mode:
-            logger.info(f"Starting Dolphie v{__version__} in daemon mode")
+            logger.info(
+                f"Starting Dolphie v{__version__} in daemon mode with a refresh "
+                f"interval of {config.refresh_interval}s"
+            )
             logger.info(f"Log file: {config.daemon_mode_log_file}")
 
     @work(thread=True, group="replay")
@@ -210,10 +213,12 @@ class DolphieApp(App):
             if not dolphie.main_db_connection.is_connected():
                 self.tab_manager.rename_tab(tab)  # this will use dolphie.host instead of host_with_port
                 self.tab_manager.update_topbar(tab=tab, connection_status=ConnectionStatus.connecting)
-                tab.loading_indicator.display = True
+
+                if not dolphie.daemon_mode:
+                    tab.loading_indicator.display = True
 
                 dolphie.db_connect()
-                self.tab_manager.rename_tab(tab)
+                self.tab_manager.rename_tab(tab)  # this will use dolphie.host_with_port instead of host
 
                 tab.replay_manager = ReplayManager(dolphie)
 
@@ -283,9 +288,18 @@ class DolphieApp(App):
             if event.state == WorkerState.SUCCESS:
                 self.monitor_read_only_change(tab)
 
+                refresh_interval = dolphie.refresh_interval
+                if dolphie.connection_source == ConnectionSource.proxysql:
+                    refresh_interval = dolphie.determine_proxysql_refresh_interval()
+
                 # Skip this if the conditions are right
-                if len(self.screen_stack) > 1 or dolphie.pause_refresh or not dolphie.main_db_connection.is_connected():
-                    tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_main, tab.id))
+                if (
+                    len(self.screen_stack) > 1
+                    or dolphie.pause_refresh
+                    or not dolphie.main_db_connection.is_connected()
+                    or dolphie.daemon_mode
+                ):
+                    tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
 
                     return
 
@@ -304,28 +318,10 @@ class DolphieApp(App):
                         if dolphie.connection_source in metric_instance.connection_source:
                             tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}_{tab.id}")
 
-                refresh_interval = dolphie.refresh_interval
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
                 elif dolphie.connection_source == ConnectionSource.proxysql:
                     self.refresh_screen_proxysql(tab)
-
-                    # If we have a lot of client connections, increase the refresh interval based on the
-                    # proxysql process execution time. René asked for this to be added to reduce load on ProxySQL
-                    client_connections = dolphie.global_status.get("Client_Connections_connected", 0)
-                    if client_connections > 30000:
-                        percentage = 0.60
-                    elif client_connections > 20000:
-                        percentage = 0.50
-                    elif client_connections > 10000:
-                        percentage = 0.40
-                    else:
-                        percentage = 0
-
-                    if percentage:
-                        refresh_interval = dolphie.refresh_interval + (
-                            dolphie.proxysql_process_execution_time * percentage
-                        )
 
                 tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:

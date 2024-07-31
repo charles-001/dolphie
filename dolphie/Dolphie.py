@@ -294,3 +294,23 @@ class Dolphie:
             metric_instance = getattr(self.metric_manager.metrics, metric_instance_name)
             metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
             metric_data.visible = switch.value
+
+    def determine_proxysql_refresh_interval(self) -> float:
+        # If we have a lot of client connections, increase the refresh interval based on the
+        # proxysql process execution time. René asked for this to be added to reduce load on ProxySQL
+        client_connections = self.global_status.get("Client_Connections_connected", 0)
+        if client_connections > 30000:
+            percentage = 0.60
+        elif client_connections > 20000:
+            percentage = 0.50
+        elif client_connections > 10000:
+            percentage = 0.40
+        else:
+            percentage = 0
+
+        if percentage:
+            refresh_interval = self.refresh_interval + (self.proxysql_process_execution_time * percentage)
+        else:
+            refresh_interval = self.refresh_interval
+
+        return refresh_interval

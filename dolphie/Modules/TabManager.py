@@ -164,6 +164,7 @@ class TabManager:
 
         # Create our new tab instance
         tab = Tab(id=tab_id, name=tab_name)
+        self.tabs[tab_id] = tab
 
         # If we're using hostgroups
         if use_hostgroup and self.config.hostgroup_hosts:
@@ -182,6 +183,7 @@ class TabManager:
             # Extract host and port information
             original_config_port = self.config.port
 
+            # Set the host and port for the config when we pass it to Dolphie class
             self.config.host = tab_host_split[0]
             self.config.port = tab_host_split[1] if len(tab_host_split) > 1 else self.config.port
 
@@ -196,6 +198,13 @@ class TabManager:
         # Revert the port back to its original value
         if use_hostgroup and self.config.hostgroup_hosts and len(tab_host_split) > 1:
             self.config.port = original_config_port
+
+        # If we're in daemon mode, stop here since we don't need to
+        # create all the widgets for the tab as that wastes resources
+        if dolphie.daemon_mode:
+            self.active_tab = tab
+
+            return tab
 
         intial_tab_name = "" if use_hostgroup else tab_name
         await self.host_tabs.add_pane(
@@ -387,9 +396,6 @@ class TabManager:
                     if metric_data.visible:
                         self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id} #{metric}", Switch).toggle()
 
-        # Save the tab instance to the tabs dictionary
-        self.tabs[tab_id] = tab
-
         if tab.manual_tab_name:
             self.rename_tab(tab, tab.manual_tab_name)
 
@@ -502,6 +508,9 @@ class TabManager:
         await self.host_tabs.remove_pane(f"tab_{tab.id}")
 
     def rename_tab(self, tab: Tab, new_name: str = None):
+        if tab.dolphie.daemon_mode:
+            return
+
         if not new_name and not tab.manual_tab_name:
             # host_with_port is the full host:port string, we want to split & truncate it to 24 characters
             host = tab.dolphie.host_with_port.split(":")[0][:24]
