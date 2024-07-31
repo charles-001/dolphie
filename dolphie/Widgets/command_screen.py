@@ -20,7 +20,7 @@ class CommandScreen(Screen):
     """
 
     BINDINGS = [
-        Binding("q", "dismiss", "", show=False),
+        Binding("q", "app.pop_screen", "", show=False),
     ]
 
     def __init__(self, connection_status, app_version, host, data):

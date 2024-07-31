@@ -31,10 +31,7 @@ class HelpScreen(ModalScreen):
         }
     """
 
-    BINDINGS = [
-        ("escape", "dismiss"),
-        ("q", "dismiss"),
-    ]
+    BINDINGS = [("escape", "app.pop_screen"), ("q", "app.pop_screen")]
 
     def __init__(self, connection_source, replay_file):
         super().__init__()

@@ -79,7 +79,7 @@ class ThreadScreen(Screen):
     """
 
     BINDINGS = [
-        Binding("q", "dismiss", "", show=False),
+        Binding("q", "app.pop_screen", "", show=False),
     ]
 
     def __init__(
