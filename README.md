@@ -72,15 +72,15 @@ positional arguments:
 options:
   --help                show this help message and exit
   --host-setup          Start Dolphie by showing the Host Setup modal instead of automatically connecting
-  -u , --user           Username
-  -p , --password       Password
-  -h , --host           Hostname/IP address
-  -P , --port           Port (socket has precedence)
-  -S , --socket         Socket file
-  -c , --config-file    Dolphie's config file to use. Options are read from these files in the given order: ['/etc/dolphie.cnf', '/etc/dolphie/dolphie.cnf', '~/.dolphie.cnf']
-  -m , --mycnf-file     MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
-  -l , --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials [default: client]
-  -r , --refresh-interval
+  -u, --user           Username
+  -p, --password       Password
+  -h, --host           Hostname/IP address
+  -P, --port           Port (socket has precedence)
+  -S, --socket         Socket file
+  -c, --config-file    Dolphie's config file to use. Options are read from these files in the given order: ['/etc/dolphie.cnf', '/etc/dolphie/dolphie.cnf', '~/.dolphie.cnf']
+  -m, --mycnf-file     MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
+  -l, --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials [default: client]
+  -r, --refresh-interval
                         How much time to wait in seconds between each refresh [default: 1]
   --host-cache-file     Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format ip=hostname [default: ~/dolphie_host_cache]
   --host-setup-file     Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
@@ -92,9 +92,9 @@ options:
   --panels              What panels to display on startup separated by a comma. Supports:  dashboard,processlist,graphs,replication,metadata_locks,ddl,proxysql_hostgroup_summary,proxysql_mysql_query_rules,proxysql_command_stats [default: dashboard,processlist]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repo           What PyPi repository to use when checking for a new version [default: https://pypi.org/pypi/dolphie/json]
-  -H , --hostgroup      This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
-  -R , --record          Enables recording of Dolphie's data to a replay file. Note: This can use significant disk space. Monitor accordingly!
-  -D , --daemon          Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the background with whatever solution you decide to use. Automatically enables --record. This mode is solely for managing replay files
+  -H, --hostgroup      This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
+  -R, --record          Enables recording of Dolphie's data to a replay file. Note: This can use significant disk space. Monitor accordingly!
+  -D, --daemon          Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the background with whatever solution you decide to use. Automatically enables --record. This mode is solely for managing replay files
   --daemon-log-file     Full path of the log file for daemon mode
   --replay-file         Specify the full path of the replay file to load and enable replay mode
   --replay-dir          Directory to store replay data files
