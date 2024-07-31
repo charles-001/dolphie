@@ -183,6 +183,7 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
+            "-c",
             "--config-file",
             dest="config_file",
             type=str,
@@ -203,7 +204,6 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "-f",
             "--host-cache-file",
             dest="host_cache_file",
             type=str,
@@ -214,7 +214,6 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "-q",
             "--host-setup-file",
             dest="host_setup_file",
             type=str,
@@ -237,14 +236,13 @@ Dolphie's config supports these options under [dolphie] section:
         )
         self.parser.add_argument(
             "-r",
-            "--refresh_interval",
+            "--refresh-interval",
             dest="refresh_interval",
             type=int,
             help=f"How much time to wait in seconds between each refresh [default: {self.config.refresh_interval}]",
             metavar="",
         )
         self.parser.add_argument(
-            "-H",
             "--heartbeat-table",
             dest="heartbeat_table",
             type=str,
@@ -306,16 +304,17 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "--pypi-repository",
+            "--pypi-repo",
             dest="pypi_repository",
             type=str,
             help=(
-                "What PyPi repository to use when checking for a new version."
-                " If not specified, it will use Dolphie's PyPi repository"
+                "What PyPi repository to use when checking for a new version "
+                f" default: [{self.config.pypi_repository}]"
             ),
             metavar="",
         )
         self.parser.add_argument(
+            "-H",
             "--hostgroup",
             dest="hostgroup",
             type=str,
@@ -351,6 +350,7 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
+            "-R",
             "--record",
             dest="record_for_replay",
             action="store_true",
@@ -360,6 +360,7 @@ Dolphie's config supports these options under [dolphie] section:
             ),
         )
         self.parser.add_argument(
+            "-D",
             "--daemon",
             dest="daemon_mode",
             action="store_true",
@@ -586,13 +587,17 @@ Dolphie's config supports these options under [dolphie] section:
             self.console.print("[#969aad]Note: Options are set by their source in the order they appear")
             sys.exit()
 
+        # Verify parameters for replay & daemon mode
         if self.config.daemon_mode:
             self.config.record_for_replay = True
             if not self.config.replay_dir:
-                self.exit("Daemon mode requires --replay-dir to be specified")
+                self.exit("Daemon mode ([red2]--daemon[/red2]) requires [red2]--replay-dir[/red2] to be specified")
 
         if self.config.replay_file and not os.path.isfile(self.config.replay_file):
-            self.exit(f"Replay file {self.config.replay_file} does not exist")
+            self.exit(f"Replay file [red2]{self.config.replay_file}[/red2] does not exist")
+
+        if self.config.record_for_replay and not self.config.replay_dir:
+            self.exit("[red2]--record[/red2] requires [red2]--replay-dir[/red2] to be specified")
 
     def parse_ssl_options(self, data):
         if isinstance(data, ConfigParser):
@@ -643,7 +648,6 @@ Dolphie's config supports these options under [dolphie] section:
                 self.exit(
                     f"Error with Dolphie config: [red2]{option}[/red2] is a boolean and must either be true/false"
                 )
-
         elif data_type == int:
             try:
                 return int(value)
