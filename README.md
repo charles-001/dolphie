@@ -202,9 +202,9 @@ Starting with version **5.1.0**, you can instruct Dolphie to record its data (vi
 Note that this feature can incur a significant amount of disk space depending on how busy your server is and what you set `--replay-retention-hours` + `--refresh-interval`. Adjust these values to suit your needs and monitor the disk space usage accordingly.
 
 ## Daemon Mode
-Also introduced in version **5.1.0**, Dolphie now supports running in daemon mode with the `--daemon` option. This mode eliminates the TUI (Text User Interface) and creates a log file for messages while also displaying them in the console. Overall, daemon mode is significantly lighter on memory and CPU compared to running Dolphie in its standard mode.
+Also introduced in version **5.1.0** is the ability to run Dolphie in daemon mode (via`--daemon` option). This mode eliminates Textual's TUI and creates a log file for messages while also displaying them in the console. Overall, daemon mode is significantly lighter weight on system resources compared to running Dolphie naturally.
 
-The primary purpose of this mode is to always be recording data to a replay file so it can be replayed whenever needed. You have flexibility in how you run Dolphie in the background; personally, I prefer using `systemctl`, but alternatives like `nohup` or `tmux` can be viable options.
+While it may not be obvious, the primary purpose of this mode is to always be recording data to a replay file so it can be replayed whenever needed. You have flexibility in how you run Dolphie in the background; personally, I prefer using `systemctl`, but alternatives like `nohup` or `tmux` can be viable options.
 
 ## Hostgroups
 Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format `key=host` (keys have no meaning). Hosts support optional port (default is whatever `port` parameter is) in the format `host:port`. You can also name the tabs by suffixing `~tab_name` to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
