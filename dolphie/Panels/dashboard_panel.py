@@ -185,10 +185,6 @@ def create_panel(tab: Tab) -> Table:
 
             table_primary.add_row("[label]Compression", binlog_compression)
 
-        # Save some global_variables to be used in next refresh
-        if dolphie.binlog_status:
-            dolphie.previous_binlog_position = dolphie.binlog_status["Position"]
-
     tab.dashboard_section_3.update(table_primary)
 
     ###############

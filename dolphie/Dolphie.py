@@ -68,7 +68,6 @@ class Dolphie:
         self.dolphie_start_time: datetime = datetime.now()
         self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
-        self.completed_first_loop: bool = False
         self.polling_latency: float = 0
         self.connection_status: DataTypes.ConnectionStatus = None
         self.processlist_threads: dict = {}
@@ -77,7 +76,6 @@ class Dolphie:
         self.metadata_locks: dict = {}
         self.ddl: list = []
         self.pause_refresh: bool = False
-        self.previous_binlog_position: int = 0
         self.innodb_metrics: dict = {}
         self.disk_io_metrics: dict = {}
         self.global_variables: dict = {}
@@ -96,6 +94,7 @@ class Dolphie:
         self.proxysql_command_stats: dict = {}
         self.proxysql_process_execution_time: float = 0
 
+        # Filters that can be applied
         self.user_filter = None
         self.db_filter = None
         self.host_filter = None

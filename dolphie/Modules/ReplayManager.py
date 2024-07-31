@@ -69,9 +69,7 @@ class ReplayManager:
             self.replay_file = f"{dolphie.replay_dir}/{dolphie.host}/daemon.db"
         elif dolphie.record_for_replay:
             self.replay_file = f"{dolphie.replay_dir}/{dolphie.host}/{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.db"
-            dolphie.app.notify(
-                f"File: [highlight]{self.replay_file}[/highlight]", title="Recording data for Replay", timeout=10
-            )
+            dolphie.app.notify(f"File: [highlight]{self.replay_file}[/highlight]", title="Recording data", timeout=10)
         else:
             # No options specified for replaying, skip initialization
             return
@@ -332,7 +330,7 @@ class ReplayManager:
         if not self.dolphie.record_for_replay:
             return
 
-        # Convert the dictionary of processlist threads to a list of dictionaries
+        # Convert the dictionary of processlist objecs to a list of dictionaries with JSON
         processlist = [
             {**thread_data, "query": minify_query(thread_data["query"])} if "query" in thread_data else thread_data
             for thread_data in (v.thread_data for v in self.dolphie.processlist_threads.values())

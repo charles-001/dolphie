@@ -144,8 +144,7 @@ class DolphieApp(App):
 
         # Update the dashboard title with the timestamp of the replay event
         tab.dashboard_replay.update(
-            f"[b]Replay Mode[/b] [dark_gray]|[/dark_gray] "
-            f"[b light_blue]{replay_event_data.timestamp}[/b light_blue]"
+            f"[b]Replay[/b] [dark_gray]|[/dark_gray] " f"[b light_blue]{replay_event_data.timestamp}[/b light_blue]"
         )
         tab.dashboard_replay_start_end.update(
             f"{tab.replay_manager.min_timestamp}[b highlight] →[/b highlight] {tab.replay_manager.max_timestamp}"
@@ -311,6 +310,8 @@ class DolphieApp(App):
                     tab.main_container.display = True
                     tab.sparkline.display = True
 
+                    self.size_dashboard_sections(tab)
+
                     # Hide all graph tabs so we can show the ones we want
                     tabs = tab.metric_graph_tabs.query(TabPane)
                     for graph_tab in tabs:
@@ -381,6 +382,8 @@ class DolphieApp(App):
                 if not tab.main_container.display:
                     tab.main_container.display = True
                     tab.sparkline.display = True
+
+                    self.size_dashboard_sections(tab)
 
                     # Hide all graph tabs so we can show the ones we want
                     tabs = tab.metric_graph_tabs.query(TabPane)
@@ -662,9 +665,6 @@ class DolphieApp(App):
         if not dolphie.daemon_mode:
             dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
-        # This denotes that we've gone through the first loop of the worker thread
-        dolphie.completed_first_loop = True
-
     def refresh_screen_mysql(self, tab: Tab):
         dolphie = tab.dolphie
 
@@ -702,9 +702,6 @@ class DolphieApp(App):
         # since the data can change after a key is pressed
         if not dolphie.daemon_mode:
             dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
-
-        # This denotes that we've gone through the first loop of the worker thread
-        dolphie.completed_first_loop = True
 
     def monitor_read_only_change(self, tab: Tab):
         dolphie = tab.dolphie
@@ -762,7 +759,9 @@ class DolphieApp(App):
             if self.config.host_setup:
                 self.tab_manager.setup_host_tab(tab)
             elif self.tab_manager.active_tab.dolphie.replay_file:
-                self.notify(f"Starting replay for file [highlight]{tab.dolphie.replay_file}[/highlight]", timeout=10)
+                self.notify(
+                    f"File: [highlight]{tab.dolphie.replay_file}[/highlight]", title="Replay started", timeout=10
+                )
 
                 self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
                 self.tab_manager.rename_tab(tab)
@@ -888,7 +887,7 @@ class DolphieApp(App):
         self.force_refresh_for_replay(need_current_data=True)
 
     def force_refresh_for_replay(self, need_current_data: bool = False):
-        # This function lets us force a refresh of the worker thread when we're in replay mode
+        # This function lets us force a refresh of the worker thread when we're in a replay
         tab = self.tab_manager.active_tab
 
         if tab.dolphie.replay_file and tab.worker.state != WorkerState.RUNNING:
@@ -899,6 +898,44 @@ class DolphieApp(App):
                 tab.replay_manager.current_index -= 1
 
             self.run_worker_replay(tab.id, manual_control=True)
+
+    def size_dashboard_sections(self, tab: Tab):
+        if tab.dolphie.connection_source == ConnectionSource.mysql:
+            # Update the sizes of the panels depending if replication container is visible or not
+            if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
+                tab.dashboard_section_1.styles.width = "25vw"
+                tab.dashboard_section_2.styles.width = "17vw"
+                tab.dashboard_section_3.styles.width = "21vw"
+                tab.dashboard_section_4.styles.width = "12vw"
+                tab.dashboard_section_5.styles.width = "25vw"
+
+                tab.dashboard_section_5.display = True
+            else:
+                tab.dashboard_section_1.styles.width = "32vw"
+                tab.dashboard_section_2.styles.width = "24vw"
+                tab.dashboard_section_3.styles.width = "27vw"
+                tab.dashboard_section_4.styles.width = "17vw"
+                tab.dashboard_section_5.styles.width = "0"
+
+                tab.dashboard_section_5.display = False
+
+            tab.dashboard_section_1.styles.max_width = "45"
+            tab.dashboard_section_2.styles.max_width = "32"
+            tab.dashboard_section_3.styles.max_width = "38"
+            tab.dashboard_section_4.styles.max_width = "22"
+            tab.dashboard_section_5.styles.max_width = "55"
+        elif tab.dolphie.connection_source == ConnectionSource.proxysql:
+            tab.dashboard_section_1.styles.width = "24vw"
+            tab.dashboard_section_2.styles.width = "20vw"
+            tab.dashboard_section_3.styles.width = "22vw"
+            tab.dashboard_section_4.styles.width = "13vw"
+
+            tab.dashboard_section_5.display = False
+
+            tab.dashboard_section_1.styles.max_width = "35"
+            tab.dashboard_section_2.styles.max_width = "28"
+            tab.dashboard_section_3.styles.max_width = "25"
+            tab.dashboard_section_4.styles.max_width = "25"
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         panel_mapping = {
@@ -921,45 +958,6 @@ class DolphieApp(App):
             },
             tab.dolphie.panels.proxysql_command_stats.name: {ConnectionSource.proxysql: proxysql_command_stats_panel},
         }
-
-        if tab.dolphie.connection_source == ConnectionSource.mysql:
-            if toggled or not tab.dolphie.completed_first_loop:
-                # Update the sizes of the panels depending if replication container is visible or not
-                if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
-                    tab.dashboard_section_1.styles.width = "25vw"
-                    tab.dashboard_section_2.styles.width = "17vw"
-                    tab.dashboard_section_3.styles.width = "21vw"
-                    tab.dashboard_section_4.styles.width = "12vw"
-                    tab.dashboard_section_5.styles.width = "25vw"
-
-                    tab.dashboard_section_5.display = True
-                else:
-                    tab.dashboard_section_1.styles.width = "32vw"
-                    tab.dashboard_section_2.styles.width = "24vw"
-                    tab.dashboard_section_3.styles.width = "27vw"
-                    tab.dashboard_section_4.styles.width = "17vw"
-                    tab.dashboard_section_5.styles.width = "0"
-
-                    tab.dashboard_section_5.display = False
-
-                tab.dashboard_section_1.styles.max_width = "45"
-                tab.dashboard_section_2.styles.max_width = "32"
-                tab.dashboard_section_3.styles.max_width = "38"
-                tab.dashboard_section_4.styles.max_width = "22"
-                tab.dashboard_section_5.styles.max_width = "55"
-
-        elif tab.dolphie.connection_source == ConnectionSource.proxysql:
-            tab.dashboard_section_1.styles.width = "24vw"
-            tab.dashboard_section_2.styles.width = "20vw"
-            tab.dashboard_section_3.styles.width = "22vw"
-            tab.dashboard_section_4.styles.width = "13vw"
-
-            tab.dashboard_section_5.display = False
-
-            tab.dashboard_section_1.styles.max_width = "35"
-            tab.dashboard_section_2.styles.max_width = "28"
-            tab.dashboard_section_3.styles.max_width = "25"
-            tab.dashboard_section_4.styles.max_width = "25"
 
         for panel_map_name, panel_map_connection_sources in panel_mapping.items():
             panel_map_obj = panel_map_connection_sources.get(tab.dolphie.connection_source)
@@ -1053,9 +1051,7 @@ class DolphieApp(App):
 
         if dolphie.replay_file:
             if key not in replay_allowed_keys and key not in exclude_keys:
-                self.notify(
-                    f"Replay mode is active - key [highlight]{key}[/highlight] is not allowed", severity="error"
-                )
+                self.notify(f"Key [highlight]{key}[/highlight] is not allowed during a replay", severity="warning")
                 return
         else:
             # Prevent commands from being run if the secondary connection is processing a query already
