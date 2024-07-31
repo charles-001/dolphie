@@ -194,32 +194,13 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
+            "-m",
             "--mycnf-file",
             dest="mycnf_file",
             type=str,
             help=(
                 "MySQL config file path to use. This should use [client] section "
                 f"[default: {self.config.mycnf_file}]"
-            ),
-            metavar="",
-        )
-        self.parser.add_argument(
-            "--host-cache-file",
-            dest="host_cache_file",
-            type=str,
-            help=(
-                "Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line "
-                f"using format ip=hostname [default: {self.config.host_cache_file}]"
-            ),
-            metavar="",
-        )
-        self.parser.add_argument(
-            "--host-setup-file",
-            dest="host_setup_file",
-            type=str,
-            help=(
-                "Specify location of file that stores the available hosts to use in host setup modal [default:"
-                f" {self.config.host_setup_file}]"
             ),
             metavar="",
         )
@@ -240,6 +221,26 @@ Dolphie's config supports these options under [dolphie] section:
             dest="refresh_interval",
             type=int,
             help=f"How much time to wait in seconds between each refresh [default: {self.config.refresh_interval}]",
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--host-cache-file",
+            dest="host_cache_file",
+            type=str,
+            help=(
+                "Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line "
+                f"using format ip=hostname [default: {self.config.host_cache_file}]"
+            ),
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--host-setup-file",
+            dest="host_setup_file",
+            type=str,
+            help=(
+                "Specify location of file that stores the available hosts to use in host setup modal [default:"
+                f" {self.config.host_setup_file}]"
+            ),
             metavar="",
         )
         self.parser.add_argument(
@@ -329,27 +330,6 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "--replay-file",
-            dest="replay_file",
-            type=str,
-            help="Specify the full path of the replay file to load and enable replay mode",
-            metavar="",
-        )
-        self.parser.add_argument(
-            "--replay-dir",
-            dest="replay_dir",
-            type=str,
-            help="Directory to store replay data files",
-            metavar="",
-        )
-        self.parser.add_argument(
-            "--replay-retention-hours",
-            dest="replay_retention_hours",
-            type=int,
-            help=f"Number of hours to keep replay data [default: {self.config.replay_retention_hours}]",
-            metavar="",
-        )
-        self.parser.add_argument(
             "-R",
             "--record",
             dest="record_for_replay",
@@ -375,6 +355,27 @@ Dolphie's config supports these options under [dolphie] section:
             dest="daemon_mode_log_file",
             type=str,
             help="Full path of the log file for daemon mode",
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--replay-file",
+            dest="replay_file",
+            type=str,
+            help="Specify the full path of the replay file to load and enable replay mode",
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--replay-dir",
+            dest="replay_dir",
+            type=str,
+            help="Directory to store replay data files",
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--replay-retention-hours",
+            dest="replay_retention_hours",
+            type=int,
+            help=f"Number of hours to keep replay data [default: {self.config.replay_retention_hours}]",
             metavar="",
         )
         self.parser.add_argument(
