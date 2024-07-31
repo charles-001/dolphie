@@ -8,6 +8,7 @@ from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.Queries import MySQLQueries
+from loguru import logger
 from packaging.version import parse as parse_version
 from textual.app import App
 from textual.widgets import Switch
@@ -314,3 +315,21 @@ class Dolphie:
             refresh_interval = self.refresh_interval
 
         return refresh_interval
+
+    def detect_global_variable_change(self, old_data: dict, new_data: dict):
+        if old_data:
+            for variable, value in new_data.items():
+                if "gtid" in variable:
+                    continue
+
+                old_value = old_data.get(variable)
+                if old_value != value:
+                    self.app.notify(
+                        f"[highlight]{variable}[/highlight] has changed from "
+                        f"[highlight]{old_value}[/highlight] to "
+                        f"[highlight]{value}[/highlight]",
+                        title="Global Variable Change",
+                        severity="warning",
+                        timeout=10,
+                    )
+                    logger.warning(f"Global variable {variable} has changed from " f"{old_value} to {value}")

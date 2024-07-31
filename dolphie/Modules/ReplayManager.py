@@ -355,14 +355,8 @@ class ReplayManager:
                 var_name
                 for var_name in self.dolphie.global_status.keys()
                 if any(
-                    exclude_var in var_name
-                    for exclude_var in [
-                        "Mysqlx",
-                        "Ssl",
-                        "Performance_schema",
-                        "Rsa_public_key",
-                        "Caching_sha2_password_rsa_public_key",
-                    ]
+                    exclude_var in var_name.lower()
+                    for exclude_var in ["performance_schema", "mysqlx", "ssl", "rsa", "tls"]
                 )
             ]
 

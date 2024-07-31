@@ -41,7 +41,7 @@ class Database:
         if auto_connect:
             self.connect()
 
-    def connect(self):
+    def connect(self, reconnect_attempt: bool = False):
         try:
             self.connection = pymysql.connect(
                 host=self.host,
@@ -74,10 +74,13 @@ class Database:
 
             logger.info(f"Connected to {self.source} with Process ID {self.connection_id}")
         except pymysql.Error as e:
-            if len(e.args) == 1:
-                raise ManualException(e.args[0])
+            if reconnect_attempt:
+                logger.error(f"Failed to reconnect to {self.source}: {e}")
             else:
-                raise ManualException(e.args[1])
+                if len(e.args) == 1:
+                    raise ManualException(e.args[0])
+                else:
+                    raise ManualException(e.args[1])
         except FileNotFoundError:  # Catch SSL file path errors
             raise ManualException("SSL certificate file path isn't valid!")
         except SSLError as e:
@@ -106,13 +109,12 @@ class Database:
             )
             return None
 
-        error_message = None
-
         # Prefix all queries with dolphie so they can be identified in the processlist from other people
         if self.source != ConnectionSource.proxysql:
             query = "/* dolphie */ " + query
 
-        for _ in range(self.max_reconnect_attempts):
+        attempt_number = 0
+        while True:
             self.running_query = True
             error_message = None
 
@@ -148,7 +150,7 @@ class Database:
                         # 2013: Lost connection to MySQL server during query
                         # 2055: Lost connection to MySQL server at hostname
 
-                        logger.error("MySQL connection lost, reconnecting...")
+                        logger.error(f"{self.source} is disconnected, attempting to reconnect...")
                         self.app.notify(
                             f"[b light_blue]{self.host}:{self.port}[/b light_blue]: {error_message}",
                             title="MySQL Connection Lost",
@@ -157,7 +159,15 @@ class Database:
                         )
 
                         self.close()
-                        self.connect()
+                        self.connect(reconnect_attempt=True)
+                        attempt_number += 1
+
+                        # Exponential backoff
+                        time.sleep(min(1 * (2**attempt_number), 20))  # Cap the wait time at 20 seconds
+
+                        # If the connection is still not open, skip the rest of the attempt
+                        if not self.connection.open:
+                            continue
 
                         self.app.notify(
                             f"[b light_blue]{self.host}:{self.port}[/b light_blue]: Successfully reconnected",
@@ -166,16 +176,10 @@ class Database:
                             timeout=10,
                         )
 
-                        time.sleep(1)
+                        # Retry the query
+                        return self.execute(query, values)
                     else:
                         raise ManualException(error_message, query=query)
-
-        if error_message is not None:
-            raise ManualException(
-                f"{self.host}:{self.port}: Failed to execute query after"
-                f" {self.max_reconnect_attempts} reconnection attempts - error: {error_message}",
-                query=query,
-            )
 
     def _process_row(self, row):
         processed_row = {}

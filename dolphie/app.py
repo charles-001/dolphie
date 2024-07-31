@@ -153,8 +153,11 @@ class DolphieApp(App):
 
         if dolphie.connection_source == ConnectionSource.mysql:
             # Update our variables with the replay event data
+            global_variables = replay_event_data.global_variables
+            dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
+            dolphie.global_variables = global_variables
+
             dolphie.global_status = replay_event_data.global_status
-            dolphie.global_variables = replay_event_data.global_variables
             dolphie.binlog_status = replay_event_data.binlog_status
             dolphie.innodb_metrics = replay_event_data.innodb_metrics
             dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
@@ -327,6 +330,8 @@ class DolphieApp(App):
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
+                    logger.critical(tab.worker_cancel_error)
+
                     if self.tab_manager.active_tab.id != tab.id or self.loading_hostgroups:
                         self.notify(
                             (
@@ -400,7 +405,10 @@ class DolphieApp(App):
     def process_mysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+        global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+        dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
+        dolphie.global_variables = global_variables
+
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
