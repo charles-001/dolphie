@@ -1,7 +1,6 @@
 import json
 import os
 import sqlite3
-from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Union
@@ -55,7 +54,6 @@ class ReplayManager:
             dolphie: The Dolphie instance.
         """
         self.dolphie = dolphie
-        # self.conn: sqlite3.Connection = None
         self.current_index = 0  # This is used to keep track of the last primary key read from the database
         self.min_timestamp = None
         self.max_timestamp = None
@@ -63,6 +61,7 @@ class ReplayManager:
         self.max_id = None
         self.last_purge_time = datetime.now() - timedelta(hours=1)  # Initialize to an hour ago
         self.replay_file_size = 0
+        self.rows_purged = 0
 
         # Determine filename used for replay file
         if dolphie.replay_file:
@@ -76,7 +75,11 @@ class ReplayManager:
             # No options specified for replaying, skip initialization
             return
 
+        os.makedirs(os.path.dirname(self.replay_file), mode=0o770, exist_ok=True)
         logger.info(f"Replay SQLite file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)")
+
+        self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
+        self.cursor = self.connection.cursor()
 
         self._initialize_sqlite()
         self._manage_metadata()
@@ -88,38 +91,28 @@ class ReplayManager:
         """
         Initializes the SQLite database and creates the necessary tables.
         """
+        # Lock down the permissions of the replay file
+        os.chmod(self.replay_file, 0o660)
 
-        # Ensure the directory for the replay file exists
-        os.makedirs(os.path.dirname(self.replay_file), mode=0o770, exist_ok=True)
-
-        # Connect to the SQLite database
-        # self.conn = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
-
-        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
-            cursor = con.cursor()
-
-            # Set the database file permissions to 660
-            os.chmod(self.replay_file, 0o660)
-
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS replay_data (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp DATETIME,
-                    data BLOB
-                )"""
-            )
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
-            cursor.execute(
-                """
-                CREATE TABLE IF NOT EXISTS metadata (
-                    hostname VARCHAR(255),
-                    host_version VARCHAR(255),
-                    host_distro VARCHAR(255),
-                    connection_source VARCHAR(255),
-                    dolphie_version VARCHAR(255)
-                )"""
-            )
+        self.cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS replay_data (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME,
+                data BLOB
+            )"""
+        )
+        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
+        self.cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS metadata (
+                hostname VARCHAR(255),
+                host_version VARCHAR(255),
+                host_distro VARCHAR(255),
+                connection_source VARCHAR(255),
+                dolphie_version VARCHAR(255)
+            )"""
+        )
 
         logger.info("Connected to SQLite")
 
@@ -141,20 +134,31 @@ class ReplayManager:
         retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
-            cursor = con.cursor()
-            cursor.execute("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
-            rows_deleted = cursor.rowcount
 
-            if rows_deleted:
-                # This will rebuild the database file and reduce its size
-                cursor.execute("VACUUM")
-                cursor.execute("PRAGMA shrink_memory")
+        self.cursor.execute("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
+        rows_deleted = self.cursor.rowcount
 
-                self.replay_file_size = os.path.getsize(self.replay_file)
+        if rows_deleted:
+            self.rows_purged += rows_deleted
+
+            self.cursor.execute("SELECT COUNT(*) FROM replay_data")
+            total_rows = int(self.cursor.fetchone()[0])
+
+            # If more than 50% of the rows were pruned, we should vacuum the database to reduce its size
+            if total_rows > 0 and (self.rows_purged / total_rows) >= 0.60:
                 logger.info(
-                    f"Purged {rows_deleted} rows from replay data older than {retention_date}. "
-                    f"Database file size is now {format_bytes(self.replay_file_size, color=False)}"
+                    f"There's {total_rows} rows in the the replay database with "
+                    f"{self.rows_purged} rows purged. Starting vacuum"
+                )
+
+                self.cursor.execute("VACUUM")
+
+                self.rows_purged = 0
+                self.replay_file_size = os.path.getsize(self.replay_file)
+
+                logger.info(
+                    "Vacuum successful! Database file size is now "
+                    f"{format_bytes(self.replay_file_size, color=False)}"
                 )
 
         self.last_purge_time = current_time
@@ -166,41 +170,39 @@ class ReplayManager:
         Args:
             timestamp: The timestamp to seek to.
         """
-        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
-            cursor = con.cursor()
-            cursor.execute("SELECT id FROM replay_data WHERE timestamp = ?", (timestamp,))
-            row = cursor.fetchone()
+        self.cursor.execute("SELECT id FROM replay_data WHERE timestamp = ?", (timestamp,))
+        row = self.cursor.fetchone()
+        if row:
+            # We subtract 1 because get_next_refresh_interval naturally increments the index
+            self.current_index = row[0] - 1
+            self.dolphie.app.notify(
+                f"Seeking to timestamp [light_blue]{timestamp}[/light_blue]", severity="success", timeout=10
+            )
+
+            return True
+        else:
+            # Try to find a timestamp before the specified timestamp
+            self.cursor.execute(
+                "SELECT id, timestamp FROM replay_data WHERE timestamp < ? ORDER BY timestamp DESC LIMIT 1",
+                (timestamp,),
+            )
+            row = self.cursor.fetchone()
             if row:
                 # We subtract 1 because get_next_refresh_interval naturally increments the index
                 self.current_index = row[0] - 1
                 self.dolphie.app.notify(
-                    f"Seeking to timestamp [light_blue]{timestamp}[/light_blue]", severity="success", timeout=10
+                    f"Timestamp not found, seeking to closest timestamp [light_blue]{row[1]}[/light_blue]",
+                    timeout=10,
                 )
 
                 return True
             else:
-                # Try to find a timestamp before the specified timestamp
-                cursor.execute(
-                    "SELECT id, timestamp FROM replay_data WHERE timestamp < ? ORDER BY timestamp DESC LIMIT 1",
-                    (timestamp,),
+                self.dolphie.app.notify(
+                    f"No timestamps found on or before [light_blue]{timestamp}[/light_blue]",
+                    severity="error",
+                    timeout=10,
                 )
-                row = cursor.fetchone()
-                if row:
-                    # We subtract 1 because get_next_refresh_interval naturally increments the index
-                    self.current_index = row[0] - 1
-                    self.dolphie.app.notify(
-                        f"Timestamp not found, seeking to closest timestamp [light_blue]{row[1]}[/light_blue]",
-                        timeout=10,
-                    )
-
-                    return True
-                else:
-                    self.dolphie.app.notify(
-                        f"No timestamps found on or before [light_blue]{timestamp}[/light_blue]",
-                        severity="error",
-                        timeout=10,
-                    )
-                    return False
+                return False
 
     def _manage_metadata(self):
         """
@@ -209,70 +211,66 @@ class ReplayManager:
         if not self.dolphie.record_for_replay:
             return
 
-        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
-            cursor = con.cursor()
-            cursor.execute("SELECT * FROM metadata")
-            row = cursor.fetchone()
-            if row is None:
-                cursor.execute(
-                    "INSERT INTO metadata (hostname, host_version, host_distro, connection_source, dolphie_version) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (
-                        self.dolphie.host_with_port,
-                        self.dolphie.host_version,
-                        self.dolphie.host_distro,
-                        self.dolphie.connection_source,
-                        self.dolphie.app_version,
-                    ),
-                )
-            else:
-                connection_source = row[3]
-                app_version = row[4]
-                logger.info(
-                    f"Replay database metadata - Host: {row[0]}, Version: {row[1]} ({row[2]}), "
-                    f"Dolphie version: {app_version}"
-                )
+        self.cursor.execute("SELECT * FROM metadata")
+        row = self.cursor.fetchone()
+        if row is None:
+            self.cursor.execute(
+                "INSERT INTO metadata (hostname, host_version, host_distro, connection_source, dolphie_version) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    self.dolphie.host_with_port,
+                    self.dolphie.host_version,
+                    self.dolphie.host_distro,
+                    self.dolphie.connection_source,
+                    self.dolphie.app_version,
+                ),
+            )
+        else:
+            connection_source = row[3]
+            app_version = row[4]
+            logger.info(
+                f"Replay database metadata - Host: {row[0]}, Version: {row[1]} ({row[2]}), "
+                f"Dolphie version: {app_version}"
+            )
 
-                if self.dolphie.daemon_mode:
-                    # Avoid mixing Dolphie versions in the same replay file. Never know what I might
-                    # change in the future :)
-                    if app_version != self.dolphie.app_version:
-                        new_replay_file = f"{self.replay_file}_v{app_version}"
-                        logger.warning(
-                            f"The version of Dolphie ({self.dolphie.app_version}) differs from the version of the "
-                            f"daemon's replay file ({app_version}). To avoid potential compatibility issues, "
-                            f"the current database file will be renamed to: {new_replay_file}"
-                        )
+            if self.dolphie.daemon_mode:
+                # Avoid mixing Dolphie versions in the same replay file. Never know what I might
+                # change in the future :)
+                if app_version != self.dolphie.app_version:
+                    new_replay_file = f"{self.replay_file}_v{app_version}"
+                    logger.warning(
+                        f"The version of Dolphie ({self.dolphie.app_version}) differs from the version of the "
+                        f"daemon's replay file ({app_version}). To avoid potential compatibility issues, "
+                        f"the current database file will be renamed to: {new_replay_file}"
+                    )
 
-                        os.rename(self.replay_file, new_replay_file)
+                    os.rename(self.replay_file, new_replay_file)
 
-                        self._initialize_sqlite()
-                        self._manage_metadata()
+                    self._initialize_sqlite()
+                    self._manage_metadata()
 
-                    # Avoid mixing connection sources in the same replay file
-                    if connection_source != self.dolphie.connection_source:
-                        logger.critical(
-                            f"The connection source of the daemon's replay file ({connection_source}) "
-                            f"differs from the current connection source ({self.dolphie.connection_source}). "
-                            "You should never mix connection sources in the same replay file. Please rename "
-                            "the daemon's replay file and restart the daemon."
-                        )
+                # Avoid mixing connection sources in the same replay file
+                if connection_source != self.dolphie.connection_source:
+                    logger.critical(
+                        f"The connection source of the daemon's replay file ({connection_source}) "
+                        f"differs from the current connection source ({self.dolphie.connection_source}). "
+                        "You should never mix connection sources in the same replay file. Please rename "
+                        "the daemon's replay file and restart the daemon."
+                    )
 
     def _get_replay_file_metadata(self):
         """
         Retrieves the replay's metadata from the metadata table.
         """
-        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
-            cursor = con.cursor()
-            cursor.execute("SELECT * FROM metadata")
-            row = cursor.fetchone()
-            if row:
-                self.dolphie.host_with_port = row[0]
-                self.dolphie.host_version = row[1]
-                self.dolphie.host_distro = row[2]
-                self.dolphie.connection_source = row[3]
-            else:
-                raise Exception("Metadata not found in replay file.")
+        self.cursor.execute("SELECT * FROM metadata")
+        row = self.cursor.fetchone()
+        if row:
+            self.dolphie.host_with_port = row[0]
+            self.dolphie.host_version = row[1]
+            self.dolphie.host_distro = row[2]
+            self.dolphie.connection_source = row[3]
+        else:
+            raise Exception("Metadata not found in replay file.")
 
     def _compress_data(self, data: str):
         """
@@ -394,19 +392,13 @@ class ReplayManager:
             )
 
         # Execute the SQL insert using the constructed dictionary
-        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
-            cursor = con.cursor()
-            cursor.execute(
-                "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
-                (
-                    timestamp,
-                    self._compress_data(json.dumps(data_dict)),
-                ),
-            )
-
-        # Cleanup large variables
-        del data_dict
-        del processlist
+        self.cursor.execute(
+            "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
+            (
+                timestamp,
+                self._compress_data(json.dumps(data_dict)),
+            ),
+        )
 
         self.purge_old_data()
 
@@ -422,24 +414,22 @@ class ReplayManager:
         """
 
         # Get the min and max timestamps and IDs from the database so we can update the UI
-        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
-            cursor = con.cursor()
-            cursor.execute("SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id) FROM replay_data")
-            row = cursor.fetchone()
-            if row:
-                self.min_timestamp = row[0]
-                self.max_timestamp = row[1]
-                self.min_id = row[2]
-                self.max_id = row[3]
+        self.cursor.execute("SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id) FROM replay_data")
+        row = self.cursor.fetchone()
+        if row:
+            self.min_timestamp = row[0]
+            self.max_timestamp = row[1]
+            self.min_id = row[2]
+            self.max_id = row[3]
 
-            # Get the next row
-            cursor.execute(
-                "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
-                (self.current_index,),
-            )
-            row = cursor.fetchone()
-            if row is None:
-                return None
+        # Get the next row
+        self.cursor.execute(
+            "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
+            (self.current_index,),
+        )
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
 
         self.current_index = row[0]
 
@@ -479,8 +469,3 @@ class ReplayManager:
             )
         else:
             self.dolphie.app.notify("Invalid connection source for replay data", severity="error")
-
-    def __del__(self):
-        """Close the SQLite connection when the ReplayManager is destroyed."""
-        if hasattr(self, "conn"):
-            self.conn.close()
