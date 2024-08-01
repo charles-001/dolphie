@@ -23,9 +23,6 @@ class Database:
         auto_connect: bool = True,
         daemon_mode: bool = False,
     ):
-        self.connection: pymysql.Connection = None
-        self.connection_id: int = None
-
         self.app = app
         self.host = host
         self.user = user
@@ -36,13 +33,14 @@ class Database:
         self.save_connection_id = save_connection_id
         self.daemon_mode = daemon_mode
 
+        self.connection: pymysql.Connection = None
+        self.connection_id: int = None
+        self.running_query: bool = False
+        self.source: ConnectionSource = None
         if daemon_mode:
             self.max_reconnect_attempts: int = 999999999
         else:
             self.max_reconnect_attempts: int = 3
-
-        self.running_query: bool = False
-        self.source: ConnectionSource = None
 
         if auto_connect:
             self.connect()
@@ -103,10 +101,64 @@ class Database:
             self.connection.close()
 
     def is_connected(self) -> bool:
-        if self.connection:
-            return self.connection.open
+        return self.connection and self.connection.open
 
-        return False
+    def _process_row(self, row):
+        return {field: self._decode_value(value) for field, value in row.items()}
+
+    def _decode_value(self, value):
+        if isinstance(value, (bytes, bytearray)):
+            try:
+                return value.decode()
+            except UnicodeDecodeError:
+                return "/* Dolphie can't decode query with utf-8 */"
+        return value
+
+    def fetchall(self):
+        if not self.is_connected():
+            return []
+
+        rows = self.cursor.fetchall()
+        return [self._process_row(row) for row in rows] if rows else []
+
+    def fetchone(self):
+        if not self.is_connected():
+            return {}
+
+        row = self.cursor.fetchone()
+        return self._process_row(row) if row else {}
+
+    def fetch_value_from_field(self, query, field=None, values=None):
+        if not self.is_connected():
+            return None
+
+        self.execute(query, values)
+        data = self.cursor.fetchone()
+
+        if not data:
+            return None
+
+        field = field or next(iter(data))  # Use field if provided, otherwise get first field
+        value = data.get(field)
+        return self._decode_value(value)
+
+    def fetch_status_and_variables(self, command):
+        if not self.is_connected():
+            return None
+
+        self.execute(
+            getattr(ProxySQLQueries, command)
+            if self.source == ConnectionSource.proxysql
+            else getattr(MySQLQueries, command)
+        )
+        data = self.fetchall()
+
+        if command in {"status", "variables", "mysql_stats"}:
+            return {
+                row["Variable_name"]: int(row["Value"]) if row["Value"].isnumeric() else row["Value"] for row in data
+            }
+        elif command == "innodb_metrics":
+            return {row["NAME"]: int(row["COUNT"]) for row in data}
 
     def execute(self, query, values=None, ignore_error=False):
         if not self.is_connected():
@@ -200,87 +252,3 @@ class Database:
                 f"Failed to execute query after {self.max_reconnect_attempts} reconnection attempts",
                 query=query,
             )
-
-    def _process_row(self, row):
-        processed_row = {}
-
-        for field, value in row.items():
-            if isinstance(value, (bytes, bytearray)):
-                try:
-                    processed_row[field] = value.decode()
-                except UnicodeDecodeError:
-                    processed_row[field] = "/* Dolphie can't decode query with utf-8 */"
-            else:
-                processed_row[field] = value
-
-        return processed_row
-
-    def fetchall(self):
-        if not self.is_connected():
-            return None
-
-        rows = [self._process_row(row) for row in self.cursor.fetchall()]
-
-        if not rows:
-            return []
-
-        return rows
-
-    def fetchone(self):
-        if not self.is_connected():
-            return
-
-        row = self.cursor.fetchone()
-
-        if not row:
-            return {}
-
-        return self._process_row(row)
-
-    def fetch_value_from_field(self, query, field=None, values=None):
-        if not self.is_connected():
-            return None
-
-        self.execute(query, values)
-        data = self.cursor.fetchone()
-
-        if not data:
-            return None
-
-        field = field or next(iter(data))  # Use field if provided, otherwise get first field
-        value = data.get(field)
-
-        if isinstance(value, (bytes, bytearray)):
-            return value.decode()
-
-        return value
-
-    def fetch_status_and_variables(self, command):
-        if not self.is_connected():
-            return None
-
-        command_data = {}
-
-        if self.source == ConnectionSource.proxysql:
-            self.execute(getattr(ProxySQLQueries, command))
-        else:
-            self.execute(getattr(MySQLQueries, command))
-
-        data = self.fetchall()
-
-        if command in {"status", "variables", "mysql_stats"}:
-            for row in data:
-                variable = row["Variable_name"]
-                value = row["Value"]
-
-                converted_value = int(value) if value.isnumeric() else value
-
-                command_data[variable] = converted_value
-        elif command == "innodb_metrics":
-            for row in data:
-                metric = row["NAME"]
-                value = int(row["COUNT"])
-
-                command_data[metric] = value
-
-        return command_data
