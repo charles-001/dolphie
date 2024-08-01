@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Union
@@ -54,7 +55,7 @@ class ReplayManager:
             dolphie: The Dolphie instance.
         """
         self.dolphie = dolphie
-        self.conn: sqlite3.Connection = None
+        # self.conn: sqlite3.Connection = None
         self.current_index = 0  # This is used to keep track of the last primary key read from the database
         self.min_timestamp = None
         self.max_timestamp = None
@@ -92,10 +93,10 @@ class ReplayManager:
         os.makedirs(os.path.dirname(self.replay_file), mode=0o770, exist_ok=True)
 
         # Connect to the SQLite database
-        self.conn = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
+        # self.conn = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
 
-        with self.conn:
-            cursor = self.conn.cursor()
+        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
+            cursor = con.cursor()
 
             # Set the database file permissions to 660
             os.chmod(self.replay_file, 0o660)
@@ -140,8 +141,8 @@ class ReplayManager:
         retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        with self.conn:
-            cursor = self.conn.cursor()
+        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
+            cursor = con.cursor()
             cursor.execute("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
             rows_deleted = cursor.rowcount
 
@@ -165,8 +166,8 @@ class ReplayManager:
         Args:
             timestamp: The timestamp to seek to.
         """
-        with self.conn:
-            cursor = self.conn.cursor()
+        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
+            cursor = con.cursor()
             cursor.execute("SELECT id FROM replay_data WHERE timestamp = ?", (timestamp,))
             row = cursor.fetchone()
             if row:
@@ -208,8 +209,8 @@ class ReplayManager:
         if not self.dolphie.record_for_replay:
             return
 
-        with self.conn:
-            cursor = self.conn.cursor()
+        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
+            cursor = con.cursor()
             cursor.execute("SELECT * FROM metadata")
             row = cursor.fetchone()
             if row is None:
@@ -261,8 +262,8 @@ class ReplayManager:
         """
         Retrieves the replay's metadata from the metadata table.
         """
-        with self.conn:
-            cursor = self.conn.cursor()
+        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
+            cursor = con.cursor()
             cursor.execute("SELECT * FROM metadata")
             row = cursor.fetchone()
             if row:
@@ -393,8 +394,8 @@ class ReplayManager:
             )
 
         # Execute the SQL insert using the constructed dictionary
-        with self.conn:
-            cursor = self.conn.cursor()
+        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
+            cursor = con.cursor()
             cursor.execute(
                 "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
                 (
@@ -421,8 +422,8 @@ class ReplayManager:
         """
 
         # Get the min and max timestamps and IDs from the database so we can update the UI
-        with self.conn:
-            cursor = self.conn.cursor()
+        with closing(sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)) as con, con:
+            cursor = con.cursor()
             cursor.execute("SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id) FROM replay_data")
             row = cursor.fetchone()
             if row:
