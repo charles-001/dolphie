@@ -388,6 +388,10 @@ class ReplayManager:
             ),
         )
 
+        # Cleanup large variables
+        del data_dict
+        del processlist
+
         self.purge_old_data()
 
         if not self.dolphie.daemon_mode:

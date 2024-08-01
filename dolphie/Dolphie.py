@@ -338,4 +338,4 @@ class Dolphie:
                     severity="warning",
                     timeout=10,
                 )
-                logger.warning(f"Global variable {variable} change: {old_value} -> {new_value}")
+                logger.warning(f"Global variable {variable} changed: {old_value} -> {new_value}")

@@ -9,6 +9,7 @@
 import os
 import re
 import sys
+import tracemalloc
 from datetime import datetime, timedelta
 from functools import partial
 from importlib import metadata
@@ -83,6 +84,8 @@ class DolphieApp(App):
     def __init__(self, config: Config):
         super().__init__()
 
+        tracemalloc.start()
+
         self.config = config
         self.loading_hostgroups: bool = False
 
@@ -150,46 +153,41 @@ class DolphieApp(App):
             f"{tab.replay_manager.min_timestamp}[b highlight] →[/b highlight] {tab.replay_manager.max_timestamp}"
         )
 
-        if dolphie.connection_source == ConnectionSource.mysql:
-            # Update our variables with the replay event data
-            global_variables = replay_event_data.global_variables
-            dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
-            dolphie.global_variables = global_variables
+        # Common data for refreshing
+        dolphie.detect_global_variable_change(
+            old_data=dolphie.global_variables, new_data=replay_event_data.global_variables
+        )
+        dolphie.global_variables = replay_event_data.global_variables
+        dolphie.global_status = replay_event_data.global_status
+        common_metrics = {
+            "worker_start_time": dolphie.worker_start_time,
+            "polling_latency": dolphie.polling_latency,
+            "global_variables": dolphie.global_variables,
+            "global_status": dolphie.global_status,
+        }
 
-            dolphie.global_status = replay_event_data.global_status
+        if dolphie.connection_source == ConnectionSource.mysql:
             dolphie.binlog_status = replay_event_data.binlog_status
             dolphie.innodb_metrics = replay_event_data.innodb_metrics
             dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
             dolphie.processlist_threads = replay_event_data.processlist
             dolphie.replication_status = replay_event_data.replication_status
 
-            # Refresh the metric manager metrics to the state of the replay event
-            dolphie.metric_manager.refresh_data(
-                worker_start_time=dolphie.worker_start_time,
-                polling_latency=dolphie.polling_latency,
-                global_variables=dolphie.global_variables,
-                global_status=dolphie.global_status,
-                innodb_metrics=dolphie.innodb_metrics,
-                disk_io_metrics=dolphie.disk_io_metrics,
-                metadata_lock_metrics=dolphie.metadata_locks,
-                replication_status=dolphie.replication_status,
-            )
+            connection_source_metrics = {
+                "innodb_metrics": dolphie.innodb_metrics,
+                "replication_status": dolphie.replication_status,
+            }
         elif dolphie.connection_source == ConnectionSource.proxysql:
-            # Update our variables with the replay event data
-            dolphie.global_status = replay_event_data.global_status
-            dolphie.global_variables = replay_event_data.global_variables
             dolphie.proxysql_command_stats = replay_event_data.command_stats
             dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
             dolphie.processlist_threads = replay_event_data.processlist
 
-            # Refresh the metric manager metrics to the state of the replay event
-            dolphie.metric_manager.refresh_data(
-                worker_start_time=dolphie.worker_start_time,
-                polling_latency=dolphie.polling_latency,
-                global_variables=dolphie.global_variables,
-                global_status=dolphie.global_status,
-                proxysql_command_stats=dolphie.proxysql_command_stats,
-            )
+            connection_source_metrics = {
+                "proxysql_command_stats": dolphie.proxysql_command_stats,
+            }
+
+        # Refresh the metric manager metrics to the state of the replay event
+        dolphie.metric_manager.refresh_data(**common_metrics, **connection_source_metrics)
 
         # Metrics data is already calculated in the replay event data so we just need to update the values
         dolphie.metric_manager.datetimes = replay_event_data.metric_manager.get("datetimes")
@@ -198,6 +196,8 @@ class DolphieApp(App):
             if metric_instance:
                 for metric_name, metric_values in metric_data.items():
                     metric_instance.__dict__[metric_name].values = metric_values
+
+        del replay_event_data
 
     @work(thread=True, group="main")
     async def run_worker_main(self, tab_id: int):
@@ -293,6 +293,13 @@ class DolphieApp(App):
                 refresh_interval = dolphie.refresh_interval
                 if dolphie.connection_source == ConnectionSource.proxysql:
                     refresh_interval = dolphie.determine_proxysql_refresh_interval()
+
+                snapshot = tracemalloc.take_snapshot()
+                top_stats = snapshot.statistics("lineno")
+
+                print("[ Top 10 memory usage ]")
+                for stat in top_stats[:10]:
+                    print(stat)
 
                 # Skip this if the conditions are right
                 if (
@@ -551,7 +558,10 @@ class DolphieApp(App):
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+        global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+        dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
+        dolphie.global_variables = global_variables
+
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("mysql_stats")
 
         dolphie.main_db_connection.execute(ProxySQLQueries.command_stats)
@@ -724,7 +734,7 @@ class DolphieApp(App):
             dolphie.connection_status in [ConnectionStatus.read_write, ConnectionStatus.read_only]
             and dolphie.connection_status != formatted_ro_status
         ):
-            logger.warning(f"Read-only mode change: {dolphie.connection_status} -> {formatted_ro_status}")
+            logger.warning(f"Read-only mode changed: {dolphie.connection_status} -> {formatted_ro_status}")
             self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
             self.tab_manager.update_topbar(tab=tab, connection_status=formatted_ro_status)
