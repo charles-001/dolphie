@@ -96,9 +96,6 @@ class ReplayManager:
 
         with self.conn:
             cursor = self.conn.cursor()
-            if self.dolphie.daemon_mode:
-                cursor.execute("PRAGMA journal_mode = WAL")
-                cursor.execute("PRAGMA synchronous = NORMAL")
 
             # Set the database file permissions to 660
             os.chmod(self.replay_file, 0o660)
@@ -243,16 +240,10 @@ class ReplayManager:
                         logger.warning(
                             f"The version of Dolphie ({self.dolphie.app_version}) differs from the version of the "
                             f"daemon's replay file ({app_version}). To avoid potential compatibility issues, "
-                            f"the current database files will be renamed to: {new_replay_file}"
+                            f"the current database file will be renamed to: {new_replay_file}"
                         )
 
-                        # List of possible file extensions
-                        extensions = ["", "-shm", "-wal"]
-                        for ext in extensions:
-                            old_file = f"{self.replay_file}{ext}"
-                            new_file = f"{new_replay_file}{ext}"
-                            if os.path.exists(old_file):
-                                os.rename(old_file, new_file)
+                        os.rename(self.replay_file, new_replay_file)
 
                         self._initialize_sqlite()
                         self._manage_metadata()
@@ -263,7 +254,7 @@ class ReplayManager:
                             f"The connection source of the daemon's replay file ({connection_source}) "
                             f"differs from the current connection source ({self.dolphie.connection_source}). "
                             "You should never mix connection sources in the same replay file. Please rename "
-                            "the daemon's replay file(s) and restart the daemon."
+                            "the daemon's replay file and restart the daemon."
                         )
 
     def _get_replay_file_metadata(self):
