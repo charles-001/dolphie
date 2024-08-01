@@ -767,27 +767,13 @@ class MetricManager:
         if not self.daemon_mode:
             return
 
-        # Define the time threshold for retaining metrics data
-        time_threshold = datetime.now() - timedelta(minutes=10)
+        # Clear all metric values except for the last 300
+        for metric_instance in self.metrics.__dict__.values():
+            self.datetimes = self.datetimes[-300:]
 
-        filtered_datetimes = []
-        for dt in self.datetimes:
-            dt_parsed = datetime.strptime(dt, "%d/%m/%y %H:%M:%S")
-            if dt_parsed >= time_threshold:
-                filtered_datetimes.append(dt)
-
-        if filtered_datetimes:
-            # Create a set for fast lookup of filtered datetimes
-            filtered_set = set(filtered_datetimes)
-
-            for metric_instance in self.metrics.__dict__.values():
-                for metric_data in metric_instance.__dict__.values():
-                    if isinstance(metric_data, MetricData):
-                        metric_data.values = [
-                            value for dt, value in zip(self.datetimes, metric_data.values) if dt in filtered_set
-                        ]
-
-        self.datetimes = filtered_datetimes
+            for metric_data in metric_instance.__dict__.values():
+                if isinstance(metric_data, MetricData):
+                    metric_data.values = metric_data.values[-300:]
 
     def add_metric(self, metric_data: MetricData, value: int):
         if self.initialized:
