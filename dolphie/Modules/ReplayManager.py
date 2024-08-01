@@ -434,7 +434,7 @@ class ReplayManager:
             for thread_data in data["processlist"]:
                 processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
 
-            replay_data = MySQLReplayData(
+            return MySQLReplayData(
                 timestamp=row[1],
                 global_status=data.get("global_status", {}),
                 global_variables=data.get("global_variables", {}),
@@ -450,7 +450,7 @@ class ReplayManager:
             for thread_data in data["processlist"]:
                 processlist[str(thread_data["id"])] = ProxySQLProcesslistThread(thread_data)
 
-            replay_data = ProxySQLReplayData(
+            return ProxySQLReplayData(
                 timestamp=row[1],
                 global_status=data.get("global_status", {}),
                 global_variables=data.get("global_variables", {}),
@@ -461,8 +461,6 @@ class ReplayManager:
             )
         else:
             self.dolphie.app.notify("Invalid connection source for replay data", severity="error")
-
-        return replay_data
 
     def __del__(self):
         """Close the SQLite connection when the ReplayManager is destroyed."""
