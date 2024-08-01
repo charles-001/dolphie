@@ -94,6 +94,9 @@ class ReplayManager:
         self.conn = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
         self.cursor = self.conn.cursor()
 
+        if self.dolphie.daemon_mode:
+            self.cursor.execute("PRAGMA journal_mode = WAL")
+
         # Set the database file permissions to 660
         os.chmod(self.replay_file, 0o660)
 
