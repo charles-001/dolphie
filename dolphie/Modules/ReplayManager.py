@@ -54,6 +54,7 @@ class ReplayManager:
             dolphie: The Dolphie instance.
         """
         self.dolphie = dolphie
+        self.conn: sqlite3.Connection = None
         self.current_index = 0  # This is used to keep track of the last primary key read from the database
         self.min_timestamp = None
         self.max_timestamp = None
@@ -97,6 +98,7 @@ class ReplayManager:
             cursor = self.conn.cursor()
             if self.dolphie.daemon_mode:
                 cursor.execute("PRAGMA journal_mode = WAL")
+                cursor.execute("PRAGMA synchronous = NORMAL")
 
             # Set the database file permissions to 660
             os.chmod(self.replay_file, 0o660)
