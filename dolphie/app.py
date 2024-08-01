@@ -9,7 +9,6 @@
 import os
 import re
 import sys
-import tracemalloc
 from datetime import datetime, timedelta
 from functools import partial
 from importlib import metadata
@@ -83,8 +82,6 @@ class DolphieApp(App):
 
     def __init__(self, config: Config):
         super().__init__()
-
-        tracemalloc.start()
 
         self.config = config
         self.loading_hostgroups: bool = False
@@ -293,13 +290,6 @@ class DolphieApp(App):
                 refresh_interval = dolphie.refresh_interval
                 if dolphie.connection_source == ConnectionSource.proxysql:
                     refresh_interval = dolphie.determine_proxysql_refresh_interval()
-
-                snapshot = tracemalloc.take_snapshot()
-                top_stats = snapshot.statistics("lineno")
-
-                print("[ Top 10 memory usage ]")
-                for stat in top_stats[:10]:
-                    print(stat)
 
                 # Skip this if the conditions are right
                 if (
