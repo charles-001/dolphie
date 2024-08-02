@@ -375,7 +375,10 @@ Dolphie's config supports these options under [dolphie] section:
             "--replay-retention-hours",
             dest="replay_retention_hours",
             type=int,
-            help=f"Number of hours to keep replay data [default: {self.config.replay_retention_hours}]",
+            help=(
+                f"Number of hours to keep replay data. Data will be purged every hour "
+                f"[default: {self.config.replay_retention_hours}]"
+            ),
             metavar="",
         )
         self.parser.add_argument(

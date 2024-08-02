@@ -99,7 +99,7 @@ options:
   --replay-file         Specify the full path of the replay file to load and enable replay mode
   --replay-dir          Directory to store replay data files
   --replay-retention-hours
-                        Number of hours to keep replay data [default: 48]
+                        Number of hours to keep replay data. Data will be purged every hour [default: 48]
   --show-trxs-only      (MySQL only) Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
   --debug-options       Display options that are set and what they're set by (command-line, dolphie config, etc) then exit. WARNING: This will show passwords and other sensitive information in plain text

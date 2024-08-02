@@ -116,7 +116,6 @@ class ReplayManager:
 
         logger.info("Connected to SQLite")
 
-        # Start the purge process
         self.purge_old_data()
 
     def purge_old_data(self):
@@ -144,22 +143,24 @@ class ReplayManager:
             self.cursor.execute("SELECT COUNT(*) FROM replay_data")
             total_rows = int(self.cursor.fetchone()[0])
 
-            # If more than 50% of the rows were pruned, we should vacuum the database to reduce its size
+            # If more than 60% of the total rows were pruned, we should vacuum the database to reduce its size
             if total_rows > 0 and (self.rows_purged / total_rows) >= 0.60:
                 logger.info(
-                    f"There's {total_rows} rows in the the replay database with "
-                    f"{self.rows_purged} rows purged. Starting vacuum"
+                    f"There's {total_rows} total rows in the the replay database with "
+                    f"{self.rows_purged} rows purged. Starting vacuum to reduce file size..."
                 )
 
+                before_prune_file_size = os.path.getsize(self.replay_file)
                 self.cursor.execute("VACUUM")
-
-                self.rows_purged = 0
                 self.replay_file_size = os.path.getsize(self.replay_file)
 
                 logger.info(
-                    "Vacuum successful! Database file size is now "
+                    f"Vacuum completed! Database file size went from "
+                    f"{format_bytes(before_prune_file_size, color=False)} to "
                     f"{format_bytes(self.replay_file_size, color=False)}"
                 )
+
+                self.rows_purged = 0
 
         self.last_purge_time = current_time
 
@@ -229,8 +230,7 @@ class ReplayManager:
             connection_source = row[3]
             app_version = row[4]
             logger.info(
-                f"Replay database metadata - Host: {row[0]}, Version: {row[1]} ({row[2]}), "
-                f"Dolphie version: {app_version}"
+                f"Replay database metadata - Host: {row[0]}, Version: {row[1]} ({row[2]}), Dolphie: {app_version}"
             )
 
             if self.dolphie.daemon_mode:
