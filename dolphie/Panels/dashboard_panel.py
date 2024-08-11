@@ -54,7 +54,7 @@ def create_panel(tab: Tab) -> Table:
     if not dolphie.replay_file:
         runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
         table_information.add_row(
-            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.polling_latency - dolphie.refresh_interval, 2)}s)"
+            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_execution_time, 2)}s)"
         )
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
@@ -174,16 +174,7 @@ def create_panel(tab: Tab) -> Table:
             table_primary.add_row("[label]Encrypt", global_variables.get("encrypt_binlog", "N/A"))
         else:
             table_primary.add_row("[label]GTID", global_variables.get("gtid_mode", "N/A"))
-
-            binlog_compression = global_variables.get("binlog_transaction_compression", "N/A")
-            # binlog_compression_percentage = ""
-            # if binlog_compression == "ON":
-            #     if dolphie.binlog_transaction_compression_percentage:
-            #         binlog_compression_percentage = f" ({dolphie.binlog_transaction_compression_percentage}% gain)"
-            #     else:
-            #         binlog_compression_percentage = " (N/A gain)"
-
-            table_primary.add_row("[label]Compression", binlog_compression)
+            table_primary.add_row("[label]Compression", global_variables.get("binlog_transaction_compression", "N/A"))
 
     tab.dashboard_section_3.update(table_primary)
 

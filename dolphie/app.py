@@ -118,7 +118,7 @@ class DolphieApp(App):
             )
             logger.info(f"Log file: {config.daemon_mode_log_file}")
 
-    @work(thread=True, group="replay")
+    @work(thread=True, group="replay", exclusive=True)
     async def run_worker_replay(self, tab_id: int, manual_control: bool = False):
         tab = self.tab_manager.get_tab(tab_id)
 
@@ -156,12 +156,7 @@ class DolphieApp(App):
         )
         dolphie.global_variables = replay_event_data.global_variables
         dolphie.global_status = replay_event_data.global_status
-        common_metrics = {
-            "worker_start_time": dolphie.worker_start_time,
-            "polling_latency": dolphie.polling_latency,
-            "global_variables": dolphie.global_variables,
-            "global_status": dolphie.global_status,
-        }
+        common_metrics = {"global_variables": dolphie.global_variables, "global_status": dolphie.global_status}
 
         if dolphie.connection_source == ConnectionSource.mysql:
             dolphie.binlog_status = replay_event_data.binlog_status
@@ -179,9 +174,7 @@ class DolphieApp(App):
             dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
             dolphie.processlist_threads = replay_event_data.processlist
 
-            connection_source_metrics = {
-                "proxysql_command_stats": dolphie.proxysql_command_stats,
-            }
+            connection_source_metrics = {"proxysql_command_stats": dolphie.proxysql_command_stats}
 
         # Refresh the metric manager metrics to the state of the replay event
         dolphie.metric_manager.refresh_data(**common_metrics, **connection_source_metrics)
@@ -193,8 +186,6 @@ class DolphieApp(App):
             if metric_instance:
                 for metric_name, metric_values in metric_data.items():
                     metric_instance.__dict__[metric_name].values = metric_values
-
-        del replay_event_data
 
     @work(thread=True, group="main")
     async def run_worker_main(self, tab_id: int):
@@ -221,19 +212,32 @@ class DolphieApp(App):
 
                 tab.replay_manager = ReplayManager(dolphie)
 
-            dolphie.worker_start_time = datetime.now()
-            dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
-            dolphie.worker_previous_start_time = dolphie.worker_start_time
+            worker_start_time = datetime.now()
 
             if dolphie.connection_source == ConnectionSource.mysql:
                 self.process_mysql_data(tab)
             elif dolphie.connection_source == ConnectionSource.proxysql:
                 self.process_proxysql_data(tab)
-                dolphie.proxysql_process_execution_time = (datetime.now() - dolphie.worker_start_time).total_seconds()
 
-            # Update the topbar with the latest replay file size
-            if dolphie.record_for_replay:
-                self.tab_manager.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
+            dolphie.worker_execution_time = (datetime.now() - worker_start_time).total_seconds()
+
+            # We calculate the polling latency by adding the worker execution time to
+            # the refresh interval (sleep time) which should give us an accurate number
+            dolphie.polling_latency = dolphie.worker_execution_time + dolphie.refresh_interval
+
+            dolphie.metric_manager.refresh_data(
+                worker_start_time=worker_start_time,
+                polling_latency=dolphie.polling_latency,
+                global_variables=dolphie.global_variables,
+                global_status=dolphie.global_status,
+                innodb_metrics=dolphie.innodb_metrics,
+                disk_io_metrics=dolphie.disk_io_metrics,
+                metadata_lock_metrics=dolphie.metadata_locks,
+                replication_status=dolphie.replication_status,
+                proxysql_command_stats=dolphie.proxysql_command_stats,
+            )
+
+            tab.replay_manager.capture_state()
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
@@ -323,6 +327,10 @@ class DolphieApp(App):
                     self.refresh_screen_mysql(tab)
                 elif dolphie.connection_source == ConnectionSource.proxysql:
                     self.refresh_screen_proxysql(tab)
+
+                # Update the topbar with the latest replay file size
+                if dolphie.record_for_replay:
+                    self.tab_manager.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
 
                 tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
@@ -532,19 +540,6 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.ddls)
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-        dolphie.metric_manager.refresh_data(
-            worker_start_time=dolphie.worker_start_time,
-            polling_latency=dolphie.polling_latency,
-            global_variables=dolphie.global_variables,
-            global_status=dolphie.global_status,
-            innodb_metrics=dolphie.innodb_metrics,
-            disk_io_metrics=dolphie.disk_io_metrics,
-            metadata_lock_metrics=dolphie.metadata_locks,
-            replication_status=dolphie.replication_status,
-        )
-
-        tab.replay_manager.capture_state()
-
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
@@ -624,16 +619,6 @@ class DolphieApp(App):
         if dolphie.panels.proxysql_mysql_query_rules.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.query_rules_summary)
             dolphie.proxysql_mysql_query_rules = dolphie.main_db_connection.fetchall()
-
-        dolphie.metric_manager.refresh_data(
-            worker_start_time=dolphie.worker_start_time,
-            polling_latency=dolphie.polling_latency,
-            global_variables=dolphie.global_variables,
-            global_status=dolphie.global_status,
-            proxysql_command_stats=dolphie.proxysql_command_stats,
-        )
-
-        tab.replay_manager.capture_state()
 
     def refresh_screen_proxysql(self, tab: Tab):
         dolphie = tab.dolphie

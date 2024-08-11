@@ -25,9 +25,7 @@ def create_panel(tab: Tab) -> Table:
     table.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
     table.add_row("[label]Uptime", str(timedelta(seconds=global_status["ProxySQL_Uptime"])))
     if not dolphie.replay_file:
-        table.add_row(
-            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.polling_latency - dolphie.refresh_interval, 2)}s)"
-        )
+        table.add_row("[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_execution_time, 2)}s)")
     table.add_row(
         "[label]MySQL",
         (

@@ -538,8 +538,7 @@ class MetricManager:
 
     def reset(self):
         self.initialized: bool = False
-        self.worker_start_time: datetime = None
-        self.polling_latency: float = None
+        self.polling_latency: float = 0
         self.global_variables: Dict[str, Union[int, str]] = None
         self.global_status: Dict[str, int] = None
         self.redo_log_size: int = 0
@@ -710,8 +709,8 @@ class MetricManager:
 
     def refresh_data(
         self,
-        worker_start_time: datetime,
-        polling_latency: float,
+        worker_start_time: datetime = None,
+        polling_latency: float = 0,
         global_variables: Dict[str, Union[int, str]] = {},
         global_status: Dict[str, int] = {},
         innodb_metrics: Dict[str, int] = {},
@@ -753,41 +752,12 @@ class MetricManager:
 
         self.metrics.redo_log.redo_log_size = self.redo_log_size
 
-        self.daemon_cleanup_data()
         self.add_metric_datetime()
+        self.daemon_cleanup_data()
 
         # Set the initialized flag after the first refresh since we now have last value data for differences
         # This lets us sync all metric values to a datetime
         self.initialized = True
-
-    def daemon_cleanup_data(self):
-        """
-        Cleanup data for daemon mode to keep the metrics data small
-        """
-        if not self.daemon_mode:
-            return
-
-        # Define the time threshold for retaining metrics data
-        time_threshold = datetime.now() - timedelta(minutes=10)
-
-        filtered_datetimes = []
-        for dt in self.datetimes:
-            dt_parsed = datetime.strptime(dt, "%d/%m/%y %H:%M:%S")
-            if dt_parsed >= time_threshold:
-                filtered_datetimes.append(dt)
-
-        if filtered_datetimes:
-            # Create a set for fast lookup of filtered datetimes
-            filtered_set = set(filtered_datetimes)
-
-            for metric_instance in self.metrics.__dict__.values():
-                for metric_data in metric_instance.__dict__.values():
-                    if isinstance(metric_data, MetricData):
-                        metric_data.values = [
-                            value for dt, value in zip(self.datetimes, metric_data.values) if dt in filtered_set
-                        ]
-
-        self.datetimes = filtered_datetimes
 
     def add_metric(self, metric_data: MetricData, value: int):
         if self.initialized:
@@ -972,3 +942,32 @@ class MetricManager:
         self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio = smoothed_hit_ratio
 
         return smoothed_hit_ratio
+
+    def daemon_cleanup_data(self):
+        """
+        Cleanup data for daemon mode to keep the metrics data small
+        """
+        if not self.daemon_mode:
+            return
+
+        # Define the time threshold for retaining metrics data
+        time_threshold = datetime.now() - timedelta(minutes=10)
+
+        filtered_datetimes = []
+        for dt in self.datetimes:
+            dt_parsed = datetime.strptime(dt, "%d/%m/%y %H:%M:%S")
+            if dt_parsed >= time_threshold:
+                filtered_datetimes.append(dt)
+
+        if filtered_datetimes:
+            # Create a set for fast lookup of filtered datetimes
+            filtered_set = set(filtered_datetimes)
+
+            for metric_instance in self.metrics.__dict__.values():
+                for metric_data in metric_instance.__dict__.values():
+                    if isinstance(metric_data, MetricData):
+                        metric_data.values = [
+                            value for dt, value in zip(self.datetimes, metric_data.values) if dt in filtered_set
+                        ]
+
+        self.datetimes = filtered_datetimes

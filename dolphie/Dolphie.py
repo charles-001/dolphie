@@ -66,8 +66,7 @@ class Dolphie:
         self.replica_manager = DataTypes.ReplicaManager()
 
         self.dolphie_start_time: datetime = datetime.now()
-        self.worker_start_time: datetime = datetime.now()
-        self.worker_previous_start_time: datetime = datetime.now()
+        self.worker_execution_time: float = 0
         self.polling_latency: float = 0
         self.connection_status: DataTypes.ConnectionStatus = None
         self.processlist_threads: dict = {}
@@ -86,13 +85,11 @@ class Dolphie:
         self.replication_applier_status: dict = {}
         self.active_redo_logs: int = None
         self.host_with_port: str = f"{self.host}:{self.port}"
-        self.binlog_transaction_compression_percentage: int = None
         self.host_cache: dict = {}
         self.proxysql_hostgroup_summary: dict = {}
         self.proxysql_mysql_query_rules: dict = {}
         self.proxysql_per_second_data: dict = {}
         self.proxysql_command_stats: dict = {}
-        self.proxysql_process_execution_time: float = 0
 
         # Filters that can be applied
         self.user_filter = None
@@ -310,7 +307,7 @@ class Dolphie:
             percentage = 0
 
         if percentage:
-            refresh_interval = self.refresh_interval + (self.proxysql_process_execution_time * percentage)
+            refresh_interval = self.refresh_interval + (self.worker_execution_time * percentage)
         else:
             refresh_interval = self.refresh_interval
 
