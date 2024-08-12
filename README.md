@@ -222,13 +222,5 @@ Example:
 3=host3:3308~[red]production[/red] :ghost:
 ```
 
-## Things to note
-Order of precedence for methods that pass options to Dolphie:
-1. Command-line
-2. Environment variables
-3. Dolphie's config (set by `--config-file`)
-4. ~/.mylogin.cnf (`mysql_config_editor`)
-5. ~/.my.cnf (set by `--mycnf-file`)
-
 ## Feedback
-I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please let me know! I'd love to hear from you :smiley:
+I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please let me know! I'd love to hear from you :dolphin:
