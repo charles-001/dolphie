@@ -249,11 +249,9 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     else:
         data = dolphie.replication_status
 
-    replica_sbm = data.get("Seconds_Behind", 0)
-
-    lag = None
-    if replica_sbm is not None:
-        replica_lag = replica_sbm
+    replica_lag = data.get("Seconds_Behind", 0)
+    formatted_replica_lag = None
+    if replica_lag is not None:
         if data.get("SQL_Delay"):
             replica_lag -= data["SQL_Delay"]
 
@@ -263,7 +261,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         elif replica_lag >= 10:
             lag_color = "yellow"
 
-        lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
+        formatted_replica_lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
 
     if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb:
         primary_uuid = data.get("Source_UUID")
@@ -348,12 +346,12 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         else:
             replication_delay = f"[dark_yellow]Delay[/dark_yellow] {format_time(data['SQL_Delay'])}"
 
-    if lag is None or sql_thread_running == "[red]OFF[/red]":
+    if formatted_replica_lag is None or sql_thread_running == "[red]OFF[/red]":
         table.add_row("[label]Lag", "")
     else:
         table.add_row(
             "[label]Lag",
-            "%s [label]Speed[/label] %s %s" % (lag, data["Replica_Speed"], replication_delay),
+            "%s [label]Speed[/label] %s %s" % (formatted_replica_lag, data["Replica_Speed"], replication_delay),
         )
 
     if dashboard_table:

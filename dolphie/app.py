@@ -529,11 +529,8 @@ class DolphieApp(App):
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
         if dolphie.is_mysql_version_at_least("5.7"):
-            if dolphie.panels.metadata_locks.visible or dolphie.record_for_replay:
+            if dolphie.metadata_locks_enabled and (dolphie.panels.metadata_locks.visible or dolphie.record_for_replay):
                 dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
-            else:
-                # Reset this data so the graph doesn't show old data
-                dolphie.metadata_locks = {}
 
             if dolphie.panels.ddl.visible:
                 dolphie.main_db_connection.execute(MySQLQueries.ddls)
@@ -1071,6 +1068,7 @@ class DolphieApp(App):
                 return
 
             self.toggle_panel(dolphie.panels.replication.name)
+            self.size_dashboard_sections(tab)
 
             tab.replicas_container.display = False
             if not dolphie.panels.replication.visible:
@@ -1089,23 +1087,13 @@ class DolphieApp(App):
                 self.toggle_panel(dolphie.panels.proxysql_mysql_query_rules.name)
                 return
 
-            if not dolphie.replay_file:
-                if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
-                    self.notify("Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled")
-                    return
-
-                query = """
-                    SELECT enabled FROM performance_schema.setup_instruments WHERE name = 'wait/lock/metadata/sql/mdl'
-                """
-
-                dolphie.secondary_db_connection.execute(query)
-                row = dolphie.secondary_db_connection.fetchone()
-                if row and row.get("enabled") == "NO":
-                    self.notify(
-                        "Metadata Locks panel requires Performance Schema to have"
-                        " [highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table"
-                    )
-                    return
+            if not dolphie.metadata_locks_enabled and not dolphie.replay_file:
+                self.notify(
+                    "Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled along with "
+                    "[highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table",
+                    severity="error",
+                )
+                return
 
             self.toggle_panel(dolphie.panels.metadata_locks.name)
             self.tab_manager.active_tab.metadata_locks_datatable.clear()

@@ -132,6 +132,7 @@ class Dolphie:
         self.secondary_db_connection = Database(**db_connection_args, save_connection_id=False)
 
         self.performance_schema_enabled: bool = False
+        self.metadata_locks_enabled: bool = False
         self.use_performance_schema: bool = True
         self.server_uuid: str = None
         self.host_version: str = None
@@ -241,6 +242,8 @@ class Dolphie:
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
 
+        self.validate_metadata_locks_enabled()
+
     def add_host_to_host_cache_file(self):
         with open(self.host_setup_file, "a+") as file:
             file.seek(0)
@@ -343,3 +346,22 @@ class Dolphie:
                     timeout=10,
                 )
                 logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")
+
+    def validate_metadata_locks_enabled(self):
+        if not self.is_mysql_version_at_least("5.7") or not self.performance_schema_enabled:
+            logger.warning("Metadata Locks requires MySQL 5.7+ with Performance Schema enabled")
+            return
+
+        query = """
+            SELECT enabled FROM performance_schema.setup_instruments WHERE name = 'wait/lock/metadata/sql/mdl'
+        """
+        self.main_db_connection.execute(query)
+        row = self.main_db_connection.fetchone()
+        if row and row.get("enabled") == "NO":
+            logger.warning(
+                "Metadata Locks requires Performance Schema to have"
+                " wait/lock/metadata/sql/mdl enabled in setup_instruments table"
+            )
+            return
+
+        self.metadata_locks_enabled = True

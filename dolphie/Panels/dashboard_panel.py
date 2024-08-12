@@ -134,7 +134,7 @@ def create_panel(tab: Tab) -> Table:
     ##############
     table_primary = Table(show_header=False, box=None, title="Binary Log", title_style=table_title_style)
 
-    if not binlog_status:
+    if global_variables.get("log_bin") == "OFF" or not binlog_status.get("File"):
         table_primary.add_column(justify="center")
         table_primary.add_row("\n\n\n[b][label]Disabled")
     else:
