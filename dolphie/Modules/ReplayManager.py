@@ -13,7 +13,7 @@ from dolphie.DataTypes import (
 )
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
-from dolphie.Modules.Functions import format_bytes, minify_query
+from dolphie.Modules.Functions import minify_query
 from loguru import logger
 
 
@@ -61,7 +61,6 @@ class ReplayManager:
         self.max_id = None
         self.last_purge_time = datetime.now() - timedelta(hours=1)  # Initialize to an hour ago
         self.replay_file_size = 0
-        self.rows_purged = 0
 
         # Determine filename used for replay file
         if dolphie.replay_file:
@@ -114,54 +113,30 @@ class ReplayManager:
             )"""
         )
 
+        # Enable auto-vacuum if it's not already enabled. This will help keep the database file size down.
+        if self.cursor.execute("PRAGMA auto_vacuum").fetchone()[0] != 1:
+            self.cursor.execute("PRAGMA auto_vacuum = FULL")
+            self.cursor.execute("VACUUM")
+
         logger.info("Connected to SQLite")
 
         self.purge_old_data()
 
     def purge_old_data(self):
         """
-        Purges data older than the retention period specified by hours_of_retention and performs a vacuum.
+        Purges data older than the retention period specified by hours_of_retention.
         Only runs if at least an hour has passed since the last purge.
         """
         if not self.dolphie.record_for_replay:
             return
 
         current_time = datetime.now()
-        if current_time - self.last_purge_time < timedelta(hours=1):
+        if current_time - self.last_purge_time < timedelta(seconds=10):
             return  # Skip purging if less than an hour has passed
 
-        retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        retention_date = (current_time - timedelta(seconds=10)).strftime("%Y-%m-%d %H:%M:%S")
 
         self.cursor.execute("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
-        rows_deleted = self.cursor.rowcount
-
-        if rows_deleted:
-            self.rows_purged += rows_deleted
-
-            self.cursor.execute("SELECT COUNT(*) FROM replay_data")
-            total_rows = int(self.cursor.fetchone()[0])
-
-            # If more than 60% of the total rows were pruned, we should vacuum the database to reduce its size
-            if total_rows > 0 and (self.rows_purged / total_rows) >= 0.60:
-                logger.info(
-                    f"There's {total_rows} total rows in the the replay database with "
-                    f"{self.rows_purged} rows purged. Starting vacuum to reduce file size..."
-                )
-
-                before_prune_file_size = os.path.getsize(self.replay_file)
-                self.cursor.execute("VACUUM")
-                self.replay_file_size = os.path.getsize(self.replay_file)
-
-                logger.info(
-                    f"Vacuum completed! Database file size went from "
-                    f"{format_bytes(before_prune_file_size, color=False)} to "
-                    f"{format_bytes(self.replay_file_size, color=False)}"
-                )
-
-                self.rows_purged = 0
-
         self.last_purge_time = current_time
 
     def seek_to_timestamp(self, timestamp: str):

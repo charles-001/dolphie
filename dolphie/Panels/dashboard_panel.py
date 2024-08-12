@@ -54,7 +54,7 @@ def create_panel(tab: Tab) -> Table:
     if not dolphie.replay_file:
         runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
         table_information.add_row(
-            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_execution_time, 2)}s)"
+            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)"
         )
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(

@@ -66,7 +66,7 @@ class Dolphie:
         self.replica_manager = DataTypes.ReplicaManager()
 
         self.dolphie_start_time: datetime = datetime.now()
-        self.worker_execution_time: float = 0
+        self.worker_processing_time: float = 0
         self.polling_latency: float = 0
         self.connection_status: DataTypes.ConnectionStatus = None
         self.processlist_threads: dict = {}
@@ -307,7 +307,7 @@ class Dolphie:
             percentage = 0
 
         if percentage:
-            refresh_interval = self.refresh_interval + (self.worker_execution_time * percentage)
+            refresh_interval = self.refresh_interval + (self.worker_processing_time * percentage)
         else:
             refresh_interval = self.refresh_interval
 
@@ -319,7 +319,8 @@ class Dolphie:
 
         # gtid is always changing so we don't want to alert on that
         # read_only is managed by monitor_read_only_change in app.py
-        exclude_values = {"gtid", "read_only"}
+        # The others are ones I've found to be spammy due to monitoring tools changing them
+        exclude_values = {"gtid", "read_only", "innodb_thread_sleep_delay", "long_query_time"}
 
         for variable, new_value in new_data.items():
             if any(item in variable.lower() for item in exclude_values):

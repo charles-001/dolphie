@@ -219,11 +219,11 @@ class DolphieApp(App):
             elif dolphie.connection_source == ConnectionSource.proxysql:
                 self.process_proxysql_data(tab)
 
-            dolphie.worker_execution_time = (datetime.now() - worker_start_time).total_seconds()
+            dolphie.worker_processing_time = (datetime.now() - worker_start_time).total_seconds()
 
-            # We calculate the polling latency by adding the worker execution time to
+            # We calculate the polling latency by adding the worker processing time to
             # the refresh interval (sleep time) which should give us an accurate number
-            dolphie.polling_latency = dolphie.worker_execution_time + dolphie.refresh_interval
+            dolphie.polling_latency = dolphie.worker_processing_time + dolphie.refresh_interval
 
             dolphie.metric_manager.refresh_data(
                 worker_start_time=worker_start_time,
