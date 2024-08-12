@@ -192,7 +192,7 @@ class ThreadScreen(Screen):
 
         with Container(id="query_container", classes="container"):
             yield Rule(line_style="heavy")
-            yield Label("Query Details", classes="title")
+            yield Label("Query", classes="title")
             yield Center(Static(id="query", shrink=True, classes="table"))
 
             yield Center(Label("", id="explain_failure"))

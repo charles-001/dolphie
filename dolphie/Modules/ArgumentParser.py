@@ -57,6 +57,7 @@ class Config:
     replay_file: str = None
     replay_dir: str = None
     replay_retention_hours: int = 48
+    exclude_notify_global_vars: str = None
 
 
 class ArgumentParser:
@@ -75,7 +76,7 @@ class ArgumentParser:
 
         self.formatted_options = "\n\t".join(
             [
-                f"({data_type.__name__}) {option}" if hasattr(data_type, "__name__") else f"(str) {option}"
+                f"({data_type.__name__}) {option}" if hasattr(data_type, "__name__") else f"(str) {option} []"
                 for option, data_type in self.config_object_options.items()
                 if option != "config_file"
             ]
@@ -145,8 +146,8 @@ Dolphie's config supports these options under [dolphie] section:
             type=str,
             nargs="?",
             help=(
-                "Use a URI string for credentials (mysql/proxysql) - format: mysql://user:password@host:port"
-                f" (port is optional with default {self.config.port}, or 6032 for ProxySQL)"
+                "Use a URI string for credentials (mysql/proxysql) - format: mysql://user:password@host:port "
+                f"(port is optional with default {self.config.port}, or 6032 for ProxySQL)"
             ),
         )
 
@@ -210,8 +211,8 @@ Dolphie's config supports these options under [dolphie] section:
             dest="login_path",
             type=str,
             help=(
-                "Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login"
-                f" credentials [default: {self.config.login_path}]"
+                "Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login "
+                f"credentials [default: {self.config.login_path}]"
             ),
             metavar="",
         )
@@ -238,8 +239,8 @@ Dolphie's config supports these options under [dolphie] section:
             dest="host_setup_file",
             type=str,
             help=(
-                "Specify location of file that stores the available hosts to use in host setup modal [default:"
-                f" {self.config.host_setup_file}]"
+                "Specify location of file that stores the available hosts to use in host setup modal [default: "
+                f"{self.config.host_setup_file}]"
             ),
             metavar="",
         )
@@ -290,7 +291,7 @@ Dolphie's config supports these options under [dolphie] section:
             type=str,
             help=(
                 "What panels to display on startup separated by a comma. Supports: "
-                f" {','.join(self.panels.all())} [default: {self.config.startup_panels}]"
+                f"{','.join(self.panels.all())} [default: {self.config.startup_panels}]"
             ),
             metavar="",
         )
@@ -299,8 +300,8 @@ Dolphie's config supports these options under [dolphie] section:
             dest="graph_marker",
             type=str,
             help=(
-                "What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default:"
-                f" {self.config.graph_marker}]"
+                "What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: "
+                f"{self.config.graph_marker}]"
             ),
             metavar="",
         )
@@ -310,7 +311,7 @@ Dolphie's config supports these options under [dolphie] section:
             type=str,
             help=(
                 "What PyPi repository to use when checking for a new version "
-                f" default: [{self.config.pypi_repository}]"
+                f"default: [{self.config.pypi_repository}]"
             ),
             metavar="",
         )
@@ -320,12 +321,12 @@ Dolphie's config supports these options under [dolphie] section:
             dest="hostgroup",
             type=str,
             help=(
-                "This is used for creating tabs and connecting to them for hosts you specify in"
-                " Dolphie's config file under a hostgroup section. As an example, you'll have a section"
-                " called [cluster1] then below it you will list each host on a new line in the format"
-                " key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is)"
-                " in the format host:port. You can also name the tabs by suffixing"
-                " ~tab_name to the host (i.e. 1=host~tab_name)"
+                "This is used for creating tabs and connecting to them for hosts you specify in "
+                "Dolphie's config file under a hostgroup section. As an example, you'll have a section "
+                "called [cluster1] then below it you will list each host on a new line in the format "
+                "key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) "
+                "in the format host:port. You can also name the tabs by suffixing "
+                "~tab_name to the host (i.e. 1=host~tab_name)"
             ),
             metavar="",
         )
@@ -347,7 +348,7 @@ Dolphie's config supports these options under [dolphie] section:
             help=(
                 "Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the "
                 "background with whatever solution you decide to use. Automatically enables --record. "
-                "This mode is solely for managing replay files"
+                "This mode is solely used for recording data to a replay file"
             ),
         )
         self.parser.add_argument(
@@ -378,6 +379,17 @@ Dolphie's config supports these options under [dolphie] section:
             help=(
                 f"Number of hours to keep replay data. Data will be purged every hour "
                 f"[default: {self.config.replay_retention_hours}]"
+            ),
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--exclude-notify-vars",
+            dest="exclude_notify_global_vars",
+            type=str,
+            help=(
+                "Dolphie will let you know when a global variable has been changed. If you have variables that change "
+                "frequently and you don't want to see them, you can specify which ones with this option separated by "
+                "a comma (i.e. --exclude-notify-vars=variable1,variable2)"
             ),
             metavar="",
         )
@@ -476,14 +488,14 @@ Dolphie's config supports these options under [dolphie] section:
                             hosts.append(host)
                         else:
                             self.exit(
-                                f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] has an empty host"
-                                f" for key [red2]{key}[/red2]"
+                                f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] has an empty host "
+                                f"for key [red2]{key}[/red2]"
                             )
 
                     if not hosts:
                         self.exit(
-                            f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] cannot be loaded because"
-                            f" it doesn't have any hosts listed under its section in Dolphie's config"
+                            f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] cannot be loaded because "
+                            f"it doesn't have any hosts listed under its section in Dolphie's config"
                         )
 
                     hostgroups[hostgroup] = hosts
@@ -562,8 +574,8 @@ Dolphie's config supports these options under [dolphie] section:
         if self.config.hostgroup:
             if self.config.hostgroup not in hostgroups:
                 self.exit(
-                    f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because"
-                    f" it wasn't found in Dolphie's config"
+                    f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because "
+                    f"it wasn't found in Dolphie's config"
                 )
 
         if self.config.heartbeat_table:
@@ -574,6 +586,9 @@ Dolphie's config supports these options under [dolphie] section:
                 )
             else:
                 self.exit("Your heartbeat table did not conform to the proper format: db.table")
+
+        if self.config.exclude_notify_global_vars:
+            self.config.exclude_notify_global_vars = self.config.exclude_notify_global_vars.split(",")
 
         self.parse_ssl_options(options)
 

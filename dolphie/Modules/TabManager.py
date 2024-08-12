@@ -217,22 +217,10 @@ class TabManager:
                         Static(id=f"dashboard_replay_{tab_id}", classes="dashboard_replay"),
                         Static(id=f"dashboard_replay_start_end_{tab_id}", classes="dashboard_replay"),
                         Horizontal(
-                            Button(
-                                ":fast_reverse_button: Back",
-                                id=f"back_button_{tab_id}",
-                                classes="replay_button replay_back",
-                            ),
+                            Button("⏪ Back", id=f"back_button_{tab_id}", classes="replay_button replay_back"),
                             Button("⏸️  Pause", id=f"pause_button_{tab_id}", classes="replay_button replay_pause"),
-                            Button(
-                                ":fast-forward_button: Forward",
-                                id=f"forward_button_{tab_id}",
-                                classes="replay_button replay_forward",
-                            ),
-                            Button(
-                                ":mag: Seek",
-                                id=f"seek_button_{tab_id}",
-                                classes="replay_button replay_seek",
-                            ),
+                            Button("⏩ Forward", id=f"forward_button_{tab_id}", classes="replay_button replay_forward"),
+                            Button("🔍 Seek", id=f"seek_button_{tab_id}", classes="replay_button replay_seek"),
                             classes="button_container",
                         ),
                         id=f"dashboard_replay_container_{tab_id}",

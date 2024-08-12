@@ -46,6 +46,7 @@ class Dolphie:
         self.replay_file = config.replay_file  # This denotes that we're replaying a file
         self.replay_dir = config.replay_dir
         self.replay_retention_hours = config.replay_retention_hours
+        self.exclude_notify_global_vars = config.exclude_notify_global_vars
 
         self.reset_runtime_variables()
 
@@ -321,10 +322,14 @@ class Dolphie:
         # gtid is always changing so we don't want to alert on that
         # read_only is managed by monitor_read_only_change in app.py
         # The others are ones I've found to be spammy due to monitoring tools changing them
-        exclude_values = {"gtid", "read_only", "innodb_thread_sleep_delay", "long_query_time"}
+        exclude_variables = {"gtid", "read_only", "innodb_thread_sleep_delay"}
+
+        # Add to exclude_variables with user specified variables
+        if self.exclude_notify_global_vars:
+            exclude_variables.update(self.exclude_notify_global_vars)
 
         for variable, new_value in new_data.items():
-            if any(item in variable.lower() for item in exclude_values):
+            if any(item in variable.lower() for item in exclude_variables):
                 continue
 
             old_value = old_data.get(variable)

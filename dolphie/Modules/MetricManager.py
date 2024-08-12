@@ -403,7 +403,7 @@ class LocksMetrics:
     graph_tab_name = "Locks"
     metric_source: MetricSource = MetricSource.none
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
-    use_with_replay: bool = False
+    use_with_replay: bool = True
 
 
 @dataclass

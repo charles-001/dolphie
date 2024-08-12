@@ -89,17 +89,19 @@ options:
   --ssl-ca              Path to the file that contains a CA (certificate authority)
   --ssl-cert            Path to the file that contains a certificate
   --ssl-key             Path to the file that contains a private key for the certificate
-  --panels              What panels to display on startup separated by a comma. Supports:  dashboard,processlist,graphs,replication,metadata_locks,ddl,proxysql_hostgroup_summary,proxysql_mysql_query_rules,proxysql_command_stats [default: dashboard,processlist]
+  --panels              What panels to display on startup separated by a comma. Supports: dashboard,processlist,graphs,replication,metadata_locks,ddl,proxysql_hostgroup_summary,proxysql_mysql_query_rules,proxysql_command_stats [default: dashboard,processlist]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repo           What PyPi repository to use when checking for a new version [default: https://pypi.org/pypi/dolphie/json]
   -H, --hostgroup      This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
   -R, --record          Enables recording of Dolphie's data to a replay file. Note: This can use significant disk space. Monitor accordingly!
-  -D, --daemon          Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the background with whatever solution you decide to use. Automatically enables --record. This mode is solely for managing replay files
+  -D, --daemon          Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the background with whatever solution you decide to use. Automatically enables --record. This mode is solely used for recording data to a replay file
   --daemon-log-file     Full path of the log file for daemon mode
   --replay-file         Specify the full path of the replay file to load and enable replay mode
   --replay-dir          Directory to store replay data files
   --replay-retention-hours
                         Number of hours to keep replay data. Data will be purged every hour [default: 48]
+  --exclude-notify-vars
+                        Dolphie will let you know when a global variable has been changed. If you have variables that change frequently and you don't want to see them, you can specify which ones with this option separated by a comma (i.e. --exclude-notify-vars=variable1,variable2)
   --show-trxs-only      (MySQL only) Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
   --debug-options       Display options that are set and what they're set by (command-line, dolphie config, etc) then exit. WARNING: This will show passwords and other sensitive information in plain text
@@ -166,6 +168,7 @@ Dolphie's config supports these options under [dolphie] section:
 	(str) replay_file
 	(str) replay_dir
 	(int) replay_retention_hours
+	(str) exclude_notify_global_vars
 ```
 ## Supported ProxySQL versions
 - ProxySQL 2.6+ (could work on previous versions but not tested)
@@ -197,12 +200,12 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 ## Record & Replay
 Have you ever wished you could view the process list and various other related statistics from a specific moment in time? Perhaps during a database stall that led to an incident, and your monitoring tools failed to identify the root cause? Well, you're in luck! Dolphie has a Replay feature that lets you do just that.
 
-Starting with version **5.1.0**, you can instruct Dolphie to record its data (via `--record`) into a local SQLite database file that's compressed with ZSTD. When you're ready to replay this data, simply pass the `--replay-file` option, and you can interact with it as if you were watching it live! Within the Replay interface, you can navigate with the controls: back, forward, play/pause, or seek to a specific datetime. While some features are disabled during replay, the essential functionalities remain intact. For a complete list of available commands, just press `?` to access the help menu.
+Starting with version **6.0.0**, you can instruct Dolphie to record its data (via `--record`) into a local SQLite database file that's compressed with ZSTD. When you're ready to replay this data, simply pass the `--replay-file` option, and you can interact with it as if you were watching it live! Within the Replay interface, you can navigate with the controls: back, forward, play/pause, or seek to a specific datetime. While some features are disabled during replay, the essential functionalities remain intact. For a complete list of available commands, press `?` to access the help menu.
 
-Note that this feature can incur a significant amount of disk space depending on how busy your server is and what you set `--replay-retention-hours` + `--refresh-interval`. Adjust these values to suit your needs and monitor the disk space usage accordingly.
+Note that this feature can incur a significant amount of disk space depending on how busy your server is and what you set `--replay-retention-hours` + `--refresh-interval`. Adjust these values to suit your needs and monitor the disk space usage accordingly. You can also not mix Dolphie versions with a replay file. If you try to, it will rename the current replay file and create a new one to prevent any potential version conflicts.
 
 ## Daemon Mode
-Also introduced in version **5.1.0** is the ability to run Dolphie in daemon mode (via `--daemon` option). This mode eliminates Textual's TUI and creates a log file for messages while also displaying them in the console. Overall, daemon mode is significantly lighter weight on system resources compared to running Dolphie live.
+Also introduced in version **6.0.0** is the ability to run Dolphie in daemon mode (via `--daemon` option). This mode eliminates Textual's TUI and creates a log file for messages while also displaying them in the console. Overall, daemon mode is significantly lighter weight on system resources compared to running Dolphie live.
 
 While it may not be obvious, the primary purpose of this mode is to always be recording data to a replay file so it can be replayed whenever needed. You have flexibility in how you run Dolphie in the background; personally, I prefer using `systemctl`, but alternatives like `nohup` or `tmux` can be viable options.
 

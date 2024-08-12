@@ -164,6 +164,7 @@ class DolphieApp(App):
             dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
             dolphie.processlist_threads = replay_event_data.processlist
             dolphie.replication_status = replay_event_data.replication_status
+            dolphie.metadata_locks = replay_event_data.metadata_locks
 
             connection_source_metrics = {
                 "innodb_metrics": dolphie.innodb_metrics,
@@ -528,7 +529,7 @@ class DolphieApp(App):
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
         if dolphie.is_mysql_version_at_least("5.7"):
-            if dolphie.panels.metadata_locks.visible:
+            if dolphie.panels.metadata_locks.visible or dolphie.record_for_replay:
                 dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
             else:
                 # Reset this data so the graph doesn't show old data
@@ -791,7 +792,7 @@ class DolphieApp(App):
         if not tab.dolphie.pause_refresh:
             tab.dolphie.pause_refresh = True
             self.notify("Replay is paused")
-            event.button.label = "▶ Resume"
+            event.button.label = "▶️  Resume"
         else:
             tab.dolphie.pause_refresh = False
             self.notify("Replay has resumed", severity="success")
@@ -1007,9 +1008,9 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if dolphie.connection_source == ConnectionSource.mysql:
-            replay_allowed_keys = ["1", "2", "3", "a", "c", "f", "p", "r", "s", "S", "t", "T", "v"]
+            replay_allowed_keys = ["1", "2", "3", "5", "a", "c", "f", "p", "r", "s", "S", "t", "T", "v"]
         elif dolphie.connection_source == ConnectionSource.proxysql:
-            replay_allowed_keys = ["1", "2", "3", "4", "a", "c", "f", "p", "r", "s", "S", "t"]
+            replay_allowed_keys = ["1", "2", "3", "4", "a", "c", "f", "p", "r", "s", "S", "t", "v"]
 
         exclude_keys = [
             "up",
@@ -1034,7 +1035,7 @@ class DolphieApp(App):
 
         if dolphie.replay_file:
             if key not in replay_allowed_keys and key not in exclude_keys:
-                self.notify(f"Key [highlight]{key}[/highlight] is not allowed during a replay", severity="warning")
+                self.notify(f"Key [highlight]{key}[/highlight] is not allowed during replay", severity="warning")
                 return
         else:
             # Prevent commands from being run if the secondary connection is processing a query already
@@ -1088,22 +1089,23 @@ class DolphieApp(App):
                 self.toggle_panel(dolphie.panels.proxysql_mysql_query_rules.name)
                 return
 
-            if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
-                self.notify("Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled")
-                return
+            if not dolphie.replay_file:
+                if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
+                    self.notify("Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled")
+                    return
 
-            query = (
-                "SELECT enabled FROM performance_schema.setup_instruments WHERE name = 'wait/lock/metadata/sql/mdl';"
-            )
+                query = """
+                    SELECT enabled FROM performance_schema.setup_instruments WHERE name = 'wait/lock/metadata/sql/mdl'
+                """
 
-            dolphie.secondary_db_connection.execute(query)
-            row = dolphie.secondary_db_connection.fetchone()
-            if row and row.get("enabled") == "NO":
-                self.notify(
-                    "Metadata Locks panel requires Performance Schema to have"
-                    " [highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table"
-                )
-                return
+                dolphie.secondary_db_connection.execute(query)
+                row = dolphie.secondary_db_connection.fetchone()
+                if row and row.get("enabled") == "NO":
+                    self.notify(
+                        "Metadata Locks panel requires Performance Schema to have"
+                        " [highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table"
+                    )
+                    return
 
             self.toggle_panel(dolphie.panels.metadata_locks.name)
             self.tab_manager.active_tab.metadata_locks_datatable.clear()

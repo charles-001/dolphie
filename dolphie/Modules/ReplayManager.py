@@ -28,6 +28,7 @@ class MySQLReplayData:
     replication_status: dict
     processlist: dict
     metric_manager: dict
+    metadata_locks: dict
 
 
 @dataclass
@@ -54,6 +55,8 @@ class ReplayManager:
             dolphie: The Dolphie instance.
         """
         self.dolphie = dolphie
+        self.connection: sqlite3.Connection = None
+        self.cursor: sqlite3.Cursor = None
         self.current_index = 0  # This is used to keep track of the last primary key read from the database
         self.min_timestamp = None
         self.max_timestamp = None
@@ -77,9 +80,6 @@ class ReplayManager:
         os.makedirs(os.path.dirname(self.replay_file), mode=0o770, exist_ok=True)
         logger.info(f"Replay SQLite file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)")
 
-        self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
-        self.cursor = self.connection.cursor()
-
         self._initialize_sqlite()
         self._manage_metadata()
 
@@ -90,6 +90,9 @@ class ReplayManager:
         """
         Initializes the SQLite database and creates the necessary tables.
         """
+        self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
+        self.cursor = self.connection.cursor()
+
         # Lock down the permissions of the replay file
         os.chmod(self.replay_file, 0o660)
 
@@ -357,6 +360,7 @@ class ReplayManager:
                     "innodb_metrics": self.dolphie.innodb_metrics,
                     "replica_manager": self.dolphie.replica_manager.available_replicas,
                     "replication_status": self.dolphie.replication_status,
+                    "metadata_locks": self.dolphie.metadata_locks,
                 }
             )
         else:
@@ -429,6 +433,7 @@ class ReplayManager:
                 replication_status=data.get("replication_status", {}),
                 processlist=processlist,
                 metric_manager=data.get("metric_manager", {}),
+                metadata_locks=data.get("metadata_locks", {}),
             )
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist
