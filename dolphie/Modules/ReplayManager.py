@@ -131,10 +131,12 @@ class ReplayManager:
             return
 
         current_time = datetime.now()
-        if current_time - self.last_purge_time < timedelta(seconds=10):
+        if current_time - self.last_purge_time < timedelta(hours=1):
             return  # Skip purging if less than an hour has passed
 
-        retention_date = (current_time - timedelta(seconds=10)).strftime("%Y-%m-%d %H:%M:%S")
+        retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
 
         self.cursor.execute("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
         self.last_purge_time = current_time
