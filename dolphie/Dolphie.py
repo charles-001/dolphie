@@ -349,7 +349,9 @@ class Dolphie:
 
     def validate_metadata_locks_enabled(self):
         if not self.is_mysql_version_at_least("5.7") or not self.performance_schema_enabled:
-            logger.warning("Metadata Locks requires MySQL 5.7+ with Performance Schema enabled")
+            logger.warning(
+                "Metadata Locks requires MySQL 5.7+ with Performance Schema enabled - will not capture that data."
+            )
             return
 
         query = """
@@ -360,7 +362,7 @@ class Dolphie:
         if row and row.get("enabled") == "NO":
             logger.warning(
                 "Metadata Locks requires Performance Schema to have"
-                " wait/lock/metadata/sql/mdl enabled in setup_instruments table"
+                " wait/lock/metadata/sql/mdl enabled in setup_instruments table - will not capture that data."
             )
             return
 

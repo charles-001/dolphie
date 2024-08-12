@@ -953,21 +953,21 @@ class MetricManager:
         # Define the time threshold for retaining metrics data
         time_threshold = datetime.now() - timedelta(minutes=10)
 
-        filtered_datetimes = []
-        for dt in self.datetimes:
-            dt_parsed = datetime.strptime(dt, "%d/%m/%y %H:%M:%S")
-            if dt_parsed >= time_threshold:
-                filtered_datetimes.append(dt)
+        # Filter
+        filtered_datetimes = [
+            dt for dt in self.datetimes if datetime.strptime(dt, "%d/%m/%y %H:%M:%S") >= time_threshold
+        ]
 
-        if filtered_datetimes:
-            # Create a set for fast lookup of filtered datetimes
-            filtered_set = set(filtered_datetimes)
+        # Create a set for fast lookup of datetimes
+        filtered_set = set(filtered_datetimes)
 
-            for metric_instance in self.metrics.__dict__.values():
-                for metric_data in metric_instance.__dict__.values():
-                    if isinstance(metric_data, MetricData):
-                        metric_data.values = [
-                            value for dt, value in zip(self.datetimes, metric_data.values) if dt in filtered_set
-                        ]
+        # Update metrics data based on datetimes
+        for metric_instance in self.metrics.__dict__.values():
+            for metric_data in metric_instance.__dict__.values():
+                if isinstance(metric_data, MetricData):
+                    metric_data.values = [
+                        value for dt, value in zip(self.datetimes, metric_data.values) if dt in filtered_set
+                    ]
 
+        # Update datetimes to only keep valid ones
         self.datetimes = filtered_datetimes
