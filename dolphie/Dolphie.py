@@ -66,6 +66,7 @@ class Dolphie:
         self.replica_manager = DataTypes.ReplicaManager()
 
         self.dolphie_start_time: datetime = datetime.now()
+        self.worker_previous_start_time: datetime = datetime.now()
         self.worker_processing_time: float = 0
         self.polling_latency: float = 0
         self.connection_status: DataTypes.ConnectionStatus = None
@@ -336,4 +337,4 @@ class Dolphie:
                     severity="warning",
                     timeout=10,
                 )
-                logger.warning(f"Global variable {variable} changed: {old_value} -> {new_value}")
+                logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")

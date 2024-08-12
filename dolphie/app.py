@@ -213,6 +213,8 @@ class DolphieApp(App):
                 tab.replay_manager = ReplayManager(dolphie)
 
             worker_start_time = datetime.now()
+            dolphie.polling_latency = (worker_start_time - dolphie.worker_previous_start_time).total_seconds()
+            dolphie.worker_previous_start_time = worker_start_time
 
             if dolphie.connection_source == ConnectionSource.mysql:
                 self.process_mysql_data(tab)
@@ -220,10 +222,6 @@ class DolphieApp(App):
                 self.process_proxysql_data(tab)
 
             dolphie.worker_processing_time = (datetime.now() - worker_start_time).total_seconds()
-
-            # We calculate the polling latency by adding the worker processing time to
-            # the refresh interval (sleep time) which should give us an accurate number
-            dolphie.polling_latency = dolphie.worker_processing_time + dolphie.refresh_interval
 
             dolphie.metric_manager.refresh_data(
                 worker_start_time=worker_start_time,
@@ -1858,11 +1856,8 @@ class DolphieApp(App):
                 thread_table.add_row("[label]Command", thread_data.command)
                 thread_table.add_row("[label]State", thread_data.state)
                 thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8))
-                thread_table.add_row("[label]Rows Locked", thread_data.trx_rows_locked)
-                thread_table.add_row("[label]Rows Modified", thread_data.trx_rows_modified)
-
-                if dolphie.global_variables.get("innodb_thread_concurrency"):
-                    thread_table.add_row("[label]Tickets", thread_data.trx_concurrency_tickets)
+                thread_table.add_row("[label]Rows Locked", format_number(thread_data.trx_rows_locked))
+                thread_table.add_row("[label]Rows Modified", format_number(thread_data.trx_rows_modified))
 
                 thread_table.add_row("", "")
                 thread_table.add_row("[label]TRX Time", thread_data.trx_time)

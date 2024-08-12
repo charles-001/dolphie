@@ -60,7 +60,7 @@ class ThreadScreen(Screen):
         ThreadScreen ScrollableContainer {
             height: auto;
             width: 50vw;
-            max-height: 16;
+            max-height: 15;
         }
 
         ThreadScreen .table {
