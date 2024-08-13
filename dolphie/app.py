@@ -1090,8 +1090,7 @@ class DolphieApp(App):
             if not dolphie.metadata_locks_enabled and not dolphie.replay_file:
                 self.notify(
                     "Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled along with "
-                    "[highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table",
-                    severity="error",
+                    "[highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table"
                 )
                 return
 

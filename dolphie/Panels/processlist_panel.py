@@ -173,6 +173,11 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
 
     if dolphie.use_performance_schema:
         processlist_query = MySQLQueries.ps_query
+        if not dolphie.is_mysql_version_at_least("5.7"):
+            # Remove the connection_type field for MySQL versions below 5.7 since it doesn't exist
+            processlist_query = processlist_query.replace(
+                "connection_type         AS connection_type,", '"" AS connection_type,'
+            )
     else:
         processlist_query = MySQLQueries.pl_query
 
@@ -260,8 +265,7 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
         # Use trx_query over Performance Schema query since it's more accurate
         if dolphie.use_performance_schema and thread["trx_query"]:
             thread["query"] = thread["trx_query"]
-        else:
-            thread["query"] = thread["query"]
+        thread["query"] = "" if thread["query"] is None else thread["query"]
 
         host = thread["host"].split(":")[0]
         thread["host"] = dolphie.get_hostname(host)

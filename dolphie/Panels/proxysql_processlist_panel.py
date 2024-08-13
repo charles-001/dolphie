@@ -198,6 +198,7 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
 
         thread["frontend_host"] = dolphie.get_hostname(thread["frontend_host"])
         thread["backend_host"] = dolphie.get_hostname(thread["backend_host"])
+        thread["query"] = "" if thread["query"] is None else thread["query"]
 
         processlist_threads[str(thread["id"])] = ProxySQLProcesslistThread(thread)
 
