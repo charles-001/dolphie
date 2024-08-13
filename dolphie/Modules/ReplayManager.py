@@ -134,7 +134,7 @@ class ReplayManager:
             return
 
         current_time = datetime.now()
-        if current_time - self.last_purge_time < timedelta(hours=1):
+        if (current_time - self.last_purge_time) < timedelta(hours=1):
             return  # Skip purging if less than an hour has passed
 
         retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(

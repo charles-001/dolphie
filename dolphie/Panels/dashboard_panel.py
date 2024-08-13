@@ -86,8 +86,6 @@ def create_panel(tab: Tab) -> Table:
     table_innodb.add_column()
     table_innodb.add_column(width=9)
 
-    history_list_length = dolphie.innodb_metrics.get("trx_rseg_history_len", "N/A")
-
     # Calculate InnoDB memory read hit efficiency
     ib_pool_disk_reads = global_status.get("Innodb_buffer_pool_reads", 0)
     ib_pool_mem_reads = global_status.get(
@@ -125,7 +123,9 @@ def create_panel(tab: Tab) -> Table:
         ),
     )
     table_innodb.add_row("[label]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
-    table_innodb.add_row("[label]History List", format_number(history_list_length))
+    table_innodb.add_row(
+        "[label]History List", format_number(dolphie.innodb_metrics.get("trx_rseg_history_len", "N/A"))
+    )
 
     tab.dashboard_section_2.update(table_innodb)
 

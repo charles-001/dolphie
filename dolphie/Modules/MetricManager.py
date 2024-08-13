@@ -407,6 +407,17 @@ class LocksMetrics:
 
 
 @dataclass
+class HistoryListLength:
+    trx_rseg_history_len: MetricData
+    graphs: List[str]
+    tab_name: str = "history_list_length"
+    graph_tab_name = "History List"
+    metric_source: MetricSource = MetricSource.innodb_metrics
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
+
+
+@dataclass
 class ProxySQLConnectionsMetrics:
     Client_Connections_non_idle: MetricData
     Client_Connections_aborted: MetricData
@@ -507,10 +518,11 @@ class ProxySQLTotalCommandStats:
 @dataclass
 class MetricInstances:
     dml: DMLMetrics
-    checkpoint: CheckpointMetrics
     buffer_pool_requests: BufferPoolRequestsMetrics
+    history_list_length: HistoryListLength
     adaptive_hash_index: AdaptiveHashIndexMetrics
     adaptive_hash_index_hit_ratio: AdaptiveHashIndexHitRatio
+    checkpoint: CheckpointMetrics
     redo_log_active_count: RedoLogActiveCountMetrics
     redo_log: RedoLogMetrics
     table_cache: TableCacheMetrics
@@ -577,6 +589,12 @@ class MetricManager:
                 Innodb_buffer_pool_read_requests=MetricData(label="Read Requests", color=MetricColor.blue),
                 Innodb_buffer_pool_write_requests=MetricData(label="Write Requests", color=MetricColor.green),
                 Innodb_buffer_pool_reads=MetricData(label="Disk Reads", color=MetricColor.red),
+            ),
+            history_list_length=HistoryListLength(
+                graphs=["graph_history_list_length"],
+                trx_rseg_history_len=MetricData(
+                    label="HLL", color=MetricColor.blue, per_second_calculation=False, create_switch=False
+                ),
             ),
             adaptive_hash_index=AdaptiveHashIndexMetrics(
                 graphs=["graph_adaptive_hash_index"],
