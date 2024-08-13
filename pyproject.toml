@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dolphie"
-version = "6.0.0"
+version = "5.1.0"
 license = "GPL-3.0-or-later"
 description = "Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]
@@ -21,6 +21,7 @@ plotext = "^5.2.8"
 zstandard = "^0.23.0"
 loguru = "^0.7.2"
 
+orjson = "^3.10.7"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

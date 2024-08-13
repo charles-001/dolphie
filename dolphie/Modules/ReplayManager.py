@@ -1,10 +1,10 @@
-import json
 import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Union
 
+import orjson
 import zstandard as zstd
 from dolphie.DataTypes import (
     ConnectionSource,
@@ -151,8 +151,7 @@ class ReplayManager:
         Args:
             timestamp: The timestamp to seek to.
         """
-        self.cursor.execute("SELECT id FROM replay_data WHERE timestamp = ?", (timestamp,))
-        row = self.cursor.fetchone()
+        row = self.cursor.execute("SELECT id FROM replay_data WHERE timestamp = ?", (timestamp,)).fetchone()
         if row:
             # We subtract 1 because get_next_refresh_interval naturally increments the index
             self.current_index = row[0] - 1
@@ -163,11 +162,10 @@ class ReplayManager:
             return True
         else:
             # Try to find a timestamp before the specified timestamp
-            self.cursor.execute(
+            row = self.cursor.execute(
                 "SELECT id, timestamp FROM replay_data WHERE timestamp < ? ORDER BY timestamp DESC LIMIT 1",
                 (timestamp,),
-            )
-            row = self.cursor.fetchone()
+            ).fetchone()
             if row:
                 # We subtract 1 because get_next_refresh_interval naturally increments the index
                 self.current_index = row[0] - 1
@@ -192,8 +190,7 @@ class ReplayManager:
         if not self.dolphie.record_for_replay:
             return
 
-        self.cursor.execute("SELECT * FROM metadata")
-        row = self.cursor.fetchone()
+        row = self.cursor.execute("SELECT * FROM metadata").fetchone()
         if row is None:
             self.cursor.execute(
                 "INSERT INTO metadata (hostname, host_version, host_distro, connection_source, dolphie_version) "
@@ -242,8 +239,7 @@ class ReplayManager:
         """
         Retrieves the replay's metadata from the metadata table.
         """
-        self.cursor.execute("SELECT * FROM metadata")
-        row = self.cursor.fetchone()
+        row = self.cursor.execute("SELECT * FROM metadata").fetchone()
         if row:
             self.dolphie.host_with_port = row[0]
             self.dolphie.host_version = row[1]
@@ -263,7 +259,7 @@ class ReplayManager:
             bytes: Compressed data.
         """
         compressor = zstd.ZstdCompressor(level=15)
-        return compressor.compress(data.encode("utf-8"))
+        return compressor.compress(data)
 
     def _decompress_data(self, compressed_data: bytes):
         """
@@ -276,7 +272,7 @@ class ReplayManager:
             str: Decompressed data.
         """
         decompressor = zstd.ZstdDecompressor()
-        return decompressor.decompress(compressed_data).decode("utf-8")
+        return decompressor.decompress(compressed_data)
 
     def _condition_metrics(self, metric_manager: MetricManager.MetricManager):
         """
@@ -332,7 +328,6 @@ class ReplayManager:
 
         # Prepare data dictionary
         data_dict = {
-            "timestamp": timestamp,
             "global_status": self.dolphie.global_status,
             "global_variables": self.dolphie.global_variables,
             "processlist": processlist,
@@ -377,7 +372,7 @@ class ReplayManager:
             "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
             (
                 timestamp,
-                self._compress_data(json.dumps(data_dict)),
+                self._compress_data(orjson.dumps(data_dict)),
             ),
         )
 
@@ -395,8 +390,7 @@ class ReplayManager:
         """
 
         # Get the min and max timestamps and IDs from the database so we can update the UI
-        self.cursor.execute("SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id) FROM replay_data")
-        row = self.cursor.fetchone()
+        row = self.cursor.execute("SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id) FROM replay_data").fetchone()
         if row:
             self.min_timestamp = row[0]
             self.max_timestamp = row[1]
@@ -404,36 +398,38 @@ class ReplayManager:
             self.max_id = row[3]
 
         # Get the next row
-        self.cursor.execute(
+        row = self.cursor.execute(
             "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
             (self.current_index,),
-        )
-        row = self.cursor.fetchone()
-        if row is None:
+        ).fetchone()
+        if not row:
             return None
 
         self.current_index = row[0]
 
         # Decompress and parse the JSON data
-        data = json.loads(self._decompress_data(row[2]))
+        data = orjson.loads(self._decompress_data(row[2]))
 
         processlist = {}
+        common_params = {
+            "timestamp": row[1],
+            "global_status": data.get("global_status", {}),
+            "global_variables": data.get("global_variables", {}),
+            "metric_manager": data.get("metric_manager", {}),
+        }
         if self.dolphie.connection_source == ConnectionSource.mysql:
             # Re-create the ProcesslistThread object for each thread in the JSON's processlist
             for thread_data in data["processlist"]:
                 processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
 
             return MySQLReplayData(
-                timestamp=row[1],
-                global_status=data.get("global_status", {}),
-                global_variables=data.get("global_variables", {}),
+                **common_params,
                 binlog_status=data.get("binlog_status", {}),
                 innodb_metrics=data.get("innodb_metrics", {}),
                 replica_manager=data.get("replica_manager", {}),
                 replication_status=data.get("replication_status", {}),
-                processlist=processlist,
-                metric_manager=data.get("metric_manager", {}),
                 metadata_locks=data.get("metadata_locks", {}),
+                processlist=processlist,
             )
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist
@@ -441,13 +437,10 @@ class ReplayManager:
                 processlist[str(thread_data["id"])] = ProxySQLProcesslistThread(thread_data)
 
             return ProxySQLReplayData(
-                timestamp=row[1],
-                global_status=data.get("global_status", {}),
-                global_variables=data.get("global_variables", {}),
+                **common_params,
                 command_stats=data.get("command_stats", {}),
                 hostgroup_summary=data.get("hostgroup_summary", {}),
                 processlist=processlist,
-                metric_manager=data.get("metric_manager", {}),
             )
         else:
             self.dolphie.app.notify("Invalid connection source for replay data", severity="error")
