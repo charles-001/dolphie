@@ -164,8 +164,8 @@ class HelpScreen(ModalScreen):
                     "s": "Toggle sorting for Age in descending/ascending order",
                     "S": "Seek to a specific time in the replay",
                     "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
-                    "left": "Seek to the previous refresh interval",
-                    "right": "Seek to the next refresh interval",
+                    "[": "Seek to the previous refresh interval",
+                    "]": "Seek to the next refresh interval",
                     "ctrl+a": "Switch to the previous tab",
                     "ctrl+d": "Switch to the next tab",
                 }
@@ -190,8 +190,8 @@ class HelpScreen(ModalScreen):
                     "s": "Toggle sorting for Age in descending/ascending order",
                     "S": "Seek to a specific time in the replay",
                     "v": "Variable wildcard search sourced from SHOW GLOBAL VARIABLES",
-                    "left": "Seek to the previous refresh interval",
-                    "right": "Seek to the next refresh interval",
+                    "[": "Seek to the previous refresh interval",
+                    "]": "Seek to the next refresh interval",
                     "ctrl+a": "Switch to the previous tab",
                     "ctrl+d": "Switch to the next tab",
                 }

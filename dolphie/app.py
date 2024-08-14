@@ -1056,9 +1056,42 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if dolphie.connection_source == ConnectionSource.mysql:
-            replay_allowed_keys = ["1", "2", "3", "5", "a", "c", "f", "p", "r", "s", "S", "t", "T", "v"]
+            replay_allowed_keys = [
+                "1",
+                "2",
+                "3",
+                "5",
+                "a",
+                "c",
+                "f",
+                "p",
+                "r",
+                "s",
+                "S",
+                "t",
+                "T",
+                "v",
+                "left_square_bracket",
+                "right_square_bracket",
+            ]
         elif dolphie.connection_source == ConnectionSource.proxysql:
-            replay_allowed_keys = ["1", "2", "3", "4", "a", "c", "f", "p", "r", "s", "S", "t", "v"]
+            replay_allowed_keys = [
+                "1",
+                "2",
+                "3",
+                "4",
+                "a",
+                "c",
+                "f",
+                "p",
+                "r",
+                "s",
+                "S",
+                "t",
+                "v",
+                "left_square_bracket",
+                "right_square_bracket",
+            ]
 
         exclude_keys = [
             "up",
@@ -1210,10 +1243,10 @@ class DolphieApp(App):
 
                 self.notify(f"Tab [highlight]{tab.name}[/highlight] [white]has been removed", severity="success")
                 self.tab_manager.tabs.pop(tab.id, None)
-        elif key == "left":
+        elif key == "left_square_bracket":
             if dolphie.replay_file:
                 self.query_one("#back_button", Button).press()
-        elif key == "right":
+        elif key == "right_square_bracket":
             if dolphie.replay_file:
                 self.query_one("#forward_button", Button).press()
 
