@@ -264,7 +264,8 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         formatted_replica_lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
 
     if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb:
-        primary_uuid = data.get("Source_UUID")
+        uuid_key = "Source_UUID"
+        primary_uuid = data.get(uuid_key)
         primary_host = dolphie.get_hostname(data.get("Source_Host"))
         primary_user = data.get("Source_User")
         primary_log_file = data.get("Source_Log_File")
@@ -281,7 +282,8 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         )
 
     else:
-        primary_uuid = data.get("Master_UUID")
+        uuid_key = "Master_UUID"
+        primary_uuid = data.get(uuid_key)
         primary_host = dolphie.get_hostname(data.get("Master_Host"))
         primary_user = data.get("Master_User")
         primary_log_file = data.get("Master_Log_File")
@@ -417,7 +419,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             if replica:
                 replica_primary_server_uuid = None
                 if dolphie.replication_status:
-                    replica_primary_server_uuid = dolphie.replication_status.get("Master_UUID")
+                    replica_primary_server_uuid = dolphie.replication_status.get(uuid_key)
 
                 def remove_primary_uuid_gtid_set(gtid_sets):
                     lines = gtid_sets.splitlines()

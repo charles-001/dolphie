@@ -283,7 +283,7 @@ class DolphieApp(App):
                 tab.replicas_container.display = False
         else:
             # If we're not displaying the replication panel, close all replica connections
-            dolphie.replica_manager.remove_all()
+            dolphie.replica_manager.disconnect_all()
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
@@ -357,7 +357,6 @@ class DolphieApp(App):
                     tab.replicas_worker_timer = self.set_timer(
                         dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
                     )
-
                     return
 
                 if dolphie.panels.replication.visible and dolphie.replica_manager.available_replicas:
@@ -845,9 +844,9 @@ class DolphieApp(App):
             # Set the display state for the replica container based on whether there are replicas
             tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
             if tab.replicas_container.display:
-                replicas = self.query(".replica_container")
-                for replica in replicas:
-                    replica.display = tab.id in replica.id
+                containers = self.query(".replica_container")
+                for container in containers:
+                    container.display = tab.id in container.id
 
                 tab.replicas_title.update(
                     f"[b]Replicas ([highlight]{len(tab.dolphie.replica_manager.available_replicas)}[/highlight])\n"
@@ -856,9 +855,9 @@ class DolphieApp(App):
             # Set the display state for the group replication container based on whether there are members
             tab.group_replication_container.display = bool(tab.dolphie.group_replication_members)
             if tab.group_replication_container.display:
-                members = self.query(".member_container")
-                for member in members:
-                    member.display = tab.id in member.id
+                containers = self.query(".member_container")
+                for container in containers:
+                    container.display = tab.id in container.id
 
     @on(TabbedContent.TabActivated, ".metrics_host_tabs")
     def metric_tab_changed(self, event: TabbedContent.TabActivated):
@@ -1122,29 +1121,26 @@ class DolphieApp(App):
             self.toggle_panel(dolphie.panels.replication.name)
             self.size_dashboard_sections(tab)
 
-            tab.replicas_container.display = False
-            if not dolphie.panels.replication.visible:
-                queries = [f".replica_container_{dolphie.tab_id}", f".member_container_{dolphie.tab_id}"]
-                for query in queries:
-                    for member in dolphie.app.query(query):
-                        member.remove()
-            else:
+            if dolphie.panels.replication.visible:
                 if dolphie.replica_manager.available_replicas:
                     tab.replicas_container.display = True
-                    for member in dolphie.app.query(".replica_container"):
-                        member.display = False
+                    tab.replicas_loading_indicator.display = True
+                    for container in dolphie.app.query(".replica_container"):
+                        container.display = tab.id in container.id
 
                     tab.replicas_title.update(
                         f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
                         " replicas...\n"
                     )
-                    tab.replicas_loading_indicator.display = True
-
                 if dolphie.group_replication_members:
                     tab.group_replication_container.display = True
-                    for member in dolphie.app.query(".member_container"):
-                        member.display = False
-
+                    for container in dolphie.app.query(".member_container"):
+                        container.display = tab.id in container.id
+            else:
+                queries = [f".replica_container_{dolphie.tab_id}", f".member_container_{dolphie.tab_id}"]
+                for query in queries:
+                    for container in dolphie.app.query(query):
+                        container.remove()
         elif key == "5":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_mysql_query_rules.name)

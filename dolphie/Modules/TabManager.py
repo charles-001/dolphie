@@ -450,12 +450,11 @@ class TabManager:
 
         tab.group_replication_container = self.app.query_one("#group_replication_container", Container)
         tab.group_replication_grid = self.app.query_one("#group_replication_grid", Container)
+        tab.group_replication_data = self.app.query_one("#group_replication_data", Static)
+        tab.group_replication_title = self.app.query_one("#group_replication_title", Label)
 
         tab.replicas_grid = self.app.query_one("#replicas_grid", Container)
         tab.replicas_container = self.app.query_one("#replicas_container", Container)
-
-        tab.group_replication_data = self.app.query_one("#group_replication_data", Static)
-        tab.group_replication_title = self.app.query_one("#group_replication_title", Label)
         tab.replicas_title = self.app.query_one("#replicas_title", Label)
         tab.replicas_loading_indicator = self.app.query_one("#replicas_loading_indicator", LoadingIndicator)
 
@@ -469,6 +468,11 @@ class TabManager:
             "#replication_thread_applier_container", ScrollableContainer
         )
         tab.replication_thread_applier = self.app.query_one("#replication_thread_applier", Static)
+
+        tab.replication_container.display = False
+        tab.replicas_container.display = False
+        tab.group_replication_container.display = False
+        tab.cluster_data.display = False
 
         # By default, hide all the panels
         for panel in tab.dolphie.panels.all():
@@ -571,7 +575,7 @@ class TabManager:
         tab.dolphie.main_db_connection.close()
         tab.dolphie.secondary_db_connection.close()
 
-        tab.dolphie.replica_manager.remove_all()
+        tab.dolphie.replica_manager.disconnect_all()
 
         if self.active_tab.id == tab.id:
             tab.main_container.display = False
@@ -579,9 +583,17 @@ class TabManager:
 
         tab.sparkline.data = [0]
 
-        tab.replicas_title.update("")
-        for member in tab.dolphie.app.query(".replica_container"):
-            await member.remove()
+        # Hide all the panels as they will be re-enabled if needed
+        tab.replication_container.display = False
+        tab.replicas_container.display = False
+        tab.group_replication_container.display = False
+        tab.cluster_data.display = False
+
+        # Remove all the replica and member containers
+        queries = [f".replica_container_{tab.id}", f".member_container_{tab.id}"]
+        for query in queries:
+            for container in tab.dolphie.app.query(query):
+                await container.remove()
 
         if update_topbar:
             self.update_topbar(tab=tab, connection_status=ConnectionStatus.disconnected)

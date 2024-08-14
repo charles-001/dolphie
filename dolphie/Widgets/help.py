@@ -95,7 +95,7 @@ class HelpScreen(ModalScreen):
                     "QPS": "Queries per second from Com_queries in SHOW GLOBAL STATUS",
                     "Latency": "How much time it takes to receive data from the host for each refresh interval",
                     "Threads": "Con = Connected, Run = Running, Cac = Cached from SHOW GLOBAL STATUS",
-                    "Speed": "How many seconds were taken off of replication lag from the last refresh interval",
+                    "Speed": "How fast replication is catching up in seconds after each refresh interval",
                     "Tickets": "Relates to innodb_concurrency_tickets variable",
                     "R-Lock/Mod": "Relates to how many rows are locked/modified for the process's transaction",
                     "GR": "Group Replication",

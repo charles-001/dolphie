@@ -49,7 +49,7 @@ class ReplicaManager:
     def get(self, thread_id: int) -> Replica:
         return self.replicas.get(thread_id)
 
-    def remove_all(self):
+    def disconnect_all(self):
         if self.replicas:
             for replica in self.replicas.values():
                 if replica.connection:
