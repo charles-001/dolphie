@@ -33,8 +33,8 @@ def create_panel(tab: Tab) -> DataTable:
     if dolphie.show_additional_query_columns:
         columns.extend(
             [
-                {"name": "Hostname/IP", "field": "host", "width": 16, "format_number": False},
-                {"name": "Database", "field": "db", "width": 13, "format_number": False},
+                {"name": "Hostname/IP", "field": "host", "width": 25, "format_number": False},
+                {"name": "Database", "field": "db", "width": 15, "format_number": False},
             ]
         )
 
@@ -47,9 +47,6 @@ def create_panel(tab: Tab) -> DataTable:
             {"name": "R-Mod", "field": "trx_rows_modified", "width": 7, "format_number": True},
         ]
     )
-
-    if dolphie.show_additional_query_columns and dolphie.global_variables.get("innodb_thread_concurrency"):
-        columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": True})
 
     if dolphie.show_trxs_only:
         columns.append(
@@ -175,9 +172,7 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
         processlist_query = MySQLQueries.ps_query
         if not dolphie.is_mysql_version_at_least("5.7"):
             # Remove the connection_type field for MySQL versions below 5.7 since it doesn't exist
-            processlist_query = processlist_query.replace(
-                "connection_type         AS connection_type,", '"" AS connection_type,'
-            )
+            processlist_query = processlist_query.replace("connection_type", '""')
     else:
         processlist_query = MySQLQueries.pl_query
 

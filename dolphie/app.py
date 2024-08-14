@@ -464,9 +464,8 @@ class DolphieApp(App):
 
                 dolphie.replica_manager.available_replicas = available_replicas
 
-        if not dolphie.daemon_mode:
-            dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
-            dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
+        dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
+        dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
 
         dolphie.replication_status = replication_panel.fetch_replication_data(tab)
 
@@ -675,6 +674,11 @@ class DolphieApp(App):
                 tab.metric_graph_tabs.show_tab(f"graph_tab_replication_lag_{tab.id}")
             else:
                 tab.metric_graph_tabs.hide_tab(f"graph_tab_replication_lag_{tab.id}")
+
+            if dolphie.metric_manager.metrics.locks.metadata_lock_count.values:
+                tab.metric_graph_tabs.show_tab(f"graph_tab_locks_{tab.id}")
+            else:
+                tab.metric_graph_tabs.hide_tab(f"graph_tab_locks_{tab.id}")
 
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)

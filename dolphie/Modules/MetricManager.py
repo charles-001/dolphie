@@ -392,7 +392,7 @@ class DiskIOMetrics:
     graph_tab_name = "Disk I/O"
     metric_source: MetricSource = MetricSource.disk_io_metrics
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
-    use_with_replay: bool = False
+    use_with_replay: bool = True
 
 
 @dataclass

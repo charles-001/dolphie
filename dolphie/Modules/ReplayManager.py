@@ -258,7 +258,7 @@ class ReplayManager:
         Returns:
             bytes: Compressed data.
         """
-        compressor = zstd.ZstdCompressor(level=15)
+        compressor = zstd.ZstdCompressor(level=5)
         return compressor.compress(data)
 
     def _decompress_data(self, compressed_data: bytes):

@@ -20,8 +20,8 @@ charset-normalizer = "^3.3.2"
 plotext = "^5.2.8"
 zstandard = "^0.23.0"
 loguru = "^0.7.2"
-
 orjson = "^3.10.7"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

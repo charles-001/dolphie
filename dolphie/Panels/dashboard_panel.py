@@ -51,11 +51,6 @@ def create_panel(tab: Tab) -> Table:
     )
     table_information.add_row("[label]Type", host_type)
     table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
-    if not dolphie.replay_file:
-        runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
-        table_information.add_row(
-            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)"
-        )
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
         "[label]Threads",
@@ -75,6 +70,11 @@ def create_panel(tab: Tab) -> Table:
             format_number(global_status["Opened_tables"]),
         ),
     )
+    if not dolphie.replay_file:
+        runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
+        table_information.add_row(
+            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)"
+        )
 
     tab.dashboard_section_1.update(table_information)
 
