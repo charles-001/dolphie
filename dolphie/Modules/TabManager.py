@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List
 
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie.DataTypes import ConnectionStatus
@@ -29,9 +29,9 @@ from textual.widgets import (
     Sparkline,
     Static,
     Switch,
-    TabbedContent,
-    TabPane,
 )
+from textual.widgets import Tab as TabWidget
+from textual.widgets import TabbedContent, TabPane, Tabs
 from textual.worker import Worker
 
 
@@ -127,9 +127,9 @@ class TabManager:
         self.config = config
 
         self.active_tab: Tab = None
-        self.tabs: dict = {}
+        self.tabs: Dict[str, Tab] = {}
 
-        self.host_tabs = self.app.query_one("#host_tabs", TabbedContent)
+        self.host_tabs = self.app.query_one("#host_tabs", Tabs)
         self.host_tabs.display = False
 
         self.topbar = self.app.query_one(TopBar)
@@ -156,11 +156,147 @@ class TabManager:
                 self.topbar.replay_file_size = None
                 self.topbar.host = ""
 
+    def generate_tab_id(self) -> str:
+        tab_id = str(uuid.uuid4()).replace("-", "")
+        # Check if the first character is a digit since Textual doesn't allow that
+        if tab_id[0].isdigit():
+            # Prepend a letter to ensure it does not start with a digit
+            tab_id = "a" + tab_id
+        return tab_id
+
+    async def create_ui_widgets(self):
+        if self.config.daemon_mode:
+            return
+
+        await self.app.mount(
+            LoadingIndicator(id="loading_indicator", classes="connection_loading_indicator"),
+            VerticalScroll(
+                SpinnerWidget(id="spinner", text="Processing command"),
+                Container(
+                    Static(id="dashboard_replay", classes="dashboard_replay"),
+                    Static(id="dashboard_replay_start_end", classes="dashboard_replay"),
+                    Horizontal(
+                        Button("⏪ Back", id="back_button", classes="replay_button replay_back"),
+                        Button("⏸️  Pause", id="pause_button", classes="replay_button replay_pause"),
+                        Button("⏩ Forward", id="forward_button", classes="replay_button replay_forward"),
+                        Button("🔍 Seek", id="seek_button", classes="replay_button replay_seek"),
+                        classes="button_container",
+                    ),
+                    id="dashboard_replay_container",
+                    classes="dashboard_replay",
+                ),
+                Container(
+                    Center(
+                        Static(id="dashboard_section_1", classes="dashboard_section_1"),
+                        Static(id="dashboard_section_2", classes="dashboard_section_2_information"),
+                        Static(id="dashboard_section_3", classes="dashboard_section_3"),
+                        Static(id="dashboard_section_5", classes="dashboard_section_5"),
+                        Static(id="dashboard_section_4", classes="dashboard_section_4"),
+                    ),
+                    Sparkline([], id="panel_dashboard_queries_qps"),
+                    id="panel_dashboard",
+                    classes="panel_container dashboard",
+                ),
+                Container(
+                    TabbedContent(id="metric_graph_tabs", classes="metrics_host_tabs"),
+                    id="panel_graphs",
+                    classes="panel_container",
+                ),
+                Container(
+                    Static(id="replication_container_title", classes="replication_container_title"),
+                    Container(
+                        Label("[b]Replication\n"),
+                        Label(id="replication_variables"),
+                        Center(
+                            ScrollableContainer(Static(id="replication_status"), classes="replication_status"),
+                            ScrollableContainer(
+                                Static(id="replication_thread_applier"),
+                                id="replication_thread_applier_container",
+                                classes="replication_thread_applier",
+                            ),
+                        ),
+                        id="replication_container",
+                        classes="replication",
+                    ),
+                    Container(
+                        Label(id="group_replication_title"),
+                        Label(id="group_replication_data"),
+                        Container(id="group_replication_grid"),
+                        id="group_replication_container",
+                        classes="group_replication",
+                    ),
+                    Static(id="cluster_data"),
+                    Container(
+                        Label(id="replicas_title"),
+                        LoadingIndicator(id="replicas_loading_indicator"),
+                        Container(id="replicas_grid"),
+                        id="replicas_container",
+                        classes="replicas",
+                    ),
+                    id="panel_replication",
+                    classes="panel_container replication_panel",
+                ),
+                Container(
+                    Label(id="metadata_locks_title"),
+                    DataTable(id="metadata_locks_datatable", show_cursor=False, zebra_stripes=True),
+                    id="panel_metadata_locks",
+                    classes="metadata_locks",
+                ),
+                Container(
+                    Label(id="ddl_title"),
+                    DataTable(id="ddl_datatable", show_cursor=False),
+                    id="panel_ddl",
+                    classes="ddl",
+                ),
+                Container(
+                    Label(id="proxysql_hostgroup_summary_title"),
+                    DataTable(
+                        id="proxysql_hostgroup_summary_datatable",
+                        classes="proxysql_hostgroup_summary_datatable",
+                        show_cursor=False,
+                    ),
+                    id="panel_proxysql_hostgroup_summary",
+                    classes="proxysql_hostgroup_summary",
+                ),
+                Container(
+                    Label(id="proxysql_mysql_query_rules_title"),
+                    DataTable(
+                        id="proxysql_mysql_query_rules_datatable",
+                        classes="proxysql_mysql_query_rules_datatable",
+                        show_cursor=False,
+                    ),
+                    id="panel_proxysql_mysql_query_rules",
+                    classes="proxysql_mysql_query_rules",
+                ),
+                Container(
+                    Label(id="proxysql_command_stats_title"),
+                    DataTable(
+                        id="proxysql_command_stats_datatable",
+                        classes="proxysql_command_stats_datatable",
+                        show_cursor=False,
+                    ),
+                    id="panel_proxysql_command_stats",
+                    classes="proxysql_command_stats",
+                ),
+                Container(
+                    Label(id="processlist_title"),
+                    DataTable(id="processlist_data", show_cursor=False),
+                    id="panel_processlist",
+                    classes="processlist",
+                ),
+                classes="tab",
+                id="main_container",
+            ),
+        )
+
+        self.app.query_one("#main_container").display = False
+        self.app.query_one("#loading_indicator").display = False
+
     async def create_tab(self, tab_name: str, use_hostgroup: bool = False, switch_tab: bool = True) -> Tab:
         if len(self.app.screen_stack) > 1:
             return
 
-        tab_id = str(uuid.uuid4()).replace("-", "")
+        tab_id = self.generate_tab_id()
 
         # Create our new tab instance
         tab = Tab(id=tab_id, name=tab_name)
@@ -206,134 +342,9 @@ class TabManager:
 
             return tab
 
+        # Create the tab in the UI
         intial_tab_name = "" if use_hostgroup else tab_name
-        await self.host_tabs.add_pane(
-            TabPane(
-                intial_tab_name,
-                LoadingIndicator(id=f"loading_indicator_{tab_id}", classes="connection_loading_indicator"),
-                SpinnerWidget(id=f"spinner_{tab_id}", text="Processing command"),
-                VerticalScroll(
-                    Container(
-                        Static(id=f"dashboard_replay_{tab_id}", classes="dashboard_replay"),
-                        Static(id=f"dashboard_replay_start_end_{tab_id}", classes="dashboard_replay"),
-                        Horizontal(
-                            Button("⏪ Back", id=f"back_button_{tab_id}", classes="replay_button replay_back"),
-                            Button("⏸️  Pause", id=f"pause_button_{tab_id}", classes="replay_button replay_pause"),
-                            Button("⏩ Forward", id=f"forward_button_{tab_id}", classes="replay_button replay_forward"),
-                            Button("🔍 Seek", id=f"seek_button_{tab_id}", classes="replay_button replay_seek"),
-                            classes="button_container",
-                        ),
-                        id=f"dashboard_replay_container_{tab_id}",
-                        classes="dashboard_replay",
-                    ),
-                    Container(
-                        Center(
-                            Static(id=f"dashboard_section_1_{tab_id}", classes="dashboard_section_1"),
-                            Static(id=f"dashboard_section_2_{tab_id}", classes="dashboard_section_2_information"),
-                            Static(id=f"dashboard_section_3_{tab_id}", classes="dashboard_section_3"),
-                            Static(id=f"dashboard_section_5_{tab_id}", classes="dashboard_section_5"),
-                            Static(id=f"dashboard_section_4_{tab_id}", classes="dashboard_section_4"),
-                        ),
-                        Sparkline([], id=f"panel_dashboard_queries_qps_{tab_id}"),
-                        id=f"panel_dashboard_{tab_id}",
-                        classes="panel_container dashboard",
-                    ),
-                    Container(
-                        TabbedContent(id=f"metric_graph_tabs_{tab_id}", classes="metrics_host_tabs"),
-                        id=f"panel_graphs_{tab_id}",
-                        classes="panel_container",
-                    ),
-                    Container(
-                        Static(id=f"replication_container_title_{tab_id}", classes="replication_container_title"),
-                        Container(
-                            Label("[b]Replication\n"),
-                            Label(id=f"replication_variables_{tab_id}"),
-                            Center(
-                                ScrollableContainer(
-                                    Static(id=f"replication_status_{tab_id}"), classes="replication_status"
-                                ),
-                                ScrollableContainer(
-                                    Static(id=f"replication_thread_applier_{tab_id}"),
-                                    id=f"replication_thread_applier_container_{tab_id}",
-                                    classes="replication_thread_applier",
-                                ),
-                            ),
-                            id=f"replication_container_{tab_id}",
-                            classes="replication",
-                        ),
-                        Container(
-                            Label(id=f"group_replication_title_{tab_id}"),
-                            Label(id=f"group_replication_data_{tab_id}"),
-                            Container(id=f"group_replication_grid_{tab_id}"),
-                            id=f"group_replication_container_{tab_id}",
-                            classes="group_replication",
-                        ),
-                        Static(id=f"cluster_data_{tab_id}"),
-                        Container(
-                            Label(id=f"replicas_title_{tab_id}"),
-                            LoadingIndicator(id=f"replicas_loading_indicator_{tab_id}"),
-                            Container(id=f"replicas_grid_{tab_id}"),
-                            id=f"replicas_container_{tab_id}",
-                            classes="replicas",
-                        ),
-                        id=f"panel_replication_{tab_id}",
-                        classes="panel_container replication_panel",
-                    ),
-                    Container(
-                        Label(id=f"metadata_locks_title_{tab_id}"),
-                        DataTable(id=f"metadata_locks_datatable_{tab_id}", show_cursor=False, zebra_stripes=True),
-                        id=f"panel_metadata_locks_{tab_id}",
-                        classes="metadata_locks",
-                    ),
-                    Container(
-                        Label(id=f"ddl_title_{tab_id}"),
-                        DataTable(id=f"ddl_datatable_{tab_id}", show_cursor=False),
-                        id=f"panel_ddl_{tab_id}",
-                        classes="ddl",
-                    ),
-                    Container(
-                        Label(id=f"proxysql_hostgroup_summary_title_{tab_id}"),
-                        DataTable(
-                            id=f"proxysql_hostgroup_summary_datatable_{tab_id}",
-                            classes="proxysql_hostgroup_summary_datatable",
-                            show_cursor=False,
-                        ),
-                        id=f"panel_proxysql_hostgroup_summary_{tab_id}",
-                        classes="proxysql_hostgroup_summary",
-                    ),
-                    Container(
-                        Label(id=f"proxysql_mysql_query_rules_title_{tab_id}"),
-                        DataTable(
-                            id=f"proxysql_mysql_query_rules_datatable_{tab_id}",
-                            classes="proxysql_mysql_query_rules_datatable",
-                            show_cursor=False,
-                        ),
-                        id=f"panel_proxysql_mysql_query_rules_{tab_id}",
-                        classes="proxysql_mysql_query_rules",
-                    ),
-                    Container(
-                        Label(id=f"proxysql_command_stats_title_{tab_id}"),
-                        DataTable(
-                            id=f"proxysql_command_stats_datatable_{tab_id}",
-                            classes="proxysql_command_stats_datatable",
-                            show_cursor=False,
-                        ),
-                        id=f"panel_proxysql_command_stats_{tab_id}",
-                        classes="proxysql_command_stats",
-                    ),
-                    Container(
-                        Label(id=f"processlist_title_{tab_id}"),
-                        DataTable(id=f"processlist_data_{tab_id}", show_cursor=False),
-                        id=f"panel_processlist_{tab_id}",
-                        classes="processlist",
-                    ),
-                    classes="tab",
-                    id=f"main_container_{tab_id}",
-                ),
-                id=f"tab_{tab_id}",
-                name=tab_id,
-            ),
-        )
+        self.host_tabs.add_tab(TabWidget(intial_tab_name, id=tab_id))
 
         # Loop the metric instances and create the graph tabs
         for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
@@ -341,141 +352,132 @@ class TabManager:
             graph_names = metric_instance.graphs
             graph_tab_name = metric_instance.graph_tab_name
 
-            graph_tab = self.app.query(f"#graph_tab_{metric_tab_name}_{tab_id}")
+            graph_tab = self.app.query(f"#graph_tab_{metric_tab_name}")
             if not graph_tab:
-                await self.app.query_one(f"#metric_graph_tabs_{tab_id}", TabbedContent).add_pane(
+                await self.app.query_one("#metric_graph_tabs", TabbedContent).add_pane(
                     TabPane(
                         graph_tab_name,
-                        Label(id=f"stats_{metric_tab_name}_{tab_id}", classes="stats_data"),
-                        Horizontal(id=f"graph_container_{metric_tab_name}_{tab_id}"),
+                        Label(id=f"stats_{metric_tab_name}", classes="stats_data"),
+                        Horizontal(id=f"graph_container_{metric_tab_name}"),
                         Horizontal(
-                            id=f"switch_container_{metric_tab_name}_{tab_id}",
-                            classes=f"switch_container_{tab_id} switch_container",
+                            id=f"switch_container_{metric_tab_name}",
+                            classes="switch_container switch_container",
                         ),
-                        id=f"graph_tab_{metric_tab_name}_{tab_id}",
+                        id=f"graph_tab_{metric_tab_name}",
                         name=metric_tab_name,
                     )
                 )
-                # Save references to the labels
-                setattr(tab, metric_tab_name, self.app.query_one(f"#stats_{metric_tab_name}_{tab_id}"))
+
+            # Save references to the labels
+            setattr(tab, metric_tab_name, self.app.query_one(f"#stats_{metric_tab_name}"))
 
             for graph_name in graph_names:
-                await self.app.query_one(f"#graph_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
-                    MetricManager.Graph(id=f"{graph_name}_{tab_id}", classes="panel_data")
-                )
+                graph = self.app.query(f"#{graph_name}")
+                if not graph:
+                    await self.app.query_one(f"#graph_container_{metric_tab_name}", Horizontal).mount(
+                        MetricManager.Graph(id=f"{graph_name}", classes="panel_data")
+                    )
 
                 # Save references to the graphs
-                setattr(tab, graph_name, self.app.query_one(f"#{graph_name}_{tab_id}"))
+                setattr(tab, graph_name, self.app.query_one(f"#{graph_name}"))
 
             for metric, metric_data in metric_instance.__dict__.items():
-                if (
-                    isinstance(metric_data, MetricManager.MetricData)
-                    and metric_data.graphable
-                    and metric_data.create_switch
-                ):
-                    await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
-                        Label(metric_data.label)
-                    )
-                    await self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id}", Horizontal).mount(
-                        Switch(animate=False, id=metric, name=metric_tab_name)
-                    )
+                switch = self.app.query(f"#switch_container_{metric_tab_name} #{metric}")
 
-                    # Toggle the switch if the metric is visible (means to enable it by default)
-                    if metric_data.visible:
-                        self.app.query_one(f"#switch_container_{metric_tab_name}_{tab_id} #{metric}", Switch).toggle()
+                if not switch:
+                    if (
+                        isinstance(metric_data, MetricManager.MetricData)
+                        and metric_data.graphable
+                        and metric_data.create_switch
+                    ):
+                        await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
+                            Label(metric_data.label)
+                        )
+                        await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
+                            Switch(animate=False, id=metric, name=metric_tab_name)
+                        )
+
+                        # Toggle the switch if the metric is visible (means to enable it by default)
+                        if metric_data.visible:
+                            self.app.query_one(f"#switch_container_{metric_tab_name} #{metric}", Switch).toggle()
 
         if tab.manual_tab_name:
             self.rename_tab(tab, tab.manual_tab_name)
 
         # Save references to the widgets in the tab
-        tab.main_container = self.app.query_one(f"#main_container_{tab.id}", VerticalScroll)
-        tab.metric_graph_tabs = self.app.query_one(f"#metric_graph_tabs_{tab.id}", TabbedContent)
-        tab.loading_indicator = self.app.query_one(f"#loading_indicator_{tab.id}", LoadingIndicator)
-        tab.sparkline = self.app.query_one(f"#panel_dashboard_queries_qps_{tab.id}", Sparkline)
-        tab.panel_dashboard = self.app.query_one(f"#panel_dashboard_{tab.id}", Container)
-        tab.panel_graphs = self.app.query_one(f"#panel_graphs_{tab.id}", Container)
-        tab.panel_replication = self.app.query_one(f"#panel_replication_{tab.id}", Container)
-        tab.panel_metadata_locks = self.app.query_one(f"#panel_metadata_locks_{tab.id}", Container)
-        tab.panel_processlist = self.app.query_one(f"#panel_processlist_{tab.id}", Container)
-        tab.panel_ddl = self.app.query_one(f"#panel_ddl_{tab.id}", Container)
-        tab.panel_proxysql_hostgroup_summary = self.app.query_one(
-            f"#panel_proxysql_hostgroup_summary_{tab.id}", Container
-        )
-        tab.panel_proxysql_mysql_query_rules = self.app.query_one(
-            f"#panel_proxysql_mysql_query_rules_{tab.id}", Container
-        )
-        tab.panel_proxysql_command_stats = self.app.query_one(f"#panel_proxysql_command_stats_{tab.id}", Container)
+        tab.main_container = self.app.query_one("#main_container", VerticalScroll)
+        tab.metric_graph_tabs = self.app.query_one("#metric_graph_tabs", TabbedContent)
+        tab.loading_indicator = self.app.query_one("#loading_indicator", LoadingIndicator)
+        tab.sparkline = self.app.query_one("#panel_dashboard_queries_qps", Sparkline)
+        tab.panel_dashboard = self.app.query_one("#panel_dashboard", Container)
+        tab.panel_graphs = self.app.query_one("#panel_graphs", Container)
+        tab.panel_replication = self.app.query_one("#panel_replication", Container)
+        tab.panel_metadata_locks = self.app.query_one("#panel_metadata_locks", Container)
+        tab.panel_processlist = self.app.query_one("#panel_processlist", Container)
+        tab.panel_ddl = self.app.query_one("#panel_ddl", Container)
+        tab.panel_proxysql_hostgroup_summary = self.app.query_one("#panel_proxysql_hostgroup_summary", Container)
+        tab.panel_proxysql_mysql_query_rules = self.app.query_one("#panel_proxysql_mysql_query_rules", Container)
+        tab.panel_proxysql_command_stats = self.app.query_one("#panel_proxysql_command_stats", Container)
 
-        tab.spinner = self.app.query_one(f"#spinner_{tab.id}", SpinnerWidget)
+        tab.spinner = self.app.query_one("#spinner", SpinnerWidget)
         tab.spinner.hide()
 
-        tab.ddl_title = self.app.query_one(f"#ddl_title_{tab.id}", Label)
-        tab.ddl_datatable = self.app.query_one(f"#ddl_datatable_{tab.id}", DataTable)
-        tab.processlist_title = self.app.query_one(f"#processlist_title_{tab.id}", Label)
-        tab.processlist_datatable = self.app.query_one(f"#processlist_data_{tab.id}", DataTable)
-        tab.metadata_locks_title = self.app.query_one(f"#metadata_locks_title_{tab.id}", Label)
-        tab.metadata_locks_datatable = self.app.query_one(f"#metadata_locks_datatable_{tab.id}", DataTable)
-        tab.proxysql_hostgroup_summary_title = self.app.query_one(f"#proxysql_hostgroup_summary_title_{tab.id}", Static)
+        tab.ddl_title = self.app.query_one("#ddl_title", Label)
+        tab.ddl_datatable = self.app.query_one("#ddl_datatable", DataTable)
+        tab.processlist_title = self.app.query_one("#processlist_title", Label)
+        tab.processlist_datatable = self.app.query_one("#processlist_data", DataTable)
+        tab.metadata_locks_title = self.app.query_one("#metadata_locks_title", Label)
+        tab.metadata_locks_datatable = self.app.query_one("#metadata_locks_datatable", DataTable)
+        tab.proxysql_hostgroup_summary_title = self.app.query_one("#proxysql_hostgroup_summary_title", Static)
         tab.proxysql_hostgroup_summary_datatable = self.app.query_one(
-            f"#proxysql_hostgroup_summary_datatable_{tab.id}", DataTable
+            "#proxysql_hostgroup_summary_datatable", DataTable
         )
-        tab.proxysql_mysql_query_rules_title = self.app.query_one(f"#proxysql_mysql_query_rules_title_{tab.id}", Static)
+        tab.proxysql_mysql_query_rules_title = self.app.query_one("#proxysql_mysql_query_rules_title", Static)
         tab.proxysql_mysql_query_rules_datatable = self.app.query_one(
-            f"#proxysql_mysql_query_rules_datatable_{tab.id}", DataTable
+            "#proxysql_mysql_query_rules_datatable", DataTable
         )
-        tab.proxysql_command_stats_title = self.app.query_one(f"#proxysql_command_stats_title_{tab.id}", Static)
-        tab.proxysql_command_stats_datatable = self.app.query_one(
-            f"#proxysql_command_stats_datatable_{tab.id}", DataTable
-        )
+        tab.proxysql_command_stats_title = self.app.query_one("#proxysql_command_stats_title", Static)
+        tab.proxysql_command_stats_datatable = self.app.query_one("#proxysql_command_stats_datatable", DataTable)
 
-        tab.dashboard_replay_container = self.app.query_one(f"#dashboard_replay_container_{tab.id}", Container)
-        tab.dashboard_replay_start_end = self.app.query_one(f"#dashboard_replay_start_end_{tab.id}", Static)
-        tab.dashboard_replay = self.app.query_one(f"#dashboard_replay_{tab.id}", Static)
-        tab.dashboard_section_1 = self.app.query_one(f"#dashboard_section_1_{tab.id}", Static)
-        tab.dashboard_section_2 = self.app.query_one(f"#dashboard_section_2_{tab.id}", Static)
-        tab.dashboard_section_3 = self.app.query_one(f"#dashboard_section_3_{tab.id}", Static)
-        tab.dashboard_section_4 = self.app.query_one(f"#dashboard_section_4_{tab.id}", Static)
-        tab.dashboard_section_5 = self.app.query_one(f"#dashboard_section_5_{tab.id}", Static)
+        tab.dashboard_replay_container = self.app.query_one("#dashboard_replay_container", Container)
+        tab.dashboard_replay_start_end = self.app.query_one("#dashboard_replay_start_end", Static)
+        tab.dashboard_replay = self.app.query_one("#dashboard_replay", Static)
+        tab.dashboard_section_1 = self.app.query_one("#dashboard_section_1", Static)
+        tab.dashboard_section_2 = self.app.query_one("#dashboard_section_2", Static)
+        tab.dashboard_section_3 = self.app.query_one("#dashboard_section_3", Static)
+        tab.dashboard_section_4 = self.app.query_one("#dashboard_section_4", Static)
+        tab.dashboard_section_5 = self.app.query_one("#dashboard_section_5", Static)
 
-        tab.group_replication_container = self.app.query_one(f"#group_replication_container_{tab.id}", Container)
-        tab.group_replication_grid = self.app.query_one(f"#group_replication_grid_{tab.id}", Container)
+        tab.group_replication_container = self.app.query_one("#group_replication_container", Container)
+        tab.group_replication_grid = self.app.query_one("#group_replication_grid", Container)
 
-        tab.replicas_grid = self.app.query_one(f"#replicas_grid_{tab.id}", Container)
-        tab.replicas_container = self.app.query_one(f"#replicas_container_{tab.id}", Container)
+        tab.replicas_grid = self.app.query_one("#replicas_grid", Container)
+        tab.replicas_container = self.app.query_one("#replicas_container", Container)
 
-        tab.group_replication_data = self.app.query_one(f"#group_replication_data_{tab.id}", Static)
-        tab.group_replication_title = self.app.query_one(f"#group_replication_title_{tab.id}", Label)
-        tab.replicas_title = self.app.query_one(f"#replicas_title_{tab.id}", Label)
-        tab.replicas_loading_indicator = self.app.query_one(f"#replicas_loading_indicator_{tab.id}", LoadingIndicator)
+        tab.group_replication_data = self.app.query_one("#group_replication_data", Static)
+        tab.group_replication_title = self.app.query_one("#group_replication_title", Label)
+        tab.replicas_title = self.app.query_one("#replicas_title", Label)
+        tab.replicas_loading_indicator = self.app.query_one("#replicas_loading_indicator", LoadingIndicator)
 
-        tab.cluster_data = self.app.query_one(f"#cluster_data_{tab.id}", Static)
+        tab.cluster_data = self.app.query_one("#cluster_data", Static)
 
-        tab.replication_container_title = self.app.query_one(f"#replication_container_title_{tab.id}", Static)
-        tab.replication_container = self.app.query_one(f"#replication_container_{tab.id}", Container)
-        tab.replication_variables = self.app.query_one(f"#replication_variables_{tab.id}", Label)
-        tab.replication_status = self.app.query_one(f"#replication_status_{tab.id}", Static)
+        tab.replication_container_title = self.app.query_one("#replication_container_title", Static)
+        tab.replication_container = self.app.query_one("#replication_container", Container)
+        tab.replication_variables = self.app.query_one("#replication_variables", Label)
+        tab.replication_status = self.app.query_one("#replication_status", Static)
         tab.replication_thread_applier_container = self.app.query_one(
-            f"#replication_thread_applier_container_{tab.id}", ScrollableContainer
+            "#replication_thread_applier_container", ScrollableContainer
         )
-        tab.replication_thread_applier = self.app.query_one(f"#replication_thread_applier_{tab.id}", Static)
-
-        tab.sparkline.display = False
-        tab.main_container.display = False
-        tab.loading_indicator.display = False
+        tab.replication_thread_applier = self.app.query_one("#replication_thread_applier", Static)
 
         # By default, hide all the panels
         for panel in tab.dolphie.panels.all():
-            self.app.query_one(f"#panel_{panel}_{tab.id}").display = False
+            self.app.query_one(f"#panel_{panel}").display = False
 
         # Set panels to be visible for the ones the user specifies
         for panel in dolphie.startup_panels:
-            self.app.query_one(f"#panel_{panel}_{tab.id}").display = True
+            self.app.query_one(f"#panel_{panel}").display = True
             setattr(getattr(dolphie.panels, panel), "visible", True)
-
-        if dolphie.replay_file:
-            tab.dashboard_replay_container.display = True
-        else:
-            tab.dashboard_replay_container.display = False
 
         # Set what marker we use for graphs
         graphs = self.app.query(MetricManager.Graph)
@@ -494,7 +496,7 @@ class TabManager:
         return tab
 
     async def remove_tab(self, tab: Tab):
-        await self.host_tabs.remove_pane(f"tab_{tab.id}")
+        self.host_tabs.remove_tab(tab.id)
 
     def rename_tab(self, tab: Tab, new_name: str = None):
         if tab.dolphie.daemon_mode:
@@ -517,9 +519,10 @@ class TabManager:
         if new_name:
             tab.dolphie.tab_name = new_name
             tab.name = new_name
-            self.host_tabs.get_tab(f"tab_{tab.id}").label = new_name
 
-    def switch_tab(self, tab_id: int):
+            self.host_tabs.query(TabWidget).filter("#" + tab.id)[0].label = new_name
+
+    def switch_tab(self, tab_id: int, set_active: bool = True):
         tab = self.get_tab(tab_id)
         if not tab:
             return
@@ -527,10 +530,16 @@ class TabManager:
         # Update the active/current tab
         self.active_tab = tab
 
-        # Switch to the new tab in the UI
-        self.host_tabs.active = f"tab_{tab.id}"
+        if set_active:
+            self.host_tabs.active = tab_id
 
+        # Switch to the new tab in the UI
         self.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
+
+        if not tab.dolphie.main_db_connection.is_connected():
+            tab.main_container.display = False
+        else:
+            tab.main_container.display = True
 
     def get_tab(self, id: int) -> Tab:
         if id in self.tabs:
@@ -564,14 +573,14 @@ class TabManager:
 
         tab.dolphie.replica_manager.remove_all()
 
-        tab.main_container.display = False
-        tab.sparkline.display = False
-        tab.loading_indicator.display = False
+        if self.active_tab.id == tab.id:
+            tab.main_container.display = False
+            tab.loading_indicator.display = False
 
         tab.sparkline.data = [0]
 
         tab.replicas_title.update("")
-        for member in tab.dolphie.app.query(f".replica_container_{tab.id}"):
+        for member in tab.dolphie.app.query(".replica_container"):
             await member.remove()
 
         if update_topbar:

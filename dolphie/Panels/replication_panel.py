@@ -90,7 +90,7 @@ def create_panel(tab: Tab):
                                 classes=f"member_{tab.id}",
                             ),
                             id=f"member_container_{member_id}_{tab.id}",
-                            classes=f"member_container_{tab.id}",
+                            classes=f"member_container_{tab.id} member_container",
                         )
                     )
 
@@ -227,7 +227,7 @@ def create_replica_panel(tab: Tab):
                                 classes=f"replica_{tab.id}",
                             ),
                             id=f"replica_container_{replica.thread_id}_{tab.id}",
-                            classes=f"replica_container_{tab.id}",
+                            classes=f"replica_container_{tab.id} replica_container",
                         )
                     )
 

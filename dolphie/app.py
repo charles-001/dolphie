@@ -6,6 +6,7 @@
 # ****************************
 
 
+import asyncio
 import os
 import re
 import sys
@@ -65,7 +66,7 @@ from rich.traceback import Traceback
 from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
-from textual.widgets import Button, Switch, TabbedContent, TabPane
+from textual.widgets import Button, Switch, TabbedContent, TabPane, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
 try:
@@ -130,7 +131,11 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         tab.replay_manual_control = manual_control
-        if len(self.screen_stack) > 1 or (dolphie.pause_refresh and not manual_control):
+        if (
+            len(self.screen_stack) > 1
+            or (dolphie.pause_refresh and not manual_control)
+            or tab.id != self.tab_manager.active_tab.id
+        ):
             return
 
         # Get the next event from the replay file
@@ -259,6 +264,9 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if dolphie.panels.replication.visible:
+            if tab.id != self.tab_manager.active_tab.id:
+                return
+
             if dolphie.replica_manager.available_replicas:
                 if not dolphie.replica_manager.replicas:
                     tab.replicas_container.display = True
@@ -300,27 +308,14 @@ class DolphieApp(App):
                     or dolphie.pause_refresh
                     or not dolphie.main_db_connection.is_connected()
                     or dolphie.daemon_mode
+                    or tab.id != self.tab_manager.active_tab.id
                 ):
                     tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
 
                     return
 
-                # If the main container isn't displayed, it means we just connected
                 if not tab.main_container.display:
-                    tab.main_container.display = True
-                    tab.sparkline.display = True
-
-                    self.size_dashboard_sections(tab)
-
-                    # Hide all graph tabs so we can show the ones we want
-                    tabs = tab.metric_graph_tabs.query(TabPane)
-                    for graph_tab in tabs:
-                        tab.metric_graph_tabs.hide_tab(graph_tab.id)
-
-                    # Show the tabs that are for the current connection source
-                    for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
-                        if dolphie.connection_source in metric_instance.connection_source:
-                            tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}_{tab.id}")
+                    self.refresh_tab_properties()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -358,7 +353,7 @@ class DolphieApp(App):
 
             if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right
-                if len(self.screen_stack) > 1 or dolphie.pause_refresh:
+                if len(self.screen_stack) > 1 or dolphie.pause_refresh or tab.id != self.tab_manager.active_tab.id:
                     tab.replicas_worker_timer = self.set_timer(
                         dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
                     )
@@ -377,30 +372,17 @@ class DolphieApp(App):
             if event.state == WorkerState.SUCCESS:
                 self.monitor_read_only_change(tab)
 
-                if len(self.screen_stack) > 1 or (dolphie.pause_refresh and not tab.replay_manual_control):
+                if (
+                    len(self.screen_stack) > 1
+                    or (dolphie.pause_refresh and not tab.replay_manual_control)
+                    or tab.id != self.tab_manager.active_tab.id
+                ):
                     tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_replay, tab.id))
 
                     return
 
-                # If the main container isn't displayed, it means this is the first loop
                 if not tab.main_container.display:
-                    tab.main_container.display = True
-                    tab.sparkline.display = True
-
-                    self.size_dashboard_sections(tab)
-
-                    # Hide all graph tabs so we can show the ones we want
-                    tabs = tab.metric_graph_tabs.query(TabPane)
-                    for graph_tab in tabs:
-                        tab.metric_graph_tabs.hide_tab(graph_tab.id)
-
-                    # Show the tabs that are for the current connection source
-                    for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
-                        if (
-                            dolphie.connection_source in metric_instance.connection_source
-                            and metric_instance.use_with_replay
-                        ):
-                            tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}_{tab.id}")
+                    self.refresh_tab_properties()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -671,14 +653,14 @@ class DolphieApp(App):
         if dolphie.panels.graphs.visible:
             # Hide/show replication tab based on replication status
             if dolphie.replication_status:
-                tab.metric_graph_tabs.show_tab(f"graph_tab_replication_lag_{tab.id}")
+                tab.metric_graph_tabs.show_tab("graph_tab_replication_lag")
             else:
-                tab.metric_graph_tabs.hide_tab(f"graph_tab_replication_lag_{tab.id}")
+                tab.metric_graph_tabs.hide_tab("graph_tab_replication_lag")
 
-            if dolphie.metric_manager.metrics.locks.metadata_lock_count.values:
-                tab.metric_graph_tabs.show_tab(f"graph_tab_locks_{tab.id}")
+            if (dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible) or dolphie.replay_file:
+                tab.metric_graph_tabs.show_tab("graph_tab_locks")
             else:
-                tab.metric_graph_tabs.hide_tab(f"graph_tab_locks_{tab.id}")
+                tab.metric_graph_tabs.hide_tab("graph_tab_locks")
 
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
@@ -730,11 +712,18 @@ class DolphieApp(App):
             self.run_worker_main(tab.id)
             self.run_worker_replicas(tab.id)
 
+        # Wait for all workers to finish before notifying the user
+        await asyncio.sleep(0.2)
+        for tab in self.tab_manager.tabs.values():
+            while tab.worker_running:
+                await asyncio.sleep(0.1)
+
         self.loading_hostgroups = False
         self.notify(f"Finished connecting to hosts in hostgroup [highlight]{hostgroup}", severity="success")
 
     async def on_mount(self):
         self.tab_manager = TabManager(app=self.app, config=self.config)
+        await self.tab_manager.create_ui_widgets()
 
         if self.config.hostgroup:
             self.connect_as_hostgroup(self.config.hostgroup)
@@ -814,9 +803,62 @@ class DolphieApp(App):
             command_get_input,
         )
 
-    @on(TabbedContent.TabActivated, "#host_tabs")
+    def refresh_tab_properties(self):
+        tab = self.tab_manager.active_tab
+        tab.main_container.display = True
+
+        self.size_dashboard_sections(tab)
+
+        # Hide all graph tabs so we can show the ones we want
+        tabs = tab.metric_graph_tabs.query(TabPane)
+        for graph_tab in tabs:
+            tab.metric_graph_tabs.hide_tab(graph_tab.id)
+
+        # Show the tabs that are for the current connection source
+        for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
+            if tab.dolphie.connection_source in metric_instance.connection_source:
+                tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
+
+        if tab.dolphie.replay_file:
+            tab.dashboard_replay_container.display = True
+        else:
+            tab.dashboard_replay_container.display = False
+
+    @on(Tabs.TabActivated, "#host_tabs")
     def tab_changed(self, event: TabbedContent.TabActivated):
-        self.tab_manager.switch_tab(event.pane.name)
+        self.tab_manager.switch_tab(event.tab.id, set_active=False)
+
+        tab = self.tab_manager.active_tab
+        if tab and tab.worker and (tab.dolphie.main_db_connection.is_connected() or tab.dolphie.replay_file):
+            if tab.dolphie.connection_source == ConnectionSource.mysql:
+                self.refresh_screen_mysql(tab)
+            elif tab.dolphie.connection_source == ConnectionSource.proxysql:
+                self.refresh_screen_proxysql(tab)
+
+            self.refresh_tab_properties()
+
+            # Set each panel's display status based on the tab's panel visibility
+            for panel in tab.dolphie.panels.get_all_panels():
+                tab_panel = tab.get_panel_widget(panel.name)
+                tab_panel.display = getattr(tab.dolphie.panels, panel.name).visible
+
+            # Set the display state for the replica container based on whether there are replicas
+            tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
+            if tab.replicas_container.display:
+                replicas = self.query(".replica_container")
+                for replica in replicas:
+                    replica.display = tab.id in replica.id
+
+                tab.replicas_title.update(
+                    f"[b]Replicas ([highlight]{len(tab.dolphie.replica_manager.available_replicas)}[/highlight])\n"
+                )
+
+            # Set the display state for the group replication container based on whether there are members
+            tab.group_replication_container.display = bool(tab.dolphie.group_replication_members)
+            if tab.group_replication_container.display:
+                members = self.query(".member_container")
+                for member in members:
+                    member.display = tab.id in member.id
 
     @on(TabbedContent.TabActivated, ".metrics_host_tabs")
     def metric_tab_changed(self, event: TabbedContent.TabActivated):
@@ -985,14 +1027,20 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1 or not self.tab_manager.active_tab:
             return
 
-        metric_instance_name = event.switch.name
+        event_metric_instance_name = event.switch.name
         metric = event.switch.id
 
-        metric_instance = getattr(self.tab_manager.active_tab.dolphie.metric_manager.metrics, metric_instance_name)
-        metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
-        metric_data.visible = event.value
+        # Loop all metric instances and set the visibility of the metric
+        for tab in self.tab_manager.tabs.values():
+            for metric_instance_name, metric_instance in tab.dolphie.metric_manager.metrics.__dict__.items():
+                if (
+                    tab.dolphie.connection_source in metric_instance.connection_source
+                    and event_metric_instance_name == metric_instance_name
+                ):
+                    metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+                    metric_data.visible = event.value
 
-        self.update_graphs(metric_instance_name)
+        self.update_graphs(event_metric_instance_name)
 
     async def on_key(self, event: events.Key):
         if len(self.screen_stack) > 1:
@@ -1076,16 +1124,27 @@ class DolphieApp(App):
 
             tab.replicas_container.display = False
             if not dolphie.panels.replication.visible:
-                for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
-                    member.remove()
+                queries = [f".replica_container_{dolphie.tab_id}", f".member_container_{dolphie.tab_id}"]
+                for query in queries:
+                    for member in dolphie.app.query(query):
+                        member.remove()
             else:
                 if dolphie.replica_manager.available_replicas:
                     tab.replicas_container.display = True
+                    for member in dolphie.app.query(".replica_container"):
+                        member.display = False
+
                     tab.replicas_title.update(
                         f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
                         " replicas...\n"
                     )
                     tab.replicas_loading_indicator.display = True
+
+                if dolphie.group_replication_members:
+                    tab.group_replication_container.display = True
+                    for member in dolphie.app.query(".member_container"):
+                        member.display = False
+
         elif key == "5":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_mysql_query_rules.name)
@@ -1130,8 +1189,9 @@ class DolphieApp(App):
                 self.run_worker_main(tab.id)
         elif key == "plus":
             new_tab = await self.tab_manager.create_tab(tab_name="New Tab")
-            self.tab_manager.topbar.host = ""
+            self.tab_manager.switch_tab(new_tab.id)
             self.tab_manager.setup_host_tab(new_tab)
+
         elif key == "equals_sign":
 
             def command_get_input(tab_name):
@@ -1156,20 +1216,16 @@ class DolphieApp(App):
                 self.tab_manager.tabs.pop(tab.id, None)
         elif key == "left":
             if dolphie.replay_file:
-                self.query_one(f"#back_button_{tab.id}", Button).press()
+                self.query_one("#back_button", Button).press()
         elif key == "right":
             if dolphie.replay_file:
-                self.query_one(f"#forward_button_{tab.id}", Button).press()
+                self.query_one("#forward_button", Button).press()
 
         elif key == "ctrl+a" or key == "ctrl+d":
-            all_tabs = [tab.id for tab in self.tab_manager.get_all_tabs()]
-
             if key == "ctrl+a":
-                switch_to_tab = all_tabs[(all_tabs.index(tab.id) - 1) % len(all_tabs)]
+                self.tab_manager.host_tabs.action_previous_tab()
             elif key == "ctrl+d":
-                switch_to_tab = all_tabs[(all_tabs.index(tab.id) + 1) % len(all_tabs)]
-
-            self.tab_manager.switch_tab(switch_to_tab)
+                self.tab_manager.host_tabs.action_next_tab()
 
         elif key == "a":
             if dolphie.show_additional_query_columns:
@@ -1326,7 +1382,7 @@ class DolphieApp(App):
 
         elif key == "p":
             if dolphie.replay_file:
-                self.query_one(f"#pause_button_{tab.id}", Button).press()
+                self.query_one("#pause_button", Button).press()
             else:
                 if not dolphie.pause_refresh:
                     dolphie.pause_refresh = True
@@ -1387,7 +1443,7 @@ class DolphieApp(App):
 
         elif key == "S":
             if dolphie.replay_file:
-                self.query_one(f"#seek_button_{tab.id}", Button).press()
+                self.query_one("#seek_button", Button).press()
 
         elif key == "t":
 
@@ -2053,7 +2109,7 @@ class DolphieApp(App):
 
     def compose(self):
         yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for help")
-        yield TabbedContent(id="host_tabs")
+        yield Tabs(id="host_tabs")
 
 
 def setup_logger(config: Config):

@@ -262,8 +262,9 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
             thread["query"] = thread["trx_query"]
         thread["query"] = "" if thread["query"] is None else thread["query"]
 
-        host = thread["host"].split(":")[0]
-        thread["host"] = dolphie.get_hostname(host)
+        if thread["host"]:
+            host = thread["host"].split(":")[0]
+            thread["host"] = dolphie.get_hostname(host)
 
         # Remove trx_query from the thread data since it's not needed
         thread.pop("trx_query", None)

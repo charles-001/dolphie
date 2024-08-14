@@ -24,8 +24,6 @@ def create_panel(tab: Tab) -> Table:
     table.add_column(min_width=15)
     table.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
     table.add_row("[label]Uptime", str(timedelta(seconds=global_status["ProxySQL_Uptime"])))
-    if not dolphie.replay_file:
-        table.add_row("[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)")
     table.add_row(
         "[label]MySQL",
         (
@@ -35,8 +33,10 @@ def create_panel(tab: Tab) -> Table:
     )
     table.add_row(
         "[label]Latency",
-        f"[label]CP Avg[/label] {round(global_status['proxysql_backend_host_average_latency'] / 1000, 2)}ms",
+        f"[label]CP Avg[/label] {round(global_status.get('proxysql_backend_host_average_latency', 0) / 1000, 2)}ms",
     )
+    if not dolphie.replay_file:
+        table.add_row("[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)")
     tab.dashboard_section_1.update(table)
 
     ##########################
