@@ -1316,7 +1316,7 @@ class DolphieApp(App):
 
                 # Generate the filename with a timestamp prefix
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                filename = f"{timestamp}_processlist.csv"
+                filename = f"processlist-{timestamp}.csv"
 
                 # Write the CSV to a file
                 with open(filename, "w", newline="") as csvfile:
@@ -1328,7 +1328,7 @@ class DolphieApp(App):
                         writer.writerow(process_thread.thread_data)
 
                 self.notify(
-                    f"Processlist has been exported to a CSV file [highlight]{filename}", severity="success", timeout=10
+                    f"Processlist has been exported to CSV file [highlight]{filename}", severity="success", timeout=10
                 )
             else:
                 self.notify("There's no processlist data to export", severity="warning")
