@@ -13,7 +13,7 @@ from dolphie.DataTypes import (
 )
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
-from dolphie.Modules.Functions import minify_query
+from dolphie.Modules.Functions import format_bytes, minify_query
 from loguru import logger
 
 
@@ -214,6 +214,10 @@ class ReplayManager:
                 f"Replay database metadata - Host: {row[0]}, Version: {row[1]} ({row[2]}), Dolphie: {app_version}"
             )
 
+            if row[5]:
+                self.compression_dict = zstd.ZstdCompressionDict(row[5])
+                logger.info(f"ZSTD compression dictionary loaded (size: {format_bytes(len(row[5]), color=False)})")
+
             if self.dolphie.daemon_mode:
                 # Avoid mixing Dolphie versions in the same replay file. Never know what I might
                 # change in the future :)
@@ -260,7 +264,12 @@ class ReplayManager:
         Returns:
             bytes: The created compression dictionary.
         """
-        compression_dict = zstd.train_dictionary(20971520, self.dict_samples, level=5)
+        compression_dict = zstd.train_dictionary(10485760, self.dict_samples, level=5)
+
+        logger.info(
+            f"ZSTD compression dictionary trained with {len(self.dict_samples)} samples "
+            f"(size: {format_bytes(len(compression_dict), color=False)})"
+        )
 
         # Store the compression dictionary in the metadata table to be used with decompression
         self.cursor.execute("UPDATE metadata SET compression_dict = ?", (compression_dict.as_bytes(),))
