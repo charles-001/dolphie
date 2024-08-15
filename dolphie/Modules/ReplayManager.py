@@ -64,6 +64,8 @@ class ReplayManager:
         self.max_id = None
         self.last_purge_time = datetime.now() - timedelta(hours=1)  # Initialize to an hour ago
         self.replay_file_size = 0
+        self.compression_dict = None
+        self.dict_samples = []
 
         # Determine filename used for replay file
         if dolphie.replay_file:
@@ -112,7 +114,8 @@ class ReplayManager:
                 host_version VARCHAR(255),
                 host_distro VARCHAR(255),
                 connection_source VARCHAR(255),
-                dolphie_version VARCHAR(255)
+                dolphie_version VARCHAR(255),
+                compression_dict BLOB
             )"""
         )
 
@@ -206,6 +209,7 @@ class ReplayManager:
         else:
             connection_source = row[3]
             app_version = row[4]
+
             logger.info(
                 f"Replay database metadata - Host: {row[0]}, Version: {row[1]} ({row[2]}), Dolphie: {app_version}"
             )
@@ -245,23 +249,41 @@ class ReplayManager:
             self.dolphie.host_version = row[1]
             self.dolphie.host_distro = row[2]
             self.dolphie.connection_source = row[3]
+            self.compression_dict = zstd.ZstdCompressionDict(row[5])
         else:
             raise Exception("Metadata not found in replay file.")
 
-    def _compress_data(self, data: str):
+    def _train_compression_dict(self) -> bytes:
         """
-        Compresses data using zstd.
+        Creates a compression dictionary based on sample data to help with better compression.
+
+        Returns:
+            bytes: The created compression dictionary.
+        """
+        compression_dict = zstd.train_dictionary(20971520, self.dict_samples, level=5)
+
+        # Store the compression dictionary in the metadata table to be used with decompression
+        self.cursor.execute("UPDATE metadata SET compression_dict = ?", (compression_dict.as_bytes(),))
+
+        return compression_dict
+
+    def _compress_data(self, data: str) -> bytes:
+        """
+        Compresses data using zstd with an optional compression dictionary.
 
         Args:
             data (str): Data to compress.
+            dict_bytes (bytes, optional): The compression dictionary.
 
         Returns:
             bytes: Compressed data.
         """
-        compressor = zstd.ZstdCompressor(level=5)
+
+        compressor = zstd.ZstdCompressor(level=5, dict_data=self.compression_dict)
+
         return compressor.compress(data)
 
-    def _decompress_data(self, compressed_data: bytes):
+    def _decompress_data(self, compressed_data: bytes) -> bytes:
         """
         Decompresses data using zstd.
 
@@ -271,7 +293,9 @@ class ReplayManager:
         Returns:
             str: Decompressed data.
         """
-        decompressor = zstd.ZstdDecompressor()
+
+        decompressor = zstd.ZstdDecompressor(dict_data=self.compression_dict)
+
         return decompressor.decompress(compressed_data)
 
     def _condition_metrics(self, metric_manager: MetricManager.MetricManager):
@@ -367,12 +391,24 @@ class ReplayManager:
                 }
             )
 
+        data_dict_bytes = orjson.dumps(data_dict)
+
+        # Store the first 10 samples to create a compression dictionary via training
+        if not self.compression_dict:
+            if len(self.dict_samples) < 10:
+                self.dict_samples.append(data_dict_bytes)
+            else:
+                self.compression_dict = self._train_compression_dict()
+
+                # Remove the samples to save memory
+                del self.dict_samples
+
         # Execute the SQL insert using the constructed dictionary
         self.cursor.execute(
             "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
             (
                 timestamp,
-                self._compress_data(orjson.dumps(data_dict)),
+                self._compress_data(data_dict_bytes),
             ),
         )
 
