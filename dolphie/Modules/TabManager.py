@@ -534,6 +534,7 @@ class TabManager:
         # Update the active/current tab
         self.active_tab = tab
 
+        # Prevent recursive calls
         if set_active:
             self.host_tabs.active = tab_id
 

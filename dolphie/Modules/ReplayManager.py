@@ -253,7 +253,9 @@ class ReplayManager:
             self.dolphie.host_version = row[1]
             self.dolphie.host_distro = row[2]
             self.dolphie.connection_source = row[3]
-            self.compression_dict = zstd.ZstdCompressionDict(row[5])
+
+            if row[5]:
+                self.compression_dict = zstd.ZstdCompressionDict(row[5])
         else:
             raise Exception("Metadata not found in replay file.")
 
