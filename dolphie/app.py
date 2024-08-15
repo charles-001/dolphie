@@ -7,6 +7,7 @@
 
 
 import asyncio
+import csv
 import os
 import re
 import sys
@@ -1063,6 +1064,7 @@ class DolphieApp(App):
                 "5",
                 "a",
                 "c",
+                "E",
                 "f",
                 "p",
                 "r",
@@ -1082,6 +1084,7 @@ class DolphieApp(App):
                 "4",
                 "a",
                 "c",
+                "E",
                 "f",
                 "p",
                 "r",
@@ -1304,6 +1307,31 @@ class DolphieApp(App):
                     )
                 else:
                     self.notify("Error log command requires MySQL 8+ with Performance Schema enabled")
+        elif key == "E":
+            processlist = dolphie.processlist_threads_snapshot or dolphie.processlist_threads
+            if processlist:
+                # Extract headers from the first entry's thread_data
+                first_entry = next(iter(processlist.values()))
+                headers = list(first_entry.thread_data.keys())
+
+                # Generate the filename with a timestamp prefix
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"{timestamp}_processlist.csv"
+
+                # Write the CSV to a file
+                with open(filename, "w", newline="") as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=headers)
+
+                    # Write the headers and rows
+                    writer.writeheader()
+                    for process_thread in processlist.values():
+                        writer.writerow(process_thread.thread_data)
+
+                self.notify(
+                    f"Processlist has been exported to a CSV file [highlight]{filename}", severity="success", timeout=10
+                )
+            else:
+                self.notify("There's no processlist data to export", severity="warning")
 
         elif key == "f":
 

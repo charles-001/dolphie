@@ -1,6 +1,7 @@
 import ipaddress
 import socket
 from datetime import datetime
+from typing import Dict, Union
 
 import dolphie.DataTypes as DataTypes
 import dolphie.Modules.MetricManager as MetricManager
@@ -71,8 +72,12 @@ class Dolphie:
         self.worker_processing_time: float = 0
         self.polling_latency: float = 0
         self.connection_status: DataTypes.ConnectionStatus = None
-        self.processlist_threads: dict = {}
-        self.processlist_threads_snapshot: dict = {}
+        self.processlist_threads: Dict[int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]] = (
+            {}
+        )
+        self.processlist_threads_snapshot: Dict[
+            int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]
+        ] = {}
         self.lock_transactions: dict = {}
         self.metadata_locks: dict = {}
         self.ddl: list = []
