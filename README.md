@@ -211,15 +211,15 @@ You have flexibility in how you run Dolphie in the background; personally, I pre
 
 Here's some examples of log messages you might see:
 ```
+[INFO] Starting Dolphie v6.0.0 in daemon mode with a refresh interval of 1s
+[INFO] Log file: /var/log/dolphie/dolphie.log
 [INFO] Connected to MySQL with Process ID 324
 [INFO] Replay SQLite file: /var/lib/dolphie/replays/localhost/daemon.db (24 hours retention)
 [INFO] Connected to SQLite
 [INFO] Replay database metadata - Host: localhost:3306, Version: 8.0.34 (Percona Server), Dolphie: 6.0.0
 [INFO] ZSTD compression dictionary trained with 10 samples (size: 52.56KB)
 [WARNING] Read-only mode changed: R/W -> RO
-[WARNING] Read-only mode changed: RO -> R/W
-[INFO] Global variable long_query_time changed: 0.000000 -> 2000.000000
-[INFO] Global variable long_query_time changed: 2000.000000 -> 0.000000
+[INFO] Global variable innodb_io_capacity changed: 1000 -> 2000
 ```
 
 ## Hostgroups
