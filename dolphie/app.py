@@ -1307,12 +1307,13 @@ class DolphieApp(App):
                     )
                 else:
                     self.notify("Error log command requires MySQL 8+ with Performance Schema enabled")
+
         elif key == "E":
             processlist = dolphie.processlist_threads_snapshot or dolphie.processlist_threads
             if processlist:
                 # Extract headers from the first entry's thread_data
                 first_entry = next(iter(processlist.values()))
-                headers = list(first_entry.thread_data.keys())
+                headers = first_entry.thread_data.keys()
 
                 # Generate the filename with a timestamp prefix
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
