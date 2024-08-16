@@ -115,8 +115,6 @@ class Tab:
     proxysql_command_stats_title: Static = None
     proxysql_command_stats_datatable: DataTable = None
 
-    cluster_data: Static = None
-
     def get_panel_widget(self, panel_name: str) -> Container:
         return getattr(self, f"panel_{panel_name}")
 
@@ -225,7 +223,6 @@ class TabManager:
                         id="group_replication_container",
                         classes="group_replication",
                     ),
-                    Static(id="cluster_data"),
                     Container(
                         Label(id="replicas_title"),
                         LoadingIndicator(id="replicas_loading_indicator"),
@@ -458,8 +455,6 @@ class TabManager:
         tab.replicas_title = self.app.query_one("#replicas_title", Label)
         tab.replicas_loading_indicator = self.app.query_one("#replicas_loading_indicator", LoadingIndicator)
 
-        tab.cluster_data = self.app.query_one("#cluster_data", Static)
-
         tab.replication_container_title = self.app.query_one("#replication_container_title", Static)
         tab.replication_container = self.app.query_one("#replication_container", Container)
         tab.replication_variables = self.app.query_one("#replication_variables", Label)
@@ -472,7 +467,6 @@ class TabManager:
         tab.replication_container.display = False
         tab.replicas_container.display = False
         tab.group_replication_container.display = False
-        tab.cluster_data.display = False
 
         # By default, hide all the panels
         for panel in tab.dolphie.panels.all():
@@ -502,11 +496,12 @@ class TabManager:
     async def remove_tab(self, tab: Tab):
         self.host_tabs.remove_tab(tab.id)
 
-    def rename_tab(self, tab: Tab, new_name: str = None):
+    def rename_tab(self, tab: Tab, manual_name: str = None):
         if tab.dolphie.daemon_mode:
             return
 
-        if not new_name and not tab.manual_tab_name:
+        new_name = None
+        if not manual_name and not tab.manual_tab_name:
             # host_with_port is the full host:port string, we want to split & truncate it to 24 characters
             host = tab.dolphie.host_with_port.split(":")[0][:24]
             if not host:
@@ -517,12 +512,16 @@ class TabManager:
                 host = host[:-1]
 
             new_name = f"{host}:[dark_gray]{tab.dolphie.port}"
-        elif new_name:
-            tab.manual_tab_name = new_name
+        elif manual_name:
+            new_name = manual_name
+        elif tab.manual_tab_name:
+            new_name = tab.manual_tab_name
 
         if new_name:
-            tab.dolphie.tab_name = new_name
             tab.name = new_name
+
+            if tab.dolphie.replay_file:
+                new_name = f"[b recording][Replay][/b recording] {new_name}"
 
             self.host_tabs.query(TabWidget).filter("#" + tab.id)[0].label = new_name
 
@@ -588,7 +587,8 @@ class TabManager:
         tab.replication_container.display = False
         tab.replicas_container.display = False
         tab.group_replication_container.display = False
-        tab.cluster_data.display = False
+
+        tab.dolphie.replay_file = None
 
         # Remove all the replica and member containers
         queries = [f".replica_container_{tab.id}", f".member_container_{tab.id}"]

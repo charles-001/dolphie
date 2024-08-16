@@ -25,7 +25,7 @@ class TopBar(Container):
 
     def _update_topbar_host(self):
         recording_text = (
-            f"| [b #ff5e5e]RECORDING[/b #ff5e5e]: {format_bytes(self.replay_file_size)}"
+            f"| [b recording]RECORDING[/b recording]: {format_bytes(self.replay_file_size)}"
             if self.replay_file_size
             else ""
         )

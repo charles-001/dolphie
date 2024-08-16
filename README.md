@@ -34,7 +34,7 @@
 
 
 ## Installation
-Requires Python 3.8+
+Requires Python 3.8.1+
 
 #### Using PyPi
 ```shell
@@ -180,22 +180,20 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 - RDS MariaDB
 
 ## Supported MySQL versions
-- MySQL/Percona Server 5.6/5.7/8.0+/8.4+
-- RDS MySQL & Aurora + Azure
+- MySQL/Percona Server 5.6/5.7/8.x/9.x
+- RDS MySQL & Aurora/Azure
 
 ## MySQL Grants required
 #### Least privilege
 1. PROCESS (only if you switch to using processlist via `P` command)
 2. SELECT to `performance_schema` + `pt-heartbeat table` (if used)
 3. REPLICATION CLIENT/REPLICATION SLAVE
-4. BACKUP_ADMIN (MySQL 8 only)
 
 #### Recommended
 1. PROCESS (only if you switch to using processlist via `P` command)
 2. Global SELECT access (good for explaining queries, listing all databases, etc)
 4. REPLICATION CLIENT/REPLICATION SLAVE
 5. SUPER (required if you want to kill queries)
-6. BACKUP_ADMIN (MySQL 8 only)
 
 ## Record & Replay
 Have you ever wished you could view the process list and various other related statistics from a specific moment in time? Perhaps during a database stall that led to an incident, and your monitoring tools failed to identify the root cause? Well, you're in luck! Dolphie has a Replay system that lets you do just that.

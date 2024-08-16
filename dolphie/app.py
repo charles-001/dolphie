@@ -106,6 +106,8 @@ class DolphieApp(App):
                 "b highlight": "b #91abec",
                 "bold red": "b #fd8383",
                 "b light_blue": "b #bbc8e8",
+                "recording": "#ff5e5e",
+                "b recording": "b #ff5e5e",
                 "panel_border": "#6171a6",
                 "table_border": "#333f62",
             }
@@ -1227,6 +1229,7 @@ class DolphieApp(App):
         elif key == "equals_sign":
 
             def command_get_input(tab_name):
+                tab.manual_tab_name = tab_name
                 self.tab_manager.rename_tab(tab, tab_name)
 
             self.app.push_screen(

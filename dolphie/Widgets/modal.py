@@ -201,7 +201,7 @@ class CommandModal(ModalScreen):
             return
 
         modal_input = self.query_one("#modal_input", Input).value
-        if not modal_input:
+        if not modal_input and self.command != HotkeyCommands.rename_tab:
             self.update_error_response("Input cannot be empty")
             return
 

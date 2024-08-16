@@ -22,7 +22,6 @@ class Dolphie:
         self.app_version = config.app_version
 
         self.tab_id: int = None
-        self.tab_name: str = None
 
         # Config options
         self.user = config.user

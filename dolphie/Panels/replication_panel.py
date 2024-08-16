@@ -7,9 +7,7 @@ from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
-from rich import box
 from rich.align import Align
-from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
 from textual.containers import ScrollableContainer
@@ -100,24 +98,6 @@ def create_panel(tab: Tab):
                 if member_id not in existing_member_ids:
                     tab.dolphie.app.query_one(f"#{existing_member.parent.id}").remove()
 
-    def create_cluster_panel():
-        if not dolphie.galera_cluster:
-            tab.cluster_data.display = False
-            return None
-
-        tab.cluster_data.display = True
-        tab.cluster_data.update(
-            Panel(
-                Align.center(
-                    "\n[b light_blue]State[/b light_blue] "
-                    f" {dolphie.global_status.get('wsrep_local_state_comment', 'N/A')}\n"
-                ),
-                title="[b white]Cluster",
-                box=box.HORIZONTALS,
-                border_style="panel_border",
-            )
-        )
-
     def create_replication_panel():
         if not dolphie.replication_status:
             tab.replication_container.display = False
@@ -190,7 +170,6 @@ def create_panel(tab: Tab):
         tab.replication_status.update(create_replication_table(tab))
 
     create_replication_panel()
-    create_cluster_panel()
     create_group_replication_panel()
 
 
