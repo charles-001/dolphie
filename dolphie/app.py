@@ -512,6 +512,7 @@ class DolphieApp(App):
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
         if dolphie.is_mysql_version_at_least("5.7"):
+            dolphie.metadata_locks = {}
             if dolphie.metadata_locks_enabled and (dolphie.panels.metadata_locks.visible or dolphie.record_for_replay):
                 dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
 
@@ -795,9 +796,9 @@ class DolphieApp(App):
         def command_get_input(timestamp: str):
             if timestamp:
                 tab = self.tab_manager.active_tab
-                response = tab.replay_manager.seek_to_timestamp(timestamp)
+                found_timestamp = tab.replay_manager.seek_to_timestamp(timestamp)
 
-                if response:
+                if found_timestamp:
                     self.force_refresh_for_replay()
 
         self.app.push_screen(

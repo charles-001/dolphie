@@ -866,9 +866,8 @@ class MetricManager:
                         self.proxysql_total_command_stats[key] = int(value)
 
     def update_metrics_replication_lag(self):
-        if self.replication_status:
-            metric_instance = self.metrics.replication_lag
-            self.add_metric(metric_instance.lag, self.replication_status.get("Seconds_Behind", 0))
+        metric_instance = self.metrics.replication_lag
+        self.add_metric(metric_instance.lag, self.replication_status.get("Seconds_Behind", 0))
 
     def update_metrics_adaptive_hash_index_hit_ratio(self):
         hit_ratio = self.get_metric_adaptive_hash_index(format=False)
