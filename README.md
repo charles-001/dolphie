@@ -12,25 +12,11 @@
   </a>
 </p>
 
-![Untitled](https://github.com/charles-001/dolphie/assets/13244625/d1292ddc-146c-413c-8a15-9d0cc928ab50)
+<img width="2032" alt="Screenshot 2024-08-19 at 1 53 39 AM" src="https://github.com/user-attachments/assets/2c5eef42-b78f-4ac4-b7b8-ffe64cab5bae">
 <p></p>
-<img width="1498" alt="Screenshot 2024-02-05 at 6 05 46 AM" src="https://github.com/charles-001/dolphie/assets/13244625/d35ab166-dc80-4911-ab78-66b4085c01de">
+<video src='https://github.com/user-attachments/assets/0818485e-f290-4ac4-95d4-8fdc25bb1124' />
 <p></p>
-<img width="1498" alt="Screenshot 2024-02-05 at 6 06 06 AM" src="https://github.com/charles-001/dolphie/assets/13244625/3afca5ce-f8e0-44a9-96a4-a5b27fb5d29b">
-<p></p>
-<img width="1558" alt="Screenshot 2024-02-12 at 8 52 32 AM" src="https://github.com/charles-001/dolphie/assets/13244625/8d6b98f5-0d0a-47b2-a538-9255ae46c393">
-<p></p>
-<img width="1500" alt="Screenshot 2024-02-05 at 6 07 41 AM" src="https://github.com/charles-001/dolphie/assets/13244625/5fbb21e2-a442-4d5d-8b40-f33546fb8b2e">
-<p></p>
-<img width="1496" alt="Screenshot 2024-02-05 at 6 08 17 AM" src="https://github.com/charles-001/dolphie/assets/13244625/afea5a1f-5b3e-454c-8b81-ba177c61dd56">
-<p></p>
-<img width="1500" alt="Screenshot 2024-02-05 at 6 14 14 AM" src="https://github.com/charles-001/dolphie/assets/13244625/27b57485-a6ad-44a6-8f9d-cfeed6a5dc65">
-<p></p>
-<img width="1503" alt="Screenshot 2024-02-05 at 6 08 36 AM" src="https://github.com/charles-001/dolphie/assets/13244625/89a02467-869c-45ca-9863-aaed333397f5">
-<p></p>
-<img width="1496" alt="Screenshot 2024-02-05 at 6 08 55 AM" src="https://github.com/charles-001/dolphie/assets/13244625/c707bfcd-f7d9-4868-a907-e7fb72929bd7">
-<p></p>
-<img width="1500" alt="Screenshot 2024-02-05 at 6 09 18 AM" src="https://github.com/charles-001/dolphie/assets/13244625/0164cac3-c55d-412f-841a-9b1ff0ea21c0">
+<video src='https://github.com/user-attachments/assets/5cf1a618-1de1-4105-92a9-0eaa08871220' />
 
 
 ## Installation
