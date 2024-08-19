@@ -189,7 +189,7 @@ Starting with version **6.0.0**, you can instruct Dolphie to record its data (vi
 Note that this feature can incur a significant amount of disk space depending on how busy your server is and what you set `--replay-retention-hours` + `--refresh-interval`. Adjust these values to suit your needs and monitor the disk space usage accordingly. You can also not mix Dolphie versions with a replay file. If you try to, it will rename the current replay file and create a new one to prevent any potential version conflicts.
 
 ## Daemon Mode
-Also introduced in version **6.0.0** is the ability to run Dolphie in daemon mode (via `--daemon` option). This mode is designed to run in the background to continuously record Dolphie's data so it can be replayed later if needed. It eliminates Textual's TUI and creates a log file for messages while also displaying them in the console. Overall, daemon mode is significantly lighter weight on system resources compared to running Dolphie live.
+Also introduced in version **6.0.0** is the ability to run Dolphie in daemon mode (via `--daemon` option). It's designed to run in the background continuously recording data for future replay. It’s more resource-efficient than running Dolphie live, transforming it into a passive, always-on monitoring service. It eliminates Textual's TUI and creates a log file for messages while also displaying them in the console.
 
 You have flexibility in how you run Dolphie in the background; personally, I prefer using `systemctl`, but alternatives like `nohup` or `tmux` can be viable options.
 
