@@ -14,9 +14,9 @@
 
 <img width="2032" alt="Screenshot 2024-08-19 at 1 53 39 AM" src="https://github.com/user-attachments/assets/2c5eef42-b78f-4ac4-b7b8-ffe64cab5bae">
 <p></p>
-<video src='https://github.com/user-attachments/assets/0818485e-f290-4ac4-95d4-8fdc25bb1124' />
+<video src='https://github.com/user-attachments/assets/0818485e-f290-4ac4-95d4-8fdc25bb1124'></video>
 <p></p>
-<video src='https://github.com/user-attachments/assets/5cf1a618-1de1-4105-92a9-0eaa08871220' />
+<video src='https://github.com/user-attachments/assets/9eba7a32-1084-43de-9f62-268ad5f0f922'></video>
 
 
 ## Installation
