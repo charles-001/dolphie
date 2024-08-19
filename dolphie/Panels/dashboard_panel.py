@@ -39,8 +39,6 @@ def create_panel(tab: Tab) -> Table:
         else:
             host_type = "MySQL"
 
-    runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
-
     replicas = 0
     if dolphie.replica_manager.available_replicas:
         replicas = len(dolphie.replica_manager.available_replicas)
@@ -53,7 +51,6 @@ def create_panel(tab: Tab) -> Table:
     )
     table_information.add_row("[label]Type", host_type)
     table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
-    table_information.add_row("[label]Runtime", f"{runtime} [dark_gray]({dolphie.refresh_latency}s)")
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
         "[label]Threads",
@@ -73,6 +70,11 @@ def create_panel(tab: Tab) -> Table:
             format_number(global_status["Opened_tables"]),
         ),
     )
+    if not dolphie.replay_file:
+        runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
+        table_information.add_row(
+            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)"
+        )
 
     tab.dashboard_section_1.update(table_information)
 
@@ -83,8 +85,6 @@ def create_panel(tab: Tab) -> Table:
 
     table_innodb.add_column()
     table_innodb.add_column(width=9)
-
-    history_list_length = dolphie.innodb_metrics.get("trx_rseg_history_len", "N/A")
 
     # Calculate InnoDB memory read hit efficiency
     ib_pool_disk_reads = global_status.get("Innodb_buffer_pool_reads", 0)
@@ -123,7 +123,9 @@ def create_panel(tab: Tab) -> Table:
         ),
     )
     table_innodb.add_row("[label]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
-    table_innodb.add_row("[label]History List", format_number(history_list_length))
+    table_innodb.add_row(
+        "[label]History List", format_number(dolphie.innodb_metrics.get("trx_rseg_history_len", "N/A"))
+    )
 
     tab.dashboard_section_2.update(table_innodb)
 
@@ -132,19 +134,12 @@ def create_panel(tab: Tab) -> Table:
     ##############
     table_primary = Table(show_header=False, box=None, title="Binary Log", title_style=table_title_style)
 
-    if not binlog_status:
+    if global_variables.get("log_bin") == "OFF" or not binlog_status.get("File"):
         table_primary.add_column(justify="center")
         table_primary.add_row("\n\n\n[b][label]Disabled")
     else:
         table_primary.add_column()
         table_primary.add_column(max_width=40)
-
-        if dolphie.previous_binlog_position == 0:
-            diff_binlog_position = 0
-        elif dolphie.previous_binlog_position > binlog_status["Position"]:
-            diff_binlog_position = "Binlog Rotated"
-        else:
-            diff_binlog_position = format_bytes(binlog_status["Position"] - dolphie.previous_binlog_position)
 
         binlog_cache = 100
         binlog_cache_disk = global_status["Binlog_cache_disk_use"]
@@ -164,7 +159,7 @@ def create_panel(tab: Tab) -> Table:
             "[label]Size",
             "%s" % format_bytes(binlog_status["Position"]),
         )
-        table_primary.add_row("[label]Diff", str(diff_binlog_position))
+        table_primary.add_row("[label]Diff", format_bytes(binlog_status["Diff_Position"]))
         table_primary.add_row("[label]Cache Hit", f"{binlog_cache}%")
 
         binlog_format = global_variables.get("binlog_format", "N/A")
@@ -179,20 +174,7 @@ def create_panel(tab: Tab) -> Table:
             table_primary.add_row("[label]Encrypt", global_variables.get("encrypt_binlog", "N/A"))
         else:
             table_primary.add_row("[label]GTID", global_variables.get("gtid_mode", "N/A"))
-
-            binlog_compression = global_variables.get("binlog_transaction_compression", "N/A")
-            # binlog_compression_percentage = ""
-            # if binlog_compression == "ON":
-            #     if dolphie.binlog_transaction_compression_percentage:
-            #         binlog_compression_percentage = f" ({dolphie.binlog_transaction_compression_percentage}% gain)"
-            #     else:
-            #         binlog_compression_percentage = " (N/A gain)"
-
-            table_primary.add_row("[label]Compression", binlog_compression)
-
-        # Save some global_variables to be used in next refresh
-        if dolphie.binlog_status:
-            dolphie.previous_binlog_position = dolphie.binlog_status["Position"]
+            table_primary.add_row("[label]Compression", global_variables.get("binlog_transaction_compression", "N/A"))
 
     tab.dashboard_section_3.update(table_primary)
 

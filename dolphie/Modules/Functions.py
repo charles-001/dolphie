@@ -98,7 +98,14 @@ def format_query(query: str, minify: bool = True) -> Syntax:
     return formatted_query
 
 
+def minify_query(query: str) -> str:
+    return markup_escape(re.sub(r"\s+", " ", query))
+
+
 def format_bytes(bytes_value, color=True):
+    if isinstance(bytes_value, str):
+        return bytes_value
+
     units = ["B", "KB", "MB", "GB", "TB"]
     unit_index = 0
 

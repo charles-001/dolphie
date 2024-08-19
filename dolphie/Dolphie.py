@@ -1,6 +1,7 @@
 import ipaddress
 import socket
 from datetime import datetime
+from typing import Dict, Union
 
 import dolphie.DataTypes as DataTypes
 import dolphie.Modules.MetricManager as MetricManager
@@ -8,6 +9,7 @@ from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.Queries import MySQLQueries
+from loguru import logger
 from packaging.version import parse as parse_version
 from textual.app import App
 from textual.widgets import Switch
@@ -20,7 +22,6 @@ class Dolphie:
         self.app_version = config.app_version
 
         self.tab_id: int = None
-        self.tab_name: str = None
 
         # Config options
         self.user = config.user
@@ -40,6 +41,12 @@ class Dolphie:
         self.graph_marker = config.graph_marker
         self.hostgroup = config.hostgroup
         self.hostgroup_hosts = config.hostgroup_hosts
+        self.record_for_replay = config.record_for_replay
+        self.daemon_mode = config.daemon_mode
+        self.replay_file = config.replay_file  # This denotes that we're replaying a file
+        self.replay_dir = config.replay_dir
+        self.replay_retention_hours = config.replay_retention_hours
+        self.exclude_notify_global_vars = config.exclude_notify_global_vars
 
         self.reset_runtime_variables()
 
@@ -56,24 +63,24 @@ class Dolphie:
         self.sort_by_time_descending: bool = True
 
     def reset_runtime_variables(self):
-        self.metric_manager = MetricManager.MetricManager()
+        self.metric_manager = MetricManager.MetricManager(self.replay_file, self.daemon_mode)
         self.replica_manager = DataTypes.ReplicaManager()
 
         self.dolphie_start_time: datetime = datetime.now()
-        self.worker_start_time: datetime = datetime.now()
         self.worker_previous_start_time: datetime = datetime.now()
-        self.completed_first_loop: bool = False
+        self.worker_processing_time: float = 0
         self.polling_latency: float = 0
-        self.refresh_latency: str = "0"
         self.connection_status: DataTypes.ConnectionStatus = None
-        self.processlist_threads: dict = {}
-        self.processlist_threads_snapshot: dict = {}
+        self.processlist_threads: Dict[int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]] = (
+            {}
+        )
+        self.processlist_threads_snapshot: Dict[
+            int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]
+        ] = {}
         self.lock_transactions: dict = {}
         self.metadata_locks: dict = {}
         self.ddl: list = []
         self.pause_refresh: bool = False
-        self.previous_binlog_position: int = 0
-        self.previous_replica_sbm: int = 0
         self.innodb_metrics: dict = {}
         self.disk_io_metrics: dict = {}
         self.global_variables: dict = {}
@@ -82,18 +89,15 @@ class Dolphie:
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
         self.replication_applier_status: dict = {}
-        self.replica_lag_source: str = None
-        self.replica_lag: int = None
         self.active_redo_logs: int = None
         self.host_with_port: str = f"{self.host}:{self.port}"
-        self.binlog_transaction_compression_percentage: int = None
         self.host_cache: dict = {}
         self.proxysql_hostgroup_summary: dict = {}
         self.proxysql_mysql_query_rules: dict = {}
         self.proxysql_per_second_data: dict = {}
         self.proxysql_command_stats: dict = {}
-        self.proxysql_process_execution_time: float = 0
 
+        # Filters that can be applied
         self.user_filter = None
         self.db_filter = None
         self.host_filter = None
@@ -125,12 +129,14 @@ class Dolphie:
             "port": self.port,
             "ssl": self.ssl,
             "auto_connect": False,
+            "daemon_mode": self.daemon_mode,
         }
         self.main_db_connection = Database(**db_connection_args)
         # Secondary connection is for ad-hoc commands that are not a part of the worker thread
         self.secondary_db_connection = Database(**db_connection_args, save_connection_id=False)
 
         self.performance_schema_enabled: bool = False
+        self.metadata_locks_enabled: bool = False
         self.use_performance_schema: bool = True
         self.server_uuid: str = None
         self.host_version: str = None
@@ -142,7 +148,8 @@ class Dolphie:
 
     def db_connect(self):
         self.main_db_connection.connect()
-        self.secondary_db_connection.connect()
+        if not self.daemon_mode:
+            self.secondary_db_connection.connect()
 
         version = self.main_db_connection.fetch_value_from_field("SELECT @@version")
         version_split = version.split(".")
@@ -159,6 +166,8 @@ class Dolphie:
             self.host_with_port = f"{self.host}:{self.port}"
         elif self.connection_source == ConnectionSource.mysql:
             self.setup_connection_mysql()
+
+        self.metric_manager.connection_source = self.connection_source
 
         # Add host to host setup file if it doesn't exist
         self.add_host_to_host_cache_file()
@@ -237,6 +246,8 @@ class Dolphie:
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
 
+        self.validate_metadata_locks_enabled()
+
     def add_host_to_host_cache_file(self):
         with open(self.host_setup_file, "a+") as file:
             file.seek(0)
@@ -279,18 +290,6 @@ class Dolphie:
 
         return hostname
 
-    def massage_metrics_data(self):
-        if self.is_mysql_version_at_least("8.0.30") and self.connection_source_alt != ConnectionSource.mariadb:
-            active_redo_logs_count = self.main_db_connection.fetch_value_from_field(
-                MySQLQueries.active_redo_logs, "count"
-            )
-            self.global_status["Active_redo_log_count"] = active_redo_logs_count
-
-        # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
-        # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
-        if not self.global_status.get("Innodb_lsn_current"):
-            self.global_status["Innodb_lsn_current"] = self.global_status["Innodb_os_log_written"]
-
     def update_switches_after_reset(self):
         # Set the graph switches to what they're currently selected to after a reset
         switches = self.app.query(f".switch_container_{self.tab_id} Switch")
@@ -302,3 +301,73 @@ class Dolphie:
             metric_instance = getattr(self.metric_manager.metrics, metric_instance_name)
             metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
             metric_data.visible = switch.value
+
+    def determine_proxysql_refresh_interval(self) -> float:
+        # If we have a lot of client connections, increase the refresh interval based on the
+        # proxysql process execution time. René asked for this to be added to reduce load on ProxySQL
+        client_connections = self.global_status.get("Client_Connections_connected", 0)
+        if client_connections > 30000:
+            percentage = 0.60
+        elif client_connections > 20000:
+            percentage = 0.50
+        elif client_connections > 10000:
+            percentage = 0.40
+        else:
+            percentage = 0
+
+        if percentage:
+            refresh_interval = self.refresh_interval + (self.worker_processing_time * percentage)
+        else:
+            refresh_interval = self.refresh_interval
+
+        return refresh_interval
+
+    def detect_global_variable_change(self, old_data: dict, new_data: dict):
+        if not old_data:
+            return
+
+        # gtid is always changing so we don't want to alert on that
+        # read_only is managed by monitor_read_only_change in app.py
+        # The others are ones I've found to be spammy due to monitoring tools changing them
+        exclude_variables = {"gtid", "read_only", "innodb_thread_sleep_delay"}
+
+        # Add to exclude_variables with user specified variables
+        if self.exclude_notify_global_vars:
+            exclude_variables.update(self.exclude_notify_global_vars)
+
+        for variable, new_value in new_data.items():
+            if any(item in variable.lower() for item in exclude_variables):
+                continue
+
+            old_value = old_data.get(variable)
+            if old_value != new_value:
+                self.app.notify(
+                    f"[highlight]{variable}[/highlight] has changed from "
+                    f"[highlight]{old_value}[/highlight] to "
+                    f"[highlight]{new_value}[/highlight]",
+                    title="Global Variable Change",
+                    severity="warning",
+                    timeout=10,
+                )
+                logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")
+
+    def validate_metadata_locks_enabled(self):
+        if not self.is_mysql_version_at_least("5.7") or not self.performance_schema_enabled:
+            logger.warning(
+                "Metadata Locks requires MySQL 5.7+ with Performance Schema enabled - will not capture that data."
+            )
+            return
+
+        query = """
+            SELECT enabled FROM performance_schema.setup_instruments WHERE name = 'wait/lock/metadata/sql/mdl'
+        """
+        self.main_db_connection.execute(query)
+        row = self.main_db_connection.fetchone()
+        if row and row.get("enabled") == "NO":
+            logger.warning(
+                "Metadata Locks requires Performance Schema to have"
+                " wait/lock/metadata/sql/mdl enabled in setup_instruments table - will not capture that data."
+            )
+            return
+
+        self.metadata_locks_enabled = True

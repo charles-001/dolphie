@@ -6,15 +6,17 @@
 # ****************************
 
 
+import asyncio
+import csv
 import os
 import re
+import sys
 from datetime import datetime, timedelta
 from functools import partial
 from importlib import metadata
 
 import dolphie.Modules.MetricManager as MetricManager
 import requests
-from dolphie import Dolphie
 from dolphie.DataTypes import (
     ConnectionSource,
     ConnectionStatus,
@@ -22,6 +24,7 @@ from dolphie.DataTypes import (
     ProcesslistThread,
     ProxySQLProcesslistThread,
 )
+from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.Functions import (
     format_bytes,
@@ -31,6 +34,7 @@ from dolphie.Modules.Functions import (
 )
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
+from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Modules.TabManager import Tab, TabManager
 from dolphie.Panels import (
     dashboard_panel,
@@ -51,6 +55,7 @@ from dolphie.Widgets.modal import CommandModal
 from dolphie.Widgets.proxysql_thread_screen import ProxySQLThreadScreen
 from dolphie.Widgets.thread_screen import ThreadScreen
 from dolphie.Widgets.topbar import TopBar
+from loguru import logger
 from packaging.version import parse as parse_version
 from rich import box
 from rich.align import Align
@@ -62,7 +67,7 @@ from rich.traceback import Traceback
 from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
-from textual.widgets import Switch, TabbedContent, TabPane
+from textual.widgets import Button, Switch, TabbedContent, TabPane, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
 try:
@@ -81,7 +86,6 @@ class DolphieApp(App):
         super().__init__()
 
         self.config = config
-
         self.loading_hostgroups: bool = False
 
         theme = Theme(
@@ -93,6 +97,7 @@ class DolphieApp(App):
                 "red": "#fd8383",
                 "purple": "#b565f3",
                 "dark_gray": "#969aad",
+                "b dark_gray": "b #969aad",
                 "highlight": "#91abec",
                 "label": "#c5c7d2",
                 "b label": "b #c5c7d2",
@@ -101,6 +106,8 @@ class DolphieApp(App):
                 "b highlight": "b #91abec",
                 "bold red": "b #fd8383",
                 "b light_blue": "b #bbc8e8",
+                "recording": "#ff5e5e",
+                "b recording": "b #ff5e5e",
                 "panel_border": "#6171a6",
                 "table_border": "#333f62",
             }
@@ -108,9 +115,92 @@ class DolphieApp(App):
         self.console.push_theme(theme)
         self.console.set_window_title(self.TITLE)
 
+        if config.daemon_mode:
+            logger.info(
+                f"Starting Dolphie v{__version__} in daemon mode with a refresh "
+                f"interval of {config.refresh_interval}s"
+            )
+            logger.info(f"Log file: {config.daemon_mode_log_file}")
+
+    @work(thread=True, group="replay", exclusive=True)
+    async def run_worker_replay(self, tab_id: int, manual_control: bool = False):
+        tab = self.tab_manager.get_tab(tab_id)
+
+        # Get our worker thread
+        tab.worker = get_current_worker()
+        tab.worker.name = tab_id
+        tab.worker_running = True
+
+        dolphie = tab.dolphie
+
+        tab.replay_manual_control = manual_control
+        if (
+            len(self.screen_stack) > 1
+            or (dolphie.pause_refresh and not manual_control)
+            or tab.id != self.tab_manager.active_tab.id
+        ):
+            return
+
+        # Get the next event from the replay file
+        replay_event_data = tab.replay_manager.get_next_refresh_interval()
+        # If there's no more events, cancel the worker
+        if not replay_event_data:
+            if not manual_control:
+                self.notify("Replay has finished", severity="success")
+
+            tab.worker.cancel()
+
+        # Update the dashboard title with the timestamp of the replay event
+        tab.dashboard_replay.update(
+            f"[b]Replay[/b] [dark_gray]|[/dark_gray] " f"[b light_blue]{replay_event_data.timestamp}[/b light_blue]"
+        )
+        tab.dashboard_replay_start_end.update(
+            f"{tab.replay_manager.min_timestamp}[b highlight] →[/b highlight] {tab.replay_manager.max_timestamp}"
+        )
+
+        # Common data for refreshing
+        dolphie.detect_global_variable_change(
+            old_data=dolphie.global_variables, new_data=replay_event_data.global_variables
+        )
+        dolphie.global_variables = replay_event_data.global_variables
+        dolphie.global_status = replay_event_data.global_status
+        common_metrics = {"global_variables": dolphie.global_variables, "global_status": dolphie.global_status}
+
+        if dolphie.connection_source == ConnectionSource.mysql:
+            dolphie.binlog_status = replay_event_data.binlog_status
+            dolphie.innodb_metrics = replay_event_data.innodb_metrics
+            dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
+            dolphie.processlist_threads = replay_event_data.processlist
+            dolphie.replication_status = replay_event_data.replication_status
+            dolphie.metadata_locks = replay_event_data.metadata_locks
+
+            connection_source_metrics = {
+                "innodb_metrics": dolphie.innodb_metrics,
+                "replication_status": dolphie.replication_status,
+            }
+        elif dolphie.connection_source == ConnectionSource.proxysql:
+            dolphie.proxysql_command_stats = replay_event_data.command_stats
+            dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
+            dolphie.processlist_threads = replay_event_data.processlist
+
+            connection_source_metrics = {"proxysql_command_stats": dolphie.proxysql_command_stats}
+
+        # Refresh the metric manager metrics to the state of the replay event
+        dolphie.metric_manager.refresh_data(**common_metrics, **connection_source_metrics)
+
+        # Metrics data is already calculated in the replay event data so we just need to update the values
+        dolphie.metric_manager.datetimes = replay_event_data.metric_manager.get("datetimes")
+        for metric_name, metric_data in replay_event_data.metric_manager.items():
+            metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
+            if metric_instance:
+                for metric_name, metric_values in metric_data.items():
+                    metric_instance.__dict__[metric_name].values = metric_values
+
     @work(thread=True, group="main")
     async def run_worker_main(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
+        if not tab:
+            return
 
         # Get our worker thread
         tab.worker = get_current_worker()
@@ -122,21 +212,39 @@ class DolphieApp(App):
             if not dolphie.main_db_connection.is_connected():
                 self.tab_manager.rename_tab(tab)  # this will use dolphie.host instead of host_with_port
                 self.tab_manager.update_topbar(tab=tab, connection_status=ConnectionStatus.connecting)
-                tab.loading_indicator.display = True
+
+                if not dolphie.daemon_mode:
+                    tab.loading_indicator.display = True
 
                 dolphie.db_connect()
-                self.tab_manager.rename_tab(tab)
+                self.tab_manager.rename_tab(tab)  # this will use dolphie.host_with_port instead of host
 
-            dolphie.worker_start_time = datetime.now()
-            dolphie.polling_latency = (dolphie.worker_start_time - dolphie.worker_previous_start_time).total_seconds()
-            dolphie.refresh_latency = round(dolphie.polling_latency - dolphie.refresh_interval, 2)
-            dolphie.worker_previous_start_time = dolphie.worker_start_time
+                tab.replay_manager = ReplayManager(dolphie)
+
+            worker_start_time = datetime.now()
+            dolphie.polling_latency = (worker_start_time - dolphie.worker_previous_start_time).total_seconds()
+            dolphie.worker_previous_start_time = worker_start_time
 
             if dolphie.connection_source == ConnectionSource.mysql:
                 self.process_mysql_data(tab)
             elif dolphie.connection_source == ConnectionSource.proxysql:
                 self.process_proxysql_data(tab)
-                dolphie.proxysql_process_execution_time = (datetime.now() - dolphie.worker_start_time).total_seconds()
+
+            dolphie.worker_processing_time = (datetime.now() - worker_start_time).total_seconds()
+
+            dolphie.metric_manager.refresh_data(
+                worker_start_time=worker_start_time,
+                polling_latency=dolphie.polling_latency,
+                global_variables=dolphie.global_variables,
+                global_status=dolphie.global_status,
+                innodb_metrics=dolphie.innodb_metrics,
+                disk_io_metrics=dolphie.disk_io_metrics,
+                metadata_lock_metrics=dolphie.metadata_locks,
+                replication_status=dolphie.replication_status,
+                proxysql_command_stats=dolphie.proxysql_command_stats,
+            )
+
+            tab.replay_manager.capture_state()
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
             # host setup modal with the error
@@ -145,6 +253,40 @@ class DolphieApp(App):
             await self.tab_manager.disconnect_tab(tab)
 
         tab.worker_running = False
+
+    @work(thread=True, group="replicas")
+    def run_worker_replicas(self, tab_id: int):
+        tab = self.tab_manager.get_tab(tab_id)
+        if not tab:
+            return
+
+        # Get our worker thread
+        tab.replicas_worker = get_current_worker()
+        tab.replicas_worker.name = tab_id
+
+        dolphie = tab.dolphie
+
+        if dolphie.panels.replication.visible:
+            if tab.id != self.tab_manager.active_tab.id:
+                return
+
+            if dolphie.replica_manager.available_replicas:
+                if not dolphie.replica_manager.replicas:
+                    tab.replicas_container.display = True
+                    tab.replicas_loading_indicator.display = True
+                    tab.replicas_title.update(
+                        f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
+                        " replicas...\n"
+                    )
+
+                tab.replicas_worker_running = True
+                replication_panel.fetch_replicas(tab)
+                tab.replicas_worker_running = False
+            else:
+                tab.replicas_container.display = False
+        else:
+            # If we're not displaying the replication panel, close all replica connections
+            dolphie.replica_manager.disconnect_all()
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
@@ -159,54 +301,40 @@ class DolphieApp(App):
             if event.state == WorkerState.SUCCESS:
                 self.monitor_read_only_change(tab)
 
+                refresh_interval = dolphie.refresh_interval
+                if dolphie.connection_source == ConnectionSource.proxysql:
+                    refresh_interval = dolphie.determine_proxysql_refresh_interval()
+
                 # Skip this if the conditions are right
-                if len(self.screen_stack) > 1 or dolphie.pause_refresh or not dolphie.main_db_connection.is_connected():
-                    tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_main, tab.id))
+                if (
+                    len(self.screen_stack) > 1
+                    or dolphie.pause_refresh
+                    or not dolphie.main_db_connection.is_connected()
+                    or dolphie.daemon_mode
+                    or tab.id != self.tab_manager.active_tab.id
+                ):
+                    tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
 
                     return
 
-                # If the main container isn't displayed, it means we just connected
                 if not tab.main_container.display:
-                    tab.main_container.display = True
-                    tab.sparkline.display = True
+                    self.refresh_tab_properties()
 
-                    # Hide all graph tabs so we can show the ones we want
-                    tabs = tab.metric_graph_tabs.query(TabPane)
-                    for graph_tab in tabs:
-                        tab.metric_graph_tabs.hide_tab(graph_tab.id)
-
-                    # Show the tabs that are for the current connection source
-                    for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
-                        if dolphie.connection_source in metric_instance.connection_source:
-                            tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}_{tab.id}")
-
-                refresh_interval = dolphie.refresh_interval
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
                 elif dolphie.connection_source == ConnectionSource.proxysql:
                     self.refresh_screen_proxysql(tab)
 
-                    # If we have a lot of client connections, increase the refresh interval based on the
-                    # proxysql process execution time. René asked for this to be added to reduce load on ProxySQL
-                    client_connections = dolphie.global_status.get("Client_Connections_connected", 0)
-                    if client_connections > 30000:
-                        percentage = 0.60
-                    elif client_connections > 20000:
-                        percentage = 0.50
-                    elif client_connections > 10000:
-                        percentage = 0.40
-                    else:
-                        percentage = 0
-
-                    if percentage:
-                        refresh_interval = dolphie.refresh_interval + (
-                            dolphie.proxysql_process_execution_time * percentage
-                        )
+                # Update the topbar with the latest replay file size
+                if dolphie.record_for_replay:
+                    self.tab_manager.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
 
                 tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
+                    logger.critical(tab.worker_cancel_error)
+
                     if self.tab_manager.active_tab.id != tab.id or self.loading_hostgroups:
                         self.notify(
                             (
@@ -228,11 +356,10 @@ class DolphieApp(App):
 
             if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right
-                if len(self.screen_stack) > 1 or dolphie.pause_refresh:
+                if len(self.screen_stack) > 1 or dolphie.pause_refresh or tab.id != self.tab_manager.active_tab.id:
                     tab.replicas_worker_timer = self.set_timer(
                         dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
                     )
-
                     return
 
                 if dolphie.panels.replication.visible and dolphie.replica_manager.available_replicas:
@@ -241,40 +368,38 @@ class DolphieApp(App):
                 tab.replicas_worker_timer = self.set_timer(
                     dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
                 )
+        elif event.worker.group == "replay":
+            tab.worker_running = False
 
-    @work(thread=True, group="replicas")
-    def run_worker_replicas(self, tab_id: int):
-        tab = self.tab_manager.get_tab(tab_id)
+            if event.state == WorkerState.SUCCESS:
+                self.monitor_read_only_change(tab)
 
-        # Get our worker thread
-        tab.replicas_worker = get_current_worker()
-        tab.replicas_worker.name = tab_id
+                if (
+                    len(self.screen_stack) > 1
+                    or (dolphie.pause_refresh and not tab.replay_manual_control)
+                    or tab.id != self.tab_manager.active_tab.id
+                ):
+                    tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_replay, tab.id))
 
-        dolphie = tab.dolphie
+                    return
 
-        if dolphie.panels.replication.visible:
-            if dolphie.replica_manager.available_replicas:
-                if not dolphie.replica_manager.replicas:
-                    tab.replicas_container.display = True
-                    tab.replicas_loading_indicator.display = True
-                    tab.replicas_title.update(
-                        f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
-                        " replicas...\n"
-                    )
+                if not tab.main_container.display:
+                    self.refresh_tab_properties()
 
-                tab.replicas_worker_running = True
-                replication_panel.fetch_replicas(tab)
-                tab.replicas_worker_running = False
-            else:
-                tab.replicas_container.display = False
-        else:
-            # If we're not displaying the replication panel, close all replica connections
-            dolphie.replica_manager.remove_all()
+                if dolphie.connection_source == ConnectionSource.mysql:
+                    self.refresh_screen_mysql(tab)
+                elif dolphie.connection_source == ConnectionSource.proxysql:
+                    self.refresh_screen_proxysql(tab)
+
+                tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_replay, tab.id))
 
     def process_mysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+        global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+        dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
+        dolphie.global_variables = global_variables
+
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
@@ -288,39 +413,45 @@ class DolphieApp(App):
 
         dolphie.main_db_connection.execute(find_replicas_query)
         available_replicas = dolphie.main_db_connection.fetchall()
-        # We update the replica ports used if the number of replicas have changed
-        if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
-            dolphie.replica_manager.ports = {}
 
-            if (
-                dolphie.is_mysql_version_at_least("8.0.22")
-                and dolphie.connection_source_alt != ConnectionSource.mariadb
-            ):
-                dolphie.main_db_connection.execute(MySQLQueries.show_replicas)
-            else:
-                dolphie.main_db_connection.execute(MySQLQueries.show_slave_hosts)
+        if dolphie.daemon_mode:
+            # Reduce how much data we're storing
+            replicas = []
+            for replica in available_replicas:
+                replicas.append(replica.get("host"))
 
-            replica_data = dolphie.main_db_connection.fetchall()
-            for row in replica_data:
-                if dolphie.connection_source_alt == ConnectionSource.mariadb:
-                    key = "Server_id"
+            dolphie.replica_manager.available_replicas = replicas
+        else:
+            # We update the replica ports used if the number of replicas have changed
+            if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
+                dolphie.replica_manager.ports = {}
+
+                if (
+                    dolphie.is_mysql_version_at_least("8.0.22")
+                    and dolphie.connection_source_alt != ConnectionSource.mariadb
+                ):
+                    dolphie.main_db_connection.execute(MySQLQueries.show_replicas)
                 else:
-                    if dolphie.is_mysql_version_at_least("8.0.22"):
-                        key = "Replica_UUID"
+                    dolphie.main_db_connection.execute(MySQLQueries.show_slave_hosts)
+
+                replica_data = dolphie.main_db_connection.fetchall()
+                for row in replica_data:
+                    if dolphie.connection_source_alt == ConnectionSource.mariadb:
+                        key = "Server_id"
                     else:
-                        key = "Slave_UUID"
+                        if dolphie.is_mysql_version_at_least("8.0.22"):
+                            key = "Replica_UUID"
+                        else:
+                            key = "Slave_UUID"
 
-                dolphie.replica_manager.ports[row.get(key)] = {"port": row.get("Port"), "in_use": False}
+                    dolphie.replica_manager.ports[row.get(key)] = {"port": row.get("Port"), "in_use": False}
 
-            dolphie.replica_manager.available_replicas = available_replicas
+                dolphie.replica_manager.available_replicas = available_replicas
 
         dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
         dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
 
-        dolphie.previous_replica_sbm = dolphie.replica_lag
-        dolphie.replica_lag_source, dolphie.replica_lag, dolphie.replication_status = (
-            replication_panel.fetch_replication_data(tab)
-        )
+        dolphie.replication_status = replication_panel.fetch_replication_data(tab)
 
         # If using MySQL 8, fetch the replication applier status data
         if (
@@ -331,9 +462,22 @@ class DolphieApp(App):
             dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
             dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
 
-        dolphie.massage_metrics_data()
+        if (
+            not dolphie.daemon_mode
+            and dolphie.is_mysql_version_at_least("8.0.30")
+            and dolphie.connection_source_alt != ConnectionSource.mariadb
+        ):
+            active_redo_logs_count = dolphie.main_db_connection.fetch_value_from_field(
+                MySQLQueries.active_redo_logs, "count"
+            )
+            dolphie.global_status["Active_redo_log_count"] = active_redo_logs_count
 
-        if dolphie.group_replication or dolphie.innodb_cluster:
+        # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
+        # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
+        if not dolphie.global_status.get("Innodb_lsn_current"):
+            dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status["Innodb_os_log_written"]
+
+        if not dolphie.daemon_mode and (dolphie.group_replication or dolphie.innodb_cluster):
             if dolphie.is_mysql_version_at_least("8.0.13"):
                 dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
                 dolphie.group_replication_data = dolphie.main_db_connection.fetchone()
@@ -348,50 +492,41 @@ class DolphieApp(App):
                     dolphie.is_group_replication_primary = True
                     break
 
-        if dolphie.panels.dashboard.visible:
+        if dolphie.panels.dashboard.visible or dolphie.record_for_replay:
             if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
                 dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
             else:
                 dolphie.main_db_connection.execute(MySQLQueries.show_master_status)
+
+            previous_position = dolphie.binlog_status.get("Position")
             dolphie.binlog_status = dolphie.main_db_connection.fetchone()
 
-            # This can cause MySQL to crash: https://perconadev.atlassian.net/browse/PS-9066
-            # if dolphie.global_variables.get("binlog_transaction_compression") == "ON":
-            #     dolphie.main_db_connection.execute(MySQLQueries.get_binlog_transaction_compression_percentage)
-            #     dolphie.binlog_transaction_compression_percentage = dolphie.main_db_connection.fetchone().get(
-            #         "compression_percentage"
-            #     )
+            if previous_position is None:
+                dolphie.binlog_status["Diff_Position"] = 0
+            elif previous_position > dolphie.binlog_status["Position"]:
+                dolphie.binlog_status["Diff_Position"] = "Binlog Rotated"
+            else:
+                dolphie.binlog_status["Diff_Position"] = dolphie.binlog_status["Position"] - previous_position
 
-        if dolphie.panels.processlist.visible:
+        if dolphie.panels.processlist.visible or dolphie.record_for_replay:
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
         if dolphie.is_mysql_version_at_least("5.7"):
-            if dolphie.panels.metadata_locks.visible:
+            dolphie.metadata_locks = {}
+            if dolphie.metadata_locks_enabled and (dolphie.panels.metadata_locks.visible or dolphie.record_for_replay):
                 dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
-            else:
-                # Reset this data so the graph doesn't show old data
-                dolphie.metadata_locks = {}
 
             if dolphie.panels.ddl.visible:
                 dolphie.main_db_connection.execute(MySQLQueries.ddls)
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-        dolphie.metric_manager.refresh_data(
-            worker_start_time=dolphie.worker_start_time,
-            polling_latency=dolphie.polling_latency,
-            global_variables=dolphie.global_variables,
-            global_status=dolphie.global_status,
-            innodb_metrics=dolphie.innodb_metrics,
-            disk_io_metrics=dolphie.disk_io_metrics,
-            metadata_lock_metrics=dolphie.metadata_locks,
-            replication_status=dolphie.replication_status,
-            replication_lag=dolphie.replica_lag,
-        )
-
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+        global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
+        dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
+        dolphie.global_variables = global_variables
+
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("mysql_stats")
 
         dolphie.main_db_connection.execute(ProxySQLQueries.command_stats)
@@ -400,9 +535,11 @@ class DolphieApp(App):
         # Here, we're going to format the command stats to match the global status keys of
         # MySQL and get total count of queries
         total_queries_count = 0
+        query_types_for_total = ["SELECT", "INSERT", "UPDATE", "DELETE", "REPLACE", "SET", "CALL"]
         for row in dolphie.proxysql_command_stats:
-            total_cnt = int(row["Total_cnt"])
-            total_queries_count += total_cnt
+            if row["Command"] in query_types_for_total:
+                total_cnt = int(row["Total_cnt"])
+                total_queries_count += total_cnt
 
             dolphie.global_status[f"Com_{row['Command'].lower()}"] = total_cnt
 
@@ -428,29 +565,45 @@ class DolphieApp(App):
         else:
             dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = 100
 
-        if dolphie.panels.proxysql_hostgroup_summary.visible:
+        if dolphie.panels.proxysql_hostgroup_summary.visible or dolphie.record_for_replay:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
+
+            previous_values = {}
+            columns_to_calculate_per_sec = ["Queries", "Bytes_data_sent", "Bytes_data_recv"]
+
+            # Store previous values for each row
+            for row in dolphie.proxysql_hostgroup_summary:
+                row_id = f"{row['hostgroup']}_{row['srv_host']}_{row['srv_port']}"
+
+                for column_key in columns_to_calculate_per_sec:
+                    previous_values.setdefault(row_id, {})[column_key] = int(row.get(column_key, 0))
+
+            # Fetch the updated hostgroup summary
             dolphie.proxysql_hostgroup_summary = dolphie.main_db_connection.fetchall()
 
-        if dolphie.panels.processlist.visible:
+            # Calculate the values per second
+            for row in dolphie.proxysql_hostgroup_summary:
+                row_id = f"{row['hostgroup']}_{row['srv_host']}_{row['srv_port']}"
+
+                if row_id in previous_values:  # Ensure we have previous values for this row_id
+                    for column_key in columns_to_calculate_per_sec:
+                        previous_value = previous_values[row_id].get(column_key, 0)
+                        current_value = int(row.get(column_key, 0))
+
+                        value_per_sec = (current_value - previous_value) / dolphie.polling_latency
+                        row[f"{column_key}_per_sec"] = round(value_per_sec)
+
+        if dolphie.panels.processlist.visible or dolphie.record_for_replay:
             dolphie.processlist_threads = proxysql_processlist_panel.fetch_data(tab)
 
         if dolphie.panels.proxysql_mysql_query_rules.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.query_rules_summary)
             dolphie.proxysql_mysql_query_rules = dolphie.main_db_connection.fetchall()
 
-        dolphie.metric_manager.refresh_data(
-            worker_start_time=dolphie.worker_start_time,
-            polling_latency=dolphie.polling_latency,
-            global_variables=dolphie.global_variables,
-            global_status=dolphie.global_status,
-            proxysql_command_stats=dolphie.proxysql_command_stats,
-        )
-
     def refresh_screen_proxysql(self, tab: Tab):
         dolphie = tab.dolphie
 
-        if tab.loading_indicator.display:
+        if tab.loading_indicator.display or dolphie.replay_file:
             tab.loading_indicator.display = False
             self.tab_manager.update_topbar(tab=tab, connection_status="ONLINE")
 
@@ -474,15 +627,13 @@ class DolphieApp(App):
 
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
-        dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
-
-        # This denotes that we've gone through the first loop of the worker thread
-        dolphie.completed_first_loop = True
+        if not dolphie.daemon_mode:
+            dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
     def refresh_screen_mysql(self, tab: Tab):
         dolphie = tab.dolphie
 
-        if tab.loading_indicator.display:
+        if tab.loading_indicator.display or dolphie.replay_file:
             tab.loading_indicator.display = False
 
             self.layout_graphs(tab)
@@ -505,19 +656,22 @@ class DolphieApp(App):
         if dolphie.panels.graphs.visible:
             # Hide/show replication tab based on replication status
             if dolphie.replication_status:
-                tab.metric_graph_tabs.show_tab(f"graph_tab_replication_lag_{tab.id}")
+                tab.metric_graph_tabs.show_tab("graph_tab_replication_lag")
             else:
-                tab.metric_graph_tabs.hide_tab(f"graph_tab_replication_lag_{tab.id}")
+                tab.metric_graph_tabs.hide_tab("graph_tab_replication_lag")
+
+            if (dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible) or dolphie.replay_file:
+                tab.metric_graph_tabs.show_tab("graph_tab_locks")
+            else:
+                tab.metric_graph_tabs.hide_tab("graph_tab_locks")
 
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
-        dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
-
-        # This denotes that we've gone through the first loop of the worker thread
-        dolphie.completed_first_loop = True
+        if not dolphie.daemon_mode:
+            dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
     def monitor_read_only_change(self, tab: Tab):
         dolphie = tab.dolphie
@@ -529,7 +683,7 @@ class DolphieApp(App):
         formatted_ro_status = ConnectionStatus.read_only if current_ro_status == "ON" else ConnectionStatus.read_write
         status = "read-only" if current_ro_status == "ON" else "read/write"
 
-        message = f"Host [light_blue]{dolphie.host_with_port}[/light_blue] is now [b highlight]{status}[/b highlight]"
+        message = f"Host [highlight]{dolphie.host_with_port}[/highlight] is now [b highlight]{status}[/b highlight]"
 
         if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
             message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
@@ -540,6 +694,7 @@ class DolphieApp(App):
             dolphie.connection_status in [ConnectionStatus.read_write, ConnectionStatus.read_only]
             and dolphie.connection_status != formatted_ro_status
         ):
+            logger.warning(f"Read-only mode changed: {dolphie.connection_status} -> {formatted_ro_status}")
             self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
             self.tab_manager.update_topbar(tab=tab, connection_status=formatted_ro_status)
@@ -560,11 +715,18 @@ class DolphieApp(App):
             self.run_worker_main(tab.id)
             self.run_worker_replicas(tab.id)
 
+        # Wait for all workers to finish before notifying the user
+        await asyncio.sleep(0.2)
+        for tab in self.tab_manager.tabs.values():
+            while tab.worker_running:
+                await asyncio.sleep(0.1)
+
         self.loading_hostgroups = False
         self.notify(f"Finished connecting to hosts in hostgroup [highlight]{hostgroup}", severity="success")
 
     async def on_mount(self):
         self.tab_manager = TabManager(app=self.app, config=self.config)
+        await self.tab_manager.create_ui_widgets()
 
         if self.config.hostgroup:
             self.connect_as_hostgroup(self.config.hostgroup)
@@ -573,9 +735,19 @@ class DolphieApp(App):
 
             if self.config.host_setup:
                 self.tab_manager.setup_host_tab(tab)
+            elif self.tab_manager.active_tab.dolphie.replay_file:
+                self.notify(
+                    f"File: [highlight]{tab.dolphie.replay_file}[/highlight]", title="Replay started", timeout=10
+                )
+
+                self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
+                self.tab_manager.rename_tab(tab)
+                self.run_worker_replay(self.tab_manager.active_tab.id)
             else:
                 self.run_worker_main(self.tab_manager.active_tab.id)
-                self.run_worker_replicas(self.tab_manager.active_tab.id)
+
+                if not self.config.daemon_mode:
+                    self.run_worker_replicas(self.tab_manager.active_tab.id)
 
         self.check_for_new_version()
 
@@ -583,9 +755,113 @@ class DolphieApp(App):
         self.bell()
         self.exit(message=Traceback(show_locals=True, width=None, locals_max_length=5))
 
-    @on(TabbedContent.TabActivated, "#host_tabs")
+    @on(Button.Pressed, ".replay_back")
+    def replay_back(self):
+        tab = self.tab_manager.active_tab
+
+        if tab.replay_manager.current_index - 1 <= tab.replay_manager.min_id:
+            self.notify("Replay has reached the beginning", severity="warning")
+
+        # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
+        tab.replay_manager.current_index -= 2
+
+        self.force_refresh_for_replay()
+
+    @on(Button.Pressed, ".replay_forward")
+    def replay_forward(self):
+        tab = self.tab_manager.active_tab
+
+        if tab.replay_manager.current_index + 1 >= tab.replay_manager.max_id:
+            self.notify("Replay has reached the end", severity="warning")
+
+        # get_next_refresh_interval will increment the index so we don't need to do it here
+
+        self.force_refresh_for_replay()
+
+    @on(Button.Pressed, ".replay_pause")
+    def replay_pause(self, event: Button.Pressed):
+        tab = self.tab_manager.active_tab
+
+        if not tab.dolphie.pause_refresh:
+            tab.dolphie.pause_refresh = True
+            self.notify("Replay is paused")
+            event.button.label = "▶️  Resume"
+        else:
+            tab.dolphie.pause_refresh = False
+            self.notify("Replay has resumed", severity="success")
+            event.button.label = "⏸️  Pause"
+
+    @on(Button.Pressed, ".replay_seek")
+    def replay_seek(self):
+        def command_get_input(timestamp: str):
+            if timestamp:
+                tab = self.tab_manager.active_tab
+                found_timestamp = tab.replay_manager.seek_to_timestamp(timestamp)
+
+                if found_timestamp:
+                    self.force_refresh_for_replay()
+
+        self.app.push_screen(
+            CommandModal(command=HotkeyCommands.replay_seek, message="What time would you like to seek to?"),
+            command_get_input,
+        )
+
+    def refresh_tab_properties(self):
+        tab = self.tab_manager.active_tab
+        tab.main_container.display = True
+
+        self.size_dashboard_sections(tab)
+
+        # Hide all graph tabs so we can show the ones we want
+        tabs = tab.metric_graph_tabs.query(TabPane)
+        for graph_tab in tabs:
+            tab.metric_graph_tabs.hide_tab(graph_tab.id)
+
+        # Show the tabs that are for the current connection source
+        for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
+            if tab.dolphie.connection_source in metric_instance.connection_source:
+                tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
+
+        if tab.dolphie.replay_file:
+            tab.dashboard_replay_container.display = True
+        else:
+            tab.dashboard_replay_container.display = False
+
+    @on(Tabs.TabActivated, "#host_tabs")
     def tab_changed(self, event: TabbedContent.TabActivated):
-        self.tab_manager.switch_tab(event.pane.name)
+        self.tab_manager.switch_tab(event.tab.id, set_active=False)
+
+        tab = self.tab_manager.active_tab
+        if tab and tab.worker and (tab.dolphie.main_db_connection.is_connected() or tab.dolphie.replay_file):
+            if tab.dolphie.connection_source == ConnectionSource.mysql:
+                self.refresh_screen_mysql(tab)
+            elif tab.dolphie.connection_source == ConnectionSource.proxysql:
+                self.refresh_screen_proxysql(tab)
+
+            self.refresh_tab_properties()
+
+            # Set each panel's display status based on the tab's panel visibility
+            for panel in tab.dolphie.panels.get_all_panels():
+                tab_panel = tab.get_panel_widget(panel.name)
+                tab_panel.display = getattr(tab.dolphie.panels, panel.name).visible
+
+            # Set the display state for the replica container based on whether there are replicas
+            tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
+            if tab.replicas_container.display:
+                containers = self.query(".replica_container")
+                for container in containers:
+                    container.display = tab.id in container.id
+
+                tab.replicas_title.update(
+                    f"[b]Replicas ([highlight]{len(tab.dolphie.replica_manager.available_replicas)}[/highlight])\n"
+                )
+
+            # Set the display state for the group replication container based on whether there are members
+            tab.group_replication_container.display = bool(tab.dolphie.group_replication_members)
+            if tab.group_replication_container.display:
+                containers = self.query(".member_container")
+                for container in containers:
+                    container.display = tab.id in container.id
 
     @on(TabbedContent.TabActivated, ".metrics_host_tabs")
     def metric_tab_changed(self, event: TabbedContent.TabActivated):
@@ -594,18 +870,20 @@ class DolphieApp(App):
         if metric_instance_name:
             self.update_graphs(metric_instance_name)
 
-    def update_graphs(self, tab_metric_instance_name):
+    def update_graphs(self, tab_metric_instance_name: str):
         if not self.tab_manager.active_tab or not self.tab_manager.active_tab.panel_graphs.display:
             return
 
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
             if tab_metric_instance_name == metric_instance.tab_name:
                 for graph_name in metric_instance.graphs:
-                    getattr(self.tab_manager.active_tab, graph_name).render_graph(metric_instance)
+                    getattr(self.tab_manager.active_tab, graph_name).render_graph(
+                        metric_instance, self.tab_manager.active_tab.dolphie.metric_manager.datetimes
+                    )
 
         self.update_stats_label(tab_metric_instance_name)
 
-    def update_stats_label(self, tab_metric_instance_name):
+    def update_stats_label(self, tab_metric_instance_name: str):
         stat_data = {}
 
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
@@ -623,7 +901,7 @@ class DolphieApp(App):
         )
         getattr(self.tab_manager.active_tab, tab_metric_instance_name).update(formatted_stat_data)
 
-    def toggle_panel(self, panel_name):
+    def toggle_panel(self, panel_name: str):
         # We store the panel objects in the tab object (i.e. tab.panel_dashboard, tab.panel_processlist, etc.)
         panel = self.tab_manager.active_tab.get_panel_widget(panel_name)
 
@@ -635,6 +913,59 @@ class DolphieApp(App):
             self.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
 
         panel.display = new_display_status
+
+        self.force_refresh_for_replay(need_current_data=True)
+
+    def force_refresh_for_replay(self, need_current_data: bool = False):
+        # This function lets us force a refresh of the worker thread when we're in a replay
+        tab = self.tab_manager.active_tab
+
+        if tab.dolphie.replay_file and tab.worker.state != WorkerState.RUNNING:
+            tab.worker_timer.stop()
+
+            if need_current_data:
+                # We subtract 1 because get_next_refresh_interval will increment the index
+                tab.replay_manager.current_index -= 1
+
+            self.run_worker_replay(tab.id, manual_control=True)
+
+    def size_dashboard_sections(self, tab: Tab):
+        if tab.dolphie.connection_source == ConnectionSource.mysql:
+            # Update the sizes of the panels depending if replication container is visible or not
+            if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
+                tab.dashboard_section_1.styles.width = "25vw"
+                tab.dashboard_section_2.styles.width = "17vw"
+                tab.dashboard_section_3.styles.width = "21vw"
+                tab.dashboard_section_4.styles.width = "12vw"
+                tab.dashboard_section_5.styles.width = "25vw"
+
+                tab.dashboard_section_5.display = True
+            else:
+                tab.dashboard_section_1.styles.width = "32vw"
+                tab.dashboard_section_2.styles.width = "24vw"
+                tab.dashboard_section_3.styles.width = "27vw"
+                tab.dashboard_section_4.styles.width = "17vw"
+                tab.dashboard_section_5.styles.width = "0"
+
+                tab.dashboard_section_5.display = False
+
+            tab.dashboard_section_1.styles.max_width = "45"
+            tab.dashboard_section_2.styles.max_width = "32"
+            tab.dashboard_section_3.styles.max_width = "38"
+            tab.dashboard_section_4.styles.max_width = "22"
+            tab.dashboard_section_5.styles.max_width = "55"
+        elif tab.dolphie.connection_source == ConnectionSource.proxysql:
+            tab.dashboard_section_1.styles.width = "24vw"
+            tab.dashboard_section_2.styles.width = "20vw"
+            tab.dashboard_section_3.styles.width = "22vw"
+            tab.dashboard_section_4.styles.width = "13vw"
+
+            tab.dashboard_section_5.display = False
+
+            tab.dashboard_section_1.styles.max_width = "35"
+            tab.dashboard_section_2.styles.max_width = "28"
+            tab.dashboard_section_3.styles.max_width = "25"
+            tab.dashboard_section_4.styles.max_width = "25"
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         panel_mapping = {
@@ -658,45 +989,6 @@ class DolphieApp(App):
             tab.dolphie.panels.proxysql_command_stats.name: {ConnectionSource.proxysql: proxysql_command_stats_panel},
         }
 
-        if tab.dolphie.connection_source == ConnectionSource.mysql:
-            if toggled or not tab.dolphie.completed_first_loop:
-                # Update the sizes of the panels depending if replication container is visible or not
-                if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
-                    tab.dashboard_section_1.styles.width = "25vw"
-                    tab.dashboard_section_2.styles.width = "17vw"
-                    tab.dashboard_section_3.styles.width = "21vw"
-                    tab.dashboard_section_4.styles.width = "12vw"
-                    tab.dashboard_section_5.styles.width = "25vw"
-
-                    tab.dashboard_section_5.display = True
-                else:
-                    tab.dashboard_section_1.styles.width = "32vw"
-                    tab.dashboard_section_2.styles.width = "24vw"
-                    tab.dashboard_section_3.styles.width = "27vw"
-                    tab.dashboard_section_4.styles.width = "17vw"
-                    tab.dashboard_section_5.styles.width = "0"
-
-                    tab.dashboard_section_5.display = False
-
-                tab.dashboard_section_1.styles.max_width = "45"
-                tab.dashboard_section_2.styles.max_width = "32"
-                tab.dashboard_section_3.styles.max_width = "38"
-                tab.dashboard_section_4.styles.max_width = "22"
-                tab.dashboard_section_5.styles.max_width = "55"
-
-        elif tab.dolphie.connection_source == ConnectionSource.proxysql:
-            tab.dashboard_section_1.styles.width = "24vw"
-            tab.dashboard_section_2.styles.width = "20vw"
-            tab.dashboard_section_3.styles.width = "22vw"
-            tab.dashboard_section_4.styles.width = "13vw"
-
-            tab.dashboard_section_5.display = False
-
-            tab.dashboard_section_1.styles.max_width = "35"
-            tab.dashboard_section_2.styles.max_width = "28"
-            tab.dashboard_section_3.styles.max_width = "25"
-            tab.dashboard_section_4.styles.max_width = "25"
-
         for panel_map_name, panel_map_connection_sources in panel_mapping.items():
             panel_map_obj = panel_map_connection_sources.get(tab.dolphie.connection_source)
 
@@ -715,11 +1007,16 @@ class DolphieApp(App):
     def layout_graphs(self, tab: Tab):
         # These variables are dynamically created
         if tab.dolphie.is_mysql_version_at_least("8.0.30"):
-            tab.graph_redo_log_data_written.styles.width = "55%"
-            tab.graph_redo_log_bar.styles.width = "12%"
-            tab.graph_redo_log_active_count.styles.width = "33%"
-            tab.graph_redo_log_active_count.display = True
-            tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+            if tab.dolphie.replay_file:
+                tab.graph_redo_log_data_written.styles.width = "88%"
+                tab.graph_redo_log_bar.styles.width = "12%"
+                tab.graph_redo_log_active_count.display = False
+            else:
+                tab.graph_redo_log_data_written.styles.width = "55%"
+                tab.graph_redo_log_bar.styles.width = "12%"
+                tab.graph_redo_log_active_count.styles.width = "33%"
+                tab.graph_redo_log_active_count.display = True
+                tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
         else:
             tab.graph_redo_log_data_written.styles.width = "88%"
             tab.graph_redo_log_bar.styles.width = "12%"
@@ -733,14 +1030,20 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1 or not self.tab_manager.active_tab:
             return
 
-        metric_instance_name = event.switch.name
+        event_metric_instance_name = event.switch.name
         metric = event.switch.id
 
-        metric_instance = getattr(self.tab_manager.active_tab.dolphie.metric_manager.metrics, metric_instance_name)
-        metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
-        metric_data.visible = event.value
+        # Loop all metric instances and set the visibility of the metric
+        for tab in self.tab_manager.tabs.values():
+            for metric_instance_name, metric_instance in tab.dolphie.metric_manager.metrics.__dict__.items():
+                if (
+                    tab.dolphie.connection_source in metric_instance.connection_source
+                    and event_metric_instance_name == metric_instance_name
+                ):
+                    metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+                    metric_data.visible = event.value
 
-        self.update_graphs(metric_instance_name)
+        self.update_graphs(event_metric_instance_name)
 
     async def on_key(self, event: events.Key):
         if len(self.screen_stack) > 1:
@@ -752,6 +1055,49 @@ class DolphieApp(App):
         tab = self.tab_manager.active_tab
         if not tab:
             return
+
+        screen_data = None
+        dolphie = tab.dolphie
+
+        if dolphie.connection_source == ConnectionSource.mysql:
+            replay_allowed_keys = [
+                "1",
+                "2",
+                "3",
+                "5",
+                "a",
+                "c",
+                "E",
+                "f",
+                "p",
+                "r",
+                "s",
+                "S",
+                "t",
+                "T",
+                "v",
+                "left_square_bracket",
+                "right_square_bracket",
+            ]
+        elif dolphie.connection_source == ConnectionSource.proxysql:
+            replay_allowed_keys = [
+                "1",
+                "2",
+                "3",
+                "4",
+                "a",
+                "c",
+                "E",
+                "f",
+                "p",
+                "r",
+                "s",
+                "S",
+                "t",
+                "v",
+                "left_square_bracket",
+                "right_square_bracket",
+            ]
 
         exclude_keys = [
             "up",
@@ -774,18 +1120,20 @@ class DolphieApp(App):
             "ctrl+d",
         ]
 
-        screen_data = None
-        dolphie = tab.dolphie
-
-        # Prevent commands from being run if the secondary connection is processing a query already
-        if key not in exclude_keys:
-            if dolphie.secondary_db_connection and dolphie.secondary_db_connection.running_query:
-                self.notify("There's already a command running - please wait for it to finish")
+        if dolphie.replay_file:
+            if key not in replay_allowed_keys and key not in exclude_keys:
+                self.notify(f"Key [highlight]{key}[/highlight] is not allowed during replay", severity="warning")
                 return
+        else:
+            # Prevent commands from being run if the secondary connection is processing a query already
+            if key not in exclude_keys:
+                if dolphie.secondary_db_connection and dolphie.secondary_db_connection.running_query:
+                    self.notify("There's already a command running - please wait for it to finish")
+                    return
 
-            if not dolphie.main_db_connection.is_connected():
-                self.notify("You must be connected to a host to use commands")
-                return
+                if not dolphie.main_db_connection.is_connected():
+                    self.notify("You must be connected to a host to use commands")
+                    return
 
         if self.loading_hostgroups:
             self.notify("You can't run commands while hosts are connecting as a hostgroup")
@@ -799,6 +1147,9 @@ class DolphieApp(App):
 
             tab.processlist_title.update("Processlist ([highlight]0[/highlight])")
         elif key == "3":
+            self.toggle_panel(dolphie.panels.graphs.name)
+            self.app.update_graphs("dml")
+        elif key == "4":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_hostgroup_summary.name)
                 dolphie.proxysql_per_second_data = {}
@@ -807,41 +1158,37 @@ class DolphieApp(App):
                 return
 
             self.toggle_panel(dolphie.panels.replication.name)
+            self.size_dashboard_sections(tab)
 
-            tab.replicas_container.display = False
-            if not dolphie.panels.replication.visible:
-                for member in dolphie.app.query(f".replica_container_{dolphie.tab_id}"):
-                    member.remove()
-            else:
+            if dolphie.panels.replication.visible:
                 if dolphie.replica_manager.available_replicas:
                     tab.replicas_container.display = True
+                    tab.replicas_loading_indicator.display = True
+                    for container in dolphie.app.query(".replica_container"):
+                        container.display = tab.id in container.id
+
                     tab.replicas_title.update(
                         f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
                         " replicas...\n"
                     )
-                    tab.replicas_loading_indicator.display = True
-        elif key == "4":
-            self.toggle_panel(dolphie.panels.graphs.name)
-            self.app.update_graphs("dml")
+                if dolphie.group_replication_members:
+                    tab.group_replication_container.display = True
+                    for container in dolphie.app.query(".member_container"):
+                        container.display = tab.id in container.id
+            else:
+                queries = [f".replica_container_{dolphie.tab_id}", f".member_container_{dolphie.tab_id}"]
+                for query in queries:
+                    for container in dolphie.app.query(query):
+                        container.remove()
         elif key == "5":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_mysql_query_rules.name)
                 return
 
-            if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
-                self.notify("Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled")
-                return
-
-            query = (
-                "SELECT enabled FROM performance_schema.setup_instruments WHERE name = 'wait/lock/metadata/sql/mdl';"
-            )
-
-            dolphie.secondary_db_connection.execute(query)
-            row = dolphie.secondary_db_connection.fetchone()
-            if row and row.get("enabled") == "NO":
+            if not dolphie.metadata_locks_enabled and not dolphie.replay_file:
                 self.notify(
-                    "Metadata Locks panel requires Performance Schema to have"
-                    " [highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table"
+                    "Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled along with "
+                    "[highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table"
                 )
                 return
 
@@ -877,11 +1224,13 @@ class DolphieApp(App):
                 self.run_worker_main(tab.id)
         elif key == "plus":
             new_tab = await self.tab_manager.create_tab(tab_name="New Tab")
-            self.tab_manager.topbar.host = ""
+            self.tab_manager.switch_tab(new_tab.id)
             self.tab_manager.setup_host_tab(new_tab)
+
         elif key == "equals_sign":
 
             def command_get_input(tab_name):
+                tab.manual_tab_name = tab_name
                 self.tab_manager.rename_tab(tab, tab_name)
 
             self.app.push_screen(
@@ -892,21 +1241,27 @@ class DolphieApp(App):
             if len(self.tab_manager.tabs) == 1:
                 self.notify("Removing all tabs is not permitted", severity="error")
             else:
+                if not self.tab_manager.active_tab:
+                    self.notify("No active tab to remove", severity="error")
+                    return
+
                 await self.tab_manager.remove_tab(tab)
                 await self.tab_manager.disconnect_tab(tab=tab, update_topbar=False)
 
                 self.notify(f"Tab [highlight]{tab.name}[/highlight] [white]has been removed", severity="success")
                 self.tab_manager.tabs.pop(tab.id, None)
+        elif key == "left_square_bracket":
+            if dolphie.replay_file:
+                self.query_one("#back_button", Button).press()
+        elif key == "right_square_bracket":
+            if dolphie.replay_file:
+                self.query_one("#forward_button", Button).press()
 
         elif key == "ctrl+a" or key == "ctrl+d":
-            all_tabs = [tab.id for tab in self.tab_manager.get_all_tabs()]
-
             if key == "ctrl+a":
-                switch_to_tab = all_tabs[(all_tabs.index(tab.id) - 1) % len(all_tabs)]
+                self.tab_manager.host_tabs.action_previous_tab()
             elif key == "ctrl+d":
-                switch_to_tab = all_tabs[(all_tabs.index(tab.id) + 1) % len(all_tabs)]
-
-            self.tab_manager.switch_tab(switch_to_tab)
+                self.tab_manager.host_tabs.action_next_tab()
 
         elif key == "a":
             if dolphie.show_additional_query_columns:
@@ -916,6 +1271,7 @@ class DolphieApp(App):
                 dolphie.show_additional_query_columns = True
                 self.notify("Processlist will now show additional columns")
 
+            self.force_refresh_for_replay(need_current_data=True)
         elif key == "c":
             dolphie.user_filter = ""
             dolphie.db_filter = ""
@@ -923,6 +1279,8 @@ class DolphieApp(App):
             dolphie.hostgroup_filter = ""
             dolphie.query_time_filter = ""
             dolphie.query_filter = ""
+
+            self.force_refresh_for_replay(need_current_data=True)
 
             self.notify("Cleared all filters", severity="success")
 
@@ -954,9 +1312,38 @@ class DolphieApp(App):
                 else:
                     self.notify("Error log command requires MySQL 8+ with Performance Schema enabled")
 
+        elif key == "E":
+            processlist = dolphie.processlist_threads_snapshot or dolphie.processlist_threads
+            if processlist:
+                # Extract headers from the first entry's thread_data
+                first_entry = next(iter(processlist.values()))
+                headers = first_entry.thread_data.keys()
+
+                # Generate the filename with a timestamp prefix
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"processlist-{timestamp}.csv"
+
+                # Write the CSV to a file
+                with open(filename, "w", newline="") as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=headers)
+
+                    # Write the headers and rows
+                    writer.writeheader()
+                    for process_thread in processlist.values():
+                        writer.writerow(process_thread.thread_data)
+
+                self.notify(
+                    f"Processlist has been exported to CSV file [highlight]{filename}", severity="success", timeout=10
+                )
+            else:
+                self.notify("There's no processlist data to export", severity="warning")
+
         elif key == "f":
 
             def command_get_input(filter_data):
+                if not filter_data:
+                    return
+
                 filter_name, filter_value = filter_data[0], filter_data[1]
                 filters_mapping = {
                     "User": "user_filter",
@@ -969,13 +1356,16 @@ class DolphieApp(App):
 
                 attribute = filters_mapping.get(filter_name)
                 if attribute:
-                    setattr(dolphie, attribute, int(filter_value) if attribute == "query_time_filter" else filter_value)
+                    setattr(dolphie, attribute, filter_value)
                     self.notify(
                         f"Filtering [b]{filter_name.capitalize()}[/b] by [b highlight]{filter_value}[/b highlight]",
                         severity="success",
                     )
+
                 else:
                     self.notify(f"Invalid filter name {filter_name}", severity="error")
+
+                self.force_refresh_for_replay(need_current_data=True)
 
             self.app.push_screen(
                 CommandModal(
@@ -1053,12 +1443,15 @@ class DolphieApp(App):
                 self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "p":
-            if not dolphie.pause_refresh:
-                dolphie.pause_refresh = True
-                self.notify(f"Refresh is paused! Press [b highlight]{key}[/b highlight] again to resume")
+            if dolphie.replay_file:
+                self.query_one("#pause_button", Button).press()
             else:
-                dolphie.pause_refresh = False
-                self.notify("Refreshing has resumed", severity="success")
+                if not dolphie.pause_refresh:
+                    dolphie.pause_refresh = True
+                    self.notify(f"Refresh is paused! Press [b highlight]{key}[/b highlight] again to resume")
+                else:
+                    dolphie.pause_refresh = False
+                    self.notify("Refreshing has resumed", severity="success")
 
         if key == "P":
             if dolphie.connection_source == ConnectionSource.proxysql:
@@ -1108,6 +1501,12 @@ class DolphieApp(App):
                 dolphie.sort_by_time_descending = True
                 self.notify("Processlist will now sort threads by time in descending order")
 
+            self.force_refresh_for_replay(need_current_data=True)
+
+        elif key == "S":
+            if dolphie.replay_file:
+                self.query_one("#seek_button", Button).press()
+
         elif key == "t":
 
             if dolphie.connection_source == ConnectionSource.proxysql:
@@ -1124,7 +1523,7 @@ class DolphieApp(App):
                         return
 
                     thread_table.add_row("[label]Process ID", thread_id)
-                    thread_table.add_row("[label]Hostgroup", thread_data.hostgroup)
+                    thread_table.add_row("[label]Hostgroup", str(thread_data.hostgroup))
                     thread_table.add_row("[label]User", thread_data.user)
                     thread_table.add_row("[label]Frontend Host", thread_data.frontend_host)
                     thread_table.add_row("[label]Backend Host", thread_data.host)
@@ -1176,6 +1575,7 @@ class DolphieApp(App):
                 dolphie.show_idle_threads = True
                 self.notify("Processlist will now only show threads that have an active transaction")
 
+            self.force_refresh_for_replay(need_current_data=True)
         elif key == "u":
             if not dolphie.performance_schema_enabled and dolphie.connection_source != ConnectionSource.proxysql:
                 self.notify("User statistics command requires Performance Schema to be enabled")
@@ -1276,7 +1676,7 @@ class DolphieApp(App):
                 )
 
         elif key == "question_mark":
-            self.app.push_screen(HelpScreen(dolphie.connection_source))
+            self.app.push_screen(HelpScreen(dolphie.connection_source, dolphie.replay_file))
 
         if screen_data:
             self.app.push_screen(
@@ -1303,6 +1703,7 @@ class DolphieApp(App):
                     user_thread_attributes_table=user_thread_attributes_table,
                     query=formatted_query,
                     explain_data=explain_data,
+                    explain_json_data=explain_json_data,
                     explain_failure=explain_failure,
                     transaction_history_table=transaction_history_table,
                 )
@@ -1547,6 +1948,7 @@ class DolphieApp(App):
                 formatted_query = ""
                 explain_failure = ""
                 explain_data = ""
+                explain_json_data = ""
 
                 thread_table = Table(box=None, show_header=False)
                 thread_table.add_column("")
@@ -1565,11 +1967,8 @@ class DolphieApp(App):
                 thread_table.add_row("[label]Command", thread_data.command)
                 thread_table.add_row("[label]State", thread_data.state)
                 thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8))
-                thread_table.add_row("[label]Rows Locked", thread_data.trx_rows_locked)
-                thread_table.add_row("[label]Rows Modified", thread_data.trx_rows_modified)
-
-                if dolphie.global_variables.get("innodb_thread_concurrency"):
-                    thread_table.add_row("[label]Tickets", thread_data.trx_concurrency_tickets)
+                thread_table.add_row("[label]Rows Locked", format_number(thread_data.trx_rows_locked))
+                thread_table.add_row("[label]Rows Modified", format_number(thread_data.trx_rows_modified))
 
                 thread_table.add_row("", "")
                 thread_table.add_row("[label]TRX Time", thread_data.trx_time)
@@ -1585,9 +1984,14 @@ class DolphieApp(App):
                     if query_db:
                         try:
                             dolphie.secondary_db_connection.execute("USE %s" % query_db)
-                            dolphie.secondary_db_connection.execute("EXPLAIN %s" % query)
 
+                            dolphie.secondary_db_connection.execute("EXPLAIN %s" % query)
                             explain_data = dolphie.secondary_db_connection.fetchall()
+
+                            dolphie.secondary_db_connection.execute("EXPLAIN FORMAT=JSON %s" % query)
+                            explain_fetched_json_data = dolphie.secondary_db_connection.fetchone()
+                            if explain_fetched_json_data:
+                                explain_json_data = explain_fetched_json_data.get("EXPLAIN")
                         except ManualException as e:
                             explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.reason
 
@@ -1757,23 +2161,53 @@ class DolphieApp(App):
                         severity="information",
                         timeout=20,
                     )
+
+                    logger.warning(
+                        f"New version v{latest_version} is available! Please update at your earliest convenience. "
+                        "Find more details at https://github.com/charles-001/dolphie"
+                    )
         except Exception:
             pass
 
     def compose(self):
         yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for help")
-        yield TabbedContent(id="host_tabs")
+        yield Tabs(id="host_tabs")
+
+
+def setup_logger(config: Config):
+    logger.remove()
+
+    # If we're not using daemon mode, we want to essentially disable logging
+    if not config.daemon_mode:
+        return
+
+    logger.level("DEBUG", color="<magenta>")
+    logger.level("INFO", color="<blue>")
+    logger.level("WARNING", color="<yellow>")
+    logger.level("ERROR", color="<red>")
+    log_format = "<dim>{time:MM-DD-YYYY HH:mm:ss}</dim> <b><level>[{level}]</level></b> {message}"
+
+    log_level = "INFO"
+
+    # Add terminal & file logging
+    logger.add(sys.stdout, format=log_format, backtrace=True, colorize=True, level=log_level)
+    logger.add(config.daemon_mode_log_file, format=log_format, backtrace=True, level=log_level)
+
+    # Exit when critical is used
+    logger.add(lambda _: sys.exit(1), level="CRITICAL")
 
 
 def main():
-    # Set environment variables so Textual can use all the pretty colors
+    # Set environment variables for better color support
     os.environ["TERM"] = "xterm-256color"
     os.environ["COLORTERM"] = "truecolor"
 
-    parser = ArgumentParser(__version__)
+    arg_parser = ArgumentParser(__version__)
 
-    app = DolphieApp(parser.config)
-    app.run()
+    setup_logger(arg_parser.config)
+
+    app = DolphieApp(arg_parser.config)
+    app.run(headless=arg_parser.config.daemon_mode)
 
 
 if __name__ == "__main__":

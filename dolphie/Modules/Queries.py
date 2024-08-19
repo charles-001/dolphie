@@ -3,19 +3,18 @@ from dataclasses import dataclass
 
 @dataclass
 class ProxySQLQueries:
-
-    processlist: str = """/* dolphie */
+    processlist: str = """
         SELECT
-            SessionID AS id,
-            user AS user,
-            db AS db,
-            cli_host AS frontend_host,
-            hostgroup AS hostgroup,
-            srv_host AS backend_host,
-            command AS command,
-            time_ms AS time,
-            IFNULL(info, "") AS query,
-            IFNULL(extended_info, "") AS extended_info
+            SessionID      AS id,
+            user           AS user,
+            db             AS db,
+            cli_host       AS frontend_host,
+            hostgroup      AS hostgroup,
+            srv_host       AS backend_host,
+            command        AS command,
+            time_ms        AS time,
+            info           AS query,
+            extended_info  AS extended_info
         FROM
             stats_mysql_processlist
         WHERE
@@ -23,8 +22,8 @@ class ProxySQLQueries:
     """
     mysql_stats: str = """
         SELECT
-            Variable_Name as Variable_name,
-            Variable_Value as Value
+            Variable_Name  AS Variable_name,
+            Variable_Value AS Value
         FROM
             stats_mysql_global
     """
@@ -107,21 +106,21 @@ class MySQLQueries:
     pl_query: str = """
         SELECT
             id,
-            IFNULL(User, "")                    AS user,
-            IFNULL(Host, "")                    AS host,
-            IFNULL(db, "")                      AS db,
-            IFNULL(Command, "")                 As command,
-            IFNULL(Time, "0")                   AS time,
-            IFNULL(Info, "")                    AS query,
-            IFNULL(State, "")                   AS state,
-            IFNULL(trx_query, "")               AS trx_query,
-            IFNULL(trx_state, "")               AS trx_state,
-            IFNULL(trx_operation_state, "")     AS trx_operation_state,
-            IFNULL(trx_rows_locked, "0")        AS trx_rows_locked,
-            IFNULL(trx_rows_modified, "0")      AS trx_rows_modified,
-            IFNULL(trx_concurrency_tickets, "") AS trx_concurrency_tickets,
-            IFNULL(TIMESTAMPDIFF(SECOND, trx_started, NOW()), "") AS trx_time,
-            "" AS connection_type
+            User                    AS user,
+            Host                    AS host,
+            db                      AS db,
+            Command                 AS command,
+            Time                    AS time,
+            Info                    AS query,
+            State                   AS state,
+            trx_query               AS trx_query,
+            trx_state               AS trx_state,
+            trx_operation_state     AS trx_operation_state,
+            trx_rows_locked         AS trx_rows_locked,
+            trx_rows_modified       AS trx_rows_modified,
+            trx_concurrency_tickets AS trx_concurrency_tickets,
+            ""                      AS connection_type,
+            TIMESTAMPDIFF(SECOND, trx_started, NOW()) AS trx_time
         FROM
             information_schema.PROCESSLIST pl
             LEFT JOIN information_schema.innodb_trx ON trx_mysql_thread_id = pl.Id
@@ -131,23 +130,23 @@ class MySQLQueries:
     """
     ps_query: str = """
         SELECT
-            processlist_id                      AS id,
-            IFNULL(thread_id, "0")              AS mysql_thread_id,
-            IFNULL(processlist_user, "")        AS user,
-            IFNULL(processlist_host, "")        AS host,
-            IFNULL(processlist_db, "")          AS db,
-            IFNULL(processlist_command, "")     As command,
-            IFNULL(processlist_time, "0")       AS time,
-            IFNULL(processlist_info, "")        AS query,
-            IFNULL(processlist_state, "")       AS state,
-            IFNULL(trx_query, "")               AS trx_query,
-            IFNULL(trx_state, "")               AS trx_state,
-            IFNULL(trx_operation_state, "")     AS trx_operation_state,
-            IFNULL(trx_rows_locked, "0")        AS trx_rows_locked,
-            IFNULL(trx_rows_modified, "0")      AS trx_rows_modified,
-            IFNULL(trx_concurrency_tickets, "") AS trx_concurrency_tickets,
-            IFNULL(TIMESTAMPDIFF(SECOND, trx_started, NOW()), "") AS trx_time,
-            IFNULL(connection_type, "")         AS connection_type
+            processlist_id          AS id,
+            thread_id               AS mysql_thread_id,
+            processlist_user        AS user,
+            processlist_host        AS host,
+            processlist_db          AS db,
+            processlist_command     AS command,
+            processlist_time        AS time,
+            processlist_info        AS query,
+            processlist_state       AS state,
+            trx_query               AS trx_query,
+            trx_state               AS trx_state,
+            trx_operation_state     AS trx_operation_state,
+            trx_rows_locked         AS trx_rows_locked,
+            trx_rows_modified       AS trx_rows_modified,
+            trx_concurrency_tickets AS trx_concurrency_tickets,
+            connection_type         AS connection_type,
+            TIMESTAMPDIFF(SECOND, trx_started, NOW()) AS trx_time
         FROM
             performance_schema.threads t
             LEFT JOIN information_schema.innodb_trx tx ON trx_mysql_thread_id = t.processlist_id
@@ -166,13 +165,13 @@ class MySQLQueries:
             waiting_trx_rows_modified,
             waiting_trx_rows_locked,
             waiting_lock_mode,
-            IFNULL(waiting_query, "")  AS waiting_query,
+            waiting_query
             blocking_pid,
             blocking_trx_age,
             blocking_trx_rows_modified,
             blocking_trx_rows_locked,
             blocking_lock_mode,
-            IFNULL(blocking_query, "") AS blocking_query
+            blocking_query
         FROM
             sys.innodb_lock_waits
     """

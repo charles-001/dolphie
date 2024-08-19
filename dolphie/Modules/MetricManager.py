@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Union
 
 import plotext as plt
@@ -15,15 +15,17 @@ class Graph(Static):
 
         self.marker = None
         self.metric_instance = None
+        self.datetimes = None
 
     def on_show(self) -> None:
-        self.render_graph(self.metric_instance)
+        self.render_graph(self.metric_instance, self.datetimes)
 
     def on_resize(self) -> None:
-        self.render_graph(self.metric_instance)
+        self.render_graph(self.metric_instance, self.datetimes)
 
-    def render_graph(self, metric_instance) -> None:
+    def render_graph(self, metric_instance, datetimes) -> None:
         self.metric_instance = metric_instance
+        self.datetimes = datetimes
 
         if self.metric_instance is None:
             return
@@ -38,10 +40,10 @@ class Graph(Static):
 
         max_y_value = 0
         if isinstance(self.metric_instance, CheckpointMetrics):
-            x = self.metric_instance.datetimes
+            x = self.datetimes
             y = self.metric_instance.Innodb_checkpoint_age.values
 
-            if y:
+            if y and x:
                 plt.hline(0, (10, 14, 27))
                 plt.hline(self.metric_instance.checkpoint_age_sync_flush, (241, 251, 130))
                 plt.hline(self.metric_instance.checkpoint_age_max, (252, 121, 121))
@@ -113,10 +115,10 @@ class Graph(Static):
                     )
                     max_y_value = max(self.metric_instance.redo_log_size, max(y))
             else:
-                x = self.metric_instance.datetimes
+                x = self.datetimes
                 y = self.metric_instance.Innodb_lsn_current.values
 
-                if y:
+                if y and x:
                     plt.plot(
                         x,
                         y,
@@ -126,10 +128,10 @@ class Graph(Static):
                     )
                     max_y_value = max(max_y_value, max(y))
         elif isinstance(self.metric_instance, RedoLogActiveCountMetrics):
-            x = self.metric_instance.datetimes
+            x = self.datetimes
             y = self.metric_instance.Active_redo_log_count.values
 
-            if y:
+            if y and x:
                 plt.hline(1, (10, 14, 27))
                 plt.hline(34, (252, 121, 121))
                 plt.text(
@@ -152,10 +154,10 @@ class Graph(Static):
         else:
             for metric_data in self.metric_instance.__dict__.values():
                 if isinstance(metric_data, MetricData) and metric_data.visible:
-                    x = self.metric_instance.datetimes
+                    x = self.datetimes
                     y = metric_data.values
 
-                    if y:
+                    if y and x:
                         plt.plot(x, y, marker=self.marker, label=metric_data.label, color=metric_data.color)
                         max_y_value = max(max_y_value, max(y))
 
@@ -241,10 +243,10 @@ class DMLMetrics:
     tab_name: str = "dml"
     graph_tab_name = "DML"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
     )
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -254,8 +256,8 @@ class ReplicationLagMetrics:
     tab_name: str = "replication_lag"
     graph_tab_name = "Replication"
     metric_source: MetricSource = MetricSource.none
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -265,10 +267,10 @@ class CheckpointMetrics:
     tab_name: str = "checkpoint"
     graph_tab_name = "Checkpoint"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     checkpoint_age_max: int = 0
     checkpoint_age_sync_flush: int = 0
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -280,8 +282,8 @@ class BufferPoolRequestsMetrics:
     tab_name: str = "buffer_pool_requests"
     graph_tab_name = "BP Requests"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -292,8 +294,8 @@ class AdaptiveHashIndexMetrics:
     tab_name: str = "adaptive_hash_index"
     graph_tab_name = "AHI"
     metric_source: MetricSource = MetricSource.innodb_metrics
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -304,8 +306,8 @@ class AdaptiveHashIndexHitRatio:
     tab_name: str = "adaptive_hash_index"
     graph_tab_name = "AHI"
     metric_source: MetricSource = MetricSource.none
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -316,8 +318,8 @@ class RedoLogMetrics:
     graph_tab_name = "Redo Log"
     redo_log_size: int = 0
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -327,8 +329,8 @@ class RedoLogActiveCountMetrics:
     tab_name: str = "redo_log"
     graph_tab_name = "Redo Log"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -340,8 +342,8 @@ class TableCacheMetrics:
     tab_name: str = "table_cache"
     graph_tab_name = "Table Cache"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -352,8 +354,8 @@ class ThreadMetrics:
     tab_name: str = "threads"
     graph_tab_name = "Threads"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -365,8 +367,8 @@ class TemporaryObjectMetrics:
     tab_name: str = "temporary_objects"
     graph_tab_name = "Temp Objects"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -377,8 +379,8 @@ class AbortedConnectionsMetrics:
     tab_name: str = "aborted_connections"
     graph_tab_name = "Aborted Connections"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -389,8 +391,8 @@ class DiskIOMetrics:
     tab_name: str = "disk_io"
     graph_tab_name = "Disk I/O"
     metric_source: MetricSource = MetricSource.disk_io_metrics
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -400,8 +402,19 @@ class LocksMetrics:
     tab_name: str = "locks"
     graph_tab_name = "Locks"
     metric_source: MetricSource = MetricSource.none
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
+
+
+@dataclass
+class HistoryListLength:
+    trx_rseg_history_len: MetricData
+    graphs: List[str]
+    tab_name: str = "history_list_length"
+    graph_tab_name = "History List"
+    metric_source: MetricSource = MetricSource.innodb_metrics
+    connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.mysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -418,8 +431,8 @@ class ProxySQLConnectionsMetrics:
     tab_name: str = "proxysql_connections"
     graph_tab_name = "Connections"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -432,8 +445,8 @@ class ProxySQLQueriesDataNetwork:
     tab_name: str = "proxysql_queries_data_network"
     graph_tab_name = "Query Data Rates"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -443,8 +456,8 @@ class ProxySQLActiveTRX:
     tab_name: str = "proxysql_active_trx"
     graph_tab_name = "Active TRX"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -454,8 +467,8 @@ class ProxySQLMultiplexEfficiency:
     tab_name: str = "proxysql_multiplex_efficiency"
     graph_tab_name = "Multiplex Efficiency"
     metric_source: MetricSource = MetricSource.global_status
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -476,8 +489,8 @@ class ProxySQLSELECTCommandStats:
     tab_name: str = "proxysql_select_command_stats"
     graph_tab_name = "SELECT Command Stats"
     metric_source: MetricSource = MetricSource.proxysql_select_command_stats
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -498,17 +511,18 @@ class ProxySQLTotalCommandStats:
     tab_name: str = "proxysql_total_command_stats"
     graph_tab_name = "Total Command Stats"
     metric_source: MetricSource = MetricSource.proxysql_total_command_stats
-    datetimes: List[str] = field(default_factory=list)
     connection_source: List[ConnectionSource] = field(default_factory=lambda: [ConnectionSource.proxysql])
+    use_with_replay: bool = True
 
 
 @dataclass
 class MetricInstances:
     dml: DMLMetrics
-    checkpoint: CheckpointMetrics
     buffer_pool_requests: BufferPoolRequestsMetrics
+    history_list_length: HistoryListLength
     adaptive_hash_index: AdaptiveHashIndexMetrics
     adaptive_hash_index_hit_ratio: AdaptiveHashIndexHitRatio
+    checkpoint: CheckpointMetrics
     redo_log_active_count: RedoLogActiveCountMetrics
     redo_log: RedoLogMetrics
     table_cache: TableCacheMetrics
@@ -527,17 +541,21 @@ class MetricInstances:
 
 
 class MetricManager:
-    def __init__(self):
+    def __init__(self, replay_file: str, daemon_mode: bool = False):
+        self.connection_source = ConnectionSource.mysql
+        self.replay_file = replay_file
+        self.daemon_mode = daemon_mode
+
         self.reset()
 
     def reset(self):
-        self.worker_start_time: datetime = None
-        self.polling_latency: float = None
+        self.initialized: bool = False
+        self.polling_latency: float = 0
         self.global_variables: Dict[str, Union[int, str]] = None
         self.global_status: Dict[str, int] = None
-        self.replication_lag: int = None
         self.redo_log_size: int = 0
 
+        self.datetimes: List[str] = []
         self.metrics = MetricInstances(
             dml=DMLMetrics(
                 graphs=["graph_dml"],
@@ -571,6 +589,12 @@ class MetricManager:
                 Innodb_buffer_pool_read_requests=MetricData(label="Read Requests", color=MetricColor.blue),
                 Innodb_buffer_pool_write_requests=MetricData(label="Write Requests", color=MetricColor.green),
                 Innodb_buffer_pool_reads=MetricData(label="Disk Reads", color=MetricColor.red),
+            ),
+            history_list_length=HistoryListLength(
+                graphs=["graph_history_list_length"],
+                trx_rseg_history_len=MetricData(
+                    label="HLL", color=MetricColor.blue, per_second_calculation=False, create_switch=False
+                ),
             ),
             adaptive_hash_index=AdaptiveHashIndexMetrics(
                 graphs=["graph_adaptive_hash_index"],
@@ -703,8 +727,8 @@ class MetricManager:
 
     def refresh_data(
         self,
-        worker_start_time: datetime,
-        polling_latency: float,
+        worker_start_time: datetime = None,
+        polling_latency: float = 0,
         global_variables: Dict[str, Union[int, str]] = {},
         global_status: Dict[str, int] = {},
         innodb_metrics: Dict[str, int] = {},
@@ -712,7 +736,6 @@ class MetricManager:
         disk_io_metrics: Dict[str, int] = {},
         metadata_lock_metrics: Dict[str, int] = {},
         replication_status: Dict[str, Union[int, str]] = {},
-        replication_lag: int = 0,  # this can be from SHOW SLAVE Status/heartbeat table
     ):
         self.worker_start_time = worker_start_time
         self.polling_latency = polling_latency
@@ -722,7 +745,6 @@ class MetricManager:
         self.disk_io_metrics = disk_io_metrics
         self.metadata_lock_metrics = metadata_lock_metrics
         self.replication_status = replication_status
-        self.replication_lag = replication_lag
         self.proxysql_total_command_stats = {}
         self.proxysql_select_command_stats = {}
 
@@ -734,23 +756,37 @@ class MetricManager:
         )
         self.redo_log_size = max(innodb_redo_log_capacity, innodb_log_file_size)
 
-        self.update_proxysql_command_stats(proxysql_command_stats)
-        self.update_metrics_per_second_values()
+        if not self.replay_file:
+            self.update_proxysql_command_stats(proxysql_command_stats)
 
-        self.update_metrics_replication_lag()
-        self.update_metrics_checkpoint()
-        self.update_metrics_adaptive_hash_index_hit_ratio()
-        self.update_metrics_locks()
-
-        self.update_metrics_last_value()
+            self.update_metrics_per_second_values()
+            self.update_metrics_replication_lag()
+            self.update_metrics_checkpoint()
+            self.update_metrics_adaptive_hash_index_hit_ratio()
+            self.update_metrics_locks()
+            self.update_metrics_last_value()
+        else:
+            self.update_metrics_checkpoint()
 
         self.metrics.redo_log.redo_log_size = self.redo_log_size
 
+        self.add_metric_datetime()
+        self.daemon_cleanup_data()
+
+        # Set the initialized flag after the first refresh since we now have last value data for differences
+        # This lets us sync all metric values to a datetime
+        self.initialized = True
+
     def add_metric(self, metric_data: MetricData, value: int):
-        if metric_data.save_history:
-            metric_data.values.append(value)
-        else:
-            metric_data.values = [value]
+        if self.initialized:
+            if metric_data.save_history:
+                metric_data.values.append(value)
+            else:
+                metric_data.values = [value]
+
+    def add_metric_datetime(self):
+        if self.initialized and not self.replay_file:
+            self.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def get_metric_source_data(self, metric_source):
         if metric_source == MetricSource.global_status:
@@ -770,7 +806,17 @@ class MetricManager:
 
     def update_metrics_per_second_values(self):
         for metric_instance in self.metrics.__dict__.values():
-            metrics_updated = False
+            # Skip if the metric instance is not for the current connection source
+            if (
+                self.connection_source == ConnectionSource.mysql
+                and ConnectionSource.mysql not in metric_instance.connection_source
+            ):
+                continue
+            elif (
+                self.connection_source == ConnectionSource.proxysql
+                and ConnectionSource.proxysql not in metric_instance.connection_source
+            ):
+                continue
 
             metric_source_data = self.get_metric_source_data(metric_instance.metric_source)
             if metric_source_data is None:
@@ -790,10 +836,6 @@ class MetricManager:
                             metric_status_per_sec = current_metric_source_value
 
                         self.add_metric(metric_data, metric_status_per_sec)
-                        metrics_updated = True
-
-            if metrics_updated:
-                metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def update_metrics_last_value(self):
         # We set the last value for specific metrics that need it so they can get per second values
@@ -805,6 +847,9 @@ class MetricManager:
                     metric_data.last_value = metric_source_data.get(metric_name, 0)
 
     def update_proxysql_command_stats(self, proxysql_command_stats):
+        if self.connection_source != ConnectionSource.proxysql:
+            return
+
         for row in proxysql_command_stats:
             # Convert all values to integers if they are a number for SELECT command
             if row["Command"] == "SELECT":
@@ -821,10 +866,8 @@ class MetricManager:
                         self.proxysql_total_command_stats[key] = int(value)
 
     def update_metrics_replication_lag(self):
-        if self.replication_status:
-            metric_instance = self.metrics.replication_lag
-            self.add_metric(metric_instance.lag, self.replication_lag)
-            metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
+        metric_instance = self.metrics.replication_lag
+        self.add_metric(metric_instance.lag, self.replication_status.get("Seconds_Behind", 0))
 
     def update_metrics_adaptive_hash_index_hit_ratio(self):
         hit_ratio = self.get_metric_adaptive_hash_index(format=False)
@@ -832,7 +875,6 @@ class MetricManager:
         if hit_ratio:
             metric_instance = self.metrics.adaptive_hash_index_hit_ratio
             self.add_metric(metric_instance.hit_ratio, hit_ratio)
-            metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def update_metrics_checkpoint(self):
         (max_checkpoint_age_bytes, checkpoint_age_sync_flush_bytes, _) = self.get_metric_checkpoint_age(format=False)
@@ -844,7 +886,6 @@ class MetricManager:
     def update_metrics_locks(self):
         metric_instance = self.metrics.locks
         self.add_metric(metric_instance.metadata_lock_count, len(self.metadata_lock_metrics))
-        metric_instance.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def get_metric_checkpoint_age(self, format):
         checkpoint_age_bytes = round(self.global_status.get("Innodb_checkpoint_age", 0))
@@ -875,7 +916,15 @@ class MetricManager:
         if self.global_variables.get("innodb_adaptive_hash_index") == "OFF":
             return "OFF" if format else None
         elif format:
-            smoothed_hit_ratio = self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio
+            smoothed_hit_ratio = None
+
+            # If we are replaying a file, we need to get the last value from the metric
+            if self.replay_file:
+                if self.metrics.adaptive_hash_index_hit_ratio.hit_ratio.values:
+                    smoothed_hit_ratio = self.metrics.adaptive_hash_index_hit_ratio.hit_ratio.values[-1]
+            else:
+                smoothed_hit_ratio = self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio
+
             if smoothed_hit_ratio is None:
                 return "N/A"
             else:
@@ -888,6 +937,9 @@ class MetricManager:
 
         current_hits = self.innodb_metrics.get("adaptive_hash_searches", 0)
         current_misses = self.innodb_metrics.get("adaptive_hash_searches_btree", 0)
+
+        if not self.metrics.adaptive_hash_index.adaptive_hash_searches.last_value:
+            return None
 
         hits = current_hits - self.metrics.adaptive_hash_index.adaptive_hash_searches.last_value
         misses = current_misses - self.metrics.adaptive_hash_index.adaptive_hash_searches_btree.last_value
@@ -907,3 +959,32 @@ class MetricManager:
         self.metrics.adaptive_hash_index_hit_ratio.smoothed_hit_ratio = smoothed_hit_ratio
 
         return smoothed_hit_ratio
+
+    def daemon_cleanup_data(self):
+        """
+        Cleanup data for daemon mode to keep the metrics data small
+        """
+        if not self.daemon_mode:
+            return
+
+        # Define the time threshold for retaining metrics data
+        time_threshold = datetime.now() - timedelta(minutes=10)
+
+        # Filter
+        filtered_datetimes = [
+            dt for dt in self.datetimes if datetime.strptime(dt, "%d/%m/%y %H:%M:%S") >= time_threshold
+        ]
+
+        # Create a set for fast lookup of datetimes
+        filtered_set = set(filtered_datetimes)
+
+        # Update metrics data based on datetimes
+        for metric_instance in self.metrics.__dict__.values():
+            for metric_data in metric_instance.__dict__.values():
+                if isinstance(metric_data, MetricData):
+                    metric_data.values = [
+                        value for dt, value in zip(self.datetimes, metric_data.values) if dt in filtered_set
+                    ]
+
+        # Update datetimes to only keep valid ones
+        self.datetimes = filtered_datetimes

@@ -7,9 +7,7 @@ from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
-from rich import box
 from rich.align import Align
-from rich.panel import Panel
 from rich.style import Style
 from rich.table import Table
 from textual.containers import ScrollableContainer
@@ -90,7 +88,7 @@ def create_panel(tab: Tab):
                                 classes=f"member_{tab.id}",
                             ),
                             id=f"member_container_{member_id}_{tab.id}",
-                            classes=f"member_container_{tab.id}",
+                            classes=f"member_container_{tab.id} member_container",
                         )
                     )
 
@@ -99,24 +97,6 @@ def create_panel(tab: Tab):
                 member_id = existing_member.id.split("_")[1]
                 if member_id not in existing_member_ids:
                     tab.dolphie.app.query_one(f"#{existing_member.parent.id}").remove()
-
-    def create_cluster_panel():
-        if not dolphie.galera_cluster:
-            tab.cluster_data.display = False
-            return None
-
-        tab.cluster_data.display = True
-        tab.cluster_data.update(
-            Panel(
-                Align.center(
-                    "\n[b light_blue]State[/b light_blue] "
-                    f" {dolphie.global_status.get('wsrep_local_state_comment', 'N/A')}\n"
-                ),
-                title="[b white]Cluster",
-                box=box.HORIZONTALS,
-                border_style="panel_border",
-            )
-        )
 
     def create_replication_panel():
         if not dolphie.replication_status:
@@ -190,7 +170,6 @@ def create_panel(tab: Tab):
         tab.replication_status.update(create_replication_table(tab))
 
     create_replication_panel()
-    create_cluster_panel()
     create_group_replication_panel()
 
 
@@ -227,7 +206,7 @@ def create_replica_panel(tab: Tab):
                                 classes=f"replica_{tab.id}",
                             ),
                             id=f"replica_container_{replica.thread_id}_{tab.id}",
-                            classes=f"replica_container_{tab.id}",
+                            classes=f"replica_container_{tab.id} replica_container",
                         )
                     )
 
@@ -246,24 +225,12 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     # When replica is specified, that means we're creating a table for a replica and not replication
     if replica:
         data = replica.replication_status
-        replica_previous_replica_sbm = replica.previous_sbm
-
-        replica_sbm_source = replica.lag_source
-        replica_sbm = replica.lag
     else:
         data = dolphie.replication_status
-        replica_previous_replica_sbm = dolphie.previous_replica_sbm
 
-        replica_sbm_source = dolphie.replica_lag_source
-        replica_sbm = dolphie.replica_lag
-
-    speed = 0
-    lag = None
-    if replica_sbm is not None:
-        if replica_previous_replica_sbm and replica_sbm < replica_previous_replica_sbm:
-            speed = round((replica_previous_replica_sbm - replica_sbm) / dolphie.polling_latency)
-
-        replica_lag = replica_sbm
+    replica_lag = data.get("Seconds_Behind", 0)
+    formatted_replica_lag = None
+    if replica_lag is not None:
         if data.get("SQL_Delay"):
             replica_lag -= data["SQL_Delay"]
 
@@ -273,10 +240,11 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         elif replica_lag >= 10:
             lag_color = "yellow"
 
-        lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
+        formatted_replica_lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
 
     if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb:
-        primary_uuid = data.get("Source_UUID")
+        uuid_key = "Source_UUID"
+        primary_uuid = data.get(uuid_key)
         primary_host = dolphie.get_hostname(data.get("Source_Host"))
         primary_user = data.get("Source_User")
         primary_log_file = data.get("Source_Log_File")
@@ -293,7 +261,8 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         )
 
     else:
-        primary_uuid = data.get("Master_UUID")
+        uuid_key = "Master_UUID"
+        primary_uuid = data.get(uuid_key)
         primary_host = dolphie.get_hostname(data.get("Master_Host"))
         primary_user = data.get("Master_User")
         primary_log_file = data.get("Master_Log_File")
@@ -358,13 +327,12 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         else:
             replication_delay = f"[dark_yellow]Delay[/dark_yellow] {format_time(data['SQL_Delay'])}"
 
-    lag_source = f"Lag ({replica_sbm_source})" if replica_sbm_source else "Lag"
-    if lag is None or sql_thread_running == "[red]OFF[/red]":
-        table.add_row(f"[label]{lag_source}", "")
+    if formatted_replica_lag is None or sql_thread_running == "[red]OFF[/red]":
+        table.add_row("[label]Lag", "")
     else:
         table.add_row(
-            "[label]%s" % lag_source,
-            "%s [label]Speed[/label] %s %s" % (lag, speed, replication_delay),
+            "[label]Lag",
+            "%s [label]Speed[/label] %s %s" % (formatted_replica_lag, data["Replica_Speed"], replication_delay),
         )
 
     if dashboard_table:
@@ -430,7 +398,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             if replica:
                 replica_primary_server_uuid = None
                 if dolphie.replication_status:
-                    replica_primary_server_uuid = dolphie.replication_status.get("Master_UUID")
+                    replica_primary_server_uuid = dolphie.replication_status.get(uuid_key)
 
                 def remove_primary_uuid_gtid_set(gtid_sets):
                     lines = gtid_sets.splitlines()
@@ -624,7 +592,21 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
     seconds_behind = replica_lag_data.get(seconds_behind_key)
     replica_lag = int(seconds_behind) if seconds_behind is not None else 0
 
-    return replica_lag_source, replica_lag, replication_status
+    if replication_status:
+        # Update the replication lag with the alternative method if available
+        replication_status["Seconds_Behind"] = replica_lag
+
+        previous_sbm = 0
+        if replica:
+            previous_sbm = replica.replication_status.get("Seconds_Behind", 0)
+        else:
+            previous_sbm = dolphie.replication_status.get("Seconds_Behind", 0)
+
+        replication_status["Replica_Speed"] = 0
+        if previous_sbm and replica_lag < previous_sbm:
+            replication_status["Replica_Speed"] = round((previous_sbm - replica_lag) / dolphie.polling_latency)
+
+    return replication_status
 
 
 def fetch_replicas(tab: Tab):
@@ -706,8 +688,7 @@ def fetch_replicas(tab: Tab):
         # If we have a replica connection, we fetch its replication status
         if replica.connection:
             try:
-                replica.previous_sbm = replica.lag
-                replica.lag_source, replica.lag, replica.replication_status = fetch_replication_data(tab, replica)
+                replica.replication_status = fetch_replication_data(tab, replica)
                 if replica.replication_status:
                     replica.table = create_replication_table(tab, replica=replica)
             except ManualException as e:

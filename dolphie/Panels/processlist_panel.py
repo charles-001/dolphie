@@ -11,7 +11,7 @@ from textual.widgets import DataTable
 def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
-    if not dolphie.performance_schema_enabled and dolphie.use_performance_schema:
+    if not dolphie.performance_schema_enabled and dolphie.use_performance_schema and not dolphie.replay_file:
         dolphie.app.notify(
             "Performance Schema is not enabled on this host, using Information Schema instead for Processlist"
         )
@@ -33,8 +33,8 @@ def create_panel(tab: Tab) -> DataTable:
     if dolphie.show_additional_query_columns:
         columns.extend(
             [
-                {"name": "Hostname/IP", "field": "host", "width": 16, "format_number": False},
-                {"name": "Database", "field": "db", "width": 13, "format_number": False},
+                {"name": "Hostname/IP", "field": "host", "width": 25, "format_number": False},
+                {"name": "Database", "field": "db", "width": 15, "format_number": False},
             ]
         )
 
@@ -47,9 +47,6 @@ def create_panel(tab: Tab) -> DataTable:
             {"name": "R-Mod", "field": "trx_rows_modified", "width": 7, "format_number": True},
         ]
     )
-
-    if dolphie.show_additional_query_columns and dolphie.global_variables.get("innodb_thread_concurrency"):
-        columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": True})
 
     if dolphie.show_trxs_only:
         columns.append(
@@ -79,9 +76,31 @@ def create_panel(tab: Tab) -> DataTable:
             column_width = column_data["width"]
             processlist_datatable.add_column(column_name, key=column_name, width=column_width)
 
+    filter_threads = []
     # Iterate through processlist_threads
     for thread_id, thread in dolphie.processlist_threads.items():
         row_values = []
+
+        thread: ProcesslistThread
+        # We use filter here for replays since the original way requires changing WHERE clause
+        if dolphie.replay_file:
+            found = False
+            if dolphie.show_trxs_only and thread.trx_state == "[dark_gray]N/A":
+                found = True
+            elif dolphie.user_filter and dolphie.user_filter != thread.user:
+                found = True
+            elif dolphie.db_filter and dolphie.db_filter != thread.db:
+                found = True
+            elif dolphie.host_filter and dolphie.host_filter not in thread.host:
+                found = True
+            elif dolphie.query_time_filter and dolphie.query_time_filter >= thread.time:
+                found = True
+            elif dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
+                found = True
+
+            if found:
+                filter_threads.append(thread_id)
+                continue
 
         for column_id, (column_data) in enumerate(columns):
             column_name = column_data["name"]
@@ -128,6 +147,10 @@ def create_panel(tab: Tab) -> DataTable:
         if row_values:
             processlist_datatable.add_row(*row_values, key=thread_id)
 
+    # Remove threads that were filtered out
+    for thread_id in filter_threads:
+        dolphie.processlist_threads.pop(thread_id)
+
     # Remove rows from processlist_datatable that no longer exist in processlist_threads
     if dolphie.processlist_threads:
         rows_to_remove = set(processlist_datatable.rows.keys()) - set(dolphie.processlist_threads.keys())
@@ -147,6 +170,9 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
 
     if dolphie.use_performance_schema:
         processlist_query = MySQLQueries.ps_query
+        if not dolphie.is_mysql_version_at_least("5.7"):
+            # Remove the connection_type field for MySQL versions below 5.7 since it doesn't exist
+            processlist_query = processlist_query.replace("connection_type", '""')
     else:
         processlist_query = MySQLQueries.pl_query
 
@@ -234,11 +260,14 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
         # Use trx_query over Performance Schema query since it's more accurate
         if dolphie.use_performance_schema and thread["trx_query"]:
             thread["query"] = thread["trx_query"]
-        else:
-            thread["query"] = thread["query"]
+        thread["query"] = "" if thread["query"] is None else thread["query"]
 
-        host = thread["host"].split(":")[0]
-        thread["host"] = dolphie.get_hostname(host)
+        if thread["host"]:
+            host = thread["host"].split(":")[0]
+            thread["host"] = dolphie.get_hostname(host)
+
+        # Remove trx_query from the thread data since it's not needed
+        thread.pop("trx_query", None)
 
         processlist_threads[str(thread["id"])] = ProcesslistThread(thread)
 

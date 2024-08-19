@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List
 
 from dolphie.Modules.Functions import format_query, format_time
@@ -7,11 +7,11 @@ from rich.table import Table
 
 @dataclass
 class ConnectionSource:
-    mysql = "mysql"
-    proxysql = "proxysql"
-    mariadb = "mariadb"
-    aws_rds = "aws_rds"
-    azure_mysql = "azure_mysql"
+    mysql = "MySQL"
+    proxysql = "ProxySQL"
+    mariadb = "MariaDB"
+    aws_rds = "AWS RDS"
+    azure_mysql = "Azure MySQL"
 
 
 @dataclass
@@ -28,10 +28,7 @@ class Replica:
     host: str
     connection: str = None
     table: Table = None
-    replication_status: Dict[str, str] = None
-    lag_source: str = None
-    lag: int = None
-    previous_sbm: int = 0
+    replication_status: Dict[str, str] = field(default_factory=dict)
     mysql_version: str = None
 
 
@@ -52,7 +49,7 @@ class ReplicaManager:
     def get(self, thread_id: int) -> Replica:
         return self.replicas.get(thread_id)
 
-    def remove_all(self):
+    def disconnect_all(self):
         if self.replicas:
             for replica in self.replicas.values():
                 if replica.connection:
@@ -98,6 +95,8 @@ class Panels:
 
 class ProcesslistThread:
     def __init__(self, thread_data: Dict[str, str]):
+        self.thread_data = thread_data
+
         self.id = str(thread_data.get("id", ""))
         self.mysql_thread_id = thread_data.get("mysql_thread_id")
         self.user = thread_data.get("user", "")
@@ -158,8 +157,10 @@ class ProcesslistThread:
 
 class ProxySQLProcesslistThread:
     def __init__(self, thread_data: Dict[str, str]):
+        self.thread_data = thread_data
+
         self.id = str(thread_data.get("id", ""))
-        self.hostgroup = thread_data.get("hostgroup")
+        self.hostgroup = int(thread_data.get("hostgroup"))
         self.user = thread_data.get("user", "")
         self.frontend_host = self._get_formatted_string(thread_data.get("frontend_host", ""))
         self.host = self._get_formatted_string(thread_data.get("backend_host", ""))
@@ -215,3 +216,4 @@ class HotkeyCommands:
     variable_search = "variable_search"
     rename_tab = "rename_tab"
     refresh_interval = "refresh_interval"
+    replay_seek = "replay_seek"

@@ -18,9 +18,9 @@ def create_panel(tab: Tab) -> DataTable:
         "ConnOK": {"name": "Conn OK", "width": 10, "format": "number"},
         "ConnERR": {"name": "Conn ERR", "width": 10, "format": "number"},
         "MaxConnUsed": {"name": "Max Conn", "width": 11, "format": "number"},
-        "Queries": {"name": "Queries/s", "width": 10, "format": "number"},
-        "Bytes_data_sent": {"name": "Data Sent/s", "width": 11, "format": "bytes"},
-        "Bytes_data_recv": {"name": "Data Recvd/s", "width": 12, "format": "bytes"},
+        "Queries_per_sec": {"name": "Queries/s", "width": 10, "format": "number"},
+        "Bytes_data_sent_per_sec": {"name": "Data Sent/s", "width": 11, "format": "bytes"},
+        "Bytes_data_recv_per_sec": {"name": "Data Recvd/s", "width": 12, "format": "bytes"},
         "Latency_us": {"name": "Latency (ms)", "width": 12, "format": "time"},
     }
 
@@ -40,23 +40,16 @@ def create_panel(tab: Tab) -> DataTable:
         for column_id, (column_key, column_data) in enumerate(columns.items()):
             column_name = column_data["name"]
             column_format = column_data["format"]
-            column_value = row.get(column_key)
+            column_value = row.get(column_key, 0)
 
-            # Calculate the values per second for the following columns since the total isn't a great metric
-            if column_key in ["Queries", "Bytes_data_sent", "Bytes_data_recv"]:
-                if not dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0):
-                    column_value = 0
-                else:
-                    value_diff = int(column_value) - dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0)
-                    column_value = round(value_diff / dolphie.polling_latency)
-
-                dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = int(row[column_key])
             if column_format == "time":
                 column_value = f"{round(int(column_value) / 1000, 2)}"
             elif column_format == "bytes":
                 column_value = format_bytes(column_value)
             elif column_format == "number":
                 column_value = format_number(column_value)
+            elif column_key == "hostgroup":
+                column_value = int(column_value)
             elif column_key == "srv_host":
                 column_value = dolphie.get_hostname(column_value)
             elif column_key == "status":
@@ -94,6 +87,8 @@ def create_panel(tab: Tab) -> DataTable:
     else:
         if hostgroup_summary_datatable.row_count:
             hostgroup_summary_datatable.clear()
+
+    hostgroup_summary_datatable.sort("hostgroup")
 
     tab.proxysql_hostgroup_summary_title.update(
         f"Hostgroups ([highlight]{hostgroup_summary_datatable.row_count}[/highlight])"

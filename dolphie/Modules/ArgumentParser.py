@@ -31,7 +31,11 @@ class Config:
     ssl_cert: str = None
     ssl_key: str = None
     config_file: List[str] = field(
-        default_factory=lambda: ["/etc/dolphie.cnf", f"{os.path.expanduser('~')}/.dolphie.cnf"]
+        default_factory=lambda: [
+            "/etc/dolphie.cnf",
+            "/etc/dolphie/dolphie.cnf",
+            f"{os.path.expanduser('~')}/.dolphie.cnf",
+        ]
     )
     mycnf_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/.my.cnf")
     login_path: str = "client"
@@ -47,6 +51,13 @@ class Config:
     hostgroup_hosts: Dict[str, List[str]] = field(default_factory=dict)
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
+    record_for_replay: bool = False
+    daemon_mode: bool = False
+    daemon_mode_log_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_daemon.log")
+    replay_file: str = None
+    replay_dir: str = None
+    replay_retention_hours: int = 48
+    exclude_notify_global_vars: str = None
 
 
 class ArgumentParser:
@@ -64,8 +75,13 @@ class ArgumentParser:
                 self.config_object_options[variable.name] = variable.type
 
         self.formatted_options = "\n\t".join(
-            [f"({data_type.__name__}) {option}" for option, data_type in self.config_object_options.items()]
+            [
+                f"({data_type.__name__}) {option}" if hasattr(data_type, "__name__") else f"(str) {option} []"
+                for option, data_type in self.config_object_options.items()
+                if option != "config_file"
+            ]
         )
+
         epilog = f"""
 Order of precedence for methods that pass options to Dolphie:
 \t1. Command-line
@@ -130,8 +146,8 @@ Dolphie's config supports these options under [dolphie] section:
             type=str,
             nargs="?",
             help=(
-                "Use a URI string for credentials (mysql/proxysql) - format: mysql://user:password@host:port"
-                f" (port is optional with default {self.config.port}, or 6032 for ProxySQL)"
+                "Use a URI string for credentials (mysql/proxysql) - format: mysql://user:password@host:port "
+                f"(port is optional with default {self.config.port}, or 6032 for ProxySQL)"
             ),
         )
 
@@ -168,6 +184,7 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
+            "-c",
             "--config-file",
             dest="config_file",
             type=str,
@@ -178,6 +195,7 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
+            "-m",
             "--mycnf-file",
             dest="mycnf_file",
             type=str,
@@ -188,7 +206,25 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "-f",
+            "-l",
+            "--login-path",
+            dest="login_path",
+            type=str,
+            help=(
+                "Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login "
+                f"credentials [default: {self.config.login_path}]"
+            ),
+            metavar="",
+        )
+        self.parser.add_argument(
+            "-r",
+            "--refresh-interval",
+            dest="refresh_interval",
+            type=int,
+            help=f"How much time to wait in seconds between each refresh [default: {self.config.refresh_interval}]",
+            metavar="",
+        )
+        self.parser.add_argument(
             "--host-cache-file",
             dest="host_cache_file",
             type=str,
@@ -199,37 +235,16 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "-q",
             "--host-setup-file",
             dest="host_setup_file",
             type=str,
             help=(
-                "Specify location of file that stores the available hosts to use in host setup modal [default:"
-                f" {self.config.host_setup_file}]"
+                "Specify location of file that stores the available hosts to use in host setup modal [default: "
+                f"{self.config.host_setup_file}]"
             ),
             metavar="",
         )
         self.parser.add_argument(
-            "-l",
-            "--login-path",
-            dest="login_path",
-            type=str,
-            help=(
-                "Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login"
-                f" credentials [default: {self.config.login_path}]"
-            ),
-            metavar="",
-        )
-        self.parser.add_argument(
-            "-r",
-            "--refresh_interval",
-            dest="refresh_interval",
-            type=int,
-            help=f"How much time to wait in seconds between each refresh [default: {self.config.refresh_interval}]",
-            metavar="",
-        )
-        self.parser.add_argument(
-            "-H",
             "--heartbeat-table",
             dest="heartbeat_table",
             type=str,
@@ -276,7 +291,7 @@ Dolphie's config supports these options under [dolphie] section:
             type=str,
             help=(
                 "What panels to display on startup separated by a comma. Supports: "
-                f" {','.join(self.panels.all())} [default: {self.config.startup_panels}]"
+                f"{','.join(self.panels.all())} [default: {self.config.startup_panels}]"
             ),
             metavar="",
         )
@@ -285,32 +300,96 @@ Dolphie's config supports these options under [dolphie] section:
             dest="graph_marker",
             type=str,
             help=(
-                "What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default:"
-                f" {self.config.graph_marker}]"
+                "What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: "
+                f"{self.config.graph_marker}]"
             ),
             metavar="",
         )
         self.parser.add_argument(
-            "--pypi-repository",
+            "--pypi-repo",
             dest="pypi_repository",
             type=str,
             help=(
-                "What PyPi repository to use when checking for a new version."
-                " If not specified, it will use Dolphie's PyPi repository"
+                "What PyPi repository to use when checking for a new version "
+                f"default: [{self.config.pypi_repository}]"
             ),
             metavar="",
         )
         self.parser.add_argument(
+            "-H",
             "--hostgroup",
             dest="hostgroup",
             type=str,
             help=(
-                "This is used for creating tabs and connecting to them for hosts you specify in"
-                " Dolphie's config file under a hostgroup section. As an example, you'll have a section"
-                " called [cluster1] then below it you will list each host on a new line in the format"
-                " key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is)"
-                " in the format host:port. You can also name the tabs by suffixing"
-                " ~tab_name to the host (i.e. 1=host~tab_name)"
+                "This is used for creating tabs and connecting to them for hosts you specify in "
+                "Dolphie's config file under a hostgroup section. As an example, you'll have a section "
+                "called [cluster1] then below it you will list each host on a new line in the format "
+                "key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) "
+                "in the format host:port. You can also name the tabs by suffixing "
+                "~tab_name to the host (i.e. 1=host~tab_name)"
+            ),
+            metavar="",
+        )
+        self.parser.add_argument(
+            "-R",
+            "--record",
+            dest="record_for_replay",
+            action="store_true",
+            help=(
+                "Enables recording of Dolphie's data to a replay file. "
+                "Note: This can use significant disk space. Monitor accordingly!"
+            ),
+        )
+        self.parser.add_argument(
+            "-D",
+            "--daemon",
+            dest="daemon_mode",
+            action="store_true",
+            help=(
+                "Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the "
+                "background with whatever solution you decide to use. Automatically enables --record. "
+                "This mode is solely used for recording data to a replay file"
+            ),
+        )
+        self.parser.add_argument(
+            "--daemon-log-file",
+            dest="daemon_mode_log_file",
+            type=str,
+            help="Full path of the log file for daemon mode",
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--replay-file",
+            dest="replay_file",
+            type=str,
+            help="Specify the full path of the replay file to load and enable replay mode",
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--replay-dir",
+            dest="replay_dir",
+            type=str,
+            help="Directory to store replay data files",
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--replay-retention-hours",
+            dest="replay_retention_hours",
+            type=int,
+            help=(
+                f"Number of hours to keep replay data. Data will be purged every hour "
+                f"[default: {self.config.replay_retention_hours}]"
+            ),
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--exclude-notify-vars",
+            dest="exclude_notify_global_vars",
+            type=str,
+            help=(
+                "Dolphie will let you know when a global variable has been changed. If you have variables that change "
+                "frequently and you don't want to see them, you can specify which ones with this option separated by "
+                "a comma (i.e. --exclude-notify-vars=variable1,variable2)"
             ),
             metavar="",
         )
@@ -409,14 +488,14 @@ Dolphie's config supports these options under [dolphie] section:
                             hosts.append(host)
                         else:
                             self.exit(
-                                f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] has an empty host"
-                                f" for key [red2]{key}[/red2]"
+                                f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] has an empty host "
+                                f"for key [red2]{key}[/red2]"
                             )
 
                     if not hosts:
                         self.exit(
-                            f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] cannot be loaded because"
-                            f" it doesn't have any hosts listed under its section in Dolphie's config"
+                            f"{config_file}: Hostgroup [red2]{hostgroup}[/red2] cannot be loaded because "
+                            f"it doesn't have any hosts listed under its section in Dolphie's config"
                         )
 
                     hostgroups[hostgroup] = hosts
@@ -495,8 +574,8 @@ Dolphie's config supports these options under [dolphie] section:
         if self.config.hostgroup:
             if self.config.hostgroup not in hostgroups:
                 self.exit(
-                    f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because"
-                    f" it wasn't found in Dolphie's config"
+                    f"Hostgroup [red2]{self.config.hostgroup}[/red2] cannot be used because "
+                    f"it wasn't found in Dolphie's config"
                 )
 
         if self.config.heartbeat_table:
@@ -507,6 +586,9 @@ Dolphie's config supports these options under [dolphie] section:
                 )
             else:
                 self.exit("Your heartbeat table did not conform to the proper format: db.table")
+
+        if self.config.exclude_notify_global_vars:
+            self.config.exclude_notify_global_vars = self.config.exclude_notify_global_vars.split(",")
 
         self.parse_ssl_options(options)
 
@@ -523,6 +605,18 @@ Dolphie's config supports these options under [dolphie] section:
             self.console.print(self.debug_options_table)
             self.console.print("[#969aad]Note: Options are set by their source in the order they appear")
             sys.exit()
+
+        # Verify parameters for replay & daemon mode
+        if self.config.daemon_mode:
+            self.config.record_for_replay = True
+            if not self.config.replay_dir:
+                self.exit("Daemon mode ([red2]--daemon[/red2]) requires [red2]--replay-dir[/red2] to be specified")
+
+        if self.config.replay_file and not os.path.isfile(self.config.replay_file):
+            self.exit(f"Replay file [red2]{self.config.replay_file}[/red2] does not exist")
+
+        if self.config.record_for_replay and not self.config.replay_dir:
+            self.exit("[red2]--record[/red2] requires [red2]--replay-dir[/red2] to be specified")
 
     def parse_ssl_options(self, data):
         if isinstance(data, ConfigParser):
@@ -573,7 +667,6 @@ Dolphie's config supports these options under [dolphie] section:
                 self.exit(
                     f"Error with Dolphie config: [red2]{option}[/red2] is a boolean and must either be true/false"
                 )
-
         elif data_type == int:
             try:
                 return int(value)

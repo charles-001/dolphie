@@ -58,7 +58,7 @@ class CommandModal(ModalScreen):
         }
     """
     BINDINGS = [
-        Binding("escape", "dismiss", "", show=False),
+        Binding("escape", "app.pop_screen", "", show=False),
     ]
 
     def __init__(
@@ -119,6 +119,7 @@ class CommandModal(ModalScreen):
 
             if self.connection_source != ConnectionSource.proxysql:
                 self.query_one("#filter_radio_buttons #hostgroup", RadioButton).display = False
+                self.query_one("#filter_radio_buttons #hostgroup", RadioButton).disabled = True
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
             sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
             sleeping_queries_checkbox.toggle()
@@ -140,7 +141,10 @@ class CommandModal(ModalScreen):
             input.placeholder = "Input a Process ID"
             input.focus()
         elif self.command == HotkeyCommands.refresh_interval:
-            input.placeholder = "Input a refresh interval (seconds)"
+            input.placeholder = "Input a refresh interval"
+            input.focus()
+        elif self.command == HotkeyCommands.replay_seek:
+            input.placeholder = "Format: 2024-07-25 13:00:00"
             input.focus()
         else:
             input.focus()
@@ -153,7 +157,7 @@ class CommandModal(ModalScreen):
 
         if field:
             sorted_array = sorted(set(getattr(thread, field) for thread in self.processlist_data.values()))
-            self.dropdown_items = [DropdownItem(value) for value in sorted_array]
+            self.dropdown_items = [DropdownItem(str(value)) for value in sorted_array]
 
         self.query_one("#dropdown_items", Dropdown).items = self.dropdown_items
 
@@ -197,7 +201,7 @@ class CommandModal(ModalScreen):
             return
 
         modal_input = self.query_one("#modal_input", Input).value
-        if not modal_input:
+        if not modal_input and self.command != HotkeyCommands.rename_tab:
             self.update_error_response("Input cannot be empty")
             return
 
@@ -227,7 +231,9 @@ class CommandModal(ModalScreen):
                     self.dismiss([filter_label, modal_input])
                 else:
                     if filter_id == "host":
-                        value = next((ip for ip, addr in self.host_cache_data.items() if modal_input == addr), None)
+                        value = next(
+                            (ip for ip, addr in self.host_cache_data.items() if modal_input == addr), modal_input
+                        )
                         modal_input = value
                     else:
                         value = next(
@@ -278,13 +284,20 @@ class CommandModal(ModalScreen):
             else:
                 self.dismiss(modal_input)
         elif self.command == HotkeyCommands.refresh_interval:
-            if not modal_input.isnumeric():
-                self.update_error_response("Input must be an integer")
+            try:
+                modal_input = float(modal_input)
+            except ValueError:
+                self.update_error_response("Input must be a number")
                 return
 
-            modal_input = int(modal_input)
-            if modal_input < 1:
+            if modal_input <= 0:
                 self.update_error_response("Input must be greater than 0")
+                return
+
+            self.dismiss(modal_input)
+        elif self.command == HotkeyCommands.replay_seek:
+            if not re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", modal_input):
+                self.update_error_response("Invalid timestamp format")
                 return
 
             self.dismiss(modal_input)
