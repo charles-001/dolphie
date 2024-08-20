@@ -170,7 +170,7 @@ class Dolphie:
         self.metric_manager.connection_source = self.connection_source
 
         # Add host to host setup file if it doesn't exist
-        self.add_host_to_host_cache_file()
+        self.add_host_to_host_setup_file()
 
     def setup_connection_mysql(self):
         global_variables = self.main_db_connection.fetch_status_and_variables("variables")
@@ -248,7 +248,10 @@ class Dolphie:
 
         self.validate_metadata_locks_enabled()
 
-    def add_host_to_host_cache_file(self):
+    def add_host_to_host_setup_file(self):
+        if self.daemon_mode:
+            return
+
         with open(self.host_setup_file, "a+") as file:
             file.seek(0)
             lines = file.readlines()

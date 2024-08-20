@@ -35,8 +35,10 @@ class Database:
 
         self.connection: pymysql.Connection = None
         self.connection_id: int = None
-        self.running_query: bool = False
         self.source: ConnectionSource = None
+        self.is_running_query: bool = False
+        self.has_connected: bool = False
+
         if daemon_mode:
             self.max_reconnect_attempts: int = 999999999
         else:
@@ -77,6 +79,7 @@ class Database:
                 self.execute("SET SESSION sql_mode=''")
 
             logger.info(f"Connected to {self.source} with Process ID {self.connection_id}")
+            self.has_connected = True
         except pymysql.Error as e:
             if reconnect_attempt:
                 logger.error(f"Failed to reconnect to {self.source}: {e.args[1]}")
@@ -164,7 +167,7 @@ class Database:
         if not self.is_connected():
             return None
 
-        if self.running_query:
+        if self.is_running_query:
             self.app.notify(
                 "Another query is already running, please repeat action",
                 title="Unable to run multiple queries at the same time",
@@ -178,24 +181,24 @@ class Database:
             query = "/* dolphie */ " + query
 
         for attempt_number in range(self.max_reconnect_attempts):
-            self.running_query = True
+            self.is_running_query = True
             error_message = None
 
             try:
                 rows = self.cursor.execute(query, values)
-                self.running_query = False
+                self.is_running_query = False
 
                 return rows
             except AttributeError:
                 # If the cursor is not defined, reconnect and try again
-                self.running_query = False
+                self.is_running_query = False
 
                 self.close()
                 self.connect()
 
                 time.sleep(1)
             except pymysql.Error as e:
-                self.running_query = False
+                self.is_running_query = False
 
                 if ignore_error:
                     return None
@@ -207,8 +210,9 @@ class Database:
                         if e.args[1]:
                             error_message = e.args[1]
 
-                    # Check if the error is due to a connection issue
-                    if error_code in (0, 2006, 2013, 2055):
+                    # Check if the error is due to a connection issue or is in daemon mode and already has
+                    # an established connection. If so, attempt to exponential backoff reconnect
+                    if error_code in (0, 2006, 2013, 2055) or (self.daemon_mode and self.has_connected):
                         # 0: Not connected to MySQL
                         # 2006: MySQL server has gone away
                         # 2013: Lost connection to MySQL server during query
@@ -228,11 +232,11 @@ class Database:
                         self.close()
                         self.connect(reconnect_attempt=True)
 
-                        # Exponential backoff
-                        time.sleep(min(1 * (2**attempt_number), 20))  # Cap the wait time at 20 seconds
-
-                        # If the connection is still not open, skip the rest of the attempt
                         if not self.connection.open:
+                            # Exponential backoff
+                            time.sleep(min(1 * (2**attempt_number), 20))  # Cap the wait time at 20 seconds
+
+                            # Skip the rest of the loop
                             continue
 
                         self.app.notify(

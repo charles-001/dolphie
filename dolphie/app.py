@@ -158,10 +158,11 @@ class DolphieApp(App):
             f"{tab.replay_manager.min_timestamp}[b highlight] →[/b highlight] {tab.replay_manager.max_timestamp}"
         )
 
-        # Common data for refreshing
         dolphie.detect_global_variable_change(
             old_data=dolphie.global_variables, new_data=replay_event_data.global_variables
         )
+
+        # Common data for refreshing
         dolphie.global_variables = replay_event_data.global_variables
         dolphie.global_status = replay_event_data.global_status
         common_metrics = {"global_variables": dolphie.global_variables, "global_status": dolphie.global_status}
@@ -1127,7 +1128,7 @@ class DolphieApp(App):
         else:
             # Prevent commands from being run if the secondary connection is processing a query already
             if key not in exclude_keys:
-                if dolphie.secondary_db_connection and dolphie.secondary_db_connection.running_query:
+                if dolphie.secondary_db_connection and dolphie.secondary_db_connection.is_running_query:
                     self.notify("There's already a command running - please wait for it to finish")
                     return
 
