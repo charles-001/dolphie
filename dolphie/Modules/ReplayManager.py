@@ -68,12 +68,13 @@ class ReplayManager:
         self.dict_samples = []
 
         # Determine filename used for replay file
+        hostname = f"{dolphie.host}_{dolphie.port}"
         if dolphie.replay_file:
             self.replay_file = dolphie.replay_file
         elif dolphie.daemon_mode:
-            self.replay_file = f"{dolphie.replay_dir}/{dolphie.host}/daemon.db"
+            self.replay_file = f"{dolphie.replay_dir}/{hostname}/daemon.db"
         elif dolphie.record_for_replay:
-            self.replay_file = f"{dolphie.replay_dir}/{dolphie.host}/{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.db"
+            self.replay_file = f"{dolphie.replay_dir}/{hostname}/{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.db"
             dolphie.app.notify(f"File: [highlight]{self.replay_file}[/highlight]", title="Recording data", timeout=10)
         else:
             # No options specified for replaying, skip initialization
@@ -230,6 +231,9 @@ class ReplayManager:
                     )
 
                     os.rename(self.replay_file, new_replay_file)
+
+                    # Reset compression dict if it's already been set or else the replay file will be corrupted
+                    self.compression_dict = None
 
                     self._initialize_sqlite()
                     self._manage_metadata()
