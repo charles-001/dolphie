@@ -18,7 +18,7 @@ def create_panel(tab: Tab) -> DataTable:
         dolphie.use_performance_schema = False
 
     columns = [
-        {"name": "Process ID", "field": "id", "width": None, "format_number": False},
+        {"name": "Thread ID", "field": "id", "width": None, "format_number": False},
     ]
 
     if dolphie.use_performance_schema:

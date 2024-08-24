@@ -26,6 +26,7 @@ from dolphie.DataTypes import (
 )
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
+from dolphie.Modules.CommandManager import CommandManager
 from dolphie.Modules.Functions import (
     format_bytes,
     format_number,
@@ -81,11 +82,13 @@ except Exception:
 class DolphieApp(App):
     TITLE = "Dolphie"
     CSS_PATH = "Dolphie.css"
+    ENABLE_COMMAND_PALETTE = False
 
     def __init__(self, config: Config):
         super().__init__()
 
         self.config = config
+        self.command_manager = CommandManager(config.replay_file)
         self.loading_hostgroups: bool = False
 
         theme = Theme(
@@ -538,6 +541,7 @@ class DolphieApp(App):
         total_queries_count = 0
         query_types_for_total = ["SELECT", "INSERT", "UPDATE", "DELETE", "REPLACE", "SET", "CALL"]
         for row in dolphie.proxysql_command_stats:
+            total_cnt = 0
             if row["Command"] in query_types_for_total:
                 total_cnt = int(row["Total_cnt"])
                 total_queries_count += total_cnt
@@ -1060,81 +1064,19 @@ class DolphieApp(App):
         screen_data = None
         dolphie = tab.dolphie
 
-        if dolphie.connection_source == ConnectionSource.mysql:
-            replay_allowed_keys = [
-                "1",
-                "2",
-                "3",
-                "5",
-                "a",
-                "c",
-                "E",
-                "f",
-                "p",
-                "r",
-                "s",
-                "S",
-                "t",
-                "T",
-                "v",
-                "left_square_bracket",
-                "right_square_bracket",
-            ]
-        elif dolphie.connection_source == ConnectionSource.proxysql:
-            replay_allowed_keys = [
-                "1",
-                "2",
-                "3",
-                "4",
-                "a",
-                "c",
-                "E",
-                "f",
-                "p",
-                "r",
-                "s",
-                "S",
-                "t",
-                "v",
-                "left_square_bracket",
-                "right_square_bracket",
-            ]
-
-        exclude_keys = [
-            "up",
-            "down",
-            "left",
-            "right",
-            "pageup",
-            "pagedown",
-            "home",
-            "end",
-            "tab",
-            "enter",
-            "grave_accent",
-            "q",
-            "question_mark",
-            "plus",
-            "minus",
-            "equals_sign",
-            "ctrl+a",
-            "ctrl+d",
-        ]
-
-        if dolphie.replay_file:
-            if key not in replay_allowed_keys and key not in exclude_keys:
-                self.notify(f"Key [highlight]{key}[/highlight] is not allowed during replay", severity="warning")
+        if key not in self.command_manager.exclude_keys:
+            if not self.command_manager.get_commands(dolphie.connection_source).get(key):
+                self.notify(f"Key [highlight]{key}[/highlight] is not a valid command", severity="warning")
                 return
-        else:
-            # Prevent commands from being run if the secondary connection is processing a query already
-            if key not in exclude_keys:
-                if dolphie.secondary_db_connection and dolphie.secondary_db_connection.is_running_query:
-                    self.notify("There's already a command running - please wait for it to finish")
-                    return
 
-                if not dolphie.main_db_connection.is_connected():
-                    self.notify("You must be connected to a host to use commands")
-                    return
+            # Prevent commands from being run if the secondary connection is processing a query already
+            if dolphie.secondary_db_connection and dolphie.secondary_db_connection.is_running_query:
+                self.notify("There's already a command running - please wait for it to finish")
+                return
+
+            if not dolphie.main_db_connection.is_connected() and not dolphie.replay_file:
+                self.notify("You must be connected to a host to use commands")
+                return
 
         if self.loading_hostgroups:
             self.notify("You can't run commands while hosts are connecting as a hostgroup")
@@ -1142,14 +1084,17 @@ class DolphieApp(App):
 
         if key == "1":
             self.toggle_panel(dolphie.panels.dashboard.name)
+
         elif key == "2":
             self.tab_manager.active_tab.processlist_datatable.clear()
             self.toggle_panel(dolphie.panels.processlist.name)
 
             tab.processlist_title.update("Processlist ([highlight]0[/highlight])")
+
         elif key == "3":
             self.toggle_panel(dolphie.panels.graphs.name)
             self.app.update_graphs("dml")
+
         elif key == "4":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_hostgroup_summary.name)
@@ -1181,6 +1126,7 @@ class DolphieApp(App):
                 for query in queries:
                     for container in dolphie.app.query(query):
                         container.remove()
+
         elif key == "5":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_mysql_query_rules.name)
@@ -1196,6 +1142,7 @@ class DolphieApp(App):
             self.toggle_panel(dolphie.panels.metadata_locks.name)
             self.tab_manager.active_tab.metadata_locks_datatable.clear()
             tab.metadata_locks_title.update("Metadata Locks ([highlight]0[/highlight])")
+
         elif key == "6":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_command_stats.name)
@@ -1217,12 +1164,15 @@ class DolphieApp(App):
                 self.toggle_panel(dolphie.panels.ddl.name)
                 self.tab_manager.active_tab.ddl_datatable.clear()
                 tab.ddl_title.update("DDL ([highlight]0[/highlight])")
+
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)
+
         elif key == "space":
             if tab.worker.state != WorkerState.RUNNING:
                 tab.worker_timer.stop()
                 self.run_worker_main(tab.id)
+
         elif key == "plus":
             new_tab = await self.tab_manager.create_tab(tab_name="New Tab")
             self.tab_manager.switch_tab(new_tab.id)
@@ -1238,6 +1188,7 @@ class DolphieApp(App):
                 CommandModal(command=HotkeyCommands.rename_tab, message="What would you like to rename the tab to?"),
                 command_get_input,
             )
+
         elif key == "minus":
             if len(self.tab_manager.tabs) == 1:
                 self.notify("Removing all tabs is not permitted", severity="error")
@@ -1254,6 +1205,7 @@ class DolphieApp(App):
         elif key == "left_square_bracket":
             if dolphie.replay_file:
                 self.query_one("#back_button", Button).press()
+
         elif key == "right_square_bracket":
             if dolphie.replay_file:
                 self.query_one("#forward_button", Button).press()
@@ -1273,6 +1225,7 @@ class DolphieApp(App):
                 self.notify("Processlist will now show additional columns")
 
             self.force_refresh_for_replay(need_current_data=True)
+
         elif key == "c":
             dolphie.user_filter = ""
             dolphie.db_filter = ""
@@ -1399,7 +1352,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.thread_kill_by_id,
-                    message="Kill Process",
+                    message="Kill Thread",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -1413,7 +1366,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.thread_kill_by_parameter,
-                    message="Kill processes based around parameters",
+                    message="Kill threads based around parameters",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -1556,7 +1509,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.show_thread,
-                    message="Process Details",
+                    message="Thread Details",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -1677,7 +1630,7 @@ class DolphieApp(App):
                 )
 
         elif key == "question_mark":
-            self.app.push_screen(HelpScreen(dolphie.connection_source, dolphie.replay_file))
+            self.app.push_screen(HelpScreen(dolphie.connection_source, self.command_manager))
 
         if screen_data:
             self.app.push_screen(
@@ -1806,9 +1759,9 @@ class DolphieApp(App):
                     else:
                         dolphie.secondary_db_connection.execute("KILL %s" % thread_id)
 
-                    self.notify("Killed Process ID [b highlight]%s[/b highlight]" % thread_id, severity="success")
+                    self.notify("Killed Thread ID [b highlight]%s[/b highlight]" % thread_id, severity="success")
                 except ManualException as e:
-                    self.notify(e.reason, title="Error killing Process ID", severity="error")
+                    self.notify(e.reason, title="Error killing Thread ID", severity="error")
 
             elif key == "K":
 
@@ -1832,7 +1785,6 @@ class DolphieApp(App):
                 if include_sleeping_queries:
                     commands_to_kill.append("Sleep")
 
-                tab.spinner.show()
                 threads_killed = 0
 
                 # We need to make a copy of the threads snapshot to so it doesn't change while we're iterating over it
@@ -1849,12 +1801,12 @@ class DolphieApp(App):
                                 execute_kill(thread_id)
                                 threads_killed += 1
                     except ManualException as e:
-                        self.notify(e.reason, title=f"Error Killing Process ID {thread_id}", severity="error")
+                        self.notify(e.reason, title=f"Error Killing Thread ID {thread_id}", severity="error")
 
                 if threads_killed:
-                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] processes")
+                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] threads")
                 else:
-                    self.notify("No processes were killed")
+                    self.notify("No threads were killed")
 
             elif key == "l":
                 deadlock = ""

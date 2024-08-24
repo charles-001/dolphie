@@ -12,21 +12,21 @@ def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
     columns = [
-        {"name": "Process ID", "field": "id", "width": 11},
+        {"name": "Thread ID", "field": "id", "width": 11},
         {"name": "Hostgroup", "field": "hostgroup", "width": 9},
         {"name": "Username", "field": "user", "width": 20},
-        {"name": "Backend Host", "field": "host", "width": 23},
     ]
 
     if dolphie.show_additional_query_columns:
         columns.extend(
             [
-                {"name": "Frontend Host", "field": "frontend_host", "width": 20},
+                {"name": "Frontend Host", "field": "frontend_host", "width": 25},
             ]
         )
 
     columns.extend(
         [
+            {"name": "Backend Host", "field": "host", "width": 25},
             {"name": "Database", "field": "db", "width": 17},
             {"name": "Command", "field": "command", "width": 8},
             {"name": "Age", "field": "formatted_time", "width": 9},

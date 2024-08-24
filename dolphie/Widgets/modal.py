@@ -138,7 +138,7 @@ class CommandModal(ModalScreen):
             input.placeholder = "Input 'all' to show everything"
             input.focus()
         elif self.command in [HotkeyCommands.show_thread, HotkeyCommands.thread_kill_by_id]:
-            input.placeholder = "Input a Process ID"
+            input.placeholder = "Input a Thread ID"
             input.focus()
         elif self.command == HotkeyCommands.refresh_interval:
             input.placeholder = "Input a refresh interval"
@@ -280,7 +280,7 @@ class CommandModal(ModalScreen):
             value = next((thread_id for thread_id in self.processlist_data.keys() if modal_input == thread_id), None)
 
             if not value:
-                self.update_error_response(f"Process ID [bold red]{modal_input}[/bold red] does not exist")
+                self.update_error_response(f"Thread ID [bold red]{modal_input}[/bold red] does not exist")
             else:
                 self.dismiss(modal_input)
         elif self.command == HotkeyCommands.refresh_interval:
