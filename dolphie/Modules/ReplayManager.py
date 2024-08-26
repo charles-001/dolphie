@@ -117,8 +117,7 @@ class ReplayManager:
             )"""
         )
         self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
-        self.cursor.execute(
-            """
+        metadata_table_query = """
             CREATE TABLE IF NOT EXISTS metadata (
                 schema_version INTEGER DEFAULT 1,
                 hostname VARCHAR(255),
@@ -128,7 +127,7 @@ class ReplayManager:
                 dolphie_version VARCHAR(255),
                 compression_dict BLOB
             )"""
-        )
+        self.cursor.execute(metadata_table_query)
 
         # Enable auto-vacuum if it's not already enabled. This will help keep the database file size down.
         if self.cursor.execute("PRAGMA auto_vacuum").fetchone()[0] != 1:
@@ -138,17 +137,26 @@ class ReplayManager:
         # This is temporary for backwards compatibility with older replay files
         columns = [info[1] for info in self.cursor.execute("PRAGMA table_info(metadata)").fetchall()]
         if "schema_version" not in columns:
-            dolphie_version = self.cursor.execute("SELECT dolphie_version FROM metadata").fetchone()[0]
-            new_replay_file = f"{self.replay_file}_v{dolphie_version}"
+            logger.warning("The 'schema_version' column is missing in the metadata table. Adding it...")
 
-            logger.error(
-                "The 'schema_version' column is missing in the metadata table. "
-                "This requires a new replay file to be created"
+            self.cursor.execute("ALTER TABLE metadata RENAME TO metadata_old")
+            self.cursor.execute(metadata_table_query)
+            self.cursor.execute(
+                f"""
+                INSERT INTO metadata (
+                    schema_version, hostname, host_version, host_distro, connection_source,
+                    dolphie_version, compression_dict
+                )
+                SELECT
+                    {self.schema_version}, hostname, host_version, host_distro, connection_source,
+                    dolphie_version, compression_dict
+                FROM
+                    metadata_old
+                """
             )
-            logger.info(f"Renaming replay file to: {new_replay_file}")
+            self.cursor.execute("DROP TABLE metadata_old")
 
-            os.rename(self.replay_file, new_replay_file)
-            self._initialize_sqlite()
+            logger.success("Column was added")
 
         self.purge_old_data()
 
