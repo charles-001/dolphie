@@ -51,7 +51,6 @@ from dolphie.Panels import (
 )
 from dolphie.Widgets.command_screen import CommandScreen
 from dolphie.Widgets.event_log_screen import EventLog
-from dolphie.Widgets.help import HelpScreen
 from dolphie.Widgets.modal import CommandModal
 from dolphie.Widgets.proxysql_thread_screen import ProxySQLThreadScreen
 from dolphie.Widgets.thread_screen import ThreadScreen
@@ -68,6 +67,7 @@ from rich.traceback import Traceback
 from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
+from textual.command import DiscoveryHit, Hit, Provider
 from textual.widgets import Button, Switch, TabbedContent, TabPane, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
@@ -79,10 +79,76 @@ except Exception:
     __version__ = "N/A"
 
 
+class CommandPaletteCommands(Provider):
+    """Command palette commands for Dolphie based on connection source."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.dolphie_app: DolphieApp = self.app
+
+    def async_command(self, key: str):
+        """Helper function to call the capture_key command asynchronously."""
+        self.app.call_later(self.dolphie_app.capture_key, key)
+
+    def get_command_hits(self):
+        """Helper function to get all commands and format them for discovery or search."""
+        commands = self.dolphie_app.command_manager.get_commands(
+            self.dolphie_app.tab_manager.active_tab.dolphie.connection_source
+        )
+
+        # Find the longest human_key length
+        max_key_length = max(len(data["human_key"]) for data in commands.values())
+
+        # Format the commands with dynamic spacing
+        return {
+            key: {
+                # Center the human_key based on the max length and pad spaces after it
+                "display": (
+                    f"[b highlight]{data['human_key'].center(max_key_length)}[/b highlight]  {data['description']}"
+                ),
+                "text": f"{data['human_key']} {data['description']}",
+                "command": partial(self.async_command, key),
+                "human_key": data["human_key"],
+            }
+            for key, data in commands.items()
+        }
+
+    async def discover(self):
+        for data in self.get_command_hits().values():
+            yield DiscoveryHit(
+                display=data["display"],
+                text=data["text"],
+                command=data["command"],
+            )
+
+    async def search(self, query: str):
+        hits = []
+
+        # Gather all hits and calculate their scores
+        for data in self.get_command_hits().values():
+            score = self.matcher(query).match(data["text"])
+            if score > 0:
+                hits.append(
+                    Hit(
+                        score=score,
+                        match_display=data["display"],
+                        text=data["text"],
+                        command=data["command"],
+                    )
+                )
+
+        # Sort the hits by score, descending order
+        hits.sort(key=lambda hit: hit.score, reverse=True)
+
+        for hit in hits:
+            yield hit
+
+
 class DolphieApp(App):
     TITLE = "Dolphie"
     CSS_PATH = "Dolphie.css"
-    ENABLE_COMMAND_PALETTE = False
+    COMMANDS = {CommandPaletteCommands}
+    COMMAND_PALETTE_BINDING = "question_mark"
 
     def __init__(self, config: Config):
         super().__init__()
@@ -1366,7 +1432,7 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.thread_kill_by_parameter,
-                    message="Kill threads based around parameters",
+                    message="Kill threads by a parameter",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -1628,9 +1694,6 @@ class DolphieApp(App):
                 screen_data = Group(
                     Align.center("[b light_blue]Host Cache[/b light_blue]\n"), "There are currently no hosts resolved"
                 )
-
-        elif key == "question_mark":
-            self.app.push_screen(HelpScreen(dolphie.connection_source, self.command_manager))
 
         if screen_data:
             self.app.push_screen(
@@ -2123,7 +2186,7 @@ class DolphieApp(App):
             pass
 
     def compose(self):
-        yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for help")
+        yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for commands")
         yield Tabs(id="host_tabs")
 
 

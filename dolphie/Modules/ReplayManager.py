@@ -55,6 +55,8 @@ class ReplayManager:
             dolphie: The Dolphie instance.
         """
         self.dolphie = dolphie
+        # We will increment this to force a new replay file if the schema changes in future versions
+        self.schema_version = 1
         self.connection: sqlite3.Connection = None
         self.cursor: sqlite3.Cursor = None
         self.current_index = 0  # This is used to keep track of the last primary key read from the database
@@ -93,11 +95,18 @@ class ReplayManager:
         """
         Initializes the SQLite database and creates the necessary tables.
         """
+        database_exists = True if os.path.exists(self.replay_file) else False
+
         self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
         self.cursor = self.connection.cursor()
 
         # Lock down the permissions of the replay file
         os.chmod(self.replay_file, 0o660)
+
+        if not database_exists:
+            logger.info("Created new SQLite database and connected to it")
+        else:
+            logger.info("Connected to SQLite")
 
         self.cursor.execute(
             """
@@ -111,6 +120,7 @@ class ReplayManager:
         self.cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS metadata (
+                schema_version INTEGER DEFAULT 1,
                 hostname VARCHAR(255),
                 host_version VARCHAR(255),
                 host_distro VARCHAR(255),
@@ -125,7 +135,20 @@ class ReplayManager:
             self.cursor.execute("PRAGMA auto_vacuum = FULL")
             self.cursor.execute("VACUUM")
 
-        logger.info("Connected to SQLite")
+        # This is temporary for backwards compatibility with older replay files
+        columns = [info[1] for info in self.cursor.execute("PRAGMA table_info(metadata)").fetchall()]
+        if "schema_version" not in columns:
+            dolphie_version = self.cursor.execute("SELECT dolphie_version FROM metadata").fetchone()[0]
+            new_replay_file = f"{self.replay_file}_v{dolphie_version}"
+
+            logger.error(
+                "The 'schema_version' column is missing in the metadata table. "
+                "This requires a new replay file to be created"
+            )
+            logger.info(f"Renaming replay file to: {new_replay_file}")
+
+            os.rename(self.replay_file, new_replay_file)
+            self._initialize_sqlite()
 
         self.purge_old_data()
 
@@ -187,6 +210,17 @@ class ReplayManager:
                 )
                 return False
 
+    def _create_new_replay_file(self, new_replay_file: str):
+        logger.info(f"Renaming replay file to: {new_replay_file}")
+
+        os.rename(self.replay_file, new_replay_file)
+
+        # Reset compression dict if it's already been set or else the replay file will be corrupted
+        self.compression_dict = None
+
+        self._initialize_sqlite()
+        self._manage_metadata()
+
     def _manage_metadata(self):
         """
         Manages the metadata table with information we care about.
@@ -197,9 +231,11 @@ class ReplayManager:
         row = self.cursor.execute("SELECT * FROM metadata").fetchone()
         if row is None:
             self.cursor.execute(
-                "INSERT INTO metadata (hostname, host_version, host_distro, connection_source, dolphie_version) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO metadata (schema_version, hostname, host_version, host_distro, "
+                "connection_source, dolphie_version) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 (
+                    self.schema_version,
                     self.dolphie.host_with_port,
                     self.dolphie.host_version,
                     self.dolphie.host_distro,
@@ -208,35 +244,35 @@ class ReplayManager:
                 ),
             )
         else:
-            connection_source = row[3]
-            app_version = row[4]
+            schema_version = row[0]
+            host = row[1]
+            host_version = row[2]
+            host_distro = row[3]
+            connection_source = row[4]
+            app_version = row[5]
+            compress_dict = row[6]
 
             logger.info(
-                f"Replay database metadata - Host: {row[0]}, Version: {row[1]} ({row[2]}), Dolphie: {app_version}"
+                f"Replay database metadata - Host: {host}, Version: {host_version} ({host_distro}), "
+                f"Dolphie: {app_version}"
             )
 
-            if row[5]:
-                self.compression_dict = zstd.ZstdCompressionDict(row[5])
-                logger.info(f"ZSTD compression dictionary loaded (size: {format_bytes(len(row[5]), color=False)})")
+            if compress_dict:
+                self.compression_dict = zstd.ZstdCompressionDict(compress_dict)
+                logger.info(
+                    f"ZSTD compression dictionary loaded (size: {format_bytes(len(compress_dict), color=False)})"
+                )
 
             if self.dolphie.daemon_mode:
-                # Avoid mixing Dolphie versions in the same replay file. Never know what I might
-                # change in the future :)
-                if app_version != self.dolphie.app_version:
+                if schema_version != self.schema_version:
                     new_replay_file = f"{self.replay_file}_v{app_version}"
                     logger.warning(
-                        f"The version of Dolphie ({self.dolphie.app_version}) differs from the version of the "
-                        f"daemon's replay file ({app_version}). To avoid potential compatibility issues, "
-                        f"the current database file will be renamed to: {new_replay_file}"
+                        f"The schema version of the replay file ({schema_version}) differs from this version "
+                        f"of Dolphie's schema version ({self.schema_version}). To avoid potential issues, the "
+                        f"replay file will be renamed and a new one will be created"
                     )
 
-                    os.rename(self.replay_file, new_replay_file)
-
-                    # Reset compression dict if it's already been set or else the replay file will be corrupted
-                    self.compression_dict = None
-
-                    self._initialize_sqlite()
-                    self._manage_metadata()
+                    self._create_new_replay_file(new_replay_file)
 
                 # Avoid mixing connection sources in the same replay file
                 if connection_source != self.dolphie.connection_source:
@@ -253,13 +289,13 @@ class ReplayManager:
         """
         row = self.cursor.execute("SELECT * FROM metadata").fetchone()
         if row:
-            self.dolphie.host_with_port = row[0]
-            self.dolphie.host_version = row[1]
-            self.dolphie.host_distro = row[2]
-            self.dolphie.connection_source = row[3]
+            self.dolphie.host_with_port = row[1]
+            self.dolphie.host_version = row[2]
+            self.dolphie.host_distro = row[3]
+            self.dolphie.connection_source = row[4]
 
-            if row[5]:
-                self.compression_dict = zstd.ZstdCompressionDict(row[5])
+            if row[6]:
+                self.compression_dict = zstd.ZstdCompressionDict(row[6])
         else:
             raise Exception("Metadata not found in replay file.")
 

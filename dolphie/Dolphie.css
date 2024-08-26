@@ -61,6 +61,35 @@ SpinnerWidget {
     content-align: center middle;
 }
 
+CommandList {
+    text-style: none;
+    border-bottom: hkey #1c2440;
+    max-height: 55vh;
+}
+CommandList > .option-list--option-highlighted {
+    background: #171d2d;
+}
+CommandList > .option-list--option-hover {
+    background: #171d2d;
+    text-style: bold;
+}
+CommandPalette {
+    background: #0d1015 70%;
+}
+CommandPalette > Vertical {
+    background: #0a0e1b;
+}
+CommandPalette #--input {
+    border-top: hkey #1c2440;
+}
+CommandInput, CommandInput:focus {
+    background: #0a0e1b !important;
+    width: 1fr !important;
+    border: blank !important;
+    padding-left: 0 !important;
+    margin: 0 1 !important;
+}
+
 TopBar {
     dock: top;
     background: #192036;
