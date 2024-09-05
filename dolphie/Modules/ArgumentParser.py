@@ -2,7 +2,7 @@ import argparse
 import os
 import re
 import sys
-from configparser import ConfigParser
+from configparser import RawConfigParser
 from dataclasses import dataclass, field, fields
 from typing import Dict, List
 from urllib.parse import ParseResult, urlparse
@@ -459,7 +459,7 @@ Dolphie's config supports these options under [dolphie] section:
         # Loop through config files to find the supplied options
         for config_file in self.config.config_file:
             if os.path.isfile(config_file):
-                cfg = ConfigParser()
+                cfg = RawConfigParser()
                 cfg.read(config_file)
 
                 # Loop through all of available options
@@ -510,7 +510,7 @@ Dolphie's config supports these options under [dolphie] section:
 
         # Use MySQL's my.cnf file for login options if specified
         if os.path.isfile(self.config.mycnf_file):
-            cfg = ConfigParser()
+            cfg = RawConfigParser()
             cfg.read(self.config.mycnf_file)
 
             for option in login_options:
@@ -619,7 +619,7 @@ Dolphie's config supports these options under [dolphie] section:
             self.exit("[red2]--record[/red2] requires [red2]--replay-dir[/red2] to be specified")
 
     def parse_ssl_options(self, data):
-        if isinstance(data, ConfigParser):
+        if isinstance(data, RawConfigParser):
             ssl_mode = data.get("client", "ssl_mode", fallback=None)
             ssl_ca = data.get("client", "ssl_ca", fallback=None)
             ssl_cert = data.get("client", "ssl_cert", fallback=None)

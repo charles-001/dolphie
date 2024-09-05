@@ -70,6 +70,7 @@ class EventLog(Screen):
             "system": {"active": True, "sql": "prio = 'System'"},
             "warning": {"active": True, "sql": "prio = 'Warning'"},
             "error": {"active": True, "sql": "prio = 'Error'"},
+            "note": {"active": True, "sql": "prio = 'Note'"},
         }
 
     def on_mount(self):
@@ -97,7 +98,7 @@ class EventLog(Screen):
         yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
         yield Label("[b white]1[/b white] = top of events/[b white]2[/b white] = bottom of events", id="help")
         with Horizontal():
-            switch_options = [("System", "system"), ("Warning", "warning"), ("Error", "error")]
+            switch_options = [("System", "system"), ("Warning", "warning"), ("Error", "error"), ("Note", "note")]
             for label, switch_id in switch_options:
                 yield Label(label)
                 yield Switch(animate=False, id=switch_id, value=True)
@@ -149,6 +150,8 @@ class EventLog(Screen):
                         level_color = "red"
                     elif row["level"] == "Warning":
                         level_color = "yellow"
+                    elif row["level"] == "Note":
+                        level_color = "dark_gray"
 
                     level = row["level"]
                     if level_color:

@@ -64,7 +64,7 @@ SpinnerWidget {
 CommandList {
     text-style: none;
     border-bottom: hkey #1c2440;
-    max-height: 55vh;
+    max-height: 80vh;
 }
 CommandList > .option-list--option-highlighted {
     background: #171d2d;
