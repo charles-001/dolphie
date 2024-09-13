@@ -1,6 +1,5 @@
 import re
 
-from dolphie.DataTypes import ConnectionSource, HotkeyCommands
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -15,6 +14,8 @@ from textual.widgets import (
     Static,
 )
 from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
+
+from dolphie.DataTypes import ConnectionSource, HotkeyCommands
 
 
 class CommandModal(ModalScreen):
@@ -62,7 +63,13 @@ class CommandModal(ModalScreen):
     ]
 
     def __init__(
-        self, command, message, connection_source: ConnectionSource = None, processlist_data=None, host_cache_data=None
+        self,
+        command,
+        message,
+        connection_source: ConnectionSource = None,
+        processlist_data=None,
+        host_cache_data=None,
+        max_replay_timestamp=None,
     ):
         super().__init__()
         self.command = command
@@ -70,6 +77,7 @@ class CommandModal(ModalScreen):
         self.connection_source = connection_source
         self.processlist_data = processlist_data
         self.host_cache_data = host_cache_data
+        self.max_replay_timestamp = max_replay_timestamp
 
         self.dropdown_items = []
         if processlist_data:
@@ -144,6 +152,8 @@ class CommandModal(ModalScreen):
             input.placeholder = "Input a refresh interval"
             input.focus()
         elif self.command == HotkeyCommands.replay_seek:
+            if self.max_replay_timestamp:
+                input.value = self.max_replay_timestamp
             input.placeholder = "Format: 2024-07-25 13:00:00"
             input.focus()
         else:

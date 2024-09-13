@@ -28,11 +28,27 @@ class EventLog(Screen):
         EventLog DataTable {
             background: #0a0e1b;
             border: none;
-            overflow-x: hidden;
+            overflow-x: auto;
             max-height: 100%;
         }
         EventLog SpinnerWidget {
             margin-top: 1;
+        }
+        .input_container {
+            align: left top;
+            padding-left: 1;
+        }
+        .input_container > Input {
+            border: none;
+            background: #0a0e1b;
+            margin: 0;
+            height: 1;
+        }
+        #days_container > Input {
+            width: 15;
+        }
+        #days_container > Label {
+            margin-right: 2;
         }
         #info {
             padding-top: 1;
@@ -41,11 +57,8 @@ class EventLog(Screen):
             text-style: bold;
         }
         #search {
-            background: #0a0e1b;
-            content-align: right middle;
-            padding-left: 1;
-            margin: 0;
-            border: none;
+            width: 90%;
+            margin-bottom: 1;
         }
         #help {
             color: #8f9fc1;
@@ -80,10 +93,10 @@ class EventLog(Screen):
         self.spinner = self.query_one(SpinnerWidget)
         self.info = self.query_one("#info", Label)
         self.search_text = self.query_one("#search", Input)
+        self.days_to_display = self.query_one("#days", Input)
 
         self.info.display = False
         self.datatable.display = False
-        self.search_text.display = False
 
         self.update_datatable()
 
@@ -93,38 +106,54 @@ class EventLog(Screen):
             self.datatable.move_cursor(row=0)
         elif event.key == "2":
             self.datatable.move_cursor(row=self.datatable.row_count - 1)
+        elif event.key == "r":
+            self.update_datatable()
 
     def compose(self) -> ComposeResult:
         yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
-        yield Label("[b white]1[/b white] = top of events/[b white]2[/b white] = bottom of events", id="help")
+        yield Label(
+            "[b white]r[/b white] = refresh/[b white]1[/b white] = top of events/"
+            "[b white]2[/b white] = bottom of events",
+            id="help",
+        )
         with Horizontal():
             switch_options = [("System", "system"), ("Warning", "warning"), ("Error", "error"), ("Note", "note")]
             for label, switch_id in switch_options:
                 yield Label(label)
                 yield Switch(animate=False, id=switch_id, value=True)
+        with Horizontal(id="days_container", classes="input_container"):
+            yield Label("Days to display")
+            yield Input(id="days", value="30")
+        with Horizontal(id="search_container", classes="input_container"):
+            yield Label("Search event text")
+            yield Input(id="search", placeholder="Specify event text to display")
         yield SpinnerWidget(id="spinner", text="Loading events")
-        yield Input(id="search", placeholder="Search (hit enter when ready)")
         yield Label("", id="info")
         with Container():
             yield DataTable(show_cursor=False)
 
-    @on(Input.Submitted, "#search")
+    @on(Input.Submitted, "Input")
     def event_search(self):
-        self.update_datatable()
-
-    @on(Switch.Changed)
-    def switch_changed(self, event: Switch.Changed):
-        self.levels[event.switch.id]["active"] = event.value
-
         self.update_datatable()
 
     @work(thread=True)
     def update_datatable(self):
+        for switch in self.query(Switch):
+            self.levels[switch.id]["active"] = switch.value
+
+        # Verify days is a number
+        try:
+            int(self.days_to_display.value)
+        except ValueError:
+            self.datatable.display = False
+            self.info.display = True
+            self.info.update("[red]Days to display must be a number[/red]")
+            return
+
         self.spinner.show()
 
         self.info.display = False
         self.datatable.display = False
-        self.search_text.display = False
 
         active_sql_list = [data["sql"] for data in self.levels.values() if data["active"]]
         where_clause = " OR ".join(active_sql_list)
@@ -133,11 +162,14 @@ class EventLog(Screen):
             where_clause = f"({where_clause}) AND (data LIKE '%{self.search_text.value}%')"
 
         self.datatable.clear(columns=True)
-        self.datatable.add_column("Time")
+        self.datatable.add_column("Date/Time")
+        self.datatable.add_column("Subsystem")
         self.datatable.add_column("Level")
+        self.datatable.add_column("Code")
 
         if where_clause:
             query = MySQLQueries.error_log.replace("$1", f"AND ({where_clause})")
+            query = query.replace("$2", f"AND logged > NOW() - INTERVAL {self.days_to_display.value} DAY")
             event_count = self.db_connection.execute(query)
             data = self.db_connection.fetchall()
 
@@ -158,28 +190,27 @@ class EventLog(Screen):
                         level = f"[{level_color}]{row['level']}[/{level_color}]"
 
                     timestamp = f"[#858A97]{row['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}[/#858A97]"
+                    error_code = f"[label]{row['error_code']}[/label]"
+                    subsystem = row["subsystem"]
 
                     # Wrap the message to 78% of console width so hopefully we don't get a scrollbar
-                    wrapped_message = textwrap.wrap(row["message"], width=round(self.app.console.width * 0.78))
+                    wrapped_message = textwrap.wrap(row["message"], width=round(self.app.console.width * 0.75))
                     wrapped_message = "\n".join(wrapped_message)
 
                     line_counts = [cell.count("\n") + 1 for cell in wrapped_message]
                     height = max(line_counts)
 
-                    self.datatable.add_row(timestamp, level, wrapped_message, height=height)
+                    self.datatable.add_row(timestamp, subsystem, level, error_code, wrapped_message, height=height)
 
                 self.datatable.display = True
-                self.search_text.display = True
                 self.datatable.focus()
             else:
                 self.datatable.display = False
-                self.search_text.display = True
                 self.info.display = True
                 self.info.update("No events found")
         else:
             self.datatable.display = False
-            self.search_text.display = False
             self.info.display = True
-            self.info.update("Toggle the switches above to filter what events you'd like to see")
+            self.info.update("No switches selected. Toggle the switches above to filter what events you'd like to see")
 
         self.spinner.hide()

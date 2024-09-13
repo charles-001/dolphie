@@ -365,12 +365,14 @@ class MySQLQueries:
             logged AS timestamp,
             prio AS level,
             subsystem,
-            data AS message
+            data AS message,
+            error_code
         FROM
             performance_schema.error_log
         WHERE
             data != 'Could not open log file.'
             $1
+            $2
         ORDER BY
             timestamp
     """

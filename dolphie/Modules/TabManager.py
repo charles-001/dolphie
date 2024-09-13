@@ -3,15 +3,6 @@ import uuid
 from dataclasses import dataclass
 from typing import Dict, List
 
-import dolphie.Modules.MetricManager as MetricManager
-from dolphie.DataTypes import ConnectionStatus
-from dolphie.Dolphie import Dolphie
-from dolphie.Modules.ArgumentParser import Config
-from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.ReplayManager import ReplayManager
-from dolphie.Widgets.host_setup import HostSetupModal
-from dolphie.Widgets.spinner import SpinnerWidget
-from dolphie.Widgets.topbar import TopBar
 from textual.app import App
 from textual.containers import (
     Center,
@@ -33,6 +24,16 @@ from textual.widgets import (
 from textual.widgets import Tab as TabWidget
 from textual.widgets import TabbedContent, TabPane, Tabs
 from textual.worker import Worker
+
+import dolphie.Modules.MetricManager as MetricManager
+from dolphie.DataTypes import ConnectionStatus
+from dolphie.Dolphie import Dolphie
+from dolphie.Modules.ArgumentParser import Config
+from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.ReplayManager import ReplayManager
+from dolphie.Widgets.host_setup import HostSetupModal
+from dolphie.Widgets.spinner import SpinnerWidget
+from dolphie.Widgets.topbar import TopBar
 
 
 @dataclass
@@ -174,10 +175,10 @@ class TabManager:
                     Static(id="dashboard_replay", classes="dashboard_replay"),
                     Static(id="dashboard_replay_start_end", classes="dashboard_replay"),
                     Horizontal(
-                        Button("⏪ Back", id="back_button", classes="replay_button replay_back"),
-                        Button("⏸️  Pause", id="pause_button", classes="replay_button replay_pause"),
-                        Button("⏩ Forward", id="forward_button", classes="replay_button replay_forward"),
-                        Button("🔍 Seek", id="seek_button", classes="replay_button replay_seek"),
+                        Button("⏪ Back", id="back_button", classes="replay_button"),
+                        Button("⏸️  Pause", id="pause_button", classes="replay_button"),
+                        Button("⏩ Forward", id="forward_button", classes="replay_button"),
+                        Button("🔍 Seek", id="seek_button", classes="replay_button"),
                         classes="button_container",
                     ),
                     id="dashboard_replay_container",

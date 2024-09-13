@@ -6,6 +6,8 @@ from typing import Union
 
 import orjson
 import zstandard as zstd
+from loguru import logger
+
 from dolphie.DataTypes import (
     ConnectionSource,
     ProcesslistThread,
@@ -14,7 +16,6 @@ from dolphie.DataTypes import (
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
-from loguru import logger
 
 
 @dataclass

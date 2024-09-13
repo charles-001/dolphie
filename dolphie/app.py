@@ -15,8 +15,24 @@ from datetime import datetime, timedelta
 from functools import partial
 from importlib import metadata
 
-import dolphie.Modules.MetricManager as MetricManager
 import requests
+from loguru import logger
+from packaging.version import parse as parse_version
+from rich import box
+from rich.align import Align
+from rich.console import Group
+from rich.style import Style
+from rich.table import Table
+from rich.theme import Theme
+from rich.traceback import Traceback
+from sqlparse import format as sqlformat
+from textual import events, on, work
+from textual.app import App
+from textual.command import DiscoveryHit, Hit, Provider
+from textual.widgets import Button, Switch, TabbedContent, TabPane, Tabs
+from textual.worker import Worker, WorkerState, get_current_worker
+
+import dolphie.Modules.MetricManager as MetricManager
 from dolphie.DataTypes import (
     ConnectionSource,
     ConnectionStatus,
@@ -55,21 +71,6 @@ from dolphie.Widgets.modal import CommandModal
 from dolphie.Widgets.proxysql_thread_screen import ProxySQLThreadScreen
 from dolphie.Widgets.thread_screen import ThreadScreen
 from dolphie.Widgets.topbar import TopBar
-from loguru import logger
-from packaging.version import parse as parse_version
-from rich import box
-from rich.align import Align
-from rich.console import Group
-from rich.style import Style
-from rich.table import Table
-from rich.theme import Theme
-from rich.traceback import Traceback
-from sqlparse import format as sqlformat
-from textual import events, on, work
-from textual.app import App
-from textual.command import DiscoveryHit, Hit, Provider
-from textual.widgets import Button, Switch, TabbedContent, TabPane, Tabs
-from textual.worker import Worker, WorkerState, get_current_worker
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -826,7 +827,7 @@ class DolphieApp(App):
         self.bell()
         self.exit(message=Traceback(show_locals=True, width=None, locals_max_length=5))
 
-    @on(Button.Pressed, ".replay_back")
+    @on(Button.Pressed, "#back_button")
     def replay_back(self):
         tab = self.tab_manager.active_tab
 
@@ -838,7 +839,7 @@ class DolphieApp(App):
 
         self.force_refresh_for_replay()
 
-    @on(Button.Pressed, ".replay_forward")
+    @on(Button.Pressed, "#forward_button")
     def replay_forward(self):
         tab = self.tab_manager.active_tab
 
@@ -849,7 +850,7 @@ class DolphieApp(App):
 
         self.force_refresh_for_replay()
 
-    @on(Button.Pressed, ".replay_pause")
+    @on(Button.Pressed, "#pause_button")
     def replay_pause(self, event: Button.Pressed):
         tab = self.tab_manager.active_tab
 
@@ -862,7 +863,7 @@ class DolphieApp(App):
             self.notify("Replay has resumed", severity="success")
             event.button.label = "⏸️  Pause"
 
-    @on(Button.Pressed, ".replay_seek")
+    @on(Button.Pressed, "#seek_button")
     def replay_seek(self):
         def command_get_input(timestamp: str):
             if timestamp:
@@ -873,7 +874,11 @@ class DolphieApp(App):
                     self.force_refresh_for_replay()
 
         self.app.push_screen(
-            CommandModal(command=HotkeyCommands.replay_seek, message="What time would you like to seek to?"),
+            CommandModal(
+                command=HotkeyCommands.replay_seek,
+                message="What time would you like to seek to?",
+                max_replay_timestamp=self.tab_manager.active_tab.replay_manager.max_timestamp,
+            ),
             command_get_input,
         )
 
