@@ -481,8 +481,6 @@ class DolphieApp(App):
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
-        self.app.notify(dolphie.global_status["Ssl_version"], title="SSL Version", severity="info", timeout=2)
-
         if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
             if dolphie.connection_source_alt == ConnectionSource.mariadb:
                 find_replicas_query = MySQLQueries.mariadb_find_replicas
