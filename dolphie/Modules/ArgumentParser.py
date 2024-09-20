@@ -9,13 +9,12 @@ from typing import Dict, List
 from urllib.parse import ParseResult, urlparse
 
 import myloginpath
+from dolphie.DataTypes import Panels
+from dolphie.Modules.Queries import MySQLQueries
 from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.theme import Theme
-
-from dolphie.DataTypes import Panels
-from dolphie.Modules.Queries import MySQLQueries
 
 
 @dataclass
@@ -527,12 +526,9 @@ Dolphie's config supports these options under [dolphie] section:
                             dolphie_config_login_options_used[option] = value
 
                 # First, loop sections for credential profiles so hostgroups can reference them
-                # if they're not in order
+                # when the profiles are not before hostgroup declarations in Dolphie's config file
                 for section in cfg.sections():
-                    if section == "dolphie":
-                        continue
-
-                    if "credential_profile" in section:
+                    if section.startswith("credential_profile"):
                         self.parse_credential_profile(cfg, section)
 
                 # Then, loop sections for hostgroups
@@ -542,7 +538,6 @@ Dolphie's config supports these options under [dolphie] section:
 
                     # Treat anything else as a hostgroup
                     hosts = self.parse_hostgroup(cfg, section, config_file)
-
                     if hosts:
                         hostgroups[section] = hosts
 
