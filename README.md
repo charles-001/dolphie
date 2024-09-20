@@ -1,4 +1,5 @@
 # Dolphie
+
 <p align="center">
   <img src="https://user-images.githubusercontent.com/13244625/187600748-19d2ad15-42e8-4f9c-ada5-a153cdcf4070.png" width="120"><br>
   Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL<br><br>
@@ -18,16 +19,18 @@
 <p></p>
 <video src='https://github.com/user-attachments/assets/9eba7a32-1084-43de-9f62-268ad5f0f922'></video>
 
-
 ## Installation
+
 Requires Python 3.8.1+
 
 #### Using PyPi
+
 ```shell
 $ pip install dolphie
 ```
 
 #### Using Poetry
+
 ```shell
 $ curl -sSL https://install.python-poetry.org | python3 -
 
@@ -51,6 +54,7 @@ $ docker exec -it dolphie dolphie -h host.docker.internal -u root --ask-pass
 ```
 
 ## Usage
+
 ```
 positional arguments:
   uri                   Use a URI string for credentials (mysql/proxysql) - format: mysql://user:password@host:port (port is optional with default 3306, or 6032 for ProxySQL)
@@ -58,15 +62,16 @@ positional arguments:
 options:
   --help                show this help message and exit
   --host-setup          Start Dolphie by showing the Host Setup modal instead of automatically connecting
-  -u, --user           Username
-  -p, --password       Password
-  -h, --host           Hostname/IP address
-  -P, --port           Port (socket has precedence)
-  -S, --socket         Socket file
-  -c, --config-file    Dolphie's config file to use. Options are read from these files in the given order: ['/etc/dolphie.cnf', '/etc/dolphie/dolphie.cnf', '~/.dolphie.cnf']
-  -m, --mycnf-file     MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
-  -l, --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials [default: client]
-  -r, --refresh-interval
+  -C , --cred-profile   Credential profile to use. See below for more information
+  -u , --user           Username
+  -p , --password       Password
+  -h , --host           Hostname/IP address
+  -P , --port           Port (socket has precedence)
+  -S , --socket         Socket file
+  -c , --config-file    Dolphie's config file to use. Options are read from these files in the given order: ['/etc/dolphie.cnf', '/etc/dolphie/dolphie.cnf', '~/.dolphie.cnf']
+  -m , --mycnf-file     MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
+  -l , --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials [default: client]
+  -r , --refresh-interval
                         How much time to wait in seconds between each refresh [default: 1]
   --host-cache-file     Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format ip=hostname [default: ~/dolphie_host_cache]
   --host-setup-file     Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
@@ -77,8 +82,8 @@ options:
   --ssl-key             Path to the file that contains a private key for the certificate
   --panels              What panels to display on startup separated by a comma. Supports: dashboard,processlist,graphs,replication,metadata_locks,ddl,proxysql_hostgroup_summary,proxysql_mysql_query_rules,proxysql_command_stats [default: dashboard,processlist]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
-  --pypi-repo           What PyPi repository to use when checking for a new version [default: https://pypi.org/pypi/dolphie/json]
-  -H, --hostgroup      This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
+  --pypi-repo           What PyPi repository to use when checking for a new version default: [https://pypi.org/pypi/dolphie/json]
+  -H , --hostgroup      This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
   -R, --record          Enables recording of Dolphie's data to a replay file. Note: This can use significant disk space. Monitor accordingly!
   -D, --daemon          Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the background with whatever solution you decide to use. Automatically enables --record. This mode is solely used for recording data to a replay file
   --daemon-log-file     Full path of the log file for daemon mode
@@ -95,10 +100,24 @@ options:
 
 Order of precedence for methods that pass options to Dolphie:
 	1. Command-line
-	2. Environment variables
-	3. Dolphie's config (set by --config-file)
-	4. ~/.mylogin.cnf (mysql_config_editor)
-	5. ~/.my.cnf (set by --mycnf-file)
+	2. Credential profile (set by --cred-profile)
+	3. Environment variables
+	4. Dolphie's config (set by --config-file)
+	5. ~/.mylogin.cnf (mysql_config_editor)
+	6. ~/.my.cnf (set by --mycnf-file)
+
+Credential profiles can be defined in Dolphie's config file. They can be used to store credentials for easy access.
+A profile can be created by adding a section in the config file with the format: [credential_profile_<name>]
+The following options are supported in credential profiles:
+	user
+	password
+	socket
+	ssl_mode REQUIRED/VERIFY_CA/VERIFY_IDENTITY
+	ssl_ca
+	ssl_cert
+	ssl_key
+	mycnf_file
+	login_path
 
 MySQL my.cnf file supports these options under [client] section:
 	host
@@ -127,6 +146,7 @@ Environment variables support these options:
 
 Dolphie's config supports these options under [dolphie] section:
 	(bool) host_setup
+	(str) credential_profile
 	(str) user
 	(str) password
 	(str) host
@@ -156,32 +176,40 @@ Dolphie's config supports these options under [dolphie] section:
 	(int) replay_retention_hours
 	(str) exclude_notify_global_vars
 ```
+
 ## Supported ProxySQL versions
+
 - ProxySQL 2.6+ (could work on previous versions but not tested)
 
 Note: Use `admin` user instead of `stats` user so you can use all features
 
 ## Supported MariaDB versions
+
 - MariaDB 5.5/10.0/11.0+
 - RDS MariaDB
 
 ## Supported MySQL versions
+
 - MySQL/Percona Server 5.6/5.7/8.x/9.x
 - RDS MySQL & Aurora/Azure
 
 ## MySQL Grants required
+
 #### Least privilege
+
 1. PROCESS (only if you switch to using processlist via `P` command)
 2. SELECT to `performance_schema` + `pt-heartbeat table` (if used)
 3. REPLICATION CLIENT/REPLICATION SLAVE
 
 #### Recommended
+
 1. PROCESS (only if you switch to using processlist via `P` command)
 2. Global SELECT access (good for explaining queries, listing all databases, etc)
-4. REPLICATION CLIENT/REPLICATION SLAVE
-5. SUPER (required if you want to kill queries)
+3. REPLICATION CLIENT/REPLICATION SLAVE
+4. SUPER (required if you want to kill queries)
 
 ## Record & Replay
+
 Have you ever wished you could view the process list and various other related statistics from a specific moment in time? Perhaps during a database stall that led to an incident, and your monitoring tools failed to identify the root cause? Well, you're in luck! Dolphie has a Replay system that lets you do just that.
 
 Starting with version **6.0.0**, you can instruct Dolphie to record its data (via `--record`) into a local SQLite database file that's compressed with ZSTD. When you're ready to replay this data, simply pass the `--replay-file` option, and you can interact with it as if you were watching it live! Within the Replay interface, you can navigate with the controls: back, forward, play/pause, or seek to a specific datetime. While some features are disabled during replay, the essential functionalities remain intact. For a complete list of available commands, press `?` to access the help menu.
@@ -189,11 +217,13 @@ Starting with version **6.0.0**, you can instruct Dolphie to record its data (vi
 Note that this feature can incur a significant amount of disk space depending on how busy your server is and what you set `--replay-retention-hours` + `--refresh-interval`. Adjust these values to suit your needs and monitor the disk space usage accordingly. You can also not mix Dolphie versions with a replay file. If you try to, it will rename the current replay file and create a new one to prevent any potential version conflicts.
 
 ## Daemon Mode
+
 Also introduced in version **6.0.0** is the ability to run Dolphie in daemon mode (via `--daemon` option). It's designed to run in the background continuously recording data for future replay. It’s more resource-efficient than running Dolphie live, transforming it into a passive, always-on monitoring service. It eliminates Textual's TUI and creates a log file for messages while also displaying them in the console.
 
 You have flexibility in how you run Dolphie in the background; personally, I prefer using `systemctl`, but alternatives like `nohup` or `tmux` can be viable options.
 
 Here's some examples of log messages you might see:
+
 ```
 [INFO] Starting Dolphie v6.0.0 in daemon mode with a refresh interval of 1s
 [INFO] Log file: /var/log/dolphie/dolphie.log
@@ -207,11 +237,13 @@ Here's some examples of log messages you might see:
 ```
 
 ## Hostgroups
+
 Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format `key=host` (keys have no meaning). Hosts support optional port (default is whatever `port` parameter is) in the format `host:port`. You can also name the tabs by suffixing `~tab_name` to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
 
 Note: Colors can be used in the tab name by using the format `[color]text[/color]` (i.e. `[red]production[/red]`). You can also use emojis supported by Rich (can see them by running `python -m rich.emoji`) by using the format `:emoji:` (i.e. `:ghost:`). Rich supports the normal emoji shortcodes.
 
 Example:
+
 ```ini
 [cluster1]
 1=host1
@@ -220,4 +252,5 @@ Example:
 ```
 
 ## Feedback
+
 I welcome all questions, bug reports, and requests. If you enjoy Dolphie, please let me know! I'd love to hear from you :dolphin:

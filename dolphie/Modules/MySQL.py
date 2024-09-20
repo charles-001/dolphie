@@ -2,11 +2,12 @@ import time
 from ssl import SSLError
 
 import pymysql
+from loguru import logger
+from textual.app import App
+
 from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
-from loguru import logger
-from textual.app import App
 
 
 class Database:
@@ -38,6 +39,7 @@ class Database:
         self.source: ConnectionSource = None
         self.is_running_query: bool = False
         self.has_connected: bool = False
+        self.refresh_connection_data: bool = True  # used for MySQL only
 
         if daemon_mode:
             self.max_reconnect_attempts: int = 999999999
@@ -245,6 +247,9 @@ class Database:
                             severity="success",
                             timeout=10,
                         )
+
+                        if self.source == ConnectionSource.mysql:
+                            self.refresh_connection_data = True
 
                         # Retry the query
                         return self.execute(query, values)

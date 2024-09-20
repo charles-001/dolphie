@@ -3,16 +3,17 @@ import socket
 from datetime import datetime
 from typing import Dict, Union
 
+from loguru import logger
+from packaging.version import parse as parse_version
+from textual.app import App
+from textual.widgets import Switch
+
 import dolphie.DataTypes as DataTypes
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.Queries import MySQLQueries
-from loguru import logger
-from packaging.version import parse as parse_version
-from textual.app import App
-from textual.widgets import Switch
 
 
 class Dolphie:
@@ -24,6 +25,7 @@ class Dolphie:
         self.tab_id: int = None
 
         # Config options
+        self.credential_profile = config.credential_profile
         self.user = config.user
         self.password = config.password
         self.host = config.host
@@ -151,21 +153,11 @@ class Dolphie:
         if not self.daemon_mode:
             self.secondary_db_connection.connect()
 
-        version = self.main_db_connection.fetch_value_from_field("SELECT @@version")
-        version_split = version.split(".")
-        self.host_version = "%s.%s.%s" % (
-            version_split[0],
-            version_split[1],
-            version_split[2].split("-")[0],
-        )
-
         self.connection_source = self.main_db_connection.source
         self.connection_source_alt = self.connection_source
         if self.connection_source == ConnectionSource.proxysql:
             self.host_distro = "ProxySQL"
             self.host_with_port = f"{self.host}:{self.port}"
-        elif self.connection_source == ConnectionSource.mysql:
-            self.setup_connection_mysql()
 
         self.metric_manager.connection_source = self.connection_source
 
@@ -173,11 +165,9 @@ class Dolphie:
         self.add_host_to_host_setup_file()
 
     def setup_connection_mysql(self):
-        global_variables = self.main_db_connection.fetch_status_and_variables("variables")
+        global_variables = self.global_variables
 
-        version = global_variables.get("version").lower()
         version_comment = global_variables.get("version_comment").lower()
-        version_split = version.split(".")
 
         # Get proper host version and fork
         if "percona xtradb cluster" in version_comment:
@@ -187,7 +177,7 @@ class Dolphie:
         elif "mariadb cluster" in version_comment:
             self.host_distro = "MariaDB Cluster"
             self.connection_source_alt = ConnectionSource.mariadb
-        elif "mariadb" in version_comment or "mariadb" in version:
+        elif "mariadb" in version_comment:
             self.host_distro = "MariaDB"
             self.connection_source_alt = ConnectionSource.mariadb
         elif global_variables.get("aurora_version"):
@@ -210,9 +200,8 @@ class Dolphie:
         else:
             self.host_with_port = f"{global_variables.get('hostname')}:{self.port}"
 
-        major_version = int(version_split[0])
         self.server_uuid = global_variables.get("server_uuid")
-        if self.connection_source_alt == ConnectionSource.mariadb and major_version >= 10:
+        if self.connection_source_alt == ConnectionSource.mariadb and self.is_mysql_version_at_least("10.0"):
             self.server_uuid = global_variables.get("server_id")
 
         if global_variables.get("performance_schema") == "ON":
@@ -265,7 +254,7 @@ class Dolphie:
                 file.write(host)
                 self.host_setup_available_hosts.append(host[:-1])  # remove the \n
 
-    def is_mysql_version_at_least(self, target, use_version=None):
+    def is_mysql_version_at_least(self, target: str, use_version: str = None):
         version = self.host_version
         if use_version:
             version = use_version
@@ -274,6 +263,14 @@ class Dolphie:
         parsed_target = parse_version(target)
 
         return parsed_source >= parsed_target
+
+    def set_host_version(self, version: str):
+        version_split = version.split(".")
+        self.host_version = "%s.%s.%s" % (
+            version_split[0],
+            version_split[1],
+            version_split[2].split("-")[0],
+        )
 
     def get_hostname(self, host):
         if host in self.host_cache:

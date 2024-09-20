@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import uuid
 from dataclasses import dataclass
 from typing import Dict, List
@@ -28,7 +29,7 @@ from textual.worker import Worker
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie.DataTypes import ConnectionStatus
 from dolphie.Dolphie import Dolphie
-from dolphie.Modules.ArgumentParser import Config
+from dolphie.Modules.ArgumentParser import Config, HostGroupMember
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Widgets.host_setup import HostSetupModal
@@ -290,47 +291,44 @@ class TabManager:
         self.app.query_one("#main_container").display = False
         self.app.query_one("#loading_indicator").display = False
 
-    async def create_tab(self, tab_name: str, use_hostgroup: bool = False, switch_tab: bool = True) -> Tab:
+    async def create_tab(
+        self, tab_name: str = None, hostgroup_member: HostGroupMember = None, switch_tab: bool = True
+    ) -> Tab:
         if len(self.app.screen_stack) > 1:
             return
 
         tab_id = self.generate_tab_id()
 
-        # Create our new tab instance
+        # Create a new tab instance
         tab = Tab(id=tab_id, name=tab_name)
 
         # If we're using hostgroups
-        if use_hostgroup and self.config.hostgroup_hosts:
-            host = tab_name
-            # Split entry by "~" to get custom tab name if there is one
-            tab_name_split_rename = tab_name.split("~")
+        config = copy.deepcopy(self.config)
+        if hostgroup_member and self.config.hostgroup_hosts:
+            config.host = hostgroup_member.host
+            config.port = hostgroup_member.port
+            tab.manual_tab_name = hostgroup_member.tab_title
 
-            if len(tab_name_split_rename) == 2:
-                # Get the hostname from the first part of the split
-                host = tab_name_split_rename[0]
-                tab.manual_tab_name = tab_name_split_rename[1]
+            # If the hostgroup member has a credential profile, update config with its credentials
+            credential_profile_data = self.config.credential_profiles.get(hostgroup_member.credential_profile)
+            if credential_profile_data:
+                config.credential_profile = hostgroup_member.credential_profile
 
-            # Split tab name by ":" to extract host and port
-            tab_host_split = host.split(":")
-
-            # Extract host and port information
-            original_config_port = self.config.port
-
-            # Set the host and port for the config when we pass it to Dolphie class
-            self.config.host = tab_host_split[0]
-            self.config.port = tab_host_split[1] if len(tab_host_split) > 1 else self.config.port
+                if credential_profile_data.user:
+                    config.user = credential_profile_data.user
+                if credential_profile_data.password:
+                    config.password = credential_profile_data.password
+                if credential_profile_data.socket:
+                    config.socket = credential_profile_data.socket
+                if credential_profile_data.ssl:
+                    config.ssl = credential_profile_data.ssl
 
         # Create a new Dolphie instance
-        dolphie = Dolphie(config=self.config, app=self.app)
+        dolphie = Dolphie(config=config, app=self.app)
         dolphie.tab_id = tab_id
-        dolphie.tab_name = tab_name
 
-        # Save the Dolphie instance to the tab
+        # Set the tab's Dolphie instance
         tab.dolphie = dolphie
-
-        # Revert the port back to its original value
-        if use_hostgroup and self.config.hostgroup_hosts and len(tab_host_split) > 1:
-            self.config.port = original_config_port
 
         # If we're in daemon mode, stop here since we don't need to
         # create all the widgets for the tab as that wastes resources
@@ -341,7 +339,7 @@ class TabManager:
             return tab
 
         # Create the tab in the UI
-        intial_tab_name = "" if use_hostgroup else tab_name
+        intial_tab_name = "" if hostgroup_member else tab_name
         self.host_tabs.add_tab(TabWidget(intial_tab_name, id=tab_id))
 
         # Loop the metric instances and create the graph tabs
@@ -610,6 +608,7 @@ class TabManager:
 
             host_port = data["host"].split(":")
 
+            dolphie.credential_profile = data.get("credential_profile")
             dolphie.host = host_port[0]
             dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
             dolphie.user = data.get("username")
@@ -655,6 +654,8 @@ class TabManager:
 
         dolphie.app.push_screen(
             HostSetupModal(
+                credential_profile=dolphie.credential_profile,
+                credential_profiles=dolphie.config.credential_profiles,
                 host=host,
                 port=port,
                 username=dolphie.user,

@@ -471,8 +471,17 @@ class DolphieApp(App):
         dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
+        # If we get disconnected and Dolphie reconnects, we should refresh the connection data
+        # as those data points can change (i.e. upgrade)
+        if dolphie.main_db_connection.refresh_connection_data:
+            dolphie.set_host_version(dolphie.global_variables.get("version"))
+            dolphie.setup_connection_mysql()
+            dolphie.main_db_connection.refresh_connection_data = False
+
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
+
+        self.app.notify(dolphie.global_status["Ssl_version"], title="SSL Version", severity="info", timeout=2)
 
         if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
             if dolphie.connection_source_alt == ConnectionSource.mariadb:
@@ -597,6 +606,8 @@ class DolphieApp(App):
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
         dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
+
+        dolphie.set_host_version(dolphie.global_variables.get("admin-version"))
 
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("mysql_stats")
 
@@ -778,11 +789,11 @@ class DolphieApp(App):
         self.loading_hostgroups = True
         self.notify(f"Connecting to hosts in hostgroup [highlight]{hostgroup}", severity="information")
 
-        for host in self.config.hostgroup_hosts.get(hostgroup, []):
+        for hostgroup_member in self.config.hostgroup_hosts.get(hostgroup, []):
             # We only want to switch if it's the first tab created
             switch_tab = True if not self.tab_manager.active_tab else False
 
-            tab = await self.tab_manager.create_tab(tab_name=host, use_hostgroup=True, switch_tab=switch_tab)
+            tab = await self.tab_manager.create_tab(hostgroup_member=hostgroup_member, switch_tab=switch_tab)
 
             self.run_worker_main(tab.id)
             self.run_worker_replicas(tab.id)
@@ -909,17 +920,17 @@ class DolphieApp(App):
 
         tab = self.tab_manager.active_tab
         if tab and tab.worker and (tab.dolphie.main_db_connection.is_connected() or tab.dolphie.replay_file):
+            # Set each panel's display status based on the tab's panel visibility
+            for panel in tab.dolphie.panels.get_all_panels():
+                tab_panel = tab.get_panel_widget(panel.name)
+                tab_panel.display = getattr(tab.dolphie.panels, panel.name).visible
+
             if tab.dolphie.connection_source == ConnectionSource.mysql:
                 self.refresh_screen_mysql(tab)
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
 
             self.refresh_tab_properties()
-
-            # Set each panel's display status based on the tab's panel visibility
-            for panel in tab.dolphie.panels.get_all_panels():
-                tab_panel = tab.get_panel_widget(panel.name)
-                tab_panel.display = getattr(tab.dolphie.panels, panel.name).visible
 
             # Set the display state for the replica container based on whether there are replicas
             tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
