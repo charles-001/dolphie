@@ -150,6 +150,10 @@ Environment variables support these options:
 \tDOLPHIE_HOST
 \tDOLPHIE_PORT
 \tDOLPHIE_SOCKET
+\tDOLPHIE_SSL_MODE REQUIRED/VERIFY_CA/VERIFY_IDENTITY
+\tDOLPHIE_SSL_CA
+\tDOLPHIE_SSL_CERT
+\tDOLPHIE_SSL_KEY
 
 Dolphie's config supports these options under [dolphie] section:
 \t{self.formatted_options}

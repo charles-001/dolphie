@@ -143,6 +143,10 @@ Environment variables support these options:
 	DOLPHIE_HOST
 	DOLPHIE_PORT
 	DOLPHIE_SOCKET
+	DOLPHIE_SSL_MODE REQUIRED/VERIFY_CA/VERIFY_IDENTITY
+	DOLPHIE_SSL_CA
+	DOLPHIE_SSL_CERT
+	DOLPHIE_SSL_KEY
 
 Dolphie's config supports these options under [dolphie] section:
 	(bool) host_setup
@@ -236,9 +240,37 @@ Here's some examples of log messages you might see:
 [INFO] Global variable innodb_io_capacity changed: 1000 -> 2000
 ```
 
+## Credential Profiles
+
+Credential profiles can be defined in Dolphie's config file. They can be used to store credentials for easy access. A profile can be created by adding a section in the config file with the format: `[credential_profile_<name>]`
+The following options are supported in credential profiles:
+
+- user
+- password
+- socket
+- ssl_mode REQUIRED/VERIFY_CA/VERIFY_IDENTITY
+- ssl_ca
+- ssl_cert
+- ssl_key
+- mycnf_file
+- login_path
+
+Example:
+
+```ini
+[credential_profile_dev]
+user = dev_user
+password = dev_password
+
+[credential_profile_prod]
+mycnf_file = /secure/path/to/prod.cnf
+```
+
+To use a credential profile, you can specify it with the `-C` or `--cred-profile` option when starting Dolphie. Hostgroups can also use credential profiles (see below)
+
 ## Hostgroups
 
-Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format `key=host` (keys have no meaning). Hosts support optional port (default is whatever `port` parameter is) in the format `host:port`. You can also name the tabs by suffixing `~tab_name` to the host. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
+Hostgroups are a way to easily connect to multiple hosts at once. To set this up, you will create a section in Dolphie's config file with the name you want the hostgroup to be and list each host on a new line in the format `key=<json>` (keys have no meaning). Hosts support optional port (default is whatever `port` parameter is) in the format `host:port`. Once ready, you will use the parameter `hostgroup` or `Host Setup` modal to see it in action!
 
 Note: Colors can be used in the tab name by using the format `[color]text[/color]` (i.e. `[red]production[/red]`). You can also use emojis supported by Rich (can see them by running `python -m rich.emoji`) by using the format `:emoji:` (i.e. `:ghost:`). Rich supports the normal emoji shortcodes.
 
@@ -246,9 +278,10 @@ Example:
 
 ```ini
 [cluster1]
-1=host1
-2=host2:3307
-3=host3:3308~[red]production[/red] :ghost:
+1={"host": "host1", "tab_title": "[yellow]host1[/yellow] :ghost:", "credential_profile": "dev"}
+2={"host": "host2", "tab_title": "[blue]host2[/blue] :ghost:", "credential_profile": "dev"}
+3={"host": "host3:3307", "tab_title": "[red]production[/red]", "credential_profile": "prod"}
+4={"host": "host4"}
 ```
 
 ## Feedback
