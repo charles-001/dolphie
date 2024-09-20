@@ -526,21 +526,25 @@ Dolphie's config supports these options under [dolphie] section:
                             # Save the login option to be used later
                             dolphie_config_login_options_used[option] = value
 
-                # Loop sections for credential profiles and hostgroups
+                # First, loop sections for credential profiles so hostgroups can reference them
+                # if they're not in order
                 for section in cfg.sections():
-                    hosts = []
-
                     if section == "dolphie":
                         continue
 
                     if "credential_profile" in section:
                         self.parse_credential_profile(cfg, section)
-                    else:
-                        # Anything else will be treated as a hostgroup
-                        hosts = self.parse_hostgroup(cfg, section, config_file)
 
-                        if hosts:
-                            hostgroups[section] = hosts
+                # Then, loop sections for hostgroups
+                for section in cfg.sections():
+                    if section == "dolphie" or section.startswith("credential_profile"):
+                        continue
+
+                    # Treat anything else as a hostgroup
+                    hosts = self.parse_hostgroup(cfg, section, config_file)
+
+                    if hosts:
+                        hostgroups[section] = hosts
 
         # Save the hostgroups found to the config object
         self.config.hostgroup_hosts = hostgroups
@@ -715,21 +719,11 @@ Dolphie's config supports these options under [dolphie] section:
         return hosts
 
     def parse_credential_profile(self, cfg: RawConfigParser, section: str):
-        # Supported options for credential profiles. mycnf_file and login_path are processed instead of directly set
-        supported_options = [
-            "user",
-            "password",
-            "socket",
-            "ssl_mode",
-            "ssl_ca",
-            "ssl_cert",
-            "ssl_key",
-            "mycnf_file",
-            "login_path",
-        ]
-
-        # Options that can be set for credential profiles
+        # Options that can be set directly
         credential_profile_options = ["user", "password", "socket", "ssl_mode", "ssl_ca", "ssl_cert", "ssl_key"]
+
+        # All options. mycnf_file and login_path are processed instead of directly set
+        supported_options = credential_profile_options + ["mycnf_file", "login_path"]
 
         credential_name = section.split("credential_profile_")[1]
         credential = CredentialProfile(name=credential_name)
