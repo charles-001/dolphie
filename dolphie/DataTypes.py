@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-from dolphie.Modules.Functions import format_query, format_time
 from rich.table import Table
+
+from dolphie.Modules.Functions import format_query, format_time
 
 
 @dataclass
@@ -17,6 +18,7 @@ class ConnectionSource:
 @dataclass
 class ConnectionStatus:
     connecting = "CONNECTING"
+    connected = "CONNECTED"
     disconnected = "DISCONNECTED"
     read_write = "R/W"
     read_only = "RO"

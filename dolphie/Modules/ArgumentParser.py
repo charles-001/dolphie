@@ -116,7 +116,7 @@ Order of precedence for methods that pass options to Dolphie:
 \t5. ~/.mylogin.cnf (mysql_config_editor)
 \t6. ~/.my.cnf (set by --mycnf-file)
 
-Credential profiles can be defined in Dolphie's config file. They can be used to store credentials for easy access.
+Credential profiles can be defined in Dolphie's config file as a way to store credentials for easy access.
 A profile can be created by adding a section in the config file with the format: [credential_profile_<name>]
 The following options are supported in credential profiles:
 \tuser

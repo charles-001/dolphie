@@ -106,7 +106,7 @@ Order of precedence for methods that pass options to Dolphie:
 	5. ~/.mylogin.cnf (mysql_config_editor)
 	6. ~/.my.cnf (set by --mycnf-file)
 
-Credential profiles can be defined in Dolphie's config file. They can be used to store credentials for easy access.
+Credential profiles can be defined in Dolphie's config file as a way to store credentials for easy access.
 A profile can be created by adding a section in the config file with the format: [credential_profile_<name>]
 The following options are supported in credential profiles:
 	user
@@ -242,7 +242,7 @@ Here's some examples of log messages you might see:
 
 ## Credential Profiles
 
-Credential profiles can be defined in Dolphie's config file. They can be used to store credentials for easy access. A profile can be created by adding a section in the config file with the format: `[credential_profile_<name>]`
+Credential profiles can be defined in Dolphie's config file as a way to store credentials for easy access. A profile can be created by adding a section in the config file with the format: `[credential_profile_<name>]`
 The following options are supported in credential profiles:
 
 - user

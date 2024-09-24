@@ -471,12 +471,10 @@ class DolphieApp(App):
         dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
-        # If we get disconnected and Dolphie reconnects, we should refresh the connection data
-        # as those data points can change (i.e. upgrade)
-        if dolphie.main_db_connection.refresh_connection_data:
+        if dolphie.connection_status == ConnectionStatus.connecting:
+            self.tab_manager.update_topbar(tab=tab, connection_status=ConnectionStatus.connected)
             dolphie.set_host_version(dolphie.global_variables.get("version"))
             dolphie.setup_connection_mysql()
-            dolphie.main_db_connection.refresh_connection_data = False
 
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
@@ -605,7 +603,9 @@ class DolphieApp(App):
         dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
-        dolphie.set_host_version(dolphie.global_variables.get("admin-version"))
+        if dolphie.connection_status == ConnectionStatus.connecting:
+            self.tab_manager.update_topbar(tab=tab, connection_status=ConnectionStatus.connected)
+            dolphie.set_host_version(dolphie.global_variables.get("admin-version"))
 
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("mysql_stats")
 
@@ -686,7 +686,6 @@ class DolphieApp(App):
 
         if tab.loading_indicator.display or dolphie.replay_file:
             tab.loading_indicator.display = False
-            self.tab_manager.update_topbar(tab=tab, connection_status="ONLINE")
 
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():

@@ -536,7 +536,7 @@ class TabManager:
         if set_active:
             self.host_tabs.active = tab_id
 
-        # Switch to the new tab in the UI
+        # Update the topbar
         self.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
 
         if not tab.dolphie.main_db_connection.is_connected():
