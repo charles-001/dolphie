@@ -16,10 +16,10 @@ from textual.widgets import (
     Select,
     Static,
 )
-from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
 
 from dolphie.Modules.ArgumentParser import CredentialProfile
 from dolphie.Modules.ManualException import ManualException
+from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
 
 
 class HostSetupModal(ModalScreen):

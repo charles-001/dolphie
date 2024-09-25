@@ -13,9 +13,9 @@ from textual.widgets import (
     RadioSet,
     Static,
 )
-from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
 
 from dolphie.DataTypes import ConnectionSource, HotkeyCommands
+from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
 
 
 class CommandModal(ModalScreen):

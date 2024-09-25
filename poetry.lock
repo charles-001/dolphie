@@ -618,21 +618,6 @@ typing-extensions = ">=4.4.0,<5.0.0"
 syntax = ["tree-sitter (>=0.20.1,<0.21.0)", "tree-sitter-languages (==1.10.2)"]
 
 [[package]]
-name = "textual-autocomplete"
-version = "2.1.0b0"
-description = "Easily add autocomplete dropdowns to your Textual apps."
-optional = false
-python-versions = ">=3.7.8,<4.0.0"
-files = [
-    {file = "textual_autocomplete-2.1.0b0-py3-none-any.whl", hash = "sha256:40a7b2e09f115465de7e339bcee4dc16f03c1e43781ee3aaf5c44f65822a5861"},
-    {file = "textual_autocomplete-2.1.0b0.tar.gz", hash = "sha256:ba31da6e9b77e4c35323c267f958f0b90e1c2ddeca9c825c7d6c29d4d33893ce"},
-]
-
-[package.dependencies]
-textual = ">=0.14.0"
-typing-extensions = ">=4.5.0,<5.0.0"
-
-[[package]]
 name = "tree-sitter"
 version = "0.20.4"
 description = "Python bindings for the Tree-Sitter parsing library"
@@ -962,4 +947,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8.1"
-content-hash = "8274bc54242ba8eff9588336705507dcf9d88442b483b12399379653e745b3cf"
+content-hash = "b649c8d097bfc703488e24f0074442d954348874a6a3abced4d5e6a226576445"
