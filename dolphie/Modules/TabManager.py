@@ -134,14 +134,17 @@ class TabManager:
 
         self.topbar = self.app.query_one(TopBar)
 
-    def update_topbar(self, tab: Tab, connection_status: ConnectionStatus):
+    def update_connection_status(self, tab: Tab, connection_status: ConnectionStatus):
+        tab.dolphie.connection_status = connection_status
+
+        self.update_topbar(tab=tab)
+
+    def update_topbar(self, tab: Tab):
         dolphie = tab.dolphie
 
         # If we're in daemon mode, don't waste time on this
         if dolphie.daemon_mode:
             return
-
-        dolphie.connection_status = connection_status
 
         # Only update the topbar if we're on the active tab
         if tab.id == self.active_tab.id:
@@ -537,16 +540,15 @@ class TabManager:
             self.host_tabs.active = tab_id
 
         # Update the topbar
-        self.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
+        self.update_topbar(tab=tab)
 
         if not tab.dolphie.main_db_connection.is_connected():
             tab.main_container.display = False
         else:
             tab.main_container.display = True
 
-    def get_tab(self, id: int) -> Tab:
-        if id in self.tabs:
-            return self.tabs[id]
+    def get_tab(self, id: str) -> Tab:
+        return self.tabs.get(id)
 
     def get_all_tabs(self) -> List[Tab]:
         all_tabs = []
@@ -557,9 +559,6 @@ class TabManager:
         return all_tabs
 
     async def disconnect_tab(self, tab: Tab, update_topbar: bool = True):
-        if tab.replay_manager:
-            tab.replay_manager.replay_file_size = None
-
         if tab.worker_timer:
             tab.worker_timer.stop()
         if tab.replicas_worker_timer:
@@ -596,7 +595,7 @@ class TabManager:
                 await container.remove()
 
         if update_topbar:
-            self.update_topbar(tab=tab, connection_status=ConnectionStatus.disconnected)
+            self.update_connection_status(tab=tab, connection_status=ConnectionStatus.disconnected)
 
     def setup_host_tab(self, tab: Tab):
         dolphie = tab.dolphie
