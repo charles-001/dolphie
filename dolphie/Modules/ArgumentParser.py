@@ -9,12 +9,13 @@ from typing import Dict, List
 from urllib.parse import ParseResult, urlparse
 
 import myloginpath
-from dolphie.DataTypes import Panels
-from dolphie.Modules.Queries import MySQLQueries
 from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.theme import Theme
+
+from dolphie.DataTypes import Panels
+from dolphie.Modules.Queries import MySQLQueries
 
 
 @dataclass
@@ -118,6 +119,7 @@ Order of precedence for methods that pass options to Dolphie:
 
 Credential profiles can be defined in Dolphie's config file as a way to store credentials for easy access.
 A profile can be created by adding a section in the config file with the format: [credential_profile_<name>]
+When using a credential profile, do not include the prefix 'credential_profile' (i.e. -C production)
 The following options are supported in credential profiles:
 \tuser
 \tpassword

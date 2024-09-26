@@ -108,6 +108,7 @@ Order of precedence for methods that pass options to Dolphie:
 
 Credential profiles can be defined in Dolphie's config file as a way to store credentials for easy access.
 A profile can be created by adding a section in the config file with the format: [credential_profile_<name>]
+When using a credential profile, do not include the prefix 'credential_profile' (i.e. -C production)
 The following options are supported in credential profiles:
 	user
 	password
@@ -266,7 +267,7 @@ password = dev_password
 mycnf_file = /secure/path/to/prod.cnf
 ```
 
-To use a credential profile, you can specify it with the `-C` or `--cred-profile` option when starting Dolphie. Hostgroups can also use credential profiles (see below)
+To use a credential profile, you can specify it with the `-C` or `--cred-profile` without using the prefix `credential_profile` (i.e. `-C prod`) when starting Dolphie. Hostgroups can also use credential profiles (see below)
 
 ## Hostgroups
 
