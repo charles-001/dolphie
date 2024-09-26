@@ -267,7 +267,7 @@ password = dev_password
 mycnf_file = /secure/path/to/prod.cnf
 ```
 
-To use a credential profile, you can specify it with the `-C` or `--cred-profile` without using the prefix `credential_profile` (i.e. `-C prod`) when starting Dolphie. Hostgroups can also use credential profiles (see below)
+To use a credential profile, you can specify it with `-C`/`--cred-profile` option without using the prefix `credential_profile` (i.e. `-C prod`) when starting Dolphie. Hostgroups can also use credential profiles (see below)
 
 ## Hostgroups
 
