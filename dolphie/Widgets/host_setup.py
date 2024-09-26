@@ -1,4 +1,5 @@
-from dolphie.Modules.ManualException import ManualException
+from typing import Dict
+
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -15,7 +16,10 @@ from textual.widgets import (
     Select,
     Static,
 )
-from textual_autocomplete import AutoComplete, Dropdown, DropdownItem
+
+from dolphie.Modules.ArgumentParser import CredentialProfile
+from dolphie.Modules.ManualException import ManualException
+from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
 
 
 class HostSetupModal(ModalScreen):
@@ -155,6 +159,8 @@ class HostSetupModal(ModalScreen):
 
     def __init__(
         self,
+        credential_profile: str,
+        credential_profiles: Dict[str, CredentialProfile],
         host: str,
         port: int,
         username: str,
@@ -167,6 +173,11 @@ class HostSetupModal(ModalScreen):
     ):
         super().__init__()
 
+        self.credential_profile = credential_profile
+        if not self.credential_profile:
+            self.credential_profile = Select.BLANK
+        self.credential_profiles = credential_profiles
+
         self.host = host
         self.port = port
         self.username = username
@@ -177,13 +188,17 @@ class HostSetupModal(ModalScreen):
         if self.host and self.port:
             self.host = f"{self.host}:{self.port}"
 
-        self.dropdown_items = []
+        self.options_available_hosts = []
         if available_hosts:
-            self.dropdown_items = [DropdownItem(id) for id in sorted(available_hosts)]
+            self.options_available_hosts = [DropdownItem(id) for id in sorted(available_hosts)]
 
-        self.hostgroups = []
+        self.options_hostgroups = []
         if hostgroups:
-            self.hostgroups = [(host, host) for host in hostgroups]
+            self.options_hostgroups = [(host, host) for host in hostgroups]
+
+        self.options_credential_profiles = []
+        if credential_profiles:
+            self.options_credential_profiles = [(profile, profile) for profile in credential_profiles.keys()]
 
         self.error_message = error_message
 
@@ -226,10 +241,17 @@ class HostSetupModal(ModalScreen):
                         id="host",
                         placeholder="Host (format is host:port)",
                     ),
-                    Dropdown(id="dropdown_items", items=self.dropdown_items),
+                    Dropdown(id="dropdown_items", items=self.options_available_hosts),
                 )
 
+                yield Select(
+                    options=self.options_credential_profiles,
+                    id="credential_profile",
+                    value=self.credential_profile,
+                    prompt="Select a credential profile (optional)",
+                )
                 yield Input(id="username", value=self.username, placeholder="Username")
+
                 with Horizontal():
                     yield Input(id="password", value=self.password, placeholder="Password", password=True)
                     yield Button("Show", id="show_password")
@@ -250,7 +272,7 @@ class HostSetupModal(ModalScreen):
                     yield Input(id="ssl_key", placeholder="Client Key File (optional)")
                 yield Rule(line_style="heavy")
                 yield Select(
-                    options=self.hostgroups,
+                    options=self.options_hostgroups,
                     id="hostgroup",
                     prompt="Select a hostgroup (optional)",
                 )
@@ -258,6 +280,37 @@ class HostSetupModal(ModalScreen):
                 yield Button("Submit", id="submit", variant="primary")
                 yield Button("Cancel", id="cancel")
             yield Label(id="modal_footer")
+
+    @on(Select.Changed, "#credential_profile")
+    def credential_profile_changed(self, event: Select.Changed):
+        def set_field(selector, value=None, default=""):
+            self.query_one(selector, Input).value = value or default
+
+        # Reset fields if no profile selected
+        if event.value == Select.BLANK:
+            self.query_one("#hostgroup", Select).disabled = False
+            self.query_one("#ssl", Checkbox).value = False
+            for selector in ["#username", "#password", "#socket_file", "#ssl_ca", "#ssl_cert", "#ssl_key"]:
+                set_field(selector)
+            return
+
+        # Load selected credential profile
+        credential_profile = self.credential_profiles.get(event.value)
+        if not credential_profile:
+            return
+
+        set_field("#username", credential_profile.user, default=self.username or "")
+        set_field("#password", credential_profile.password, default=self.password or "")
+        set_field("#socket_file", credential_profile.socket, default=self.socket_file or "")
+
+        if credential_profile.ssl_mode:
+            self.query_one("#ssl", Checkbox).value = True
+            self.query_one(f"#{credential_profile.ssl_mode}", RadioButton).value = True
+
+            for field, ssl_key in [("#ssl_ca", "ca"), ("#ssl_cert", "cert"), ("#ssl_key", "key")]:
+                set_field(field, getattr(credential_profile, f"ssl_{ssl_key}"), default=self.ssl.get(ssl_key, ""))
+        else:
+            self.query_one("#ssl", Checkbox).value = False
 
     @on(Select.Changed, "#hostgroup")
     def hostgroup_changed(self, event: Select.Changed):
@@ -268,6 +321,7 @@ class HostSetupModal(ModalScreen):
             self.query_one("#socket_file", Input).disabled = False
             self.query_one("#ssl", Checkbox).disabled = False
             self.query_one("#show_password", Button).disabled = False
+            self.query_one("#credential_profile", Select).disabled = False
         elif event.value:
             self.query_one("#host", Input).disabled = True
             self.query_one("#username", Input).disabled = True
@@ -276,6 +330,7 @@ class HostSetupModal(ModalScreen):
             self.query_one("#ssl", Checkbox).value = False
             self.query_one("#ssl", Checkbox).disabled = True
             self.query_one("#show_password", Button).disabled = True
+            self.query_one("#credential_profile", Select).disabled = True
 
     @on(RadioSet.Changed, "#ssl_mode")
     def ssl_mode_changed(self, event: RadioSet.Changed):
@@ -312,6 +367,7 @@ class HostSetupModal(ModalScreen):
         if event.button.id == "submit":
             error_message = None
 
+            credential_profile = self.query_one("#credential_profile", Select)
             host = self.query_one("#host", Input)
             hostgroup = self.query_one("#hostgroup", Select)
             username = self.query_one("#username", Input)
@@ -327,7 +383,7 @@ class HostSetupModal(ModalScreen):
             ssl_key = self.query_one("#ssl_key", Input).value
 
             ssl = {}
-            if self.query_one("#ssl", Checkbox).value and ssl_mode:
+            if self.query_one("#ssl", Checkbox).value:
                 if ssl_mode == "REQUIRED":
                     ssl["required"] = True
                 elif ssl_mode == "VERIFY_CA":
@@ -342,6 +398,8 @@ class HostSetupModal(ModalScreen):
 
                     ssl["check_hostname"] = True
                     ssl["verify_mode"] = True
+                else:
+                    error_message = "SSL mode must be specified"
 
                 if ssl_ca:
                     ssl["ca"] = ssl_ca
@@ -376,6 +434,7 @@ class HostSetupModal(ModalScreen):
 
             self.dismiss(
                 {
+                    "credential_profile": credential_profile.value,
                     "host": host.value,
                     "hostgroup": hostgroup_value,
                     "username": username.value,

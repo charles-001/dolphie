@@ -2,11 +2,12 @@ import time
 from ssl import SSLError
 
 import pymysql
+from loguru import logger
+from textual.app import App
+
 from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
-from loguru import logger
-from textual.app import App
 
 
 class Database:

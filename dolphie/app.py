@@ -281,16 +281,16 @@ class DolphieApp(App):
         dolphie = tab.dolphie
         try:
             if not dolphie.main_db_connection.is_connected():
-                self.tab_manager.rename_tab(tab)  # this will use dolphie.host instead of host_with_port
-                self.tab_manager.update_topbar(tab=tab, connection_status=ConnectionStatus.connecting)
+                self.tab_manager.rename_tab(tab)  # this will use host instead of host_with_port
+                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connecting)
 
+                tab.replay_manager = None
                 if not dolphie.daemon_mode:
                     tab.loading_indicator.display = True
 
                 dolphie.db_connect()
-                self.tab_manager.rename_tab(tab)  # this will use dolphie.host_with_port instead of host
-
-                tab.replay_manager = ReplayManager(dolphie)
+                # this will use host_with_port instead of just the host since we're connected at this point
+                self.tab_manager.rename_tab(tab)
 
             worker_start_time = datetime.now()
             dolphie.polling_latency = (worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -314,6 +314,10 @@ class DolphieApp(App):
                 replication_status=dolphie.replication_status,
                 proxysql_command_stats=dolphie.proxysql_command_stats,
             )
+
+            # We initalize this here so we have the host version from process_{mysql,proxysql}_data
+            if not tab.replay_manager:
+                tab.replay_manager = ReplayManager(dolphie)
 
             tab.replay_manager.capture_state()
         except ManualException as exception:
@@ -398,7 +402,7 @@ class DolphieApp(App):
 
                 # Update the topbar with the latest replay file size
                 if dolphie.record_for_replay:
-                    self.tab_manager.update_topbar(tab=tab, connection_status=tab.dolphie.connection_status)
+                    self.tab_manager.update_topbar(tab=tab)
 
                 tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
@@ -470,6 +474,11 @@ class DolphieApp(App):
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
         dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
+
+        if dolphie.connection_status == ConnectionStatus.connecting:
+            self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+            dolphie.set_host_version(dolphie.global_variables.get("version"))
+            dolphie.setup_connection_mysql()
 
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
@@ -598,6 +607,10 @@ class DolphieApp(App):
         dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
+        if dolphie.connection_status == ConnectionStatus.connecting:
+            self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+            dolphie.set_host_version(dolphie.global_variables.get("admin-version"))
+
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("mysql_stats")
 
         dolphie.main_db_connection.execute(ProxySQLQueries.command_stats)
@@ -677,7 +690,6 @@ class DolphieApp(App):
 
         if tab.loading_indicator.display or dolphie.replay_file:
             tab.loading_indicator.display = False
-            self.tab_manager.update_topbar(tab=tab, connection_status="ONLINE")
 
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
@@ -707,9 +719,7 @@ class DolphieApp(App):
 
         if tab.loading_indicator.display or dolphie.replay_file:
             tab.loading_indicator.display = False
-
             self.layout_graphs(tab)
-            self.tab_manager.update_topbar(tab=tab, connection_status=dolphie.connection_status)
 
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
@@ -769,7 +779,9 @@ class DolphieApp(App):
             logger.warning(f"Read-only mode changed: {dolphie.connection_status} -> {formatted_ro_status}")
             self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
-            self.tab_manager.update_topbar(tab=tab, connection_status=formatted_ro_status)
+            self.tab_manager.update_connection_status(tab=tab, connection_status=formatted_ro_status)
+        elif dolphie.connection_status == ConnectionStatus.connected:
+            self.tab_manager.update_connection_status(tab=tab, connection_status=formatted_ro_status)
 
         dolphie.connection_status = formatted_ro_status
 
@@ -778,11 +790,11 @@ class DolphieApp(App):
         self.loading_hostgroups = True
         self.notify(f"Connecting to hosts in hostgroup [highlight]{hostgroup}", severity="information")
 
-        for host in self.config.hostgroup_hosts.get(hostgroup, []):
+        for hostgroup_member in self.config.hostgroup_hosts.get(hostgroup, []):
             # We only want to switch if it's the first tab created
             switch_tab = True if not self.tab_manager.active_tab else False
 
-            tab = await self.tab_manager.create_tab(tab_name=host, use_hostgroup=True, switch_tab=switch_tab)
+            tab = await self.tab_manager.create_tab(hostgroup_member=hostgroup_member, switch_tab=switch_tab)
 
             self.run_worker_main(tab.id)
             self.run_worker_replicas(tab.id)
@@ -814,6 +826,7 @@ class DolphieApp(App):
 
                 self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
                 self.tab_manager.rename_tab(tab)
+                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
                 self.run_worker_replay(self.tab_manager.active_tab.id)
             else:
                 self.run_worker_main(self.tab_manager.active_tab.id)
@@ -845,8 +858,6 @@ class DolphieApp(App):
 
         if tab.replay_manager.current_index + 1 >= tab.replay_manager.max_id:
             self.notify("Replay has reached the end", severity="warning")
-
-        # get_next_refresh_interval will increment the index so we don't need to do it here
 
         self.force_refresh_for_replay()
 
@@ -909,17 +920,17 @@ class DolphieApp(App):
 
         tab = self.tab_manager.active_tab
         if tab and tab.worker and (tab.dolphie.main_db_connection.is_connected() or tab.dolphie.replay_file):
+            # Set each panel's display status based on the tab's panel visibility
+            for panel in tab.dolphie.panels.get_all_panels():
+                tab_panel = tab.get_panel_widget(panel.name)
+                tab_panel.display = getattr(tab.dolphie.panels, panel.name).visible
+
             if tab.dolphie.connection_source == ConnectionSource.mysql:
                 self.refresh_screen_mysql(tab)
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
 
             self.refresh_tab_properties()
-
-            # Set each panel's display status based on the tab's panel visibility
-            for panel in tab.dolphie.panels.get_all_panels():
-                tab_panel = tab.get_panel_widget(panel.name)
-                tab_panel.display = getattr(tab.dolphie.panels, panel.name).visible
 
             # Set the display state for the replica container based on whether there are replicas
             tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
@@ -996,7 +1007,8 @@ class DolphieApp(App):
         # This function lets us force a refresh of the worker thread when we're in a replay
         tab = self.tab_manager.active_tab
 
-        if tab.dolphie.replay_file and tab.worker.state != WorkerState.RUNNING:
+        if tab.dolphie.replay_file:
+            tab.worker.cancel()
             tab.worker_timer.stop()
 
             if need_current_data:
