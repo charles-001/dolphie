@@ -7,11 +7,6 @@
   <img src="https://github.com/charles-001/dolphie/assets/13244625/1d94502a-9abf-4436-a7d0-cb2b08c105c1" width="30">
   <img src="https://github.com/charles-001/dolphie/assets/13244625/9b1aadc8-cabb-4256-92f9-fe4d04451b83" width="30">
 </p>
-<p align="center">
-  <a href="https://www.buymeacoffee.com/charlesthompson">
-    <img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee">
-  </a>
-</p>
 
 <img width="2032" alt="Screenshot 2024-08-19 at 1 53 39 AM" src="https://github.com/user-attachments/assets/2c5eef42-b78f-4ac4-b7b8-ffe64cab5bae">
 <p></p>
