@@ -319,3 +319,7 @@ class CommandModal(ModalScreen):
         error_response = self.query_one("#error_response", Static)
         error_response.display = True
         error_response.update(message)
+
+    def on_input_submitted(self):
+        if self.command not in [HotkeyCommands.thread_filter, HotkeyCommands.thread_kill_by_parameter]:
+            self.query_one("#submit", Button).press()
