@@ -116,7 +116,8 @@ class CommandModal(ModalScreen):
                     yield AutoComplete(
                         Input(id="kill_by_host_input"), Dropdown(id="kill_by_host_dropdown_items", items=[])
                     )
-                    yield Input(id="kill_by_time_range_input", placeholder="Example: 10-20")
+                    yield Input(id="kill_by_age_range_input", placeholder="Example: 5-8")
+                    yield Input(id="kill_by_query_text_input")
                     yield Checkbox("Include sleeping queries", id="sleeping_queries")
 
                 yield AutoComplete(
@@ -169,7 +170,8 @@ class CommandModal(ModalScreen):
             self.query_one("#kill_by_username_dropdown_items", Dropdown).items = self.create_dropdown_items("user")
             self.query_one("#kill_by_host_input", Input).border_title = "Host/IP"
             self.query_one("#kill_by_host_dropdown_items", Dropdown).items = self.create_dropdown_items("host")
-            self.query_one("#kill_by_time_range_input", Input).border_title = "Time Range"
+            self.query_one("#kill_by_age_range_input", Input).border_title = "Age Range (seconds)"
+            self.query_one("#kill_by_query_text_input", Input).border_title = "Partial Query Text"
 
             sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
             sleeping_queries_checkbox.toggle()
@@ -200,7 +202,14 @@ class CommandModal(ModalScreen):
         dropdown_items = []
 
         if field:
-            sorted_array = sorted(set(getattr(thread, field) for thread in self.processlist_data.values()))
+            # Filter out None values before sorting
+            sorted_array = sorted(
+                set(
+                    getattr(thread, field)
+                    for thread in self.processlist_data.values()
+                    if getattr(thread, field) is not None
+                )
+            )
             dropdown_items = [DropdownItem(str(value)) for value in sorted_array]
 
         return dropdown_items
@@ -253,25 +262,26 @@ class CommandModal(ModalScreen):
             # Get input values
             kill_by_username = self.query_one("#kill_by_username_input", Input).value
             kill_by_host = self.query_one("#kill_by_host_input", Input).value
-            kill_by_time_range = self.query_one("#kill_by_time_range_input", Input).value
+            kill_by_age_range = self.query_one("#kill_by_age_range_input", Input).value
+            kill_by_query_text = self.query_one("#kill_by_query_text_input", Input).value
             checkbox_sleeping_queries = self.query_one("#sleeping_queries", Checkbox).value
 
-            time_range_lower_limit, time_range_upper_limit = None, None
+            age_range_lower_limit, age_range_upper_limit = None, None
 
-            # Process and validate time range input
-            if kill_by_time_range:
-                match = re.match(r"(\d+)-(\d+)", kill_by_time_range)
+            # Process and validate age range input
+            if kill_by_age_range:
+                match = re.match(r"(\d+)-(\d+)", kill_by_age_range)
                 if match:
-                    time_range_lower_limit, time_range_upper_limit = map(int, match.groups())
-                    if time_range_lower_limit > time_range_upper_limit:
-                        self.update_error_response("Invalid time range! Lower limit can't be higher than upper")
+                    age_range_lower_limit, age_range_upper_limit = map(int, match.groups())
+                    if age_range_lower_limit > age_range_upper_limit:
+                        self.update_error_response("Invalid age range! Lower limit can't be higher than upper")
                         return
                 else:
-                    self.update_error_response("Invalid time range")
+                    self.update_error_response("Invalid age range")
                     return
 
             # Ensure at least one parameter is provided
-            if not any([kill_by_username, kill_by_host, kill_by_time_range]):
+            if not any([kill_by_username, kill_by_host, kill_by_age_range, kill_by_query_text]):
                 self.update_error_response("At least one parameter must be provided")
                 return
 
@@ -280,9 +290,10 @@ class CommandModal(ModalScreen):
                 [
                     kill_by_username,
                     kill_by_host,
-                    kill_by_time_range,
-                    time_range_lower_limit,
-                    time_range_upper_limit,
+                    kill_by_age_range,
+                    age_range_lower_limit,
+                    age_range_upper_limit,
+                    kill_by_query_text,
                     checkbox_sleeping_queries,
                 ]
             )

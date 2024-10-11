@@ -1844,9 +1844,10 @@ class DolphieApp(App):
                 (
                     kill_by_username,
                     kill_by_host,
-                    kill_by_time_range,
-                    time_range_lower_limit,
-                    time_range_upper_limit,
+                    kill_by_age_range,
+                    age_range_lower_limit,
+                    age_range_upper_limit,
+                    kill_by_query_text,
                     include_sleeping_queries,
                 ) = additional_data
 
@@ -1867,10 +1868,8 @@ class DolphieApp(App):
                             thread.command in commands_to_kill
                             and (not kill_by_username or kill_by_username == thread.user)
                             and (not kill_by_host or kill_by_host == thread.host)
-                            and (
-                                not kill_by_time_range
-                                or time_range_lower_limit <= thread.time <= time_range_upper_limit
-                            )
+                            and (not kill_by_age_range or age_range_lower_limit <= thread.time <= age_range_upper_limit)
+                            and (not kill_by_query_text or kill_by_query_text in thread.formatted_query.code)
                         ):
                             if dolphie.connection_source_alt == ConnectionSource.aws_rds:
                                 query = "CALL mysql.rds_kill(%s)"
@@ -1887,7 +1886,7 @@ class DolphieApp(App):
                         self.notify(e.reason, title=f"Error Killing Thread ID {thread_id}", severity="error")
 
                 if threads_killed:
-                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] threads")
+                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] thread(s)")
                 else:
                     self.notify("No threads were killed")
 
