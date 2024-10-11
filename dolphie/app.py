@@ -1321,11 +1321,23 @@ class DolphieApp(App):
 
             self.notify("Cleared all filters", severity="success")
 
-        elif key == "d":
-            if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
+        elif key == "C":
+            if not dolphie.global_variables.get("innodb_thread_concurrency"):
+                self.notify("InnoDB thread concurrency is not setup", severity="warning")
                 return
 
+            if dolphie.show_threads_with_concurrency_tickets:
+                dolphie.show_threads_with_concurrency_tickets = False
+                dolphie.show_idle_threads = False
+                self.notify("Processlist will no longer only show threads with concurrency tickets")
+            else:
+                dolphie.show_threads_with_concurrency_tickets = True
+                dolphie.show_idle_threads = True
+                self.notify("Processlist will only show threads with concurrency tickets")
+
+            self.force_refresh_for_replay(need_current_data=True)
+
+        elif key == "d":
             self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "D":
@@ -1378,36 +1390,35 @@ class DolphieApp(App):
         elif key == "f":
 
             def command_get_input(filter_data):
-                if not filter_data:
-                    return
-
-                filter_name, filter_value = filter_data[0], filter_data[1]
+                # Unpack the data from the modal
                 filters_mapping = {
                     "User": "user_filter",
-                    "Database": "db_filter",
                     "Host": "host_filter",
+                    "Database": "db_filter",
                     "Hostgroup": "hostgroup_filter",
-                    "Query time": "query_time_filter",
-                    "Query text": "query_filter",
+                    "Minimum Query Time": "query_time_filter",
+                    "Partial Query Text": "query_filter",
                 }
 
-                attribute = filters_mapping.get(filter_name)
-                if attribute:
-                    setattr(dolphie, attribute, filter_value)
-                    self.notify(
-                        f"Filtering [b]{filter_name.capitalize()}[/b] by [b highlight]{filter_value}[/b highlight]",
-                        severity="success",
-                    )
+                filters = dict(zip(filters_mapping.keys(), filter_data))
 
-                else:
-                    self.notify(f"Invalid filter name {filter_name}", severity="error")
+                # Apply filters and notify the user for each valid input
+                for filter_name, filter_value in filters.items():
+                    if filter_value:
+                        setattr(dolphie, filters_mapping[filter_name], filter_value)
+                        self.notify(
+                            f"[b]{filter_name}[/b]: [b highlight]{filter_value}[/b highlight]",
+                            title="Filter applied",
+                            severity="success",
+                        )
 
+                # Refresh data after applying filters
                 self.force_refresh_for_replay(need_current_data=True)
 
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.thread_filter,
-                    message="Select which field you'd like to filter by",
+                    message="Filter threads by field(s)",
                     processlist_data=dolphie.processlist_threads_snapshot,
                     host_cache_data=dolphie.host_cache,
                     connection_source=dolphie.connection_source,
@@ -1449,24 +1460,16 @@ class DolphieApp(App):
             self.app.push_screen(
                 CommandModal(
                     command=HotkeyCommands.thread_kill_by_parameter,
-                    message="Kill threads by a parameter",
+                    message="Kill threads by parameter(s)",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
             )
 
         elif key == "l":
-            if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
-                return
-
             self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "o":
-            if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
-                return
-
             self.run_command_in_worker(key=key, dolphie=dolphie)
 
         elif key == "m":
@@ -1491,10 +1494,6 @@ class DolphieApp(App):
                     self.notify("Refreshing has resumed", severity="success")
 
         if key == "P":
-            if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
-                return
-
             if dolphie.use_performance_schema:
                 dolphie.use_performance_schema = False
                 self.notify("Switched to using [b highlight]Processlist")
@@ -1599,18 +1598,14 @@ class DolphieApp(App):
             )
 
         elif key == "T":
-            if dolphie.connection_source == ConnectionSource.proxysql:
-                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
-                return
-
             if dolphie.show_trxs_only:
                 dolphie.show_trxs_only = False
                 dolphie.show_idle_threads = False
-                self.notify("Processlist will now no longer only show threads that have an active transaction")
+                self.notify("Processlist will no longer only show threads that have an active transaction")
             else:
                 dolphie.show_trxs_only = True
                 dolphie.show_idle_threads = True
-                self.notify("Processlist will now only show threads that have an active transaction")
+                self.notify("Processlist will only show threads that have an active transaction")
 
             self.force_refresh_for_replay(need_current_data=True)
         elif key == "u":
@@ -1845,41 +1840,49 @@ class DolphieApp(App):
 
             elif key == "K":
 
-                def execute_kill(thread_id):
-                    if dolphie.connection_source_alt == ConnectionSource.aws_rds:
-                        query = "CALL mysql.rds_kill(%s)"
-                    elif dolphie.connection_source_alt == ConnectionSource.azure_mysql:
-                        query = "CALL mysql.az_kill(%s)"
-                    elif dolphie.connection_source == ConnectionSource.proxysql:
-                        query = "KILL CONNECTION %s"
-                    else:
-                        query = "KILL %s"
+                # Unpack the data from the modal
+                (
+                    kill_by_username,
+                    kill_by_host,
+                    kill_by_time_range,
+                    time_range_lower_limit,
+                    time_range_upper_limit,
+                    include_sleeping_queries,
+                ) = additional_data
 
-                    dolphie.secondary_db_connection.execute(query % thread_id)
-
-                kill_type, kill_value, include_sleeping_queries, lower_limit, upper_limit = additional_data
-                db_field = {"username": "user", "host": "host", "time_range": "time"}.get(kill_type)
-
+                threads_killed = 0
                 commands_to_kill = ["Query", "Execute"]
 
                 if include_sleeping_queries:
                     commands_to_kill.append("Sleep")
 
-                threads_killed = 0
-
-                # We need to make a copy of the threads snapshot to so it doesn't change while we're iterating over it
+                # Make a copy of the threads snapshot to avoid modification during iteration
                 threads = dolphie.processlist_threads_snapshot.copy()
+
                 for thread_id, thread in threads.items():
                     thread: ProcesslistThread
                     try:
-                        if thread.command in commands_to_kill:
-                            if kill_type == "time_range":
-                                if lower_limit <= thread.time <= upper_limit:
-                                    execute_kill(thread_id)
-                                    threads_killed += 1
-                            elif getattr(thread, db_field) == kill_value:
-                                execute_kill(thread_id)
-                                threads_killed += 1
+                        # Check if the thread matches all conditions
+                        if (
+                            thread.command in commands_to_kill
+                            and (not kill_by_username or kill_by_username == thread.user)
+                            and (not kill_by_host or kill_by_host == thread.host)
+                            and (
+                                not kill_by_time_range
+                                or time_range_lower_limit <= thread.time <= time_range_upper_limit
+                            )
+                        ):
+                            if dolphie.connection_source_alt == ConnectionSource.aws_rds:
+                                query = "CALL mysql.rds_kill(%s)"
+                            elif dolphie.connection_source_alt == ConnectionSource.azure_mysql:
+                                query = "CALL mysql.az_kill(%s)"
+                            elif dolphie.connection_source == ConnectionSource.proxysql:
+                                query = "KILL CONNECTION %s"
+                            else:
+                                query = "KILL %s"
+
+                            dolphie.secondary_db_connection.execute(query % thread_id)
+                            threads_killed += 1
                     except ManualException as e:
                         self.notify(e.reason, title=f"Error Killing Thread ID {thread_id}", severity="error")
 

@@ -26,6 +26,10 @@ class CommandManager:
                     "ctrl+d": {"human_key": "ctrl+d", "description": "Switch to the next tab"},
                     "placeholder_2": {"human_key": "", "description": ""},
                     "a": {"human_key": "a", "description": "Toggle additional processlist columns"},
+                    "C": {
+                        "human_key": "C",
+                        "description": "Toggle display of threads with concurrency tickets in Processlist panel",
+                    },
                     "i": {"human_key": "i", "description": "Toggle display of idle threads"},
                     "T": {
                         "human_key": "T",
@@ -133,6 +137,10 @@ class CommandManager:
                     "ctrl+d": {"human_key": "ctrl+d", "description": "Switch to the next tab"},
                     "placeholder_2": {"human_key": "", "description": ""},
                     "a": {"human_key": "a", "description": "Toggle additional processlist columns"},
+                    "C": {
+                        "human_key": "C",
+                        "description": "Toggle display of concurrency threads with tickets in Processlist panel",
+                    },
                     "T": {
                         "human_key": "T",
                         "description": "Toggle display of threads that only have an active transaction",

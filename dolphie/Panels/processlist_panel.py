@@ -1,11 +1,12 @@
 from typing import Dict
 
+from rich.syntax import Syntax
+from textual.widgets import DataTable
+
 from dolphie.DataTypes import ProcesslistThread
 from dolphie.Modules.Functions import format_number, format_query
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
-from rich.syntax import Syntax
-from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -47,6 +48,11 @@ def create_panel(tab: Tab) -> DataTable:
             {"name": "R-Mod", "field": "trx_rows_modified", "width": 7, "format_number": True},
         ]
     )
+
+    if (
+        dolphie.show_additional_query_columns and dolphie.global_variables.get("innodb_thread_concurrency")
+    ) or dolphie.show_threads_with_concurrency_tickets:
+        columns.append({"name": "Tickets", "field": "trx_concurrency_tickets", "width": 8, "format_number": False})
 
     if dolphie.show_trxs_only:
         columns.append(
@@ -93,9 +99,11 @@ def create_panel(tab: Tab) -> DataTable:
                 found = True
             elif dolphie.host_filter and dolphie.host_filter not in thread.host:
                 found = True
-            elif dolphie.query_time_filter and dolphie.query_time_filter >= thread.time:
+            elif dolphie.query_time_filter and int(dolphie.query_time_filter) >= thread.time:
                 found = True
             elif dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
+                found = True
+            elif dolphie.show_threads_with_concurrency_tickets and thread.trx_concurrency_tickets == "[dark_gray]0":
                 found = True
 
             if found:
@@ -198,6 +206,9 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
     # Only show running transactions only
     if dolphie.show_trxs_only:
         where_clause.append("trx_state != ''")
+
+    if dolphie.show_threads_with_concurrency_tickets:
+        where_clause.append("trx_concurrency_tickets > 0")
 
     # Filter user
     if dolphie.user_filter:

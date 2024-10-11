@@ -1,11 +1,12 @@
 from typing import Dict
 
+from rich.syntax import Syntax
+from textual.widgets import DataTable
+
 from dolphie.DataTypes import ProcesslistThread, ProxySQLProcesslistThread
 from dolphie.Modules.Functions import format_query
 from dolphie.Modules.Queries import ProxySQLQueries
 from dolphie.Modules.TabManager import Tab
-from rich.syntax import Syntax
-from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -65,11 +66,11 @@ def create_panel(tab: Tab) -> DataTable:
                 found = True
             elif dolphie.host_filter and dolphie.host_filter not in thread.host:
                 found = True
-            elif dolphie.query_time_filter and dolphie.query_time_filter >= thread.time:
+            elif dolphie.query_time_filter and int(dolphie.query_time_filter) >= thread.time:
                 found = True
             elif dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
                 found = True
-            elif dolphie.hostgroup_filter and dolphie.hostgroup_filter != thread.hostgroup:
+            elif dolphie.hostgroup_filter and int(dolphie.hostgroup_filter) != thread.hostgroup:
                 found = True
 
             if found:
