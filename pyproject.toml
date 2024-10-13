@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dolphie"
-version = "6.1.0"
+version = "6.2.0"
 license = "GPL-3.0-or-later"
 description = "Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]

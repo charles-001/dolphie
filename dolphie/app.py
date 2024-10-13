@@ -919,7 +919,14 @@ class DolphieApp(App):
         self.tab_manager.switch_tab(event.tab.id, set_active=False)
 
         tab = self.tab_manager.active_tab
-        if tab and tab.worker and (tab.dolphie.main_db_connection.is_connected() or tab.dolphie.replay_file):
+        if (
+            tab
+            and tab.worker
+            and (
+                (tab.dolphie.main_db_connection.is_connected() and tab.dolphie.worker_processing_time)
+                or tab.dolphie.replay_file
+            )
+        ):
             # Set each panel's display status based on the tab's panel visibility
             for panel in tab.dolphie.panels.get_all_panels():
                 tab_panel = tab.get_panel_widget(panel.name)

@@ -51,7 +51,7 @@ class HostSetupModal(ModalScreen):
         }
         HostSetupModal Input {
             width: 100%;
-            content-align: center middle;
+            border-title-color: #d2d2d2;
         }
         HostSetupModal .main_container {
             width: 100%;
@@ -210,6 +210,14 @@ class HostSetupModal(ModalScreen):
             footer.update(self.error_message.output())
             footer.display = True
 
+        self.query_one("#host", Input).border_title = "Host"
+        self.query_one("#username", Input).border_title = "Username"
+        self.query_one("#password", Input).border_title = "Password"
+        self.query_one("#socket_file", Input).border_title = "Socket File [dark_gray](optional)[/dark_gray]"
+        self.query_one("#ssl_ca", Input).border_title = "CA File [dark_gray](optional)[/dark_gray]"
+        self.query_one("#ssl_cert", Input).border_title = "Client Certificate File [dark_gray](optional)[/dark_gray]"
+        self.query_one("#ssl_key", Input).border_title = "Client Key File [dark_gray](optional)[/dark_gray]"
+
         if self.ssl:
             self.query_one("#ssl", Checkbox).value = True
 
@@ -235,27 +243,24 @@ class HostSetupModal(ModalScreen):
             with Vertical(classes="main_container"):
                 yield Label("Host Setup")
 
-                yield AutoComplete(
-                    Input(
-                        value=self.host,
-                        id="host",
-                        placeholder="Host (format is host:port)",
-                    ),
-                    Dropdown(id="dropdown_items", items=self.options_available_hosts),
-                )
-
                 yield Select(
                     options=self.options_credential_profiles,
                     id="credential_profile",
                     value=self.credential_profile,
                     prompt="Select a credential profile (optional)",
                 )
-                yield Input(id="username", value=self.username, placeholder="Username")
+
+                yield AutoComplete(
+                    Input(value=self.host, id="host", placeholder="Host:Port"),
+                    Dropdown(id="dropdown_items", items=self.options_available_hosts),
+                )
+
+                yield Input(id="username", value=self.username)
 
                 with Horizontal():
-                    yield Input(id="password", value=self.password, placeholder="Password", password=True)
+                    yield Input(id="password", value=self.password, password=True)
                     yield Button("Show", id="show_password")
-                yield Input(id="socket_file", placeholder="Socket file (optional)")
+                yield Input(id="socket_file")
                 yield Checkbox("Enable SSL", id="ssl")
                 with Container(id="container_ssl"):
                     yield RadioSet(
@@ -267,9 +272,9 @@ class HostSetupModal(ModalScreen):
                         ),
                         id="ssl_mode",
                     )
-                    yield Input(id="ssl_ca", placeholder="CA File (optional)")
-                    yield Input(id="ssl_cert", placeholder="Client Certificate File (optional)")
-                    yield Input(id="ssl_key", placeholder="Client Key File (optional)")
+                    yield Input(id="ssl_ca")
+                    yield Input(id="ssl_cert")
+                    yield Input(id="ssl_key")
                 yield Rule(line_style="heavy")
                 yield Select(
                     options=self.options_hostgroups,
@@ -335,13 +340,17 @@ class HostSetupModal(ModalScreen):
     @on(RadioSet.Changed, "#ssl_mode")
     def ssl_mode_changed(self, event: RadioSet.Changed):
         if event.pressed.id in ["VERIFY_CA", "VERIFY_IDENTITY"]:
-            self.query_one("#ssl_ca", Input).placeholder = "CA File"
-            self.query_one("#ssl_cert", Input).placeholder = "Client Certificate File (optional)"
-            self.query_one("#ssl_key", Input).placeholder = "Client Key File (optional)"
+            self.query_one("#ssl_ca", Input).border_title = "CA File"
+            self.query_one("#ssl_cert", Input).border_title = (
+                "Client Certificate File [dark_gray](optional)[/dark_gray]"
+            )
+            self.query_one("#ssl_key", Input).border_title = "Client Key File [dark_gray](optional)[/dark_gray]"
         else:
-            self.query_one("#ssl_ca", Input).placeholder = "CA File (optional)"
-            self.query_one("#ssl_cert", Input).placeholder = "Client Certificate File (optional)"
-            self.query_one("#ssl_key", Input).placeholder = "Client Key File (optional)"
+            self.query_one("#ssl_ca", Input).border_title = "CA File [dark_gray](optional)[/dark_gray]"
+            self.query_one("#ssl_cert", Input).border_title = (
+                "Client Certificate File [dark_gray](optional)[/dark_gray]"
+            )
+            self.query_one("#ssl_key", Input).border_title = "Client Key File [dark_gray](optional)[/dark_gray]"
 
     @on(Checkbox.Changed, "#ssl")
     def ssl_changed(self, event: Checkbox.Changed):

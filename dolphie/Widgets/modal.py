@@ -40,7 +40,6 @@ class CommandModal(ModalScreen):
             border-title-color: #d2d2d2;
         }
         CommandModal Label {
-            text-style: bold;
             width: 100%;
             content-align: center middle;
             padding-bottom: 1;
@@ -92,7 +91,7 @@ class CommandModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical():
             with Vertical():
-                yield Label(self.message)
+                yield Label(f"[b]{self.message}[/b]")
                 with Vertical(id="filter_container"):
                     yield AutoComplete(
                         Input(id="filter_by_username_input"), Dropdown(id="filter_by_username_dropdown_items", items=[])
@@ -119,7 +118,7 @@ class CommandModal(ModalScreen):
                     yield Input(id="kill_by_age_range_input", placeholder="Example: 5-8")
                     yield Input(id="kill_by_query_text_input")
                     yield Checkbox("Include sleeping queries", id="sleeping_queries")
-
+                    yield Label("[dark_gray][b]Note[/b]: This feature uses threads visible in the processlist")
                 yield AutoComplete(
                     Input(id="modal_input"),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
@@ -150,7 +149,7 @@ class CommandModal(ModalScreen):
             self.query_one("#filter_by_host_dropdown_items", Dropdown).items = self.create_dropdown_items("host")
             self.query_one("#filter_by_db_input", Input).border_title = "Database"
             self.query_one("#filter_by_db_dropdown_items", Dropdown).items = self.create_dropdown_items("db")
-            self.query_one("#filter_by_query_time_input", Input).border_title = "Minimum Query Time"
+            self.query_one("#filter_by_query_time_input", Input).border_title = "Minimum Query Time (seconds)"
             self.query_one("#filter_by_query_text_input", Input).border_title = "Partial Query Text"
 
             if self.connection_source != ConnectionSource.proxysql:
