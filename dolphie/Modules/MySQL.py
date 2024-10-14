@@ -1,3 +1,5 @@
+import re
+import string
 import time
 from ssl import SSLError
 
@@ -39,6 +41,9 @@ class Database:
         self.source: ConnectionSource = None
         self.is_running_query: bool = False
         self.has_connected: bool = False
+
+        # Pre-compile regex pattern to filter non-printable characters
+        self.non_printable_regex = re.compile(f"[^{re.escape(string.printable)}]")
 
         if daemon_mode:
             self.max_reconnect_attempts: int = 999999999
@@ -112,10 +117,19 @@ class Database:
 
     def _decode_value(self, value):
         if isinstance(value, (bytes, bytearray)):
+            # First attempt: UTF-8
             try:
-                return value.decode()
+                decoded_value = value.decode("utf-8")
             except UnicodeDecodeError:
-                return "/* Dolphie can't decode query with utf-8 */"
+                # Second attempt: Latin-1
+                try:
+                    decoded_value = value.decode("latin-1")
+                except UnicodeDecodeError:
+                    # Fallback: Hex representation
+                    return f"/* Failed to decode query, returning hex: {value.hex()} */"
+
+            return self.non_printable_regex.sub("?", decoded_value)
+
         return value
 
     def fetchall(self):

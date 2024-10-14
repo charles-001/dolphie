@@ -347,7 +347,7 @@ AutoComplete {
     height: auto;
 }
 Dropdown {
-    width: 60;
+    width: 70;
     background: #151926;
 }
 Dropdown .autocomplete--highlight-match {

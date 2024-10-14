@@ -36,6 +36,7 @@ class Dolphie:
         self.host_setup_file = config.host_setup_file
         self.refresh_interval = config.refresh_interval
         self.show_trxs_only = config.show_trxs_only
+        self.show_threads_with_concurrency_tickets = False
         self.show_additional_query_columns = config.show_additional_query_columns
         self.heartbeat_table = config.heartbeat_table
         self.host_setup_available_hosts = config.host_setup_available_hosts

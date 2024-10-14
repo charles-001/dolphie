@@ -4,15 +4,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import (
-    Button,
-    Checkbox,
-    Input,
-    Label,
-    RadioButton,
-    RadioSet,
-    Static,
-)
+from textual.widgets import Button, Checkbox, Input, Label, Static
 
 from dolphie.DataTypes import ConnectionSource, HotkeyCommands
 from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
@@ -29,16 +21,25 @@ class CommandModal(ModalScreen):
         CommandModal > Vertical > * {
             width: auto;
             height: auto;
+            content-align: center middle;
         }
-        CommandModal #filter_radio_buttons {
-            margin-bottom: 1;
+        CommandModal #filter_container {
+            width: auto;
+            height: auto;
         }
         CommandModal #kill_container {
-            width: 100%;
-            height: 6;
+            width: auto;
+            height: auto;
+        }
+        CommandModal #filter_container Input {
+            width: 60;
+            border-title-color: #d2d2d2;
+        }
+        CommandModal #kill_container Input {
+            width: 60;
+            border-title-color: #d2d2d2;
         }
         CommandModal Label {
-            text-style: bold;
             width: 100%;
             content-align: center middle;
             padding-bottom: 1;
@@ -56,6 +57,9 @@ class CommandModal(ModalScreen):
             content-align: center middle;
             padding-top: 1;
             width: 100%;
+        }
+        CommandModal #sleeping_queries {
+            padding-bottom: 1;
         }
     """
     BINDINGS = [
@@ -87,24 +91,39 @@ class CommandModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical():
             with Vertical():
-                yield Label(self.message)
-                with RadioSet(id="filter_radio_buttons"):
-                    yield RadioButton("User", id="user")
-                    yield RadioButton("Host/IP", id="host")
-                    yield RadioButton("Database", id="db")
-                    yield RadioButton("Hostgroup", id="hostgroup")
-                    yield RadioButton("Query Text", id="query_text")
-                    yield RadioButton("Query Time", id="query_time")
+                yield Label(f"[b]{self.message}[/b]")
+                with Vertical(id="filter_container"):
+                    yield AutoComplete(
+                        Input(id="filter_by_username_input"), Dropdown(id="filter_by_username_dropdown_items", items=[])
+                    )
+                    yield AutoComplete(
+                        Input(id="filter_by_host_input"), Dropdown(id="filter_by_host_dropdown_items", items=[])
+                    )
+                    yield AutoComplete(
+                        Input(id="filter_by_db_input"), Dropdown(id="filter_by_db_dropdown_items", items=[])
+                    )
+                    yield AutoComplete(
+                        Input(id="filter_by_hostgroup_input"),
+                        Dropdown(id="filter_by_hostgroup_dropdown_items", items=[]),
+                    )
+                    yield Input(id="filter_by_query_time_input")
+                    yield Input(id="filter_by_query_text_input")
                 with Vertical(id="kill_container"):
-                    with RadioSet(id="kill_radio_buttons"):
-                        yield RadioButton("Username", id="username")
-                        yield RadioButton("Host/IP", id="host")
-                        yield RadioButton("Time range", id="time_range")
+                    yield AutoComplete(
+                        Input(id="kill_by_username_input"), Dropdown(id="kill_by_username_dropdown_items", items=[])
+                    )
+                    yield AutoComplete(
+                        Input(id="kill_by_host_input"), Dropdown(id="kill_by_host_dropdown_items", items=[])
+                    )
+                    yield Input(id="kill_by_age_range_input", placeholder="Example: 5-8")
+                    yield Input(id="kill_by_query_text_input")
                     yield Checkbox("Include sleeping queries", id="sleeping_queries")
+                    yield Label("[dark_gray][b]Note[/b]: This feature uses threads visible in the processlist")
                 yield AutoComplete(
                     Input(id="modal_input"),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
                 )
+
                 yield Static(id="error_response")
             with Horizontal(classes="button_container"):
                 yield Button("Submit", id="submit", variant="primary")
@@ -112,30 +131,49 @@ class CommandModal(ModalScreen):
 
     def on_mount(self):
         input = self.query_one("#modal_input", Input)
-        filter_radio_buttons = self.query_one("#filter_radio_buttons", RadioSet)
+        filter_container = self.query_one("#filter_container", Vertical)
         kill_container = self.query_one("#kill_container", Vertical)
         self.query_one("#error_response", Static).display = False
 
-        filter_radio_buttons.display = False
+        filter_container.display = False
         kill_container.display = False
 
         if self.command == HotkeyCommands.thread_filter:
-            filter_radio_buttons.display = True
-            filter_radio_buttons.focus()
+            input.display = False
+            filter_container.display = True
 
-            input.placeholder = "Select an option from above"
+            self.query_one("#filter_by_username_input", Input).focus()
+            self.query_one("#filter_by_username_input", Input).border_title = "Username"
+            self.query_one("#filter_by_username_dropdown_items", Dropdown).items = self.create_dropdown_items("user")
+            self.query_one("#filter_by_host_input", Input).border_title = "Host/IP"
+            self.query_one("#filter_by_host_dropdown_items", Dropdown).items = self.create_dropdown_items("host")
+            self.query_one("#filter_by_db_input", Input).border_title = "Database"
+            self.query_one("#filter_by_db_dropdown_items", Dropdown).items = self.create_dropdown_items("db")
+            self.query_one("#filter_by_query_time_input", Input).border_title = "Minimum Query Time (seconds)"
+            self.query_one("#filter_by_query_text_input", Input).border_title = "Partial Query Text"
 
             if self.connection_source != ConnectionSource.proxysql:
-                self.query_one("#filter_radio_buttons #hostgroup", RadioButton).display = False
-                self.query_one("#filter_radio_buttons #hostgroup", RadioButton).disabled = True
+                self.query_one("#filter_by_hostgroup_input", Input).display = False
+            else:
+                self.query_one("#filter_by_host_input", Input).border_title = "Backend Host/IP"
+                self.query_one("#filter_by_hostgroup_input", Input).border_title = "Hostgroup"
+                self.query_one("#filter_by_hostgroup_dropdown_items", Dropdown).items = self.create_dropdown_items(
+                    "hostgroup"
+                )
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
-            sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
-            sleeping_queries_checkbox.toggle()
-
+            input.display = False
             kill_container.display = True
 
-            kill_radio_buttons = self.query_one("#kill_radio_buttons", RadioSet)
-            kill_radio_buttons.focus()
+            self.query_one("#kill_by_username_input", Input).focus()
+            self.query_one("#kill_by_username_input", Input).border_title = "Username"
+            self.query_one("#kill_by_username_dropdown_items", Dropdown).items = self.create_dropdown_items("user")
+            self.query_one("#kill_by_host_input", Input).border_title = "Host/IP"
+            self.query_one("#kill_by_host_dropdown_items", Dropdown).items = self.create_dropdown_items("host")
+            self.query_one("#kill_by_age_range_input", Input).border_title = "Age Range (seconds)"
+            self.query_one("#kill_by_query_text_input", Input).border_title = "Partial Query Text"
+
+            sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
+            sleeping_queries_checkbox.toggle()
 
             input.placeholder = "Select an option from above"
         elif self.command == HotkeyCommands.rename_tab:
@@ -159,51 +197,21 @@ class CommandModal(ModalScreen):
         else:
             input.focus()
 
-    def on_input_submitted(self):
-        self.query_one("#submit", Button).press()
-
     def create_dropdown_items(self, field):
-        self.dropdown_items = []
+        dropdown_items = []
 
         if field:
-            sorted_array = sorted(set(getattr(thread, field) for thread in self.processlist_data.values()))
-            self.dropdown_items = [DropdownItem(str(value)) for value in sorted_array]
+            # Filter out None values before sorting
+            sorted_array = sorted(
+                set(
+                    getattr(thread, field)
+                    for thread in self.processlist_data.values()
+                    if getattr(thread, field) is not None
+                )
+            )
+            dropdown_items = [DropdownItem(str(value)) for value in sorted_array]
 
-        self.query_one("#dropdown_items", Dropdown).items = self.dropdown_items
-
-    def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
-        modal_input = self.query_one("#modal_input", Input)
-
-        self.create_dropdown_items(None)  # empty string to clear dropdown items
-
-        if self.command == HotkeyCommands.thread_filter:
-            if event.pressed.id == "db":
-                self.create_dropdown_items("db")
-                modal_input.placeholder = "Database name"
-            elif event.pressed.id == "host":
-                self.create_dropdown_items("host")
-                modal_input.placeholder = "Hostname or IP address"
-            elif event.pressed.id == "query_text":
-                modal_input.placeholder = "Partial query text"
-            elif event.pressed.id == "query_time":
-                modal_input.placeholder = "Minimum query time (in seconds)"
-            elif event.pressed.id == "user":
-                self.create_dropdown_items("user")
-                modal_input.placeholder = "Username"
-            elif event.pressed.id == "hostgroup":
-                self.create_dropdown_items("hostgroup")
-                modal_input.placeholder = "Hostgroup"
-        elif self.command == HotkeyCommands.thread_kill_by_parameter:
-            if event.pressed.id == "username":
-                self.create_dropdown_items("user")
-                modal_input.placeholder = "Username"
-            elif event.pressed.id == "host":
-                self.create_dropdown_items("host")
-                modal_input.placeholder = "Hostname or IP address"
-            elif event.pressed.id == "time_range":
-                modal_input.placeholder = "Time range (ex. 10-20)"
-
-        modal_input.focus()
+        return dropdown_items
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id != "submit":
@@ -211,81 +219,84 @@ class CommandModal(ModalScreen):
             return
 
         modal_input = self.query_one("#modal_input", Input).value
-        if not modal_input and self.command != HotkeyCommands.rename_tab:
+        if not modal_input and self.command not in [
+            HotkeyCommands.rename_tab,
+            HotkeyCommands.thread_kill_by_parameter,
+            HotkeyCommands.thread_filter,
+        ]:
             self.update_error_response("Input cannot be empty")
             return
 
         if self.command == HotkeyCommands.thread_filter:
-            filter_options = {
-                "user": "User",
-                "db": "Database",
-                "host": "Host",
-                "hostgroup": "Hostgroup",
-                "query_time": "Query time",
-                "query_text": "Query text",
+            # Fetch all filter values
+            filters = {
+                "username": self.query_one("#filter_by_username_input", Input).value,
+                "host": self.query_one("#filter_by_host_input", Input).value,
+                "db": self.query_one("#filter_by_db_input", Input).value,
+                "hostgroup": self.query_one("#filter_by_hostgroup_input", Input).value,
+                "query_time": self.query_one("#filter_by_query_time_input", Input).value,
+                "query_text": self.query_one("#filter_by_query_text_input", Input).value,
             }
 
-            for rb_id, label in filter_options.items():
-                if self.query_one(f"#filter_radio_buttons #{rb_id}", RadioButton).value:
-                    filter_id = rb_id
-                    filter_label = label
-                    break
+            # Use IP address instead of hostname since that's what is used in the processlist
+            if filters["host"]:
+                filters["host"] = next(
+                    (ip for ip, addr in self.host_cache_data.items() if filters["host"] == addr), filters["host"]
+                )
 
-            if filter_label:
-                if filter_id in ["query_time", "hostgroup"]:
-                    if not modal_input.isdigit():
-                        self.update_error_response("Value must be an integer")
-                    else:
-                        self.dismiss([filter_label, int(modal_input)])
-                elif filter_id == "query_text":
-                    self.dismiss([filter_label, modal_input])
-                else:
-                    if filter_id == "host":
-                        value = next(
-                            (ip for ip, addr in self.host_cache_data.items() if modal_input == addr), modal_input
-                        )
-                        modal_input = value
-                    else:
-                        value = next(
-                            (
-                                getattr(data, filter_id)
-                                for data in self.processlist_data.values()
-                                if modal_input == getattr(data, filter_id)
-                            ),
-                            None,
-                        )
+            # Validate numeric fields
+            for value, field_name in [(filters["query_time"], "Query time"), (filters["hostgroup"], "Hostgroup")]:
+                if value and not re.search(r"^\d+$", value):
+                    self.update_error_response(f"{field_name} must be an integer")
+                    return
 
-                    self.dismiss([filter_label, modal_input])
-            else:
-                self.update_error_response("Please select a filter option")
+            # Ensure at least one filter is provided
+            if not any(filters.values()):
+                self.update_error_response("At least one field must be provided")
+                return
+
+            # Dismiss with the filter values
+            self.dismiss(list(filters.values()))
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
-            kill_type = None
-            lower_limit = None
-            upper_limit = None
-
+            # Get input values
+            kill_by_username = self.query_one("#kill_by_username_input", Input).value
+            kill_by_host = self.query_one("#kill_by_host_input", Input).value
+            kill_by_age_range = self.query_one("#kill_by_age_range_input", Input).value
+            kill_by_query_text = self.query_one("#kill_by_query_text_input", Input).value
             checkbox_sleeping_queries = self.query_one("#sleeping_queries", Checkbox).value
-            for rb in self.query("#kill_container RadioButton"):
-                if rb.value:
-                    kill_type = rb.id
-                    break
 
-            if kill_type:
-                if kill_type == "time_range":
-                    if re.search(r"(\d+-\d+)", modal_input):
-                        time_range = modal_input.split("-")
-                        lower_limit = int(time_range[0])
-                        upper_limit = int(time_range[1])
+            age_range_lower_limit, age_range_upper_limit = None, None
 
-                        if lower_limit > upper_limit:
-                            self.update_error_response("Invalid time range! Lower limit can't be higher than upper")
-                            return
-                    else:
-                        self.update_error_response("Invalid time range")
+            # Process and validate age range input
+            if kill_by_age_range:
+                match = re.match(r"(\d+)-(\d+)", kill_by_age_range)
+                if match:
+                    age_range_lower_limit, age_range_upper_limit = map(int, match.groups())
+                    if age_range_lower_limit > age_range_upper_limit:
+                        self.update_error_response("Invalid age range! Lower limit can't be higher than upper")
                         return
+                else:
+                    self.update_error_response("Invalid age range")
+                    return
 
-                self.dismiss([rb.id, modal_input, checkbox_sleeping_queries, lower_limit, upper_limit])
-            else:
-                self.update_error_response("Please select a kill option")
+            # Ensure at least one parameter is provided
+            if not any([kill_by_username, kill_by_host, kill_by_age_range, kill_by_query_text]):
+                self.update_error_response("At least one parameter must be provided")
+                return
+
+            # Dismiss with the filter values
+            self.dismiss(
+                [
+                    kill_by_username,
+                    kill_by_host,
+                    kill_by_age_range,
+                    age_range_lower_limit,
+                    age_range_upper_limit,
+                    kill_by_query_text,
+                    checkbox_sleeping_queries,
+                ]
+            )
+
         elif self.command in [HotkeyCommands.thread_kill_by_id, HotkeyCommands.show_thread]:
             value = next((thread_id for thread_id in self.processlist_data.keys() if modal_input == thread_id), None)
 
@@ -318,3 +329,7 @@ class CommandModal(ModalScreen):
         error_response = self.query_one("#error_response", Static)
         error_response.display = True
         error_response.update(message)
+
+    def on_input_submitted(self):
+        if self.command not in [HotkeyCommands.thread_filter, HotkeyCommands.thread_kill_by_parameter]:
+            self.query_one("#submit", Button).press()
