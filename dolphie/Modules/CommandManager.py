@@ -4,9 +4,7 @@ from dolphie.DataTypes import ConnectionSource
 
 
 class CommandManager:
-    def __init__(self, replay_file: str):
-        self.replay_file = replay_file
-
+    def __init__(self):
         self.command_keys = {
             ConnectionSource.mysql: {
                 "Commands": {
@@ -127,6 +125,7 @@ class CommandManager:
                     "1": {"human_key": "1", "description": "Toggle panel Dashboard"},
                     "2": {"human_key": "2", "description": "Toggle panel Processlist"},
                     "3": {"human_key": "3", "description": "Toggle panel Graph Metrics"},
+                    "4": {"human_key": "4", "description": "Toggle panel Replication/Replicas"},
                     "5": {"human_key": "5", "description": "Toggle panel Metadata Locks"},
                     "placeholder_1": {"human_key": "", "description": ""},
                     "grave_accent": {"human_key": "`", "description": "Open host setup"},
@@ -218,8 +217,8 @@ class CommandManager:
             "ctrl+d",
         ]
 
-    def get_commands(self, connection_source: ConnectionSource) -> Dict[str, Dict[str, str]]:
-        if self.replay_file:
+    def get_commands(self, replay_file: str, connection_source: ConnectionSource) -> Dict[str, Dict[str, str]]:
+        if replay_file:
             key = {ConnectionSource.mysql: "mysql_replay", ConnectionSource.proxysql: "proxysql_replay"}.get(
                 connection_source, connection_source
             )

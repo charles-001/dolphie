@@ -1,4 +1,5 @@
 import ipaddress
+import os
 import socket
 from datetime import datetime
 from typing import Dict, Union
@@ -372,3 +373,34 @@ class Dolphie:
             return
 
         self.metadata_locks_enabled = True
+
+    def get_replay_files(self):
+        """
+        Gets a list of replay files in the replay directory.
+
+        Returns:
+            list: A list of tuples in the format (full_path, server_name/db path).
+        """
+        # Determine the replay directory
+        replay_dir = self.replay_dir
+        if self.replay_file:
+            replay_dir = os.path.dirname(os.path.dirname(self.replay_file))
+
+        # Check if the replay directory exists
+        if not replay_dir or not os.path.exists(replay_dir):
+            return []
+
+        replay_files = []
+        try:
+            # List all files from subdirectories in one go and create tuples
+            replay_files = [
+                (os.path.join(entry_path, file), f"[b light_blue]{entry}[/b light_blue]/{file}")
+                for entry in os.listdir(replay_dir)
+                if os.path.isdir(entry_path := os.path.join(replay_dir, entry))  # Only directories
+                for file in os.listdir(entry_path)
+                if os.path.isfile(os.path.join(entry_path, file))  # Only files
+            ]
+        except OSError as e:
+            self.app.notify(str(e), title="Error getting replay files", severity="error")
+
+        return replay_files

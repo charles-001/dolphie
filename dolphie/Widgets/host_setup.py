@@ -70,10 +70,10 @@ class HostSetupModal(ModalScreen):
             height: auto;
         }
         HostSetupModal #password {
-            width: 88%;
+            width: 53;
         }
         HostSetupModal #show_password {
-            max-width: 13%;
+            max-width: 8;
             height: 3;
             background: #262c4b;
             border: blank #344063;
@@ -169,6 +169,7 @@ class HostSetupModal(ModalScreen):
         socket_file: str,
         available_hosts: list,
         hostgroups: dict,
+        replay_files: list,
         error_message: ManualException = None,
     ):
         super().__init__()
@@ -199,6 +200,10 @@ class HostSetupModal(ModalScreen):
         self.options_credential_profiles = []
         if credential_profiles:
             self.options_credential_profiles = [(profile, profile) for profile in credential_profiles.keys()]
+
+        self.options_replay_files = []
+        if replay_files:
+            self.options_replay_files = [(replay_file, replay_path) for replay_path, replay_file in replay_files]
 
         self.error_message = error_message
 
@@ -281,6 +286,12 @@ class HostSetupModal(ModalScreen):
                     id="hostgroup",
                     prompt="Select a hostgroup (optional)",
                 )
+                yield Rule(line_style="heavy")
+                yield Select(
+                    options=self.options_replay_files,
+                    id="replay_file",
+                    prompt="Select a replay file (optional)",
+                )
             with Horizontal(classes="button_container"):
                 yield Button("Submit", id="submit", variant="primary")
                 yield Button("Cancel", id="cancel")
@@ -327,6 +338,7 @@ class HostSetupModal(ModalScreen):
             self.query_one("#ssl", Checkbox).disabled = False
             self.query_one("#show_password", Button).disabled = False
             self.query_one("#credential_profile", Select).disabled = False
+            self.query_one("#replay_file", Select).disabled = False
         elif event.value:
             self.query_one("#host", Input).disabled = True
             self.query_one("#username", Input).disabled = True
@@ -336,6 +348,29 @@ class HostSetupModal(ModalScreen):
             self.query_one("#ssl", Checkbox).disabled = True
             self.query_one("#show_password", Button).disabled = True
             self.query_one("#credential_profile", Select).disabled = True
+            self.query_one("#replay_file", Select).disabled = True
+
+    @on(Select.Changed, "#replay_file")
+    def replay_file_changed(self, event: Select.Changed):
+        if event.value == Select.BLANK:
+            self.query_one("#host", Input).disabled = False
+            self.query_one("#username", Input).disabled = False
+            self.query_one("#password", Input).disabled = False
+            self.query_one("#socket_file", Input).disabled = False
+            self.query_one("#ssl", Checkbox).disabled = False
+            self.query_one("#show_password", Button).disabled = False
+            self.query_one("#credential_profile", Select).disabled = False
+            self.query_one("#hostgroup", Select).disabled = False
+        elif event.value:
+            self.query_one("#host", Input).disabled = True
+            self.query_one("#username", Input).disabled = True
+            self.query_one("#password", Input).disabled = True
+            self.query_one("#socket_file", Input).disabled = True
+            self.query_one("#ssl", Checkbox).value = False
+            self.query_one("#ssl", Checkbox).disabled = True
+            self.query_one("#show_password", Button).disabled = True
+            self.query_one("#credential_profile", Select).disabled = True
+            self.query_one("#hostgroup", Select).disabled = True
 
     @on(RadioSet.Changed, "#ssl_mode")
     def ssl_mode_changed(self, event: RadioSet.Changed):
@@ -377,6 +412,7 @@ class HostSetupModal(ModalScreen):
             error_message = None
 
             credential_profile = self.query_one("#credential_profile", Select)
+            replay_file = self.query_one("#replay_file", Select)
             host = self.query_one("#host", Input)
             hostgroup = self.query_one("#hostgroup", Select)
             username = self.query_one("#username", Input)
@@ -418,10 +454,8 @@ class HostSetupModal(ModalScreen):
                     ssl["key"] = ssl_key
 
             socket_file = self.query_one("#socket_file", Input)
-
-            hostgroup_value = hostgroup.value
-            if hostgroup_value == Select.BLANK:
-                hostgroup_value = None
+            hostgroup_value = None if hostgroup.value == Select.BLANK else hostgroup.value
+            replay_file_value = None if replay_file.value == Select.BLANK else replay_file.value
 
             modal_footer = self.query_one("#modal_footer", Label)
             host_split = host.value.split(":")
@@ -433,8 +467,8 @@ class HostSetupModal(ModalScreen):
             elif len(host_split) > 2:
                 error_message = "Host cannot contain more than one colon"
 
-            if not host.value and not hostgroup_value:
-                error_message = "You must specify either a host or hostgroup"
+            if not host.value and not hostgroup_value and not replay_file_value:
+                error_message = "You must specify either a host, hostgroup, or replay file"
 
             if error_message:
                 modal_footer.update(error_message)
@@ -444,6 +478,7 @@ class HostSetupModal(ModalScreen):
             self.dismiss(
                 {
                     "credential_profile": credential_profile.value,
+                    "replay_file": replay_file_value,
                     "host": host.value,
                     "hostgroup": hostgroup_value,
                     "username": username.value,

@@ -94,7 +94,8 @@ class CommandPaletteCommands(Provider):
     def get_command_hits(self):
         """Helper function to get all commands and format them for discovery or search."""
         commands = self.dolphie_app.command_manager.get_commands(
-            self.dolphie_app.tab_manager.active_tab.dolphie.connection_source
+            self.dolphie_app.tab_manager.active_tab.dolphie.replay_file,
+            self.dolphie_app.tab_manager.active_tab.dolphie.connection_source,
         )
 
         # Find the longest human_key length
@@ -155,7 +156,7 @@ class DolphieApp(App):
         super().__init__()
 
         self.config = config
-        self.command_manager = CommandManager(config.replay_file)
+        self.command_manager = CommandManager()
         self.loading_hostgroups: bool = False
 
         theme = Theme(
@@ -222,7 +223,8 @@ class DolphieApp(App):
 
         # Update the dashboard title with the timestamp of the replay event
         tab.dashboard_replay.update(
-            f"[b]Replay[/b] [dark_gray]|[/dark_gray] " f"[b light_blue]{replay_event_data.timestamp}[/b light_blue]"
+            f"[b]Replay[/b] ([dark_gray]{os.path.basename(dolphie.replay_file)}[/dark_gray]) [dark_gray]|[/dark_gray] "
+            f"[b light_blue]{replay_event_data.timestamp}[/b light_blue]"
         )
         tab.dashboard_replay_start_end.update(
             f"{tab.replay_manager.min_timestamp}[b highlight] →[/b highlight] {tab.replay_manager.max_timestamp}"
@@ -249,6 +251,8 @@ class DolphieApp(App):
                 "innodb_metrics": dolphie.innodb_metrics,
                 "replication_status": dolphie.replication_status,
             }
+
+            replication_panel.fetch_replicas(tab)
         elif dolphie.connection_source == ConnectionSource.proxysql:
             dolphie.proxysql_command_stats = replay_event_data.command_stats
             dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
@@ -463,6 +467,7 @@ class DolphieApp(App):
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
+                    replication_panel.create_replica_panel(tab)
                 elif dolphie.connection_source == ConnectionSource.proxysql:
                     self.refresh_screen_proxysql(tab)
 
@@ -495,12 +500,7 @@ class DolphieApp(App):
         available_replicas = dolphie.main_db_connection.fetchall()
 
         if dolphie.daemon_mode:
-            # Reduce how much data we're storing
-            replicas = []
-            for replica in available_replicas:
-                replicas.append(replica.get("host"))
-
-            dolphie.replica_manager.available_replicas = replicas
+            dolphie.replica_manager.available_replicas = available_replicas
         else:
             # We update the replica ports used if the number of replicas have changed
             if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
@@ -820,10 +820,6 @@ class DolphieApp(App):
             if self.config.host_setup:
                 self.tab_manager.setup_host_tab(tab)
             elif self.tab_manager.active_tab.dolphie.replay_file:
-                self.notify(
-                    f"File: [highlight]{tab.dolphie.replay_file}[/highlight]", title="Replay started", timeout=10
-                )
-
                 self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
                 self.tab_manager.rename_tab(tab)
                 self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
@@ -1155,7 +1151,7 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if key not in self.command_manager.exclude_keys:
-            if not self.command_manager.get_commands(dolphie.connection_source).get(key):
+            if not self.command_manager.get_commands(dolphie.replay_file, dolphie.connection_source).get(key):
                 self.notify(f"Key [highlight]{key}[/highlight] is not a valid command", severity="warning")
                 return
 
@@ -1193,20 +1189,29 @@ class DolphieApp(App):
 
                 return
 
+            # If we're in replay mode and there's no replication status or replicas, stop here
+            if dolphie.replay_file and (not dolphie.replication_status and not dolphie.replica_manager.replicas):
+                return
+
             self.toggle_panel(dolphie.panels.replication.name)
             self.size_dashboard_sections(tab)
 
             if dolphie.panels.replication.visible:
                 if dolphie.replica_manager.available_replicas:
                     tab.replicas_container.display = True
-                    tab.replicas_loading_indicator.display = True
+
+                    # No loading animation necessary for replay mode
+                    if not dolphie.replay_file:
+                        tab.replicas_loading_indicator.display = True
+
+                        tab.replicas_title.update(
+                            f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
+                            " replicas...\n"
+                        )
+
                     for container in dolphie.app.query(".replica_container"):
                         container.display = tab.id in container.id
 
-                    tab.replicas_title.update(
-                        f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
-                        " replicas...\n"
-                    )
                 if dolphie.group_replication_members:
                     tab.group_replication_container.display = True
                     for container in dolphie.app.query(".member_container"):
@@ -1710,9 +1715,7 @@ class DolphieApp(App):
                     table,
                 )
             else:
-                screen_data = Group(
-                    Align.center("[b light_blue]Host Cache[/b light_blue]\n"), "There are currently no hosts resolved"
-                )
+                self.notify("There are currently no hosts resolved")
 
         if screen_data:
             self.app.push_screen(

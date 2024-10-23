@@ -308,6 +308,7 @@ class TabManager:
         # If we're using hostgroups
         config = copy.deepcopy(self.config)
         if hostgroup_member and self.config.hostgroup_hosts:
+            config.replay_file = None
             config.host = hostgroup_member.host
             config.port = hostgroup_member.port
             tab.manual_tab_name = hostgroup_member.tab_title
@@ -586,8 +587,6 @@ class TabManager:
         tab.replicas_container.display = False
         tab.group_replication_container.display = False
 
-        tab.dolphie.replay_file = None
-
         # Remove all the replica and member containers
         queries = [f".replica_container_{tab.id}", f".member_container_{tab.id}"]
         for query in queries:
@@ -619,6 +618,8 @@ class TabManager:
             if hostgroup:
                 dolphie.app.connect_as_hostgroup(hostgroup)
             else:
+                dolphie.replay_file = data.get("replay_file")
+
                 await self.disconnect_tab(tab)
 
                 tab.loading_indicator.display = True
@@ -626,13 +627,18 @@ class TabManager:
                     if not tab.worker_running and not tab.replicas_worker_running:
                         tab.worker_cancel_error = ""
 
-                        # Edge case if a user switches from a replay to connecting
-                        dolphie.replay_file = None
                         tab.dashboard_replay_container.display = False
 
                         dolphie.reset_runtime_variables()
-                        dolphie.app.run_worker_main(tab.id)
-                        dolphie.app.run_worker_replicas(tab.id)
+
+                        if dolphie.replay_file:
+                            tab.replay_manager = ReplayManager(dolphie)
+                            self.rename_tab(tab)
+                            self.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+                            dolphie.app.run_worker_replay(tab.id)
+                        else:
+                            dolphie.app.run_worker_main(tab.id)
+                            dolphie.app.run_worker_replicas(tab.id)
 
                         break
 
@@ -663,6 +669,7 @@ class TabManager:
                 socket_file=dolphie.socket,
                 hostgroups=dolphie.hostgroup_hosts.keys(),
                 available_hosts=dolphie.host_setup_available_hosts,
+                replay_files=dolphie.get_replay_files(),
                 error_message=tab.worker_cancel_error,
             ),
             command_get_input,
