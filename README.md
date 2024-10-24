@@ -220,7 +220,7 @@ Note that this feature can incur a significant amount of disk space depending on
 
 Also introduced in version **6.0.0** is the ability to run Dolphie in daemon mode (via `--daemon` option). It's designed to run in the background continuously recording data for future replay. It’s more resource-efficient than running Dolphie live, transforming it into a passive, always-on monitoring service. It eliminates Textual's TUI and creates a log file for messages while also displaying them in the console.
 
-You have flexibility in how you run Dolphie in the background; personally, I prefer using `systemctl`, but alternatives like `nohup` or `tmux` can be viable options.
+You have several options for running Dolphie in the background. My personal preference is using systemctl (see example [service configuration](https://github.com/charles-001/dolphie/blob/main/dolphie.service)) for its flexibility and management features. However, alternatives like nohup or tmux are also viable, though they don’t offer the same level of control.
 
 Here's some examples of log messages you might see:
 
