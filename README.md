@@ -230,7 +230,7 @@ Here's some examples of log messages you might see:
 [INFO] Connected to MySQL with Process ID 324
 [INFO] Replay SQLite file: /var/lib/dolphie/replays/localhost/daemon.db (24 hours retention)
 [INFO] Connected to SQLite
-[INFO] Replay database metadata - Host: localhost, Port: 3306, Source: MySQL (Percona Server), Version: 8.0.34, Dolphie: 6.3.0
+[INFO] Replay database metadata - Host: localhost, Port: 3306, Source: MySQL (Percona Server), Dolphie: 6.3.0
 [INFO] ZSTD compression dictionary trained with 10 samples (size: 52.56KB)
 [WARNING] Read-only mode changed: R/W -> RO
 [INFO] Global variable innodb_io_capacity changed: 1000 -> 2000

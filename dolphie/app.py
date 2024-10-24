@@ -248,6 +248,8 @@ class DolphieApp(App):
         common_metrics = {"global_variables": dolphie.global_variables, "global_status": dolphie.global_status}
 
         if dolphie.connection_source == ConnectionSource.mysql:
+            dolphie.set_host_version(dolphie.global_variables.get("version"))
+
             dolphie.binlog_status = replay_event_data.binlog_status
             dolphie.innodb_metrics = replay_event_data.innodb_metrics
             dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
@@ -267,6 +269,8 @@ class DolphieApp(App):
             if not dolphie.server_uuid:
                 dolphie.configure_mysql_variables()
         elif dolphie.connection_source == ConnectionSource.proxysql:
+            dolphie.set_host_version(dolphie.global_variables.get("admin-version"))
+
             dolphie.proxysql_command_stats = replay_event_data.command_stats
             dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
             dolphie.processlist_threads = replay_event_data.processlist

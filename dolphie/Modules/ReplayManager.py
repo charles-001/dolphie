@@ -125,7 +125,6 @@ class ReplayManager:
                 schema_version INTEGER DEFAULT 1,
                 host VARCHAR(255),
                 port INTEGER,
-                host_version VARCHAR(255),
                 host_distro VARCHAR(255),
                 connection_source VARCHAR(255),
                 dolphie_version VARCHAR(255),
@@ -137,30 +136,6 @@ class ReplayManager:
         if self.cursor.execute("PRAGMA auto_vacuum").fetchone()[0] != 1:
             self.cursor.execute("PRAGMA auto_vacuum = FULL")
             self.cursor.execute("VACUUM")
-
-        # This is temporary for backwards compatibility with older replay files
-        # columns = [info[1] for info in self.cursor.execute("PRAGMA table_info(metadata)").fetchall()]
-        # if "schema_version" not in columns:
-        #     logger.warning("The 'schema_version' column is missing in the metadata table. Adding it...")
-
-        #     self.cursor.execute("ALTER TABLE metadata RENAME TO metadata_old")
-        #     self.cursor.execute(metadata_table_query)
-        #     self.cursor.execute(
-        #         f"""
-        #         INSERT INTO metadata (
-        #             schema_version, hostname, host_version, host_distro, connection_source,
-        #             dolphie_version, compression_dict
-        #         )
-        #         SELECT
-        #             {self.schema_version}, hostname, host_version, host_distro, connection_source,
-        #             dolphie_version, compression_dict
-        #         FROM
-        #             metadata_old
-        #         """
-        #     )
-        #     self.cursor.execute("DROP TABLE metadata_old")
-
-        #     logger.success("Column was added")
 
         self.purge_old_data()
 
@@ -243,14 +218,12 @@ class ReplayManager:
         row = self.cursor.execute("SELECT * FROM metadata").fetchone()
         if row is None:
             self.cursor.execute(
-                "INSERT INTO metadata (schema_version, host, port, host_version, host_distro, connection_source, "
-                "dolphie_version) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO metadata (schema_version, host, port, host_distro, connection_source, dolphie_version)"
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     self.schema_version,
                     self.dolphie.host,
                     self.dolphie.port,
-                    self.dolphie.host_version,
                     self.dolphie.host_distro,
                     self.dolphie.connection_source,
                     self.dolphie.app_version,
@@ -271,7 +244,7 @@ class ReplayManager:
 
                     return
 
-            connection_source = row[5]
+            connection_source = row[4]
             if self.dolphie.daemon_mode:
                 # Avoid mixing connection sources in the same replay file
                 if connection_source != self.dolphie.connection_source:
@@ -284,14 +257,13 @@ class ReplayManager:
 
             host = row[1]
             port = row[2]
-            host_version = row[3]
-            host_distro = row[4]
-            app_version = row[6]
-            compress_dict = row[7]
+            host_distro = row[3]
+            app_version = row[5]
+            compress_dict = row[6]
 
             logger.info(
-                f"Replay database metadata - Host: {host}, Port: {port}, "
-                f"Source: {connection_source} ({host_distro}), Version: {host_version}, Dolphie: {app_version}"
+                f"Replay database metadata - Host: {host}, Port: {port}, Source: {connection_source} ({host_distro}), "
+                f"Dolphie: {app_version}"
             )
 
             if compress_dict:
@@ -317,12 +289,11 @@ class ReplayManager:
             self.dolphie.host = row[1]
             self.dolphie.port = row[2]
             self.dolphie.host_with_port = f"{self.dolphie.host}:{self.dolphie.port}"
-            self.dolphie.host_version = row[3]
-            self.dolphie.host_distro = row[4]
-            self.dolphie.connection_source = row[5]
+            self.dolphie.host_distro = row[3]
+            self.dolphie.connection_source = row[4]
 
-            if row[7]:
-                self.compression_dict = zstd.ZstdCompressionDict(row[7])
+            if row[6]:
+                self.compression_dict = zstd.ZstdCompressionDict(row[6])
         else:
             raise Exception("Metadata not found in replay file.")
 
