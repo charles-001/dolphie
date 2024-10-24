@@ -42,7 +42,7 @@ class HostGroupMember:
 @dataclass
 class Config:
     app_version: str
-    host_setup: bool = False
+    tab_setup: bool = False
     credential_profile: str = None
     user: str = None
     password: str = None
@@ -64,11 +64,11 @@ class Config:
     mycnf_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/.my.cnf")
     login_path: str = "client"
     host_cache_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_host_cache")
-    host_setup_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_hosts")
+    tab_setup_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_hosts")
     refresh_interval: int = 1
     heartbeat_table: str = None
     credential_profiles: Dict[str, CredentialProfile] = field(default_factory=dict)
-    host_setup_available_hosts: List[str] = field(default_factory=list)
+    tab_setup_available_hosts: List[str] = field(default_factory=list)
     startup_panels: str = "dashboard,processlist"
     graph_marker: str = "braille"
     pypi_repository: str = "https://pypi.org/pypi/dolphie/json"
@@ -93,7 +93,7 @@ class ArgumentParser:
             # Exclude these options since we handle them differently
             if variable.name not in [
                 "app_version",
-                "host_setup_available_hosts",
+                "tab_setup_available_hosts",
                 "ssl",
                 "hostgroup_hosts",
                 "credential_profiles",
@@ -193,10 +193,13 @@ Dolphie's config supports these options under [dolphie] section:
         )
 
         self.parser.add_argument(
-            "--host-setup",
-            dest="host_setup",
+            "--tab-setup",
+            dest="tab_setup",
             action="store_true",
-            help="Start Dolphie by showing the Host Setup modal instead of automatically connecting",
+            help=(
+                "Start Dolphie by showing the Tab Setup modal instead of automatically connecting "
+                "with the specified options"
+            ),
         )
         self.parser.add_argument(
             "-C",
@@ -284,12 +287,12 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
-            "--host-setup-file",
-            dest="host_setup_file",
+            "--tab-setup-file",
+            dest="tab_setup_file",
             type=str,
             help=(
-                "Specify location of file that stores the available hosts to use in host setup modal [default: "
-                f"{self.config.host_setup_file}]"
+                "Specify location of file that stores the available hosts to use in Tab Setup modal [default: "
+                f"{self.config.tab_setup_file}]"
             ),
             metavar="",
         )
@@ -654,9 +657,9 @@ Dolphie's config supports these options under [dolphie] section:
             if panel not in self.panels.all():
                 self.exit(f"Panel [red2]{panel}[/red2] is not valid (see --help for more information)")
 
-        if os.path.exists(self.config.host_setup_file):
-            with open(self.config.host_setup_file, "r") as file:
-                self.config.host_setup_available_hosts = [line.strip() for line in file]
+        if os.path.exists(self.config.tab_setup_file):
+            with open(self.config.tab_setup_file, "r") as file:
+                self.config.tab_setup_available_hosts = [line.strip() for line in file]
 
         if self.debug_options:
             self.console.print(self.debug_options_table)
@@ -674,6 +677,10 @@ Dolphie's config supports these options under [dolphie] section:
 
         if self.config.record_for_replay and not self.config.replay_dir:
             self.exit("[red2]--record[/red2] requires [red2]--replay-dir[/red2] to be specified")
+
+        # Set replay directory if replay file is specified
+        if self.config.replay_file and not self.config.replay_dir:
+            self.config.replay_dir = os.path.dirname(os.path.dirname(self.config.replay_file))
 
     def parse_hostgroup(self, cfg, section, config_file) -> List[HostGroupMember]:
         hosts = []

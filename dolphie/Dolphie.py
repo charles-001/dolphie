@@ -34,13 +34,13 @@ class Dolphie:
         self.socket = config.socket
         self.ssl = config.ssl
         self.host_cache_file = config.host_cache_file
-        self.host_setup_file = config.host_setup_file
+        self.tab_setup_file = config.tab_setup_file
         self.refresh_interval = config.refresh_interval
         self.show_trxs_only = config.show_trxs_only
         self.show_threads_with_concurrency_tickets = False
         self.show_additional_query_columns = config.show_additional_query_columns
         self.heartbeat_table = config.heartbeat_table
-        self.host_setup_available_hosts = config.host_setup_available_hosts
+        self.tab_setup_available_hosts = config.tab_setup_available_hosts
         self.startup_panels = config.startup_panels
         self.graph_marker = config.graph_marker
         self.hostgroup = config.hostgroup
@@ -164,7 +164,7 @@ class Dolphie:
         self.metric_manager.connection_source = self.connection_source
 
         # Add host to host setup file if it doesn't exist
-        self.add_host_to_host_setup_file()
+        self.add_host_to_tab_setup_file()
 
     def setup_connection_mysql(self):
         global_variables = self.global_variables
@@ -239,11 +239,11 @@ class Dolphie:
 
         self.validate_metadata_locks_enabled()
 
-    def add_host_to_host_setup_file(self):
+    def add_host_to_tab_setup_file(self):
         if self.daemon_mode:
             return
 
-        with open(self.host_setup_file, "a+") as file:
+        with open(self.tab_setup_file, "a+") as file:
             file.seek(0)
             lines = file.readlines()
 
@@ -254,7 +254,7 @@ class Dolphie:
 
             if host not in lines:
                 file.write(host)
-                self.host_setup_available_hosts.append(host[:-1])  # remove the \n
+                self.tab_setup_available_hosts.append(host[:-1])  # remove the \n
 
     def is_mysql_version_at_least(self, target: str, use_version: str = None):
         version = self.host_version
@@ -379,27 +379,29 @@ class Dolphie:
         Gets a list of replay files in the replay directory.
 
         Returns:
-            list: A list of tuples in the format (full_path, server_name/db path).
+            list: A list of tuples in the format (full_path, formatted host name + replay name).
         """
-        # Determine the replay directory
-        replay_dir = self.replay_dir
-        if self.replay_file:
-            replay_dir = os.path.dirname(os.path.dirname(self.replay_file))
-
-        # Check if the replay directory exists
-        if not replay_dir or not os.path.exists(replay_dir):
+        if not self.replay_dir or not os.path.exists(self.replay_dir):
             return []
 
         replay_files = []
         try:
-            # List all files from subdirectories in one go and create tuples
-            replay_files = [
-                (os.path.join(entry_path, file), f"[b light_blue]{entry}[/b light_blue]/{file}")
-                for entry in os.listdir(replay_dir)
-                if os.path.isdir(entry_path := os.path.join(replay_dir, entry))  # Only directories
-                for file in os.listdir(entry_path)
-                if os.path.isfile(os.path.join(entry_path, file))  # Only files
-            ]
+            with os.scandir(self.replay_dir) as entries:
+                for entry in entries:
+                    if entry.is_dir():
+                        entry_path = entry.path
+                        for file in os.scandir(entry_path):
+                            if file.is_file():
+                                # Get first 30 characters of the host name and get port from end of it
+                                host_name = entry.name[:30]
+                                port = ""
+                                if "_" in entry.name:
+                                    port = "_" + entry.name.rsplit("_", 1)[-1]
+
+                                formatted_replay_name = f"[label]{host_name}{port}[/label]"
+                                formatted_replay_name += f": [b light_blue]{file.name}[/b light_blue]"
+
+                                replay_files.append((file.path, formatted_replay_name))
         except OSError as e:
             self.app.notify(str(e), title="Error getting replay files", severity="error")
 

@@ -32,8 +32,8 @@ from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import Config, HostGroupMember
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.ReplayManager import ReplayManager
-from dolphie.Widgets.host_setup import HostSetupModal
 from dolphie.Widgets.spinner import SpinnerWidget
+from dolphie.Widgets.tab_setup import TabSetupModal
 from dolphie.Widgets.topbar import TopBar
 
 
@@ -600,9 +600,9 @@ class TabManager:
         dolphie = tab.dolphie
 
         async def command_get_input(data):
-            # Set host_setup to false since it's only used when Dolphie first loads
-            if self.config.host_setup:
-                self.config.host_setup = False
+            # Set tab_setup to false since it's only used when Dolphie first loads
+            if self.config.tab_setup:
+                self.config.tab_setup = False
 
             host_port = data["host"].split(":")
 
@@ -649,7 +649,7 @@ class TabManager:
         if (
             tab.worker_cancel_error
             or dolphie.connection_status == ConnectionStatus.disconnected
-            or self.config.host_setup
+            or self.config.tab_setup
         ):
             host = dolphie.host
             port = dolphie.port
@@ -658,7 +658,7 @@ class TabManager:
             port = ""
 
         dolphie.app.push_screen(
-            HostSetupModal(
+            TabSetupModal(
                 credential_profile=dolphie.credential_profile,
                 credential_profiles=dolphie.config.credential_profiles,
                 host=host,
@@ -668,7 +668,8 @@ class TabManager:
                 ssl=dolphie.ssl,
                 socket_file=dolphie.socket,
                 hostgroups=dolphie.hostgroup_hosts.keys(),
-                available_hosts=dolphie.host_setup_available_hosts,
+                available_hosts=dolphie.tab_setup_available_hosts,
+                replay_directory=dolphie.config.replay_dir,
                 replay_files=dolphie.get_replay_files(),
                 error_message=tab.worker_cancel_error,
             ),

@@ -216,18 +216,26 @@ class DolphieApp(App):
         replay_event_data = tab.replay_manager.get_next_refresh_interval()
         # If there's no more events, cancel the worker
         if not replay_event_data:
-            if not manual_control:
-                self.notify("Replay has finished", severity="success")
-
             tab.worker.cancel()
 
-        # Update the dashboard title with the timestamp of the replay event
-        tab.dashboard_replay.update(
-            f"[b]Replay[/b] ([dark_gray]{os.path.basename(dolphie.replay_file)}[/dark_gray]) [dark_gray]|[/dark_gray] "
-            f"[b light_blue]{replay_event_data.timestamp}[/b light_blue]"
+        min_timestamp = tab.replay_manager.min_timestamp
+        max_timestamp = tab.replay_manager.max_timestamp
+        current_timestamp = replay_event_data.timestamp
+
+        # Highlight if the min or max timestamp matches the current timestamp
+        min_timestamp = (
+            f"[b light_blue]{min_timestamp}[/b light_blue]" if min_timestamp == current_timestamp else min_timestamp
         )
+        max_timestamp = (
+            f"[b light_blue]{max_timestamp}[/b light_blue]" if max_timestamp == current_timestamp else max_timestamp
+        )
+
+        # Update the dashboard title with the timestamp of the replay event
+        tab.dashboard_replay.update(f"[b]Replay[/b] ([dark_gray]{os.path.basename(dolphie.replay_file)}[/dark_gray])")
         tab.dashboard_replay_start_end.update(
-            f"{tab.replay_manager.min_timestamp}[b highlight] →[/b highlight] {tab.replay_manager.max_timestamp}"
+            f"{min_timestamp} [b highlight]←[/b highlight] "
+            f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]→[/b highlight] "
+            f"{max_timestamp}"
         )
 
         dolphie.detect_global_variable_change(
@@ -817,7 +825,7 @@ class DolphieApp(App):
         else:
             tab = await self.tab_manager.create_tab(tab_name="Initial Tab")
 
-            if self.config.host_setup:
+            if self.config.tab_setup:
                 self.tab_manager.setup_host_tab(tab)
             elif self.tab_manager.active_tab.dolphie.replay_file:
                 self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
@@ -838,23 +846,12 @@ class DolphieApp(App):
 
     @on(Button.Pressed, "#back_button")
     def replay_back(self):
-        tab = self.tab_manager.active_tab
-
-        if tab.replay_manager.current_index - 1 <= tab.replay_manager.min_id:
-            self.notify("Replay has reached the beginning", severity="warning")
-
         # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
-        tab.replay_manager.current_index -= 2
-
+        self.tab_manager.active_tab.replay_manager.current_index -= 2
         self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#forward_button")
     def replay_forward(self):
-        tab = self.tab_manager.active_tab
-
-        if tab.replay_manager.current_index + 1 >= tab.replay_manager.max_id:
-            self.notify("Replay has reached the end", severity="warning")
-
         self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#pause_button")
@@ -874,8 +871,7 @@ class DolphieApp(App):
     def replay_seek(self):
         def command_get_input(timestamp: str):
             if timestamp:
-                tab = self.tab_manager.active_tab
-                found_timestamp = tab.replay_manager.seek_to_timestamp(timestamp)
+                found_timestamp = self.tab_manager.active_tab.replay_manager.seek_to_timestamp(timestamp)
 
                 if found_timestamp:
                     self.force_refresh_for_replay()

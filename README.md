@@ -56,7 +56,7 @@ positional arguments:
 
 options:
   --help                show this help message and exit
-  --host-setup          Start Dolphie by showing the Host Setup modal instead of automatically connecting
+  --tab-setup           Start Dolphie by showing the Tab Setup modal instead of automatically connecting with the specified options
   -C , --cred-profile   Credential profile to use. See below for more information
   -u , --user           Username
   -p , --password       Password
@@ -69,7 +69,7 @@ options:
   -r , --refresh-interval
                         How much time to wait in seconds between each refresh [default: 1]
   --host-cache-file     Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format ip=hostname [default: ~/dolphie_host_cache]
-  --host-setup-file     Specify location of file that stores the available hosts to use in host setup modal [default: ~/dolphie_hosts]
+  --tab-setup-file      Specify location of file that stores the available hosts to use in Tab Setup modal [default: ~/dolphie_hosts]
   --heartbeat-table     (MySQL only) If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW REPLICA STATUS
   --ssl-mode            Desired security state of the connection to the host. Supports: REQUIRED/VERIFY_CA/VERIFY_IDENTITY [default: OFF]
   --ssl-ca              Path to the file that contains a CA (certificate authority)
@@ -145,7 +145,7 @@ Environment variables support these options:
 	DOLPHIE_SSL_KEY
 
 Dolphie's config supports these options under [dolphie] section:
-	(bool) host_setup
+	(bool) tab_setup
 	(str) credential_profile
 	(str) user
 	(str) password
@@ -159,7 +159,7 @@ Dolphie's config supports these options under [dolphie] section:
 	(str) mycnf_file
 	(str) login_path
 	(str) host_cache_file
-	(str) host_setup_file
+	(str) tab_setup_file
 	(int) refresh_interval
 	(str) heartbeat_table
 	(str) startup_panels
