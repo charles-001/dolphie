@@ -1,4 +1,3 @@
-from dolphie.Widgets.topbar import TopBar
 from rich.style import Style
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -6,6 +5,8 @@ from textual.containers import Center, Container
 from textual.screen import Screen
 from textual.widgets import Label, Rule, Static, TextArea
 from textual.widgets.text_area import TextAreaTheme
+
+from dolphie.Widgets.topbar import TopBar
 
 
 class ProxySQLThreadScreen(Screen):
@@ -100,7 +101,7 @@ class ProxySQLThreadScreen(Screen):
         yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
 
         with Container(id="thread_container"):
-            yield Label("Process Details", classes="title")
+            yield Label("Thread Details", classes="title")
             yield Center(Static(id="thread_table", shrink=True, classes="table"))
 
         with Container(id="query_container"):

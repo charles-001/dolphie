@@ -94,7 +94,8 @@ class CommandPaletteCommands(Provider):
     def get_command_hits(self):
         """Helper function to get all commands and format them for discovery or search."""
         commands = self.dolphie_app.command_manager.get_commands(
-            self.dolphie_app.tab_manager.active_tab.dolphie.connection_source
+            self.dolphie_app.tab_manager.active_tab.dolphie.replay_file,
+            self.dolphie_app.tab_manager.active_tab.dolphie.connection_source,
         )
 
         # Find the longest human_key length
@@ -155,7 +156,7 @@ class DolphieApp(App):
         super().__init__()
 
         self.config = config
-        self.command_manager = CommandManager(config.replay_file)
+        self.command_manager = CommandManager()
         self.loading_hostgroups: bool = False
 
         theme = Theme(
@@ -192,7 +193,7 @@ class DolphieApp(App):
             )
             logger.info(f"Log file: {config.daemon_mode_log_file}")
 
-    @work(thread=True, group="replay", exclusive=True)
+    @work(thread=True, group="replay")
     async def run_worker_replay(self, tab_id: int, manual_control: bool = False):
         tab = self.tab_manager.get_tab(tab_id)
 
@@ -215,17 +216,26 @@ class DolphieApp(App):
         replay_event_data = tab.replay_manager.get_next_refresh_interval()
         # If there's no more events, cancel the worker
         if not replay_event_data:
-            if not manual_control:
-                self.notify("Replay has finished", severity="success")
-
             tab.worker.cancel()
 
-        # Update the dashboard title with the timestamp of the replay event
-        tab.dashboard_replay.update(
-            f"[b]Replay[/b] [dark_gray]|[/dark_gray] " f"[b light_blue]{replay_event_data.timestamp}[/b light_blue]"
+        min_timestamp = tab.replay_manager.min_timestamp
+        max_timestamp = tab.replay_manager.max_timestamp
+        current_timestamp = replay_event_data.timestamp
+
+        # Highlight if the min or max timestamp matches the current timestamp
+        min_timestamp = (
+            f"[b light_blue]{min_timestamp}[/b light_blue]" if min_timestamp == current_timestamp else min_timestamp
         )
+        max_timestamp = (
+            f"[b light_blue]{max_timestamp}[/b light_blue]" if max_timestamp == current_timestamp else max_timestamp
+        )
+
+        # Update the dashboard title with the timestamp of the replay event
+        tab.dashboard_replay.update(f"[b]Replay[/b] ([dark_gray]{os.path.basename(dolphie.replay_file)}[/dark_gray])")
         tab.dashboard_replay_start_end.update(
-            f"{tab.replay_manager.min_timestamp}[b highlight] →[/b highlight] {tab.replay_manager.max_timestamp}"
+            f"{min_timestamp} [b highlight]←[/b highlight] "
+            f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]→[/b highlight] "
+            f"{max_timestamp}"
         )
 
         dolphie.detect_global_variable_change(
@@ -238,18 +248,29 @@ class DolphieApp(App):
         common_metrics = {"global_variables": dolphie.global_variables, "global_status": dolphie.global_status}
 
         if dolphie.connection_source == ConnectionSource.mysql:
+            dolphie.set_host_version(dolphie.global_variables.get("version"))
+
             dolphie.binlog_status = replay_event_data.binlog_status
             dolphie.innodb_metrics = replay_event_data.innodb_metrics
             dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
             dolphie.processlist_threads = replay_event_data.processlist
             dolphie.replication_status = replay_event_data.replication_status
             dolphie.metadata_locks = replay_event_data.metadata_locks
+            dolphie.group_replication_members = replay_event_data.group_replication_members
+            dolphie.group_replication_data = replay_event_data.group_replication_data
 
             connection_source_metrics = {
                 "innodb_metrics": dolphie.innodb_metrics,
                 "replication_status": dolphie.replication_status,
             }
+
+            replication_panel.fetch_replicas(tab)
+
+            if not dolphie.server_uuid:
+                dolphie.configure_mysql_variables()
         elif dolphie.connection_source == ConnectionSource.proxysql:
+            dolphie.set_host_version(dolphie.global_variables.get("admin-version"))
+
             dolphie.proxysql_command_stats = replay_event_data.command_stats
             dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
             dolphie.processlist_threads = replay_event_data.processlist
@@ -281,16 +302,13 @@ class DolphieApp(App):
         dolphie = tab.dolphie
         try:
             if not dolphie.main_db_connection.is_connected():
-                self.tab_manager.rename_tab(tab)  # this will use host instead of host_with_port
                 self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connecting)
 
                 tab.replay_manager = None
-                if not dolphie.daemon_mode:
+                if not dolphie.daemon_mode and tab == self.tab_manager.active_tab:
                     tab.loading_indicator.display = True
 
                 dolphie.db_connect()
-                # this will use host_with_port instead of just the host since we're connected at this point
-                self.tab_manager.rename_tab(tab)
 
             worker_start_time = datetime.now()
             dolphie.polling_latency = (worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -322,7 +340,7 @@ class DolphieApp(App):
             tab.replay_manager.capture_state()
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
-            # host setup modal with the error
+            # tab setup modal with the error
             tab.worker_cancel_error = exception
 
             await self.tab_manager.disconnect_tab(tab)
@@ -463,6 +481,7 @@ class DolphieApp(App):
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
+                    replication_panel.create_replica_panel(tab)
                 elif dolphie.connection_source == ConnectionSource.proxysql:
                     self.refresh_screen_proxysql(tab)
 
@@ -475,10 +494,13 @@ class DolphieApp(App):
         dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
+        # At this point, we're connected so we need to do a few things
         if dolphie.connection_status == ConnectionStatus.connecting:
             self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
             dolphie.set_host_version(dolphie.global_variables.get("version"))
-            dolphie.setup_connection_mysql()
+            dolphie.get_group_replication_metadata()
+            dolphie.configure_mysql_variables()
+            dolphie.validate_metadata_locks_enabled()
 
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
@@ -495,12 +517,7 @@ class DolphieApp(App):
         available_replicas = dolphie.main_db_connection.fetchall()
 
         if dolphie.daemon_mode:
-            # Reduce how much data we're storing
-            replicas = []
-            for replica in available_replicas:
-                replicas.append(replica.get("host"))
-
-            dolphie.replica_manager.available_replicas = replicas
+            dolphie.replica_manager.available_replicas = available_replicas
         else:
             # We update the replica ports used if the number of replicas have changed
             if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
@@ -557,20 +574,14 @@ class DolphieApp(App):
         if not dolphie.global_status.get("Innodb_lsn_current"):
             dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status["Innodb_os_log_written"]
 
-        if not dolphie.daemon_mode and (dolphie.group_replication or dolphie.innodb_cluster):
+        if dolphie.group_replication or dolphie.innodb_cluster:
             if dolphie.is_mysql_version_at_least("8.0.13"):
-                dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
-                dolphie.group_replication_data = dolphie.main_db_connection.fetchone()
+                dolphie.group_replication_data["write_concurrency"] = dolphie.main_db_connection.fetch_value_from_field(
+                    MySQLQueries.group_replication_get_write_concurrency, "write_concurrency"
+                )
 
             dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
             dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
-            for member_role_data in dolphie.group_replication_members:
-                if (
-                    member_role_data.get("MEMBER_ID") == dolphie.server_uuid
-                    and member_role_data.get("MEMBER_ROLE") == "PRIMARY"
-                ):
-                    dolphie.is_group_replication_primary = True
-                    break
 
         if dolphie.panels.dashboard.visible or dolphie.record_for_replay:
             if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
@@ -817,13 +828,9 @@ class DolphieApp(App):
         else:
             tab = await self.tab_manager.create_tab(tab_name="Initial Tab")
 
-            if self.config.host_setup:
+            if self.config.tab_setup:
                 self.tab_manager.setup_host_tab(tab)
             elif self.tab_manager.active_tab.dolphie.replay_file:
-                self.notify(
-                    f"File: [highlight]{tab.dolphie.replay_file}[/highlight]", title="Replay started", timeout=10
-                )
-
                 self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
                 self.tab_manager.rename_tab(tab)
                 self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
@@ -842,23 +849,12 @@ class DolphieApp(App):
 
     @on(Button.Pressed, "#back_button")
     def replay_back(self):
-        tab = self.tab_manager.active_tab
-
-        if tab.replay_manager.current_index - 1 <= tab.replay_manager.min_id:
-            self.notify("Replay has reached the beginning", severity="warning")
-
         # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
-        tab.replay_manager.current_index -= 2
-
+        self.tab_manager.active_tab.replay_manager.current_index -= 2
         self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#forward_button")
     def replay_forward(self):
-        tab = self.tab_manager.active_tab
-
-        if tab.replay_manager.current_index + 1 >= tab.replay_manager.max_id:
-            self.notify("Replay has reached the end", severity="warning")
-
         self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#pause_button")
@@ -878,8 +874,7 @@ class DolphieApp(App):
     def replay_seek(self):
         def command_get_input(timestamp: str):
             if timestamp:
-                tab = self.tab_manager.active_tab
-                found_timestamp = tab.replay_manager.seek_to_timestamp(timestamp)
+                found_timestamp = self.tab_manager.active_tab.replay_manager.seek_to_timestamp(timestamp)
 
                 if found_timestamp:
                     self.force_refresh_for_replay()
@@ -1155,7 +1150,7 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if key not in self.command_manager.exclude_keys:
-            if not self.command_manager.get_commands(dolphie.connection_source).get(key):
+            if not self.command_manager.get_commands(dolphie.replay_file, dolphie.connection_source).get(key):
                 self.notify(f"Key [highlight]{key}[/highlight] is not a valid command", severity="warning")
                 return
 
@@ -1193,20 +1188,34 @@ class DolphieApp(App):
 
                 return
 
+            # If we're in replay mode and there's no replication status, replicas or group replication, stop here
+            if dolphie.replay_file and (
+                not dolphie.replication_status
+                and not dolphie.replica_manager.replicas
+                and not dolphie.group_replication_members
+            ):
+                self.notify("This replay file has no replication data")
+                return
+
             self.toggle_panel(dolphie.panels.replication.name)
             self.size_dashboard_sections(tab)
 
             if dolphie.panels.replication.visible:
                 if dolphie.replica_manager.available_replicas:
                     tab.replicas_container.display = True
-                    tab.replicas_loading_indicator.display = True
+
+                    # No loading animation necessary for replay mode
+                    if not dolphie.replay_file:
+                        tab.replicas_loading_indicator.display = True
+
+                        tab.replicas_title.update(
+                            f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
+                            " replicas...\n"
+                        )
+
                     for container in dolphie.app.query(".replica_container"):
                         container.display = tab.id in container.id
 
-                    tab.replicas_title.update(
-                        f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
-                        " replicas...\n"
-                    )
                 if dolphie.group_replication_members:
                     tab.group_replication_container.display = True
                     for container in dolphie.app.query(".member_container"):
@@ -1710,9 +1719,7 @@ class DolphieApp(App):
                     table,
                 )
             else:
-                screen_data = Group(
-                    Align.center("[b light_blue]Host Cache[/b light_blue]\n"), "There are currently no hosts resolved"
-                )
+                self.notify("There are currently no hosts resolved")
 
         if screen_data:
             self.app.push_screen(

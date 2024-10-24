@@ -22,42 +22,42 @@ from dolphie.Modules.ManualException import ManualException
 from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
 
 
-class HostSetupModal(ModalScreen):
+class TabSetupModal(ModalScreen):
     CSS = """
-        HostSetupModal > Vertical {
+        TabSetupModal > Vertical {
             background: #131626;
             border: tall #384673;
             height: auto;
             width: 70;
         }
-        HostSetupModal > Vertical > * {
+        TabSetupModal > Vertical > * {
             width: auto;
             height: auto;
             align: center middle;
         }
-        HostSetupModal > Vertical > Vertical  > Container {
+        TabSetupModal > Vertical > Vertical  > Container {
             width: 100%;
             height: auto;
         }
-        HostSetupModal Label {
+        TabSetupModal Label {
             text-style: bold;
             width: 100%;
             content-align: center middle;
             padding-bottom: 1;
         }
-        HostSetupModal Rule {
+        TabSetupModal Rule {
             width: 100%;
             margin-bottom: 1;
         }
-        HostSetupModal Input {
+        TabSetupModal Input {
             width: 100%;
             border-title-color: #d2d2d2;
         }
-        HostSetupModal .main_container {
+        TabSetupModal .main_container {
             width: 100%;
             content-align: center middle;
         }
-        HostSetupModal RadioSet {
+        TabSetupModal RadioSet {
             background: #131626;
             border: none;
             padding-bottom: 1;
@@ -65,90 +65,101 @@ class HostSetupModal(ModalScreen):
             width: 100%;
             layout: horizontal;
         }
-        HostSetupModal AutoComplete {
+        TabSetupModal AutoComplete {
             width: 100%;
             height: auto;
         }
-        HostSetupModal #password {
-            width: 88%;
+        TabSetupModal #password {
+            width: 53;
         }
-        HostSetupModal #show_password {
-            max-width: 13%;
+        TabSetupModal #show_password {
+            max-width: 8;
             height: 3;
             background: #262c4b;
             border: blank #344063;
         }
-        HostSetupModal #show_password:hover {
+        TabSetupModal #show_password:hover {
             background:  #313960;
             border: blank #344063;
         }
-        HostSetupModal #show_password:focus {
+        TabSetupModal #show_password:focus {
             background:  #313960;
             border: blank #344063;
         }
-        HostSetupModal #modal_footer {
+        TabSetupModal #modal_footer {
             color: #d3565c;
             width: 100%;
             padding-bottom: 0;
             padding-top: 1;
             margin: 0 2;
         }
-        HostSetupModal Checkbox {
+        TabSetupModal #replay_directory {
+            padding-left: 3;
+            padding-bottom: 1;
+        }
+        TabSetupModal Checkbox {
             background: #131626;
             border: none;
             padding-left: 2;
             padding-bottom: 1;
             content-align: left middle;
         }
-        HostSetupModal Select {
-            width: 100%;
+        TabSetupModal Select {
             margin: 0 2;
             margin-bottom: 1;
+            width: 100%;
         }
-        HostSetupModal SelectCurrent Static#label {
+        TabSetupModal SelectCurrent Static#label {
             color: #606e88;
         }
-        HostSetupModal SelectCurrent.-has-value Static#label {
+        TabSetupModal SelectCurrent.-has-value Static#label {
             color: #e9e9e9;
         }
-        HostSetupModal Select:focus > SelectCurrent {
+        TabSetupModal Select:focus > SelectCurrent {
             border: tall #384673;
         }
-        HostSetupModal SelectCurrent {
+        TabSetupModal SelectCurrent {
             background: #111322;
             border: tall #252e49;
         }
-        HostSetupModal Select > OptionList:focus {
+        TabSetupModal Select > OptionList:focus {
             margin: 0 0 0 0;
             height: auto;
             max-height: 15;
             border: tall #3c476b;
         }
-        HostSetupModal OptionList {
+        TabSetupModal OptionList {
             background: #111322;
             border: tall #252e49;
             width: 100%;
             height: 15;
             margin: 0 1 0 1;
         }
-        HostSetupModal OptionList:focus {
+        TabSetupModal #replay_file > SelectOverlay > .option-list--option {
+            padding: 0;
+        }
+        TabSetupModal #replay_file > OptionList {
+            width: auto;
+            min-width: 100%;
+        }
+        TabSetupModal OptionList:focus {
             border: tall #475484;
         }
-        HostSetupModal OptionList > .option-list--option-highlighted {
+        TabSetupModal OptionList > .option-list--option-highlighted {
             text-style: none;
             background: #131626;
         }
-        HostSetupModal OptionList:focus > .option-list--option-highlighted {
+        TabSetupModal OptionList:focus > .option-list--option-highlighted {
             background: #283048;
         }
-        HostSetupModal OptionList > .option-list--option-hover {
+        TabSetupModal OptionList > .option-list--option-hover {
             background: #283048;
         }
-        HostSetupModal OptionList > .option-list--option-hover-highlighted {
+        TabSetupModal OptionList > .option-list--option-hover-highlighted {
             background: #283048;
             text-style: none;
         }
-        HostSetupModal OptionList:focus > .option-list--option-hover-highlighted {
+        TabSetupModal OptionList:focus > .option-list--option-hover-highlighted {
             background: #283048;
             text-style: none;
         }
@@ -169,6 +180,8 @@ class HostSetupModal(ModalScreen):
         socket_file: str,
         available_hosts: list,
         hostgroups: dict,
+        replay_files: list,
+        replay_directory: str,
         error_message: ManualException = None,
     ):
         super().__init__()
@@ -184,6 +197,7 @@ class HostSetupModal(ModalScreen):
         self.password = password
         self.ssl = ssl
         self.socket_file = socket_file
+        self.replay_directory = replay_directory
 
         if self.host and self.port:
             self.host = f"{self.host}:{self.port}"
@@ -199,6 +213,10 @@ class HostSetupModal(ModalScreen):
         self.options_credential_profiles = []
         if credential_profiles:
             self.options_credential_profiles = [(profile, profile) for profile in credential_profiles.keys()]
+
+        self.options_replay_files = []
+        if replay_files:
+            self.options_replay_files = [(replay_file, replay_path) for replay_path, replay_file in replay_files]
 
         self.error_message = error_message
 
@@ -241,7 +259,7 @@ class HostSetupModal(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical():
             with Vertical(classes="main_container"):
-                yield Label("Host Setup")
+                yield Label("Connect to a Host")
 
                 yield Select(
                     options=self.options_credential_profiles,
@@ -276,10 +294,19 @@ class HostSetupModal(ModalScreen):
                     yield Input(id="ssl_cert")
                     yield Input(id="ssl_key")
                 yield Rule(line_style="heavy")
+                yield Label("Connect with a Hostgroup")
                 yield Select(
                     options=self.options_hostgroups,
                     id="hostgroup",
-                    prompt="Select a hostgroup (optional)",
+                    prompt="Select a hostgroup",
+                )
+                yield Rule(line_style="heavy")
+                yield Label("Load a Replay File")
+                yield Static(f"[dark_gray][b]Directory[/b]: {self.replay_directory}", id="replay_directory")
+                yield Select(
+                    options=self.options_replay_files,
+                    id="replay_file",
+                    prompt="Select a replay file",
                 )
             with Horizontal(classes="button_container"):
                 yield Button("Submit", id="submit", variant="primary")
@@ -317,25 +344,32 @@ class HostSetupModal(ModalScreen):
         else:
             self.query_one("#ssl", Checkbox).value = False
 
+    def update_inputs(self, disable: bool = None, exclude: list = []):
+        inputs = {
+            "#host": Input,
+            "#username": Input,
+            "#password": Input,
+            "#socket_file": Input,
+            "#ssl": Checkbox,
+            "#show_password": Button,
+            "#credential_profile": Select,
+            "#hostgroup": Select,
+        }
+        for key, widget in inputs.items():
+            if key not in exclude:
+                input_element = self.query_one(key, widget)
+                if disable is not None:
+                    input_element.disabled = disable
+                    if key == "#ssl" and disable:  # Reset SSL checkbox when disabled
+                        input_element.value = False
+
     @on(Select.Changed, "#hostgroup")
     def hostgroup_changed(self, event: Select.Changed):
-        if event.value == Select.BLANK:
-            self.query_one("#host", Input).disabled = False
-            self.query_one("#username", Input).disabled = False
-            self.query_one("#password", Input).disabled = False
-            self.query_one("#socket_file", Input).disabled = False
-            self.query_one("#ssl", Checkbox).disabled = False
-            self.query_one("#show_password", Button).disabled = False
-            self.query_one("#credential_profile", Select).disabled = False
-        elif event.value:
-            self.query_one("#host", Input).disabled = True
-            self.query_one("#username", Input).disabled = True
-            self.query_one("#password", Input).disabled = True
-            self.query_one("#socket_file", Input).disabled = True
-            self.query_one("#ssl", Checkbox).value = False
-            self.query_one("#ssl", Checkbox).disabled = True
-            self.query_one("#show_password", Button).disabled = True
-            self.query_one("#credential_profile", Select).disabled = True
+        self.update_inputs(disable=event.value != Select.BLANK, exclude=["#hostgroup"])
+
+    @on(Select.Changed, "#replay_file")
+    def replay_file_changed(self, event: Select.Changed):
+        self.update_inputs(disable=event.value != Select.BLANK, exclude=["#replay_file"])
 
     @on(RadioSet.Changed, "#ssl_mode")
     def ssl_mode_changed(self, event: RadioSet.Changed):
@@ -377,6 +411,7 @@ class HostSetupModal(ModalScreen):
             error_message = None
 
             credential_profile = self.query_one("#credential_profile", Select)
+            replay_file = self.query_one("#replay_file", Select)
             host = self.query_one("#host", Input)
             hostgroup = self.query_one("#hostgroup", Select)
             username = self.query_one("#username", Input)
@@ -418,10 +453,8 @@ class HostSetupModal(ModalScreen):
                     ssl["key"] = ssl_key
 
             socket_file = self.query_one("#socket_file", Input)
-
-            hostgroup_value = hostgroup.value
-            if hostgroup_value == Select.BLANK:
-                hostgroup_value = None
+            hostgroup_value = None if hostgroup.value == Select.BLANK else hostgroup.value
+            replay_file_value = None if replay_file.value == Select.BLANK else replay_file.value
 
             modal_footer = self.query_one("#modal_footer", Label)
             host_split = host.value.split(":")
@@ -433,8 +466,8 @@ class HostSetupModal(ModalScreen):
             elif len(host_split) > 2:
                 error_message = "Host cannot contain more than one colon"
 
-            if not host.value and not hostgroup_value:
-                error_message = "You must specify either a host or hostgroup"
+            if not host.value and not hostgroup_value and not replay_file_value:
+                error_message = "You must specify either a host, hostgroup, or replay file"
 
             if error_message:
                 modal_footer.update(error_message)
@@ -444,6 +477,7 @@ class HostSetupModal(ModalScreen):
             self.dismiss(
                 {
                     "credential_profile": credential_profile.value,
+                    "replay_file": replay_file_value,
                     "host": host.value,
                     "hostgroup": hostgroup_value,
                     "username": username.value,

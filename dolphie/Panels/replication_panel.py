@@ -1,17 +1,18 @@
 import re
 import socket
 
+from rich.align import Align
+from rich.style import Style
+from rich.table import Table
+from textual.containers import ScrollableContainer
+from textual.widgets import Static
+
 from dolphie.DataTypes import ConnectionSource, Replica
 from dolphie.Modules.Functions import format_number, format_time
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
-from rich.align import Align
-from rich.style import Style
-from rich.table import Table
-from textual.containers import ScrollableContainer
-from textual.widgets import Static
 
 
 def create_panel(tab: Tab):
@@ -550,6 +551,9 @@ def create_group_replication_member_table(tab: Tab):
             "table": table,
         }
 
+        if row.get("MEMBER_ID") == dolphie.server_uuid and row.get("MEMBER_ROLE") == "PRIMARY":
+            dolphie.is_group_replication_primary = True
+
     return group_replica_tables
 
 
@@ -612,7 +616,7 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
 def fetch_replicas(tab: Tab):
     dolphie = tab.dolphie
 
-    # Only run this query if we don't have replica ports or if the number of replicas has changed
+    # If replicas don't match available_replicas, we need need to sync
     if len(dolphie.replica_manager.replicas) != len(dolphie.replica_manager.available_replicas):
         # Remove replica connections that no longer exist
         unique_ids = {row["id"] for row in dolphie.replica_manager.available_replicas}
@@ -660,47 +664,61 @@ def fetch_replicas(tab: Tab):
 
         replica = dolphie.replica_manager.get(thread_id)
 
-        # If we don't have a replica connection, we create one
-        if not replica:
-            try:
-                replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port)
-                replica.connection = Database(
-                    app=dolphie.app,
-                    host=host,
-                    user=dolphie.user,
-                    password=dolphie.password,
-                    port=port,
-                    socket=None,
-                    ssl=dolphie.ssl,
-                    save_connection_id=False,
-                )
+        if dolphie.replay_file:
+            if not replica:
+                replica = dolphie.replica_manager.add(thread_id=thread_id, host=host)
 
-                # Save the MySQL version for the replica
-                version_split = replica.connection.fetch_value_from_field("SELECT @@version").split(".")
-                replica.mysql_version = "%s.%s.%s" % (
-                    version_split[0],
-                    version_split[1],
-                    version_split[2].split("-")[0],
-                )
-            except ManualException as e:
-                replica_error = e.reason
-
-        # If we have a replica connection, we fetch its replication status
-        if replica.connection:
-            try:
-                replica.replication_status = fetch_replication_data(tab, replica)
-                if replica.replication_status:
-                    replica.table = create_replication_table(tab, replica=replica)
-            except ManualException as e:
-                replica_error = e.reason
-
-        if replica_error:
             table = Table(box=None, show_header=False)
             table.add_column()
             table.add_column(overflow="fold")
 
-            table.add_row("[b][light_blue]Host", "[light_blue]%s:%s" % (host, port))
+            table.add_row("[b][light_blue]Host", "[light_blue]%s" % host)
             table.add_row("[label]User", row["user"])
-            table.add_row("[label]Error", "[red]%s[/red]" % replica_error)
+            table.add_row("[label]Thread ID", str(thread_id))
 
             replica.table = table
+        else:
+            # If we don't have a replica connection, we create one
+            if not replica:
+                try:
+                    replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port)
+                    replica.connection = Database(
+                        app=dolphie.app,
+                        host=host,
+                        user=dolphie.user,
+                        password=dolphie.password,
+                        port=port,
+                        socket=None,
+                        ssl=dolphie.ssl,
+                        save_connection_id=False,
+                    )
+
+                    # Save the MySQL version for the replica
+                    version_split = replica.connection.fetch_value_from_field("SELECT @@version").split(".")
+                    replica.mysql_version = "%s.%s.%s" % (
+                        version_split[0],
+                        version_split[1],
+                        version_split[2].split("-")[0],
+                    )
+                except ManualException as e:
+                    replica_error = e.reason
+
+            # If we have a replica connection, we fetch its replication status
+            if replica.connection:
+                try:
+                    replica.replication_status = fetch_replication_data(tab, replica)
+                    if replica.replication_status:
+                        replica.table = create_replication_table(tab, replica=replica)
+                except ManualException as e:
+                    replica_error = e.reason
+
+            if replica_error:
+                table = Table(box=None, show_header=False)
+                table.add_column()
+                table.add_column(overflow="fold")
+
+                table.add_row("[b][light_blue]Host", "[light_blue]%s:%s" % (host, port))
+                table.add_row("[label]User", row["user"])
+                table.add_row("[label]Error", "[red]%s[/red]" % replica_error)
+
+                replica.table = table

@@ -1,4 +1,5 @@
 import ipaddress
+import os
 import socket
 from datetime import datetime
 from typing import Dict, Union
@@ -33,13 +34,13 @@ class Dolphie:
         self.socket = config.socket
         self.ssl = config.ssl
         self.host_cache_file = config.host_cache_file
-        self.host_setup_file = config.host_setup_file
+        self.tab_setup_file = config.tab_setup_file
         self.refresh_interval = config.refresh_interval
         self.show_trxs_only = config.show_trxs_only
         self.show_threads_with_concurrency_tickets = False
         self.show_additional_query_columns = config.show_additional_query_columns
         self.heartbeat_table = config.heartbeat_table
-        self.host_setup_available_hosts = config.host_setup_available_hosts
+        self.tab_setup_available_hosts = config.tab_setup_available_hosts
         self.startup_panels = config.startup_panels
         self.graph_marker = config.graph_marker
         self.hostgroup = config.hostgroup
@@ -162,10 +163,10 @@ class Dolphie:
 
         self.metric_manager.connection_source = self.connection_source
 
-        # Add host to host setup file if it doesn't exist
-        self.add_host_to_host_setup_file()
+        # Add host to tab setup file if it doesn't exist
+        self.add_host_to_tab_setup_file()
 
-    def setup_connection_mysql(self):
+    def configure_mysql_variables(self):
         global_variables = self.global_variables
 
         version_comment = global_variables.get("version_comment").lower()
@@ -212,7 +213,22 @@ class Dolphie:
         if global_variables.get("wsrep_on") == "ON" or global_variables.get("wsrep_cluster_address"):
             self.galera_cluster = True
 
-        # Check to get information on what cluster type it is
+        # Check to see if the host is in a InnoDB cluster
+        if self.group_replication_data.get("cluster_type") == "ar":
+            self.replicaset = True
+        elif self.group_replication_data.get("cluster_type") == "gr":
+            self.innodb_cluster = True
+
+            if self.group_replication_data.get("instance_type") == "read-replica":
+                self.innodb_cluster = False  # It doesn't work like an actual member in a cluster so set it to False
+                self.innodb_cluster_read_replica = True
+
+        # Check to see if this is a Group Replication host
+        if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
+            self.group_replication = True
+
+    def get_group_replication_metadata(self):
+        # Check to get information on what cluster/instance type it is
         if self.is_mysql_version_at_least("8.1"):
             query = MySQLQueries.determine_cluster_type_81
         else:
@@ -220,29 +236,14 @@ class Dolphie:
 
         self.main_db_connection.execute(query, ignore_error=True)
         data = self.main_db_connection.fetchone()
+        self.group_replication_data["cluster_type"] = data.get("cluster_type")
+        self.group_replication_data["instance_type"] = data.get("instance_type")
 
-        cluster_type = data.get("cluster_type")
-        instance_type = data.get("instance_type")
-
-        if cluster_type == "ar":
-            self.replicaset = True
-        elif cluster_type == "gr":
-            self.innodb_cluster = True
-
-            if instance_type == "read-replica":
-                self.innodb_cluster = False  # It doesn't work like an actual member in a cluster so set it to False
-                self.innodb_cluster_read_replica = True
-
-        if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
-            self.group_replication = True
-
-        self.validate_metadata_locks_enabled()
-
-    def add_host_to_host_setup_file(self):
+    def add_host_to_tab_setup_file(self):
         if self.daemon_mode:
             return
 
-        with open(self.host_setup_file, "a+") as file:
+        with open(self.tab_setup_file, "a+") as file:
             file.seek(0)
             lines = file.readlines()
 
@@ -253,7 +254,7 @@ class Dolphie:
 
             if host not in lines:
                 file.write(host)
-                self.host_setup_available_hosts.append(host[:-1])  # remove the \n
+                self.tab_setup_available_hosts.append(host[:-1])  # remove the \n
 
     def is_mysql_version_at_least(self, target: str, use_version: str = None):
         version = self.host_version
@@ -372,3 +373,38 @@ class Dolphie:
             return
 
         self.metadata_locks_enabled = True
+
+    def get_replay_files(self):
+        """
+        Gets a list of replay files in the replay directory.
+
+        Returns:
+            list: A list of tuples in the format (full_path, formatted host name + replay name).
+        """
+        if not self.replay_dir or not os.path.exists(self.replay_dir):
+            return []
+
+        replay_files = []
+        try:
+            with os.scandir(self.replay_dir) as entries:
+                for entry in entries:
+                    if entry.is_dir():
+                        entry_path = entry.path
+                        for file in os.scandir(entry_path):
+                            if file.is_file():
+                                # Get first 30 characters of the host name
+                                host_name = entry.name[:30]
+
+                                # Only set port if the host name is 30 characters or more
+                                port = ""
+                                if len(entry.name) >= 30 and "_" in entry.name:
+                                    port = "_" + entry.name.rsplit("_", 1)[-1]
+
+                                formatted_replay_name = f"[label]{host_name}{port}[/label]"
+                                formatted_replay_name += f": [b light_blue]{file.name}[/b light_blue]"
+
+                                replay_files.append((file.path, formatted_replay_name))
+        except OSError as e:
+            self.app.notify(str(e), title="Error getting replay files", severity="error")
+
+        return replay_files

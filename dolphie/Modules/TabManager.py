@@ -32,8 +32,8 @@ from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import Config, HostGroupMember
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.ReplayManager import ReplayManager
-from dolphie.Widgets.host_setup import HostSetupModal
 from dolphie.Widgets.spinner import SpinnerWidget
+from dolphie.Widgets.tab_setup import TabSetupModal
 from dolphie.Widgets.topbar import TopBar
 
 
@@ -138,6 +138,7 @@ class TabManager:
         tab.dolphie.connection_status = connection_status
 
         self.update_topbar(tab=tab)
+        self.rename_tab(tab)
 
     def update_topbar(self, tab: Tab):
         dolphie = tab.dolphie
@@ -308,6 +309,7 @@ class TabManager:
         # If we're using hostgroups
         config = copy.deepcopy(self.config)
         if hostgroup_member and self.config.hostgroup_hosts:
+            config.replay_file = None
             config.host = hostgroup_member.host
             config.port = hostgroup_member.port
             tab.manual_tab_name = hostgroup_member.tab_title
@@ -586,8 +588,6 @@ class TabManager:
         tab.replicas_container.display = False
         tab.group_replication_container.display = False
 
-        tab.dolphie.replay_file = None
-
         # Remove all the replica and member containers
         queries = [f".replica_container_{tab.id}", f".member_container_{tab.id}"]
         for query in queries:
@@ -601,9 +601,9 @@ class TabManager:
         dolphie = tab.dolphie
 
         async def command_get_input(data):
-            # Set host_setup to false since it's only used when Dolphie first loads
-            if self.config.host_setup:
-                self.config.host_setup = False
+            # Set tab_setup to false since it's only used when Dolphie first loads
+            if self.config.tab_setup:
+                self.config.tab_setup = False
 
             host_port = data["host"].split(":")
 
@@ -619,6 +619,8 @@ class TabManager:
             if hostgroup:
                 dolphie.app.connect_as_hostgroup(hostgroup)
             else:
+                dolphie.replay_file = data.get("replay_file")
+
                 await self.disconnect_tab(tab)
 
                 tab.loading_indicator.display = True
@@ -626,13 +628,17 @@ class TabManager:
                     if not tab.worker_running and not tab.replicas_worker_running:
                         tab.worker_cancel_error = ""
 
-                        # Edge case if a user switches from a replay to connecting
-                        dolphie.replay_file = None
                         tab.dashboard_replay_container.display = False
 
                         dolphie.reset_runtime_variables()
-                        dolphie.app.run_worker_main(tab.id)
-                        dolphie.app.run_worker_replicas(tab.id)
+
+                        if dolphie.replay_file:
+                            tab.replay_manager = ReplayManager(dolphie)
+                            self.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+                            dolphie.app.run_worker_replay(tab.id)
+                        else:
+                            dolphie.app.run_worker_main(tab.id)
+                            dolphie.app.run_worker_replicas(tab.id)
 
                         break
 
@@ -643,7 +649,7 @@ class TabManager:
         if (
             tab.worker_cancel_error
             or dolphie.connection_status == ConnectionStatus.disconnected
-            or self.config.host_setup
+            or self.config.tab_setup
         ):
             host = dolphie.host
             port = dolphie.port
@@ -652,7 +658,7 @@ class TabManager:
             port = ""
 
         dolphie.app.push_screen(
-            HostSetupModal(
+            TabSetupModal(
                 credential_profile=dolphie.credential_profile,
                 credential_profiles=dolphie.config.credential_profiles,
                 host=host,
@@ -662,7 +668,9 @@ class TabManager:
                 ssl=dolphie.ssl,
                 socket_file=dolphie.socket,
                 hostgroups=dolphie.hostgroup_hosts.keys(),
-                available_hosts=dolphie.host_setup_available_hosts,
+                available_hosts=dolphie.tab_setup_available_hosts,
+                replay_directory=dolphie.config.replay_dir,
+                replay_files=dolphie.get_replay_files(),
                 error_message=tab.worker_cancel_error,
             ),
             command_get_input,

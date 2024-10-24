@@ -30,6 +30,8 @@ class MySQLReplayData:
     processlist: dict
     metric_manager: dict
     metadata_locks: dict
+    group_replication_data: dict
+    group_replication_members: dict
 
 
 @dataclass
@@ -57,7 +59,7 @@ class ReplayManager:
         """
         self.dolphie = dolphie
         # We will increment this to force a new replay file if the schema changes in future versions
-        self.schema_version = 1
+        self.schema_version = 2
         self.connection: sqlite3.Connection = None
         self.cursor: sqlite3.Cursor = None
         self.current_index = 0  # This is used to keep track of the last primary key read from the database
@@ -121,8 +123,8 @@ class ReplayManager:
         metadata_table_query = """
             CREATE TABLE IF NOT EXISTS metadata (
                 schema_version INTEGER DEFAULT 1,
-                hostname VARCHAR(255),
-                host_version VARCHAR(255),
+                host VARCHAR(255),
+                port INTEGER,
                 host_distro VARCHAR(255),
                 connection_source VARCHAR(255),
                 dolphie_version VARCHAR(255),
@@ -134,30 +136,6 @@ class ReplayManager:
         if self.cursor.execute("PRAGMA auto_vacuum").fetchone()[0] != 1:
             self.cursor.execute("PRAGMA auto_vacuum = FULL")
             self.cursor.execute("VACUUM")
-
-        # This is temporary for backwards compatibility with older replay files
-        columns = [info[1] for info in self.cursor.execute("PRAGMA table_info(metadata)").fetchall()]
-        if "schema_version" not in columns:
-            logger.warning("The 'schema_version' column is missing in the metadata table. Adding it...")
-
-            self.cursor.execute("ALTER TABLE metadata RENAME TO metadata_old")
-            self.cursor.execute(metadata_table_query)
-            self.cursor.execute(
-                f"""
-                INSERT INTO metadata (
-                    schema_version, hostname, host_version, host_distro, connection_source,
-                    dolphie_version, compression_dict
-                )
-                SELECT
-                    {self.schema_version}, hostname, host_version, host_distro, connection_source,
-                    dolphie_version, compression_dict
-                FROM
-                    metadata_old
-                """
-            )
-            self.cursor.execute("DROP TABLE metadata_old")
-
-            logger.success("Column was added")
 
         self.purge_old_data()
 
@@ -240,13 +218,12 @@ class ReplayManager:
         row = self.cursor.execute("SELECT * FROM metadata").fetchone()
         if row is None:
             self.cursor.execute(
-                "INSERT INTO metadata (schema_version, hostname, host_version, host_distro, "
-                "connection_source, dolphie_version) "
+                "INSERT INTO metadata (schema_version, host, port, host_distro, connection_source, dolphie_version)"
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     self.schema_version,
-                    self.dolphie.host_with_port,
-                    self.dolphie.host_version,
+                    self.dolphie.host,
+                    self.dolphie.port,
                     self.dolphie.host_distro,
                     self.dolphie.connection_source,
                     self.dolphie.app_version,
@@ -254,27 +231,9 @@ class ReplayManager:
             )
         else:
             schema_version = row[0]
-            host = row[1]
-            host_version = row[2]
-            host_distro = row[3]
-            connection_source = row[4]
-            app_version = row[5]
-            compress_dict = row[6]
-
-            logger.info(
-                f"Replay database metadata - Host: {host}, Version: {host_version} ({host_distro}), "
-                f"Dolphie: {app_version}"
-            )
-
-            if compress_dict:
-                self.compression_dict = zstd.ZstdCompressionDict(compress_dict)
-                logger.info(
-                    f"ZSTD compression dictionary loaded (size: {format_bytes(len(compress_dict), color=False)})"
-                )
-
             if self.dolphie.daemon_mode:
                 if schema_version != self.schema_version:
-                    new_replay_file = f"{self.replay_file}_v{app_version}"
+                    new_replay_file = f"{self.replay_file}_old_schema_v{schema_version}"
                     logger.warning(
                         f"The schema version of the replay file ({schema_version}) differs from this version "
                         f"of Dolphie's schema version ({self.schema_version}). To avoid potential issues, the "
@@ -283,6 +242,10 @@ class ReplayManager:
 
                     self._create_new_replay_file(new_replay_file)
 
+                    return
+
+            connection_source = row[4]
+            if self.dolphie.daemon_mode:
                 # Avoid mixing connection sources in the same replay file
                 if connection_source != self.dolphie.connection_source:
                     logger.critical(
@@ -292,14 +255,40 @@ class ReplayManager:
                         "the daemon's replay file and restart the daemon."
                     )
 
+            host = row[1]
+            port = row[2]
+            host_distro = row[3]
+            app_version = row[5]
+            compress_dict = row[6]
+
+            logger.info(
+                f"Replay database metadata - Host: {host}, Port: {port}, Source: {connection_source} ({host_distro}), "
+                f"Dolphie: {app_version}"
+            )
+
+            if compress_dict:
+                self.compression_dict = zstd.ZstdCompressionDict(compress_dict)
+                logger.info(
+                    f"ZSTD compression dictionary loaded (size: {format_bytes(len(compress_dict), color=False)})"
+                )
+
     def _get_replay_file_metadata(self):
         """
         Retrieves the replay's metadata from the metadata table.
         """
         row = self.cursor.execute("SELECT * FROM metadata").fetchone()
         if row:
-            self.dolphie.host_with_port = row[1]
-            self.dolphie.host_version = row[2]
+            schema_version = row[0]
+            if schema_version != self.schema_version:
+                raise Exception(
+                    f"The schema version of the replay file ({schema_version}) differs from this version "
+                    f"of Dolphie's schema version ({self.schema_version}). You will need to use a compatiable version "
+                    "of Dolphie to replay this file."
+                )
+
+            self.dolphie.host = row[1]
+            self.dolphie.port = row[2]
+            self.dolphie.host_with_port = f"{self.dolphie.host}:{self.dolphie.port}"
             self.dolphie.host_distro = row[3]
             self.dolphie.connection_source = row[4]
 
@@ -437,11 +426,23 @@ class ReplayManager:
                 {
                     "binlog_status": self.dolphie.binlog_status,
                     "innodb_metrics": self.dolphie.innodb_metrics,
-                    "replica_manager": self.dolphie.replica_manager.available_replicas,
-                    "replication_status": self.dolphie.replication_status,
                     "metadata_locks": self.dolphie.metadata_locks,
                 }
             )
+
+            if self.dolphie.replication_status:
+                data_dict.update({"replication_status": self.dolphie.replication_status})
+
+            if self.dolphie.replica_manager.available_replicas:
+                data_dict.update({"replica_manager": self.dolphie.replica_manager.available_replicas})
+
+            if self.dolphie.group_replication or self.dolphie.innodb_cluster:
+                data_dict.update(
+                    {
+                        "group_replication_data": self.dolphie.group_replication_data,
+                        "group_replication_members": self.dolphie.group_replication_members,
+                    }
+                )
         else:
             # Add ProxySQL specific data to the dictionary
             data_dict.update(
@@ -526,6 +527,8 @@ class ReplayManager:
                 replication_status=data.get("replication_status", {}),
                 metadata_locks=data.get("metadata_locks", {}),
                 processlist=processlist,
+                group_replication_data=data.get("group_replication_data", {}),
+                group_replication_members=data.get("group_replication_members", {}),
             )
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist

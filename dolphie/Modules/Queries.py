@@ -480,9 +480,7 @@ class MySQLQueries:
 
     # Group Replication Event Horizon and Protocol
     group_replication_get_write_concurrency: str = """
-        SELECT
-            group_replication_get_write_concurrency() write_concurrency,
-            group_replication_get_communication_protocol() protocol_version
+        SELECT group_replication_get_write_concurrency() write_concurrency
     """
     get_group_replication_members: str = """
         SELECT
