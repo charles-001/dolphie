@@ -163,10 +163,10 @@ class Dolphie:
 
         self.metric_manager.connection_source = self.connection_source
 
-        # Add host to host setup file if it doesn't exist
+        # Add host to tab setup file if it doesn't exist
         self.add_host_to_tab_setup_file()
 
-    def setup_connection_mysql(self):
+    def configure_mysql_variables(self):
         global_variables = self.global_variables
 
         version_comment = global_variables.get("version_comment").lower()
@@ -213,7 +213,22 @@ class Dolphie:
         if global_variables.get("wsrep_on") == "ON" or global_variables.get("wsrep_cluster_address"):
             self.galera_cluster = True
 
-        # Check to get information on what cluster type it is
+        # Check to see if the host is in a InnoDB cluster
+        if self.group_replication_data.get("cluster_type") == "ar":
+            self.replicaset = True
+        elif self.group_replication_data.get("cluster_type") == "gr":
+            self.innodb_cluster = True
+
+            if self.group_replication_data.get("instance_type") == "read-replica":
+                self.innodb_cluster = False  # It doesn't work like an actual member in a cluster so set it to False
+                self.innodb_cluster_read_replica = True
+
+        # Check to see if this is a Group Replication host
+        if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
+            self.group_replication = True
+
+    def get_group_replication_metadata(self):
+        # Check to get information on what cluster/instance type it is
         if self.is_mysql_version_at_least("8.1"):
             query = MySQLQueries.determine_cluster_type_81
         else:
@@ -221,23 +236,8 @@ class Dolphie:
 
         self.main_db_connection.execute(query, ignore_error=True)
         data = self.main_db_connection.fetchone()
-
-        cluster_type = data.get("cluster_type")
-        instance_type = data.get("instance_type")
-
-        if cluster_type == "ar":
-            self.replicaset = True
-        elif cluster_type == "gr":
-            self.innodb_cluster = True
-
-            if instance_type == "read-replica":
-                self.innodb_cluster = False  # It doesn't work like an actual member in a cluster so set it to False
-                self.innodb_cluster_read_replica = True
-
-        if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
-            self.group_replication = True
-
-        self.validate_metadata_locks_enabled()
+        self.group_replication_data["cluster_type"] = data.get("cluster_type")
+        self.group_replication_data["instance_type"] = data.get("instance_type")
 
     def add_host_to_tab_setup_file(self):
         if self.daemon_mode:
@@ -392,10 +392,12 @@ class Dolphie:
                         entry_path = entry.path
                         for file in os.scandir(entry_path):
                             if file.is_file():
-                                # Get first 30 characters of the host name and get port from end of it
+                                # Get first 30 characters of the host name
                                 host_name = entry.name[:30]
+
+                                # Only set port if the host name is 30 characters or more
                                 port = ""
-                                if "_" in entry.name:
+                                if len(entry.name) >= 30 and "_" in entry.name:
                                     port = "_" + entry.name.rsplit("_", 1)[-1]
 
                                 formatted_replay_name = f"[label]{host_name}{port}[/label]"

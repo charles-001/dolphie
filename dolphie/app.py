@@ -193,7 +193,7 @@ class DolphieApp(App):
             )
             logger.info(f"Log file: {config.daemon_mode_log_file}")
 
-    @work(thread=True, group="replay", exclusive=True)
+    @work(thread=True, group="replay")
     async def run_worker_replay(self, tab_id: int, manual_control: bool = False):
         tab = self.tab_manager.get_tab(tab_id)
 
@@ -254,6 +254,8 @@ class DolphieApp(App):
             dolphie.processlist_threads = replay_event_data.processlist
             dolphie.replication_status = replay_event_data.replication_status
             dolphie.metadata_locks = replay_event_data.metadata_locks
+            dolphie.group_replication_members = replay_event_data.group_replication_members
+            dolphie.group_replication_data = replay_event_data.group_replication_data
 
             connection_source_metrics = {
                 "innodb_metrics": dolphie.innodb_metrics,
@@ -261,6 +263,9 @@ class DolphieApp(App):
             }
 
             replication_panel.fetch_replicas(tab)
+
+            if not dolphie.server_uuid:
+                dolphie.configure_mysql_variables()
         elif dolphie.connection_source == ConnectionSource.proxysql:
             dolphie.proxysql_command_stats = replay_event_data.command_stats
             dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
@@ -293,16 +298,13 @@ class DolphieApp(App):
         dolphie = tab.dolphie
         try:
             if not dolphie.main_db_connection.is_connected():
-                self.tab_manager.rename_tab(tab)  # this will use host instead of host_with_port
                 self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connecting)
 
                 tab.replay_manager = None
-                if not dolphie.daemon_mode:
+                if not dolphie.daemon_mode and tab == self.tab_manager.active_tab:
                     tab.loading_indicator.display = True
 
                 dolphie.db_connect()
-                # this will use host_with_port instead of just the host since we're connected at this point
-                self.tab_manager.rename_tab(tab)
 
             worker_start_time = datetime.now()
             dolphie.polling_latency = (worker_start_time - dolphie.worker_previous_start_time).total_seconds()
@@ -334,7 +336,7 @@ class DolphieApp(App):
             tab.replay_manager.capture_state()
         except ManualException as exception:
             # This will set up the worker state change function below to trigger the
-            # host setup modal with the error
+            # tab setup modal with the error
             tab.worker_cancel_error = exception
 
             await self.tab_manager.disconnect_tab(tab)
@@ -488,10 +490,13 @@ class DolphieApp(App):
         dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
+        # At this point, we're connected so we need to do a few things
         if dolphie.connection_status == ConnectionStatus.connecting:
             self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
             dolphie.set_host_version(dolphie.global_variables.get("version"))
-            dolphie.setup_connection_mysql()
+            dolphie.get_group_replication_metadata()
+            dolphie.configure_mysql_variables()
+            dolphie.validate_metadata_locks_enabled()
 
         dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
@@ -565,20 +570,14 @@ class DolphieApp(App):
         if not dolphie.global_status.get("Innodb_lsn_current"):
             dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status["Innodb_os_log_written"]
 
-        if not dolphie.daemon_mode and (dolphie.group_replication or dolphie.innodb_cluster):
+        if dolphie.group_replication or dolphie.innodb_cluster:
             if dolphie.is_mysql_version_at_least("8.0.13"):
-                dolphie.main_db_connection.execute(MySQLQueries.group_replication_get_write_concurrency)
-                dolphie.group_replication_data = dolphie.main_db_connection.fetchone()
+                dolphie.group_replication_data["write_concurrency"] = dolphie.main_db_connection.fetch_value_from_field(
+                    MySQLQueries.group_replication_get_write_concurrency, "write_concurrency"
+                )
 
             dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
             dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
-            for member_role_data in dolphie.group_replication_members:
-                if (
-                    member_role_data.get("MEMBER_ID") == dolphie.server_uuid
-                    and member_role_data.get("MEMBER_ROLE") == "PRIMARY"
-                ):
-                    dolphie.is_group_replication_primary = True
-                    break
 
         if dolphie.panels.dashboard.visible or dolphie.record_for_replay:
             if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
@@ -1185,8 +1184,13 @@ class DolphieApp(App):
 
                 return
 
-            # If we're in replay mode and there's no replication status or replicas, stop here
-            if dolphie.replay_file and (not dolphie.replication_status and not dolphie.replica_manager.replicas):
+            # If we're in replay mode and there's no replication status, replicas or group replication, stop here
+            if dolphie.replay_file and (
+                not dolphie.replication_status
+                and not dolphie.replica_manager.replicas
+                and not dolphie.group_replication_members
+            ):
+                self.notify("This replay file has no replication data")
                 return
 
             self.toggle_panel(dolphie.panels.replication.name)

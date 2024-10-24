@@ -551,6 +551,9 @@ def create_group_replication_member_table(tab: Tab):
             "table": table,
         }
 
+        if row.get("MEMBER_ID") == dolphie.server_uuid and row.get("MEMBER_ROLE") == "PRIMARY":
+            dolphie.is_group_replication_primary = True
+
     return group_replica_tables
 
 
@@ -612,14 +615,6 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
 
 def fetch_replicas(tab: Tab):
     dolphie = tab.dolphie
-
-    # Check if available_replicas list has dicts in it to be backwards compatible since 6.2.1 changes the data structure
-    if dolphie.replay_file and (
-        not dolphie.replica_manager.available_replicas
-        or not isinstance(dolphie.replica_manager.available_replicas[0], dict)
-    ):
-        dolphie.replica_manager.disconnect_all()
-        return
 
     # If replicas don't match available_replicas, we need need to sync
     if len(dolphie.replica_manager.replicas) != len(dolphie.replica_manager.available_replicas):

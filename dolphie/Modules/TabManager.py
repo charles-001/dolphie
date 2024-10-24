@@ -138,6 +138,7 @@ class TabManager:
         tab.dolphie.connection_status = connection_status
 
         self.update_topbar(tab=tab)
+        self.rename_tab(tab)
 
     def update_topbar(self, tab: Tab):
         dolphie = tab.dolphie
@@ -633,7 +634,6 @@ class TabManager:
 
                         if dolphie.replay_file:
                             tab.replay_manager = ReplayManager(dolphie)
-                            self.rename_tab(tab)
                             self.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
                             dolphie.app.run_worker_replay(tab.id)
                         else:
