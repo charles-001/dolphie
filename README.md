@@ -214,13 +214,13 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 
 Dolphie is capable of recording your live session data that can be used in a future replay if needed. To begin recording, specify the `--record` option along with `--replay-dir` and you're good to go! The data will be saved in a SQLite database compressed with ZSTD for efficient storage management. 
 
-If you want to revisit a moment from the recorded live session, you can load the replay by using the `--replay-file` option or the `Tab Setup` modal. This functionality allows you to navigate the recorded data as if you were observing it in real-time. The replay interface features intuitive controls for stepping backward, moving forward, playing/pausing, and jumping to specific timestamps. While some commands or features may be restricted in replay mode, all core functionalities for effective review and troubleshooting remain accessible.
+To view a replay from either a live session or daemon mode, specify the `--replay-file` option or bring up the `Tab Setup` modal. Replays enable you to navigate through the recorded data as if you were observing Dolphie in real-time at the exact time you need to investigate. The replay interface features intuitive controls for stepping backward, moving forward, playing/pausing, and jumping to specific timestamps. While some commands or features may be restricted in replay mode, all core functionalities for effective review and troubleshooting remain accessible.
 
 ## Daemon Mode
 
 If you need Dolphie running incognito while always recording data to capture those critical moments when a database stall causes an incident or a tricky performance issue slips past other monitoring tools, then look no further! Daemon mode is the solution. Purpose-built for nonstop recording, it ensures you never miss the insights that matter most.
 
-To activate Daemon mode, use the `--daemon` option, which will automatically enable `--record`. This will transform Dolphie into a resource-efficient, passive, always-on monitoring process that continuously records data. It removes Textual's TUI and creates a log file for messages while also printing them to the console.
+To activate Daemon mode, specify the `--daemon` option, which will automatically enable `--record`. This will transform Dolphie into a resource-efficient, passive, always-on monitoring process that continuously records data. It removes Textual's TUI and creates a log file for messages while also printing them to the console.
 
 To run Dolphie in the background using daemon mode, I recommend  `systemctl` for its flexibility and management capabilities (see the [service configuration example](https://github.com/charles-001/dolphie/blob/main/dolphie.service)). While alternatives like `nohup` or `tmux` can be used, they are not advisable due to their limited management features.
 
