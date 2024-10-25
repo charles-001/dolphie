@@ -212,19 +212,19 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 
 ## Record & Replay
 
-Dolphie lets you to capture live session data for future analysis. To begin recording, simply use the `--record` option, which saves the session in a compressed SQLite database (utilizing ZSTD compression) for efficient storage management. 
+Dolphie lets you to record your live session data to be used later in a replay. To begin recording, specify the `--record` and you're all set! The data will be saved in a SQLite database compressed with ZSTD for efficient storage management. 
 
-If you want to revisit a moment from the live session, you can load the replay by using the `--replay-file` option or the `Tab Setup` modal. This functionality allows you to navigate the recorded data as if you were observing it in real-time. The replay interface features intuitive controls for stepping backward, moving forward, playing/pausing, and jumping to specific timestamps. While some commands or features may be restricted in replay mode, all core functionalities for effective review and troubleshooting remain accessible.
+If you want to revisit a moment from the recorded live session, you can load the replay by using the `--replay-file` option or the `Tab Setup` modal. This functionality allows you to navigate the recorded data as if you were observing it in real-time. The replay interface features intuitive controls for stepping backward, moving forward, playing/pausing, and jumping to specific timestamps. While some commands or features may be restricted in replay mode, all core functionalities for effective review and troubleshooting remain accessible.
 
 ## Daemon Mode
 
-Have you ever wanted to view your processlist, replication/replicas status, system analytics, and other key statistics from a specific moment in time, just as if you were using Dolphie live? Maybe during a database stall that led to an incident, where your other monitoring tools missed the root cause? With daemon mode, you can always be recording to capture all of Dolphie's data from that moment and review it as if it were happening live, allowing you to see exactly what was going on!
+If you need Dolphie running incognito while always recording data to capture those critical moments when a database stall causes an incident or a tricky performance issue slips past other monitoring tools, then look no further! Daemon mode is the solution. Purpose-built for nonstop recording, it ensures you never miss the insights that matter most.
 
-To enable daemon mode, just specify the `--daemon` option which will automatically enable `--record`. This will transform Dolphie into a resource-efficient, passive, always-on monitoring process that continuously records data. It removes Textual's TUI and creates a log file for messages while also printing them to the console.
+To activate Daemon mode, use the `--daemon` option, which will automatically enable `--record`. This will transform Dolphie into a resource-efficient, passive, always-on monitoring process that continuously records data. It removes Textual's TUI and creates a log file for messages while also printing them to the console.
 
-To run Dolphie in the background using daemon mode, it is recommended to use `systemctl` for its flexibility and management capabilities (see the [service configuration example](https://github.com/charles-001/dolphie/blob/main/dolphie.service)). While alternatives like `nohup` or `tmux` can be used, they are not advisable due to their limited management features.
+To run Dolphie in the background using daemon mode, I recommend  `systemctl` for its flexibility and management capabilities (see the [service configuration example](https://github.com/charles-001/dolphie/blob/main/dolphie.service)). While alternatives like `nohup` or `tmux` can be used, they are not advisable due to their limited management features.
 
-**Note**: Replay files generated in daemon mode can consume significant disk space, particularly on busy servers. To minimize disk usage, adjust the `--replay-retention-hours` and `--refresh-interval` options to control data retention and collection frequency.
+**Note**: Daemon mode's replay file can consume significant disk space, particularly on busy servers. To minimize disk usage, adjust the `--replay-retention-hours` and `--refresh-interval` options to control data retention and collection frequency.
 
 Example log messages in daemon mode:
 
