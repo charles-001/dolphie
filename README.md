@@ -181,12 +181,13 @@ Dolphie's config supports these options under [dolphie] section:
 
 - MySQL/Percona Server 5.6/5.7/8.x/9.x
 - AWS RDS/Aurora
-- Azure
+- Azure MySQL
 
 ## Supported MariaDB versions
 
 - MariaDB 5.5/10.0/11.0+
 - AWS RDS
+- Azure MariaDB
 
 ## Supported ProxySQL versions
 
@@ -213,7 +214,7 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 
 Dolphie lets you to capture live session data for future analysis. To begin recording, simply use the `--record` option, which saves the session in a compressed SQLite database (utilizing ZSTD compression) for efficient storage management. 
 
-If you want to revisit a moment from the live session, you can load the replay by using the `--replay-file` option or the `Tab Setup` modal. This functionality allows you to navigate the recorded data as if you were observing it in real-time. The replay interface features intuitive controls for stepping backward, moving forward, playing/pausing, and jumping to specific timestamps. While some advanced features may be restricted in replay mode, all core functionalities for effective review and troubleshooting remain fully accessible.
+If you want to revisit a moment from the live session, you can load the replay by using the `--replay-file` option or the `Tab Setup` modal. This functionality allows you to navigate the recorded data as if you were observing it in real-time. The replay interface features intuitive controls for stepping backward, moving forward, playing/pausing, and jumping to specific timestamps. While some commands or features may be restricted in replay mode, all core functionalities for effective review and troubleshooting remain accessible.
 
 ## Daemon Mode
 
@@ -242,6 +243,7 @@ Example log messages in daemon mode:
 ## Credential Profiles
 
 Credential profiles can be defined in Dolphie's config file as a way to store credentials for easy access. A profile can be created by adding a section in the config file with the format: `[credential_profile_<name>]`
+
 The following options are supported in credential profiles:
 
 - user
