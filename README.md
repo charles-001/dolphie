@@ -212,7 +212,7 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 
 ## Record & Replay 
 
-Dolphie is capable of recording your live session data that can be used in a future replay if needed. To begin recording, specify the `--record` and you're all set! The data will be saved in a SQLite database compressed with ZSTD for efficient storage management. 
+Dolphie is capable of recording your live session data that can be used in a future replay if needed. To begin recording, specify the `--record` option along with `--replay-dir` and you're good to go! The data will be saved in a SQLite database compressed with ZSTD for efficient storage management. 
 
 If you want to revisit a moment from the recorded live session, you can load the replay by using the `--replay-file` option or the `Tab Setup` modal. This functionality allows you to navigate the recorded data as if you were observing it in real-time. The replay interface features intuitive controls for stepping backward, moving forward, playing/pausing, and jumping to specific timestamps. While some commands or features may be restricted in replay mode, all core functionalities for effective review and troubleshooting remain accessible.
 
