@@ -204,8 +204,8 @@ class DolphieApp(App):
 
         dolphie = tab.dolphie
 
-        # if dolphie.connection_status != ConnectionStatus.replaying:
-        #     self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.replaying)
+        if dolphie.connection_status != ConnectionStatus.replaying:
+            self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.replaying)
 
         tab.replay_manual_control = manual_control
         if (
@@ -863,8 +863,6 @@ class DolphieApp(App):
                 self.tab_manager.setup_host_tab(tab)
             elif self.tab_manager.active_tab.dolphie.replay_file:
                 self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
-                self.tab_manager.rename_tab(tab)
-                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.replaying)
                 self.run_worker_replay(self.tab_manager.active_tab.id)
             else:
                 self.run_worker_main(self.tab_manager.active_tab.id)
