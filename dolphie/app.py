@@ -164,7 +164,7 @@ class DolphieApp(App):
                 "white": "#e9e9e9",
                 "green": "#54efae",
                 "yellow": "#f6ff8f",
-                "dark_yellow": "#cad45f",
+                "dark_yellow": "#e6d733",
                 "red": "#fd8383",
                 "purple": "#b565f3",
                 "dark_gray": "#969aad",
@@ -819,9 +819,9 @@ class DolphieApp(App):
         message = f"Host [light_blue]{dolphie.host_with_port}[/light_blue] is now [b highlight]{status}[/b highlight]"
 
         if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
-            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+            message += " ([dark_yellow]SHOULD BE READ/WRITE?[/dark_yellow])"
         elif current_ro_status == "ON" and dolphie.group_replication and dolphie.is_group_replication_primary:
-            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+            message += " ([dark_yellow]SHOULD BE READ/WRITE?[/dark_yellow])"
 
         if (
             dolphie.connection_status in [ConnectionStatus.read_write, ConnectionStatus.read_only]
