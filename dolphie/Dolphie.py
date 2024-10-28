@@ -378,4 +378,7 @@ class Dolphie:
         except OSError as e:
             self.app.notify(str(e), title="Error getting replay files", severity="error")
 
+        # Sort replay_files by the file path
+        replay_files.sort(key=lambda x: x[0])
+
         return replay_files
