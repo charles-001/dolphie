@@ -153,11 +153,17 @@ class TabManager:
                 self.topbar.connection_status = dolphie.connection_status
                 self.topbar.host = dolphie.host_with_port
 
-                if dolphie.record_for_replay and tab.replay_manager:
+                if (
+                    dolphie.record_for_replay
+                    and tab.replay_manager
+                    and dolphie.connection_status != ConnectionStatus.disconnected
+                ):
                     self.topbar.replay_file_size = tab.replay_manager.replay_file_size
+                else:
+                    self.topbar.replay_file_size = None
             else:
-                self.topbar.connection_status = None
                 self.topbar.replay_file_size = None
+                self.topbar.connection_status = None
                 self.topbar.host = ""
 
     def generate_tab_id(self) -> str:
@@ -615,6 +621,7 @@ class TabManager:
             hostgroup = data.get("hostgroup")
             dolphie.socket = data.get("socket_file")
             dolphie.ssl = data.get("ssl")
+            dolphie.record_for_replay = data.get("recording")
 
             if hostgroup:
                 dolphie.app.connect_as_hostgroup(hostgroup)
@@ -634,7 +641,6 @@ class TabManager:
 
                         if dolphie.replay_file:
                             tab.replay_manager = ReplayManager(dolphie)
-                            self.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
                             dolphie.app.run_worker_replay(tab.id)
                         else:
                             dolphie.app.run_worker_main(tab.id)
@@ -666,6 +672,7 @@ class TabManager:
                 username=dolphie.user,
                 password=dolphie.password,
                 ssl=dolphie.ssl,
+                recording=dolphie.record_for_replay,
                 socket_file=dolphie.socket,
                 hostgroups=dolphie.hostgroup_hosts.keys(),
                 available_hosts=dolphie.tab_setup_available_hosts,

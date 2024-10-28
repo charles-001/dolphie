@@ -324,35 +324,6 @@ class Dolphie:
 
         return refresh_interval
 
-    def detect_global_variable_change(self, old_data: dict, new_data: dict):
-        if not old_data:
-            return
-
-        # gtid is always changing so we don't want to alert on that
-        # read_only is managed by monitor_read_only_change in app.py
-        # The others are ones I've found to be spammy due to monitoring tools changing them
-        exclude_variables = {"gtid", "read_only", "innodb_thread_sleep_delay"}
-
-        # Add to exclude_variables with user specified variables
-        if self.exclude_notify_global_vars:
-            exclude_variables.update(self.exclude_notify_global_vars)
-
-        for variable, new_value in new_data.items():
-            if any(item in variable.lower() for item in exclude_variables):
-                continue
-
-            old_value = old_data.get(variable)
-            if old_value != new_value:
-                self.app.notify(
-                    f"[highlight]{variable}[/highlight] has changed from "
-                    f"[highlight]{old_value}[/highlight] to "
-                    f"[highlight]{new_value}[/highlight]",
-                    title="Global Variable Change",
-                    severity="warning",
-                    timeout=10,
-                )
-                logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")
-
     def validate_metadata_locks_enabled(self):
         if not self.is_mysql_version_at_least("5.7") or not self.performance_schema_enabled:
             logger.warning(

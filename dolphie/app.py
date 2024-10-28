@@ -204,6 +204,9 @@ class DolphieApp(App):
 
         dolphie = tab.dolphie
 
+        # if dolphie.connection_status != ConnectionStatus.replaying:
+        #     self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.replaying)
+
         tab.replay_manual_control = manual_control
         if (
             len(self.screen_stack) > 1
@@ -233,14 +236,12 @@ class DolphieApp(App):
         # Update the dashboard title with the timestamp of the replay event
         tab.dashboard_replay.update(f"[b]Replay[/b] ([dark_gray]{os.path.basename(dolphie.replay_file)}[/dark_gray])")
         tab.dashboard_replay_start_end.update(
-            f"{min_timestamp} [b highlight]←[/b highlight] "
-            f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]→[/b highlight] "
+            f"{min_timestamp} [b highlight]<-[/b highlight] "
+            f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]->[/b highlight] "
             f"{max_timestamp}"
         )
 
-        dolphie.detect_global_variable_change(
-            old_data=dolphie.global_variables, new_data=replay_event_data.global_variables
-        )
+        tab.replay_manager.fetch_global_variable_changes_for_current_replay_id()
 
         # Common data for refreshing
         dolphie.global_variables = replay_event_data.global_variables
@@ -465,8 +466,6 @@ class DolphieApp(App):
             tab.worker_running = False
 
             if event.state == WorkerState.SUCCESS:
-                self.monitor_read_only_change(tab)
-
                 if (
                     len(self.screen_stack) > 1
                     or (dolphie.pause_refresh and not tab.replay_manual_control)
@@ -491,7 +490,7 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
-        dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
+        self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
         # At this point, we're connected so we need to do a few things
@@ -615,7 +614,7 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
-        dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
+        self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
         if dolphie.connection_status == ConnectionStatus.connecting:
@@ -766,6 +765,38 @@ class DolphieApp(App):
         if not dolphie.daemon_mode:
             dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
 
+    def monitor_global_variable_change(self, tab: Tab, old_data: dict, new_data: dict):
+        if not old_data:
+            return
+
+        dolphie = tab.dolphie
+
+        # gtid is always changing so we don't want to alert on that
+        # The others are ones I've found to be spammy due to monitoring tools changing them
+        exclude_variables = {"gtid", "innodb_thread_sleep_delay"}
+
+        # Add to exclude_variables with user specified variables
+        if dolphie.exclude_notify_global_vars:
+            exclude_variables.update(dolphie.exclude_notify_global_vars)
+
+        for variable, new_value in new_data.items():
+            if any(item in variable.lower() for item in exclude_variables):
+                continue
+
+            old_value = old_data.get(variable)
+            if old_value != new_value:
+                logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")
+                tab.replay_manager.capture_global_variable_change(variable, old_value, new_value)
+
+                self.app.notify(
+                    f"Variable:  [light_blue]{variable}[/light_blue]\n"
+                    f"Old Value: [highlight]{old_value}[/highlight]\n"
+                    f"New Value: [highlight]{new_value}[/highlight]",
+                    title="Global Variable Change",
+                    severity="warning",
+                    timeout=10,
+                )
+
     def monitor_read_only_change(self, tab: Tab):
         dolphie = tab.dolphie
 
@@ -833,7 +864,7 @@ class DolphieApp(App):
             elif self.tab_manager.active_tab.dolphie.replay_file:
                 self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
                 self.tab_manager.rename_tab(tab)
-                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.replaying)
                 self.run_worker_replay(self.tab_manager.active_tab.id)
             else:
                 self.run_worker_main(self.tab_manager.active_tab.id)
@@ -850,7 +881,7 @@ class DolphieApp(App):
     @on(Button.Pressed, "#back_button")
     def replay_back(self):
         # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
-        self.tab_manager.active_tab.replay_manager.current_index -= 2
+        self.tab_manager.active_tab.replay_manager.current_replay_id -= 2
         self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#forward_button")
@@ -1015,7 +1046,7 @@ class DolphieApp(App):
 
             if need_current_data:
                 # We subtract 1 because get_next_refresh_interval will increment the index
-                tab.replay_manager.current_index -= 1
+                tab.replay_manager.current_replay_id -= 1
 
             self.run_worker_replay(tab.id, manual_control=True)
 
@@ -1630,6 +1661,34 @@ class DolphieApp(App):
                 return
 
             self.run_command_in_worker(key=key, dolphie=dolphie)
+
+        elif key == "V":
+            global_variable_changes = tab.replay_manager.fetch_all_global_variable_changes()
+
+            if global_variable_changes:
+                table = Table(
+                    box=box.SIMPLE_HEAVY,
+                    show_edge=False,
+                    style="table_border",
+                )
+                table.add_column("Timestamp")
+                table.add_column("Variable")
+                table.add_column("Old Value", overflow="fold")
+                table.add_column("New Value", overflow="fold")
+
+                for change in global_variable_changes:
+                    timestamp, variable, old_value, new_value = change[0], change[1], change[2], change[3]
+                    table.add_row(f"[dark_gray]{timestamp}", f"[light_blue]{variable}", old_value, new_value)
+
+                screen_data = Group(
+                    Align.center(
+                        "[b light_blue]Global Variable Changes[/b light_blue] "
+                        f"([b highlight]{table.row_count}[/b highlight])\n"
+                    ),
+                    table,
+                )
+            else:
+                self.notify("There are no global variable changes in this replay")
 
         elif key == "v":
 

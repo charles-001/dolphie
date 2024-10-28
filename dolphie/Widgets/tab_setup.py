@@ -182,6 +182,7 @@ class TabSetupModal(ModalScreen):
         hostgroups: dict,
         replay_files: list,
         replay_directory: str,
+        recording: str,
         error_message: ManualException = None,
     ):
         super().__init__()
@@ -198,6 +199,7 @@ class TabSetupModal(ModalScreen):
         self.ssl = ssl
         self.socket_file = socket_file
         self.replay_directory = replay_directory
+        self.recording = recording
 
         if self.host and self.port:
             self.host = f"{self.host}:{self.port}"
@@ -256,6 +258,9 @@ class TabSetupModal(ModalScreen):
         if self.socket_file:
             self.query_one("#socket_file", Input).value = self.socket_file
 
+        if self.recording:
+            self.query_one("#recording", Checkbox).value = True
+
     def compose(self) -> ComposeResult:
         with Vertical():
             with Vertical(classes="main_container"):
@@ -279,6 +284,7 @@ class TabSetupModal(ModalScreen):
                     yield Input(id="password", value=self.password, password=True)
                     yield Button("Show", id="show_password")
                 yield Input(id="socket_file")
+                yield Checkbox("Enable Recording", id="recording")
                 yield Checkbox("Enable SSL", id="ssl")
                 with Container(id="container_ssl"):
                     yield RadioSet(
@@ -354,6 +360,7 @@ class TabSetupModal(ModalScreen):
             "#show_password": Button,
             "#credential_profile": Select,
             "#hostgroup": Select,
+            "#recording": Checkbox,
         }
         for key, widget in inputs.items():
             if key not in exclude:
@@ -365,7 +372,7 @@ class TabSetupModal(ModalScreen):
 
     @on(Select.Changed, "#hostgroup")
     def hostgroup_changed(self, event: Select.Changed):
-        self.update_inputs(disable=event.value != Select.BLANK, exclude=["#hostgroup"])
+        self.update_inputs(disable=event.value != Select.BLANK, exclude=["#hostgroup", "#recording"])
 
     @on(Select.Changed, "#replay_file")
     def replay_file_changed(self, event: Select.Changed):
@@ -416,6 +423,7 @@ class TabSetupModal(ModalScreen):
             hostgroup = self.query_one("#hostgroup", Select)
             username = self.query_one("#username", Input)
             password = self.query_one("#password", Input)
+            recording = self.query_one("#recording", Checkbox)
 
             ssl_mode = (
                 self.query_one("#ssl_mode", RadioSet).pressed_button.id
@@ -469,6 +477,9 @@ class TabSetupModal(ModalScreen):
             if not host.value and not hostgroup_value and not replay_file_value:
                 error_message = "You must specify either a host, hostgroup, or replay file"
 
+            if recording.value and not self.replay_directory:
+                error_message = "Recording requires a replay directory to be specified. Use --replay-dir to do this"
+
             if error_message:
                 modal_footer.update(error_message)
                 modal_footer.display = True
@@ -484,6 +495,7 @@ class TabSetupModal(ModalScreen):
                     "password": password.value,
                     "ssl": ssl,
                     "socket_file": socket_file.value,
+                    "recording": recording.value,
                 }
             )
         else:

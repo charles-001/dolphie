@@ -613,13 +613,13 @@ doc = ["sphinx"]
 
 [[package]]
 name = "textual"
-version = "0.84.0"
+version = "0.85.0"
 description = "Modern Text User Interface framework"
 optional = false
 python-versions = "<4.0.0,>=3.8.1"
 files = [
-    {file = "textual-0.84.0-py3-none-any.whl", hash = "sha256:1457d2cb66ba4ea46812355f31adbb4b693424a94e69d052e4affe1dc410ec96"},
-    {file = "textual-0.84.0.tar.gz", hash = "sha256:fb89717960fea7a539823fa264252f7be1c84844e4b8d27360e6d4edb36846a8"},
+    {file = "textual-0.85.0-py3-none-any.whl", hash = "sha256:8e75d023f06b242fb88233926dfb7801792f867643493096dd45dd216dc950f3"},
+    {file = "textual-0.85.0.tar.gz", hash = "sha256:645c0fd0b4f61cd19383df78a1acd4f3b555e2c514cfa2f454e20692dffc10a0"},
 ]
 
 [package.dependencies]
@@ -963,4 +963,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8.1"
-content-hash = "d5bad17623a1746f0d6107b987707de949de73b4d1b66855455fcb0d511af5e9"
+content-hash = "24fe24cb36adaf656f3d3a64af435ef45e8d3224ffc2739937cd5e11a2830c27"
