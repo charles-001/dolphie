@@ -641,6 +641,7 @@ class TabManager:
 
                         if dolphie.replay_file:
                             tab.replay_manager = ReplayManager(dolphie)
+                            self.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
                             dolphie.app.run_worker_replay(tab.id)
                         else:
                             dolphie.app.run_worker_main(tab.id)

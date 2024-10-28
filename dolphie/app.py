@@ -204,9 +204,6 @@ class DolphieApp(App):
 
         dolphie = tab.dolphie
 
-        if dolphie.connection_status != ConnectionStatus.replaying:
-            self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.replaying)
-
         tab.replay_manual_control = manual_control
         if (
             len(self.screen_stack) > 1
@@ -466,6 +463,8 @@ class DolphieApp(App):
             tab.worker_running = False
 
             if event.state == WorkerState.SUCCESS:
+                self.monitor_read_only_change(tab)
+
                 if (
                     len(self.screen_stack) > 1
                     or (dolphie.pause_refresh and not tab.replay_manual_control)
@@ -788,13 +787,23 @@ class DolphieApp(App):
                 logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")
                 tab.replay_manager.capture_global_variable_change(variable, old_value, new_value)
 
+                # If the tab is not active, include the host in the notification
+                include_host = ""
+                if self.tab_manager.active_tab.id != tab.id:
+                    include_host = f"Host:      [light_blue]{dolphie.host_with_port}[/light_blue]\n"
+
+                # read_only notification is handled by monitor_read_only_change()
+                if variable == "read_only":
+                    continue
+
                 self.app.notify(
-                    f"Variable:  [light_blue]{variable}[/light_blue]\n"
+                    f"[b][dark_yellow]{variable}[/b][/dark_yellow]\n"
+                    f"{include_host}"
                     f"Old Value: [highlight]{old_value}[/highlight]\n"
                     f"New Value: [highlight]{new_value}[/highlight]",
                     title="Global Variable Change",
                     severity="warning",
-                    timeout=10,
+                    timeout=15,
                 )
 
     def monitor_read_only_change(self, tab: Tab):
@@ -807,7 +816,7 @@ class DolphieApp(App):
         formatted_ro_status = ConnectionStatus.read_only if current_ro_status == "ON" else ConnectionStatus.read_write
         status = "read-only" if current_ro_status == "ON" else "read/write"
 
-        message = f"Host [highlight]{dolphie.host_with_port}[/highlight] is now [b highlight]{status}[/b highlight]"
+        message = f"Host [light_blue]{dolphie.host_with_port}[/light_blue] is now [b highlight]{status}[/b highlight]"
 
         if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
             message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
@@ -863,6 +872,8 @@ class DolphieApp(App):
                 self.tab_manager.setup_host_tab(tab)
             elif self.tab_manager.active_tab.dolphie.replay_file:
                 self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
+                self.tab_manager.rename_tab(tab)
+                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
                 self.run_worker_replay(self.tab_manager.active_tab.id)
             else:
                 self.run_worker_main(self.tab_manager.active_tab.id)

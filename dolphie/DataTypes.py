@@ -22,7 +22,6 @@ class ConnectionStatus:
     disconnected = "DISCONNECTED"
     read_write = "R/W"
     read_only = "RO"
-    replaying = "REPLAYING"
 
 
 @dataclass

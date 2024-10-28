@@ -589,11 +589,17 @@ class ReplayManager:
 
         for row in rows:
             timestamp, variable, old_value, new_value = row[0], row[1], row[2], row[3]
+
+            # read_only notification is handled by monitor_read_only_change() in app.py
+            if variable == "read_only":
+                continue
+
             self.dolphie.app.notify(
-                f"Variable:  [light_blue]{variable}[/light_blue]\n"
+                f"[b][dark_yellow]{variable}[/b][/dark_yellow]\n"
+                f"Timestamp: [light_blue]{timestamp}[/light_blue]\n"
                 f"Old Value: [highlight]{old_value}[/highlight]\n"
                 f"New Value: [highlight]{new_value}[/highlight]",
-                title=f"Global Variable Change @ {timestamp}",
+                title="Global Variable Change",
                 severity="warning",
                 timeout=10,
             )
