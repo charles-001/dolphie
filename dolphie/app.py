@@ -29,7 +29,7 @@ from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
-from textual.widgets import Button, Switch, TabbedContent, TabPane, Tabs
+from textual.widgets import Button, Switch, TabbedContent, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
 import dolphie.Modules.MetricManager as MetricManager
@@ -409,7 +409,7 @@ class DolphieApp(App):
                     return
 
                 if not tab.main_container.display:
-                    self.refresh_tab_properties()
+                    tab.refresh_tab_properties()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -475,7 +475,7 @@ class DolphieApp(App):
                     return
 
                 if not tab.main_container.display:
-                    self.refresh_tab_properties()
+                    tab.refresh_tab_properties()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -728,7 +728,7 @@ class DolphieApp(App):
 
         if tab.loading_indicator.display or dolphie.replay_file:
             tab.loading_indicator.display = False
-            self.layout_graphs(tab)
+            tab.layout_graphs()
 
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
@@ -859,30 +859,6 @@ class DolphieApp(App):
         self.loading_hostgroups = False
         self.notify(f"Finished connecting to hosts in hostgroup [highlight]{hostgroup}", severity="success")
 
-    async def on_mount(self):
-        self.tab_manager = TabManager(app=self.app, config=self.config)
-        await self.tab_manager.create_ui_widgets()
-
-        if self.config.hostgroup:
-            self.connect_as_hostgroup(self.config.hostgroup)
-        else:
-            tab = await self.tab_manager.create_tab(tab_name="Initial Tab")
-
-            if self.config.tab_setup:
-                self.tab_manager.setup_host_tab(tab)
-            elif self.tab_manager.active_tab.dolphie.replay_file:
-                self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
-                self.tab_manager.rename_tab(tab)
-                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
-                self.run_worker_replay(self.tab_manager.active_tab.id)
-            else:
-                self.run_worker_main(self.tab_manager.active_tab.id)
-
-                if not self.config.daemon_mode:
-                    self.run_worker_replicas(self.tab_manager.active_tab.id)
-
-        self.check_for_new_version()
-
     def _handle_exception(self, error: Exception) -> None:
         self.bell()
         self.exit(message=Traceback(show_locals=True, width=None, locals_max_length=5))
@@ -928,27 +904,6 @@ class DolphieApp(App):
             command_get_input,
         )
 
-    def refresh_tab_properties(self):
-        tab = self.tab_manager.active_tab
-        tab.main_container.display = True
-
-        self.size_dashboard_sections(tab)
-
-        # Hide all graph tabs so we can show the ones we want
-        tabs = tab.metric_graph_tabs.query(TabPane)
-        for graph_tab in tabs:
-            tab.metric_graph_tabs.hide_tab(graph_tab.id)
-
-        # Show the tabs that are for the current connection source
-        for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
-            if tab.dolphie.connection_source in metric_instance.connection_source:
-                tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
-
-        if tab.dolphie.replay_file:
-            tab.dashboard_replay_container.display = True
-        else:
-            tab.dashboard_replay_container.display = False
-
     @on(Tabs.TabActivated, "#host_tabs")
     def tab_changed(self, event: TabbedContent.TabActivated):
         self.tab_manager.switch_tab(event.tab.id, set_active=False)
@@ -972,7 +927,7 @@ class DolphieApp(App):
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
 
-            self.refresh_tab_properties()
+            tab.refresh_tab_properties()
 
             # Set the display state for the replica container based on whether there are replicas
             tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
@@ -1059,44 +1014,6 @@ class DolphieApp(App):
 
             self.run_worker_replay(tab.id, manual_control=True)
 
-    def size_dashboard_sections(self, tab: Tab):
-        if tab.dolphie.connection_source == ConnectionSource.mysql:
-            # Update the sizes of the panels depending if replication container is visible or not
-            if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
-                tab.dashboard_section_1.styles.width = "25vw"
-                tab.dashboard_section_2.styles.width = "17vw"
-                tab.dashboard_section_3.styles.width = "21vw"
-                tab.dashboard_section_4.styles.width = "12vw"
-                tab.dashboard_section_5.styles.width = "25vw"
-
-                tab.dashboard_section_5.display = True
-            else:
-                tab.dashboard_section_1.styles.width = "32vw"
-                tab.dashboard_section_2.styles.width = "24vw"
-                tab.dashboard_section_3.styles.width = "27vw"
-                tab.dashboard_section_4.styles.width = "17vw"
-                tab.dashboard_section_5.styles.width = "0"
-
-                tab.dashboard_section_5.display = False
-
-            tab.dashboard_section_1.styles.max_width = "45"
-            tab.dashboard_section_2.styles.max_width = "32"
-            tab.dashboard_section_3.styles.max_width = "38"
-            tab.dashboard_section_4.styles.max_width = "22"
-            tab.dashboard_section_5.styles.max_width = "55"
-        elif tab.dolphie.connection_source == ConnectionSource.proxysql:
-            tab.dashboard_section_1.styles.width = "24vw"
-            tab.dashboard_section_2.styles.width = "20vw"
-            tab.dashboard_section_3.styles.width = "22vw"
-            tab.dashboard_section_4.styles.width = "13vw"
-
-            tab.dashboard_section_5.display = False
-
-            tab.dashboard_section_1.styles.max_width = "35"
-            tab.dashboard_section_2.styles.max_width = "28"
-            tab.dashboard_section_3.styles.max_width = "25"
-            tab.dashboard_section_4.styles.max_width = "25"
-
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         panel_mapping = {
             tab.dolphie.panels.replication.name: {ConnectionSource.mysql: replication_panel},
@@ -1133,27 +1050,6 @@ class DolphieApp(App):
                 # When replication panel status is changed, we need to refresh the dashboard panel as well since
                 # it adds/removes it from there
                 dashboard_panel.create_panel(tab)
-
-    def layout_graphs(self, tab: Tab):
-        # These variables are dynamically created
-        if tab.dolphie.is_mysql_version_at_least("8.0.30"):
-            if tab.dolphie.replay_file:
-                tab.graph_redo_log_data_written.styles.width = "88%"
-                tab.graph_redo_log_bar.styles.width = "12%"
-                tab.graph_redo_log_active_count.display = False
-            else:
-                tab.graph_redo_log_data_written.styles.width = "55%"
-                tab.graph_redo_log_bar.styles.width = "12%"
-                tab.graph_redo_log_active_count.styles.width = "33%"
-                tab.graph_redo_log_active_count.display = True
-                tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
-        else:
-            tab.graph_redo_log_data_written.styles.width = "88%"
-            tab.graph_redo_log_bar.styles.width = "12%"
-            tab.graph_redo_log_active_count.display = False
-
-        tab.graph_adaptive_hash_index.styles.width = "50%"
-        tab.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):
@@ -1238,7 +1134,7 @@ class DolphieApp(App):
                 return
 
             self.toggle_panel(dolphie.panels.replication.name)
-            self.size_dashboard_sections(tab)
+            tab.size_dashboard_sections()
 
             if dolphie.panels.replication.visible:
                 if dolphie.replica_manager.available_replicas:
@@ -2285,6 +2181,30 @@ class DolphieApp(App):
                     )
         except Exception:
             pass
+
+    async def on_mount(self):
+        self.tab_manager = TabManager(app=self.app, config=self.config)
+        await self.tab_manager.create_ui_widgets()
+
+        if self.config.hostgroup:
+            self.connect_as_hostgroup(self.config.hostgroup)
+        else:
+            tab = await self.tab_manager.create_tab(tab_name="Initial Tab")
+
+            if self.config.tab_setup:
+                self.tab_manager.setup_host_tab(tab)
+            elif self.tab_manager.active_tab.dolphie.replay_file:
+                self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
+                self.tab_manager.rename_tab(tab)
+                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+                self.run_worker_replay(self.tab_manager.active_tab.id)
+            else:
+                self.run_worker_main(self.tab_manager.active_tab.id)
+
+                if not self.config.daemon_mode:
+                    self.run_worker_replicas(self.tab_manager.active_tab.id)
+
+        self.check_for_new_version()
 
     def compose(self):
         yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for commands")

@@ -27,7 +27,7 @@ from textual.widgets import TabbedContent, TabPane, Tabs
 from textual.worker import Worker
 
 import dolphie.Modules.MetricManager as MetricManager
-from dolphie.DataTypes import ConnectionStatus
+from dolphie.DataTypes import ConnectionSource, ConnectionStatus
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import Config, HostGroupMember
 from dolphie.Modules.ManualException import ManualException
@@ -119,6 +119,85 @@ class Tab:
 
     def get_panel_widget(self, panel_name: str) -> Container:
         return getattr(self, f"panel_{panel_name}")
+
+    def size_dashboard_sections(self):
+        if self.dolphie.connection_source == ConnectionSource.mysql:
+            # Update the sizes of the panels depending if replication container is visible or not
+            if self.dolphie.replication_status and not self.dolphie.panels.replication.visible:
+                self.dashboard_section_1.styles.width = "25vw"
+                self.dashboard_section_2.styles.width = "17vw"
+                self.dashboard_section_3.styles.width = "21vw"
+                self.dashboard_section_4.styles.width = "12vw"
+                self.dashboard_section_5.styles.width = "25vw"
+
+                self.dashboard_section_5.display = True
+            else:
+                self.dashboard_section_1.styles.width = "32vw"
+                self.dashboard_section_2.styles.width = "24vw"
+                self.dashboard_section_3.styles.width = "27vw"
+                self.dashboard_section_4.styles.width = "17vw"
+                self.dashboard_section_5.styles.width = "0"
+
+                self.dashboard_section_5.display = False
+
+            self.dashboard_section_1.styles.max_width = "45"
+            self.dashboard_section_2.styles.max_width = "32"
+            self.dashboard_section_3.styles.max_width = "38"
+            self.dashboard_section_4.styles.max_width = "22"
+            self.dashboard_section_5.styles.max_width = "55"
+        elif self.dolphie.connection_source == ConnectionSource.proxysql:
+            self.dashboard_section_1.styles.width = "24vw"
+            self.dashboard_section_2.styles.width = "20vw"
+            self.dashboard_section_3.styles.width = "22vw"
+            self.dashboard_section_4.styles.width = "13vw"
+
+            self.dashboard_section_5.display = False
+
+            self.dashboard_section_1.styles.max_width = "35"
+            self.dashboard_section_2.styles.max_width = "28"
+            self.dashboard_section_3.styles.max_width = "25"
+            self.dashboard_section_4.styles.max_width = "25"
+
+    def refresh_tab_properties(self):
+        self.main_container.display = True
+
+        self.size_dashboard_sections()
+
+        # Hide all graph tabs so we can show the ones we want
+        tabs = self.metric_graph_tabs.query(TabPane)
+        for graph_tab in tabs:
+            self.metric_graph_tabs.hide_tab(graph_tab.id)
+
+        # Show the tabs that are for the current connection source
+        for metric_instance in self.dolphie.metric_manager.metrics.__dict__.values():
+            if self.dolphie.connection_source in metric_instance.connection_source:
+                self.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
+
+        if self.dolphie.replay_file:
+            self.dashboard_replay_container.display = True
+        else:
+            self.dashboard_replay_container.display = False
+
+    def layout_graphs(self):
+        # These variables are dynamically created
+        if self.dolphie.is_mysql_version_at_least("8.0.30"):
+            if self.dolphie.replay_file:
+                self.graph_redo_log_data_written.styles.width = "88%"
+                self.graph_redo_log_bar.styles.width = "12%"
+                self.graph_redo_log_active_count.display = False
+            else:
+                self.graph_redo_log_data_written.styles.width = "55%"
+                self.graph_redo_log_bar.styles.width = "12%"
+                self.graph_redo_log_active_count.styles.width = "33%"
+                self.graph_redo_log_active_count.display = True
+                self.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+        else:
+            self.graph_redo_log_data_written.styles.width = "88%"
+            self.graph_redo_log_bar.styles.width = "12%"
+            self.graph_redo_log_active_count.display = False
+
+        self.graph_adaptive_hash_index.styles.width = "50%"
+        self.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
 
 
 class TabManager:

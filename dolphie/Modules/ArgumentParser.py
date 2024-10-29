@@ -273,7 +273,10 @@ Dolphie's config supports these options under [dolphie] section:
             "--refresh-interval",
             dest="refresh_interval",
             type=int,
-            help=f"How much time to wait in seconds between each refresh [default: {self.config.refresh_interval}]",
+            help=(
+                "The time, in seconds, between each data collection and processing cycle "
+                f"[default: {self.config.refresh_interval}]"
+            ),
             metavar="",
         )
         self.parser.add_argument(
