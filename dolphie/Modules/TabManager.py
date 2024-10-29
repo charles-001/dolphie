@@ -20,6 +20,7 @@ from textual.widgets import (
     DataTable,
     Label,
     LoadingIndicator,
+    ProgressBar,
     Sparkline,
     Static,
     Switch,
@@ -76,6 +77,7 @@ class Tab:
     spinner: SpinnerWidget = None
 
     dashboard_replay_container: Container = None
+    dashboard_replay_progressbar: ProgressBar = None
     dashboard_replay_start_end: Static = None
     dashboard_replay: Static = None
     dashboard_section_1: Static = None
@@ -130,13 +132,8 @@ class Tab:
         max_timestamp = self.replay_manager.max_timestamp
         current_timestamp = self.replay_manager.current_replay_timestamp
 
-        # Highlight if the min or max timestamp matches the current timestamp
-        min_timestamp = (
-            f"[b light_blue]{min_timestamp}[/b light_blue]" if min_timestamp == current_timestamp else min_timestamp
-        )
-        max_timestamp = (
-            f"[b light_blue]{max_timestamp}[/b light_blue]" if max_timestamp == current_timestamp else max_timestamp
-        )
+        # Highlight if the max timestamp matches the current timestamp
+        max_timestamp = f"[b][green]{max_timestamp}[/b][green]" if max_timestamp == current_timestamp else max_timestamp
 
         # Update the dashboard title with the timestamp of the replay event
         self.dashboard_replay.update(
@@ -146,6 +143,16 @@ class Tab:
             f"{min_timestamp} [b highlight]<-[/b highlight] "
             f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]->[/b highlight] "
             f"{max_timestamp}"
+        )
+
+        # Update the progress bar with the current replay progress
+        if self.replay_manager.current_replay_id == self.replay_manager.min_id:
+            current_position = 0
+        else:
+            current_position = self.replay_manager.current_replay_id - self.replay_manager.min_id + 1
+        self.dashboard_replay_progressbar.update(
+            progress=current_position,
+            total=self.replay_manager.total_replay_rows,
         )
 
     def size_dashboard_sections(self):
@@ -289,18 +296,23 @@ class TabManager:
             LoadingIndicator(id="loading_indicator", classes="connection_loading_indicator"),
             VerticalScroll(
                 SpinnerWidget(id="spinner", text="Processing command"),
-                Container(
-                    Static(id="dashboard_replay", classes="dashboard_replay"),
-                    Static(id="dashboard_replay_start_end", classes="dashboard_replay"),
-                    Horizontal(
-                        Button("⏪ Back", id="back_button", classes="replay_button"),
-                        Button("⏸️  Pause", id="pause_button", classes="replay_button"),
-                        Button("⏩ Forward", id="forward_button", classes="replay_button"),
-                        Button("🔍 Seek", id="seek_button", classes="replay_button"),
-                        classes="button_container",
-                    ),
-                    id="dashboard_replay_container",
-                    classes="dashboard_replay",
+                Center(
+                    Container(
+                        Static(id="dashboard_replay", classes="dashboard_replay"),
+                        Static(id="dashboard_replay_start_end", classes="dashboard_replay"),
+                        Horizontal(
+                            Button("⏪ Back", id="back_button", classes="replay_button"),
+                            Button("⏸️  Pause", id="pause_button", classes="replay_button"),
+                            Button("⏩ Forward", id="forward_button", classes="replay_button"),
+                            Button("🔍 Seek", id="seek_button", classes="replay_button"),
+                            classes="replay_buttons",
+                        ),
+                        ProgressBar(
+                            id="dashboard_replay_progressbar", total=100, show_percentage=False, show_eta=False
+                        ),
+                        id="dashboard_replay_container",
+                        classes="dashboard_replay",
+                    )
                 ),
                 Container(
                     Center(
@@ -554,6 +566,7 @@ class TabManager:
         tab.proxysql_command_stats_datatable = self.app.query_one("#proxysql_command_stats_datatable", DataTable)
 
         tab.dashboard_replay_container = self.app.query_one("#dashboard_replay_container", Container)
+        tab.dashboard_replay_progressbar = self.app.query_one("#dashboard_replay_progressbar", ProgressBar)
         tab.dashboard_replay_start_end = self.app.query_one("#dashboard_replay_start_end", Static)
         tab.dashboard_replay = self.app.query_one("#dashboard_replay", Static)
         tab.dashboard_section_1 = self.app.query_one("#dashboard_section_1", Static)
@@ -738,23 +751,13 @@ class TabManager:
                 await self.disconnect_tab(tab)
 
                 tab.loading_indicator.display = True
+
+                # This is to prevent an edge case I experienced.
+                # Continue on with process after 5 seconds if it gets stuck in the loop
                 start_time = monotonic()
 
                 while True:
-                    # This is to prevent an edge case I experienced.
-                    # Re-try the process after 5 seconds if it gets stuck in a loop
-                    if monotonic() - start_time > 5:
-                        await self.disconnect_tab(tab)
-
-                        tab.worker_running = False
-                        tab.replicas_worker_running = False
-
-                        self.app.notify("Operation timed out after 5 seconds", severity="error")
-                        self.setup_host_tab(tab)
-
-                        break
-
-                    if not tab.worker_running and not tab.replicas_worker_running:
+                    if (not tab.worker_running and not tab.replicas_worker_running) or (monotonic() - start_time > 5):
                         tab.worker_cancel_error = ""
 
                         tab.dashboard_replay_container.display = False

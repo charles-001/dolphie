@@ -214,9 +214,12 @@ class DolphieApp(App):
 
         # Get the next event from the replay file
         replay_event_data = tab.replay_manager.get_next_refresh_interval()
-        # If there's no more events, cancel the worker
+        # If there's no more events, stop here and cancel the worker
         if not replay_event_data:
+            tab.worker_running = False
             tab.worker.cancel()
+
+            return
 
         tab.replay_manager.fetch_global_variable_changes_for_current_replay_id()
 
@@ -265,6 +268,8 @@ class DolphieApp(App):
             if metric_instance:
                 for metric_name, metric_values in metric_data.items():
                     metric_instance.__dict__[metric_name].values = metric_values
+
+        tab.worker_running = False
 
     @work(thread=True, group="main")
     async def run_worker_main(self, tab_id: int):
@@ -1565,8 +1570,7 @@ class DolphieApp(App):
                 table.add_column("Old Value", overflow="fold")
                 table.add_column("New Value", overflow="fold")
 
-                for change in global_variable_changes:
-                    timestamp, variable, old_value, new_value = change[0], change[1], change[2], change[3]
+                for timestamp, variable, old_value, new_value in global_variable_changes:
                     table.add_row(f"[dark_gray]{timestamp}", f"[light_blue]{variable}", old_value, new_value)
 
                 screen_data = Group(

@@ -64,6 +64,7 @@ class ReplayManager:
         self.cursor: sqlite3.Cursor = None
         self.current_replay_id = 0  # This is used to keep track of the last primary key read from the database
         self.current_replay_timestamp = None  # Only used for dashboard replay section
+        self.total_replay_rows = 0
         self.min_timestamp = None
         self.max_timestamp = None
         self.min_id = None
@@ -521,20 +522,28 @@ class ReplayManager:
             ReplayData: The next replay data.
         """
 
-        # Get the min and max timestamps and IDs from the database so we can update the UI
-        row = self.cursor.execute("SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id) FROM replay_data").fetchone()
-        if row:
-            self.min_timestamp = row[0]
-            self.max_timestamp = row[1]
-            self.min_id = row[2]
-            self.max_id = row[3]
+        try:
+            # Get the min and max timestamps and IDs from the database so we can update the UI
+            row = self.cursor.execute(
+                "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data"
+            ).fetchone()
+            if row:
+                self.min_timestamp = row[0]
+                self.max_timestamp = row[1]
+                self.min_id = row[2]
+                self.max_id = row[3]
+                self.total_replay_rows = row[4]
 
-        # Get the next row
-        row = self.cursor.execute(
-            "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
-            (self.current_replay_id,),
-        ).fetchone()
-        if not row:
+            # Get the next row
+            row = self.cursor.execute(
+                "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
+                (self.current_replay_id,),
+            ).fetchone()
+            if not row:
+                return None
+
+        except sqlite3.ProgrammingError as e:
+            self.dolphie.app.notify(str(e), title="Error reading replay data", severity="error")
             return None
 
         self.current_replay_id = row[0]
@@ -589,9 +598,7 @@ class ReplayManager:
             (self.current_replay_id,),
         )
 
-        for row in rows:
-            timestamp, variable, old_value, new_value = row[0], row[1], row[2], row[3]
-
+        for timestamp, variable, old_value, new_value in rows:
             # read_only notification is handled by monitor_read_only_change() in app.py
             if variable == "read_only":
                 continue
