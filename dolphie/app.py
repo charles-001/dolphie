@@ -218,26 +218,6 @@ class DolphieApp(App):
         if not replay_event_data:
             tab.worker.cancel()
 
-        min_timestamp = tab.replay_manager.min_timestamp
-        max_timestamp = tab.replay_manager.max_timestamp
-        current_timestamp = replay_event_data.timestamp
-
-        # Highlight if the min or max timestamp matches the current timestamp
-        min_timestamp = (
-            f"[b light_blue]{min_timestamp}[/b light_blue]" if min_timestamp == current_timestamp else min_timestamp
-        )
-        max_timestamp = (
-            f"[b light_blue]{max_timestamp}[/b light_blue]" if max_timestamp == current_timestamp else max_timestamp
-        )
-
-        # Update the dashboard title with the timestamp of the replay event
-        tab.dashboard_replay.update(f"[b]Replay[/b] ([dark_gray]{os.path.basename(dolphie.replay_file)}[/dark_gray])")
-        tab.dashboard_replay_start_end.update(
-            f"{min_timestamp} [b highlight]<-[/b highlight] "
-            f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]->[/b highlight] "
-            f"{max_timestamp}"
-        )
-
         tab.replay_manager.fetch_global_variable_changes_for_current_replay_id()
 
         # Common data for refreshing
@@ -718,6 +698,8 @@ class DolphieApp(App):
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
+        tab.refresh_replay_dashboard_section()
+
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
         if not dolphie.daemon_mode:
@@ -758,6 +740,8 @@ class DolphieApp(App):
 
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
+
+        tab.refresh_replay_dashboard_section()
 
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed

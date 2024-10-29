@@ -1,7 +1,9 @@
 import asyncio
 import copy
+import os
 import uuid
 from dataclasses import dataclass
+from time import monotonic
 from typing import Dict, List
 
 from textual.app import App
@@ -119,6 +121,32 @@ class Tab:
 
     def get_panel_widget(self, panel_name: str) -> Container:
         return getattr(self, f"panel_{panel_name}")
+
+    def refresh_replay_dashboard_section(self):
+        if not self.dolphie.replay_file:
+            return
+
+        min_timestamp = self.replay_manager.min_timestamp
+        max_timestamp = self.replay_manager.max_timestamp
+        current_timestamp = self.replay_manager.current_replay_timestamp
+
+        # Highlight if the min or max timestamp matches the current timestamp
+        min_timestamp = (
+            f"[b light_blue]{min_timestamp}[/b light_blue]" if min_timestamp == current_timestamp else min_timestamp
+        )
+        max_timestamp = (
+            f"[b light_blue]{max_timestamp}[/b light_blue]" if max_timestamp == current_timestamp else max_timestamp
+        )
+
+        # Update the dashboard title with the timestamp of the replay event
+        self.dashboard_replay.update(
+            f"[b]Replay[/b] ([dark_gray]{os.path.basename(self.dolphie.replay_file)}[/dark_gray])"
+        )
+        self.dashboard_replay_start_end.update(
+            f"{min_timestamp} [b highlight]<-[/b highlight] "
+            f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]->[/b highlight] "
+            f"{max_timestamp}"
+        )
 
     def size_dashboard_sections(self):
         if self.dolphie.connection_source == ConnectionSource.mysql:
@@ -710,7 +738,22 @@ class TabManager:
                 await self.disconnect_tab(tab)
 
                 tab.loading_indicator.display = True
+                start_time = monotonic()
+
                 while True:
+                    # This is to prevent an edge case I experienced.
+                    # Re-try the process after 5 seconds if it gets stuck in a loop
+                    if monotonic() - start_time > 5:
+                        await self.disconnect_tab(tab)
+
+                        tab.worker_running = False
+                        tab.replicas_worker_running = False
+
+                        self.app.notify("Operation timed out after 5 seconds", severity="error")
+                        self.setup_host_tab(tab)
+
+                        break
+
                     if not tab.worker_running and not tab.replicas_worker_running:
                         tab.worker_cancel_error = ""
 

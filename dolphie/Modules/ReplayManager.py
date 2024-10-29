@@ -63,6 +63,7 @@ class ReplayManager:
         self.connection: sqlite3.Connection = None
         self.cursor: sqlite3.Cursor = None
         self.current_replay_id = 0  # This is used to keep track of the last primary key read from the database
+        self.current_replay_timestamp = None  # Only used for dashboard replay section
         self.min_timestamp = None
         self.max_timestamp = None
         self.min_id = None
@@ -537,6 +538,7 @@ class ReplayManager:
             return None
 
         self.current_replay_id = row[0]
+        self.current_replay_timestamp = row[1]
 
         # Decompress and parse the JSON data
         data = orjson.loads(self._decompress_data(row[2]))
