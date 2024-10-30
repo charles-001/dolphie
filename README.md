@@ -67,7 +67,7 @@ options:
   -m , --mycnf-file     MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
   -l , --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials [default: client]
   -r , --refresh-interval
-                        How much time to wait in seconds between each refresh [default: 1]
+                        The time, in seconds, between each data collection and processing cycle [default: 1]
   --host-cache-file     Resolve IPs to hostnames when your DNS is unable to. Each IP/hostname pair should be on its own line using format ip=hostname [default: ~/dolphie_host_cache]
   --tab-setup-file      Specify location of file that stores the available hosts to use in Tab Setup modal [default: ~/dolphie_hosts]
   --heartbeat-table     (MySQL only) If your hosts use pt-heartbeat, specify table in format db.table to use the timestamp it has for replication lag instead of Seconds_Behind_Master from SHOW REPLICA STATUS
@@ -210,9 +210,9 @@ Note: Use `admin` user instead of `stats` user so you can use all features
 3. REPLICATION CLIENT/REPLICATION SLAVE
 4. SUPER (required if you want to kill queries)
 
-## Record & Replay 
+## Record & Replay
 
-Dolphie is capable of recording your live session data that can be used in a future replay if needed. To begin recording, specify the `--record` option along with `--replay-dir` and you're good to go! The data will be saved in a SQLite database compressed with ZSTD for efficient storage management. 
+Dolphie is capable of recording your live session data that can be used in a future replay if needed. To begin recording, specify the `--record` option along with `--replay-dir` and you're good to go! The data will be saved in a SQLite database compressed with ZSTD for efficient storage management.
 
 To view a replay from either a live session or daemon mode, specify the `--replay-file` option or bring up the `Tab Setup` modal. Replays enable you to navigate through the recorded data as if you were observing Dolphie in real-time at the exact time you need to investigate. The replay interface features intuitive controls for stepping backward, moving forward, playing/pausing, and jumping to specific timestamps. While some commands or features may be restricted in replay mode, all core functionalities for effective review and troubleshooting remain accessible.
 
@@ -222,7 +222,7 @@ If you need Dolphie running incognito while always recording data to capture tho
 
 To activate Daemon mode, specify the `--daemon` option, which will automatically enable `--record`. This will transform Dolphie into a resource-efficient, passive, always-on monitoring process that continuously records data. It removes Textual's TUI and creates a log file for messages while also printing them to the console.
 
-To run Dolphie in the background using daemon mode, I recommend  `systemctl` for its flexibility and management capabilities (see the [service configuration example](https://github.com/charles-001/dolphie/blob/main/dolphie.service)). While alternatives like `nohup` or `tmux` can be used, they are not advisable due to their limited management features.
+To run Dolphie in the background using daemon mode, I recommend `systemctl` for its flexibility and management capabilities (see the [service configuration example](https://github.com/charles-001/dolphie/blob/main/dolphie.service)). While alternatives like `nohup` or `tmux` can be used, they are not advisable due to their limited management features.
 
 **Note**: Daemon mode's replay file can consume significant disk space, particularly on busy servers. To minimize disk usage, adjust the `--replay-retention-hours` and `--refresh-interval` options to control data retention and collection frequency.
 

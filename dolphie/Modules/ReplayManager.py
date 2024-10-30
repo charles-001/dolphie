@@ -62,7 +62,9 @@ class ReplayManager:
         self.schema_version = 2
         self.connection: sqlite3.Connection = None
         self.cursor: sqlite3.Cursor = None
-        self.current_index = 0  # This is used to keep track of the last primary key read from the database
+        self.current_replay_id = 0  # This is used to keep track of the last primary key read from the database
+        self.current_replay_timestamp = None  # Only used for dashboard replay section
+        self.total_replay_rows = 0
         self.min_timestamp = None
         self.max_timestamp = None
         self.min_id = None
@@ -71,6 +73,7 @@ class ReplayManager:
         self.replay_file_size = 0
         self.compression_dict = None
         self.dict_samples = []
+        self.global_variable_change_ids = []  # Used to keep track of the primary keys of global variable changes
 
         # Determine filename used for replay file
         hostname = f"{dolphie.host}_{dolphie.port}"
@@ -91,9 +94,6 @@ class ReplayManager:
         self._initialize_sqlite()
         self._manage_metadata()
 
-        if dolphie.replay_file:
-            self._get_replay_file_metadata()
-
     def _initialize_sqlite(self):
         """
         Initializes the SQLite database and creates the necessary tables.
@@ -111,6 +111,7 @@ class ReplayManager:
         else:
             logger.info("Connected to SQLite")
 
+        # Create replay_data table if it doesn't exist
         self.cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS replay_data (
@@ -120,7 +121,10 @@ class ReplayManager:
             )"""
         )
         self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
-        metadata_table_query = """
+
+        # Create metadata table if it doesn't exist
+        self.cursor.execute(
+            """
             CREATE TABLE IF NOT EXISTS metadata (
                 schema_version INTEGER DEFAULT 1,
                 host VARCHAR(255),
@@ -130,7 +134,22 @@ class ReplayManager:
                 dolphie_version VARCHAR(255),
                 compression_dict BLOB
             )"""
-        self.cursor.execute(metadata_table_query)
+        )
+
+        # Create variable_changes table if it doesn't exist
+        self.cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS variable_changes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                replay_id INTEGER,
+                timestamp DATETIME,
+                variable_name VARCHAR(255),
+                old_value VARCHAR(255),
+                new_value VARCHAR(255)
+            )"""
+        )
+        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_variable_changes_timestamp ON variable_changes (timestamp)")
+        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_variable_changes_replay_id ON variable_changes (replay_id)")
 
         # Enable auto-vacuum if it's not already enabled. This will help keep the database file size down.
         if self.cursor.execute("PRAGMA auto_vacuum").fetchone()[0] != 1:
@@ -156,6 +175,8 @@ class ReplayManager:
         )
 
         self.cursor.execute("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
+        self.cursor.execute("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
+
         self.last_purge_time = current_time
 
     def seek_to_timestamp(self, timestamp: str):
@@ -168,7 +189,7 @@ class ReplayManager:
         row = self.cursor.execute("SELECT id FROM replay_data WHERE timestamp = ?", (timestamp,)).fetchone()
         if row:
             # We subtract 1 because get_next_refresh_interval naturally increments the index
-            self.current_index = row[0] - 1
+            self.current_replay_id = row[0] - 1
             self.dolphie.app.notify(
                 f"Seeking to timestamp [light_blue]{timestamp}[/light_blue]", severity="success", timeout=10
             )
@@ -182,7 +203,7 @@ class ReplayManager:
             ).fetchone()
             if row:
                 # We subtract 1 because get_next_refresh_interval naturally increments the index
-                self.current_index = row[0] - 1
+                self.current_replay_id = row[0] - 1
                 self.dolphie.app.notify(
                     f"Timestamp not found, seeking to closest timestamp [light_blue]{row[1]}[/light_blue]",
                     timeout=10,
@@ -252,17 +273,18 @@ class ReplayManager:
                         f"The connection source of the daemon's replay file ({connection_source}) "
                         f"differs from the current connection source ({self.dolphie.connection_source}). "
                         "You should never mix connection sources in the same replay file. Please rename "
-                        "the daemon's replay file and restart the daemon."
+                        "the daemon's replay file and restart the daemon"
                     )
 
             host = row[1]
             port = row[2]
-            host_distro = row[3]
+            # Add the host's distro to the metadata if it's different than the connection source
+            host_distro = f" ({row[3]})" if connection_source != row[3] else ""
             app_version = row[5]
             compress_dict = row[6]
 
             logger.info(
-                f"Replay database metadata - Host: {host}, Port: {port}, Source: {connection_source} ({host_distro}), "
+                f"Replay database metadata - Host: {host}, Port: {port}, Source: {connection_source}{host_distro}, "
                 f"Dolphie: {app_version}"
             )
 
@@ -272,30 +294,71 @@ class ReplayManager:
                     f"ZSTD compression dictionary loaded (size: {format_bytes(len(compress_dict), color=False)})"
                 )
 
+    def verify_replay_file(self):
+        """
+        Verifies that the replay file has data to replay and that the schema version matches.
+        """
+        if not self.dolphie.replay_file:
+            return
+
+        if not self._get_replay_file_metadata() or not self._verify_replay_has_data():
+            return False
+
+        return True
+
     def _get_replay_file_metadata(self):
         """
         Retrieves the replay's metadata from the metadata table.
+
+        Returns:
+            bool: True if metadata is found and schema matches; False otherwise.
         """
         row = self.cursor.execute("SELECT * FROM metadata").fetchone()
-        if row:
-            schema_version = row[0]
-            if schema_version != self.schema_version:
-                raise Exception(
-                    f"The schema version of the replay file ({schema_version}) differs from this version "
-                    f"of Dolphie's schema version ({self.schema_version}). You will need to use a compatiable version "
-                    "of Dolphie to replay this file."
-                )
+        if not row:
+            self._notify_error("Metadata not found in replay file", "Error reading replay file")
+            return False
 
-            self.dolphie.host = row[1]
-            self.dolphie.port = row[2]
-            self.dolphie.host_with_port = f"{self.dolphie.host}:{self.dolphie.port}"
-            self.dolphie.host_distro = row[3]
-            self.dolphie.connection_source = row[4]
+        schema_version = row[0]
+        if schema_version != self.schema_version:
+            self._notify_error(
+                f"The schema version of the replay file ({schema_version}) differs from Dolphie's schema version "
+                f"({self.schema_version}). Use a compatible version of Dolphie to replay this file",
+                "Schema version mismatch",
+            )
+            return False
 
-            if row[6]:
-                self.compression_dict = zstd.ZstdCompressionDict(row[6])
-        else:
-            raise Exception("Metadata not found in replay file.")
+        self.dolphie.host, self.dolphie.port, self.dolphie.host_distro, self.dolphie.connection_source = row[1:5]
+        self.dolphie.host_with_port = f"{self.dolphie.host}:{self.dolphie.port}"
+
+        if row[6]:
+            self.compression_dict = zstd.ZstdCompressionDict(row[6])
+
+        return True
+
+    def _verify_replay_has_data(self):
+        """
+        Verifies that the replay file has data to replay.
+
+        Returns:
+            bool: True if data is found, False if not.
+        """
+        row = self.cursor.execute("SELECT COUNT(*) FROM replay_data").fetchone()
+        if row[0] == 0:
+            self._notify_error("File has no data to replay", "No replay data found")
+            return False
+
+        return True
+
+    def _notify_error(self, message, title):
+        """
+        Helper method to display error notifications.
+        """
+        self.dolphie.app.notify(
+            f"[b]Replay file[/b]: [highlight]{self.replay_file}[/highlight]\n{message}",
+            title=title,
+            severity="error",
+            timeout=10,
+        )
 
     def _train_compression_dict(self) -> bytes:
         """
@@ -473,6 +536,18 @@ class ReplayManager:
             ),
         )
 
+        self.current_replay_id = self.cursor.lastrowid
+
+        # Update the variable_changes table with the data of the replay row so they're linked
+        if self.global_variable_change_ids:
+            self.cursor.executemany(
+                "UPDATE variable_changes SET replay_id = ?, timestamp = ? WHERE id = ?",
+                [(self.current_replay_id, timestamp, id) for id in self.global_variable_change_ids],
+            )
+
+            # Clear the list of global variable change IDs now that they've been linked
+            self.global_variable_change_ids = []
+
         self.purge_old_data()
 
         if not self.dolphie.daemon_mode:
@@ -486,23 +561,32 @@ class ReplayManager:
             ReplayData: The next replay data.
         """
 
-        # Get the min and max timestamps and IDs from the database so we can update the UI
-        row = self.cursor.execute("SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id) FROM replay_data").fetchone()
-        if row:
-            self.min_timestamp = row[0]
-            self.max_timestamp = row[1]
-            self.min_id = row[2]
-            self.max_id = row[3]
+        try:
+            # Get the min and max timestamps and IDs from the database so we can update the UI
+            row = self.cursor.execute(
+                "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data"
+            ).fetchone()
+            if row:
+                self.min_timestamp = row[0]
+                self.max_timestamp = row[1]
+                self.min_id = row[2]
+                self.max_id = row[3]
+                self.total_replay_rows = row[4]
 
-        # Get the next row
-        row = self.cursor.execute(
-            "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
-            (self.current_index,),
-        ).fetchone()
-        if not row:
+            # Get the next row
+            row = self.cursor.execute(
+                "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
+                (self.current_replay_id,),
+            ).fetchone()
+            if not row:
+                return None
+
+        except sqlite3.ProgrammingError as e:
+            self.dolphie.app.notify(str(e), title="Error reading replay data", severity="error")
             return None
 
-        self.current_index = row[0]
+        self.current_replay_id = row[0]
+        self.current_replay_timestamp = row[1]
 
         # Decompress and parse the JSON data
         data = orjson.loads(self._decompress_data(row[2]))
@@ -543,3 +627,59 @@ class ReplayManager:
             )
         else:
             self.dolphie.app.notify("Invalid connection source for replay data", severity="error")
+
+    def fetch_global_variable_changes_for_current_replay_id(self):
+        """
+        Fetches global variable changes for the current replay ID.
+        """
+        rows = self.cursor.execute(
+            "SELECT timestamp, variable_name, old_value, new_value FROM variable_changes WHERE replay_id = ?",
+            (self.current_replay_id,),
+        )
+
+        for timestamp, variable, old_value, new_value in rows:
+            # read_only notification is handled by monitor_read_only_change() in app.py
+            if variable == "read_only":
+                continue
+
+            self.dolphie.app.notify(
+                f"[b][dark_yellow]{variable}[/b][/dark_yellow]\n"
+                f"Timestamp: [light_blue]{timestamp}[/light_blue]\n"
+                f"Old Value: [highlight]{old_value}[/highlight]\n"
+                f"New Value: [highlight]{new_value}[/highlight]",
+                title="Global Variable Change",
+                severity="warning",
+                timeout=10,
+            )
+
+    def fetch_all_global_variable_changes(self) -> list:
+        """
+        Fetches all global variable changes for command 'V'
+        """
+        rows = self.cursor.execute(
+            "SELECT timestamp, variable_name, old_value, new_value FROM variable_changes ORDER BY timestamp"
+        )
+
+        return rows.fetchall()
+
+    def capture_global_variable_change(self, variable_name: str, old_value: str, new_value: str):
+        """
+        Captures a global variable change and stores it in the SQLite database.
+
+        Args:
+            variable_name: The name of the variable that changed.
+            old_value: The old value of the variable.
+            new_value: The new value of the variable.
+        """
+        if not self.dolphie.record_for_replay:
+            return
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        self.cursor.execute(
+            "INSERT INTO variable_changes (timestamp, variable_name, old_value, new_value) VALUES (?, ?, ?, ?)",
+            (timestamp, variable_name, old_value, new_value),
+        )
+
+        # Keep track of the primary key of the global variable change so we can link it to the replay data
+        self.global_variable_change_ids.append(self.cursor.lastrowid)

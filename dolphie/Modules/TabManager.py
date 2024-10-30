@@ -1,7 +1,9 @@
 import asyncio
 import copy
+import os
 import uuid
 from dataclasses import dataclass
+from time import monotonic
 from typing import Dict, List
 
 from textual.app import App
@@ -18,6 +20,7 @@ from textual.widgets import (
     DataTable,
     Label,
     LoadingIndicator,
+    ProgressBar,
     Sparkline,
     Static,
     Switch,
@@ -27,7 +30,7 @@ from textual.widgets import TabbedContent, TabPane, Tabs
 from textual.worker import Worker
 
 import dolphie.Modules.MetricManager as MetricManager
-from dolphie.DataTypes import ConnectionStatus
+from dolphie.DataTypes import ConnectionSource, ConnectionStatus
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import Config, HostGroupMember
 from dolphie.Modules.ManualException import ManualException
@@ -74,6 +77,7 @@ class Tab:
     spinner: SpinnerWidget = None
 
     dashboard_replay_container: Container = None
+    dashboard_replay_progressbar: ProgressBar = None
     dashboard_replay_start_end: Static = None
     dashboard_replay: Static = None
     dashboard_section_1: Static = None
@@ -120,6 +124,116 @@ class Tab:
     def get_panel_widget(self, panel_name: str) -> Container:
         return getattr(self, f"panel_{panel_name}")
 
+    def refresh_replay_dashboard_section(self):
+        if not self.dolphie.replay_file:
+            return
+
+        min_timestamp = self.replay_manager.min_timestamp
+        max_timestamp = self.replay_manager.max_timestamp
+        current_timestamp = self.replay_manager.current_replay_timestamp
+
+        # Highlight if the max timestamp matches the current timestamp
+        max_timestamp = f"[b][green]{max_timestamp}[/b][green]" if max_timestamp == current_timestamp else max_timestamp
+
+        # Update the dashboard title with the timestamp of the replay event
+        self.dashboard_replay.update(
+            f"[b]Replay[/b] ([dark_gray]{os.path.basename(self.dolphie.replay_file)}[/dark_gray])"
+        )
+        self.dashboard_replay_start_end.update(
+            f"{min_timestamp} [b highlight]<-[/b highlight] "
+            f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]->[/b highlight] "
+            f"{max_timestamp}"
+        )
+
+        # Update the progress bar with the current replay progress
+        if self.replay_manager.current_replay_id == self.replay_manager.min_id:
+            current_position = 0
+        else:
+            current_position = self.replay_manager.current_replay_id - self.replay_manager.min_id + 1
+        self.dashboard_replay_progressbar.update(
+            progress=current_position,
+            total=self.replay_manager.total_replay_rows,
+        )
+
+    def size_dashboard_sections(self):
+        if self.dolphie.connection_source == ConnectionSource.mysql:
+            # Update the sizes of the panels depending if replication container is visible or not
+            if self.dolphie.replication_status and not self.dolphie.panels.replication.visible:
+                self.dashboard_section_1.styles.width = "25vw"
+                self.dashboard_section_2.styles.width = "17vw"
+                self.dashboard_section_3.styles.width = "21vw"
+                self.dashboard_section_4.styles.width = "12vw"
+                self.dashboard_section_5.styles.width = "25vw"
+
+                self.dashboard_section_5.display = True
+            else:
+                self.dashboard_section_1.styles.width = "32vw"
+                self.dashboard_section_2.styles.width = "24vw"
+                self.dashboard_section_3.styles.width = "27vw"
+                self.dashboard_section_4.styles.width = "17vw"
+                self.dashboard_section_5.styles.width = "0"
+
+                self.dashboard_section_5.display = False
+
+            self.dashboard_section_1.styles.max_width = "45"
+            self.dashboard_section_2.styles.max_width = "32"
+            self.dashboard_section_3.styles.max_width = "38"
+            self.dashboard_section_4.styles.max_width = "22"
+            self.dashboard_section_5.styles.max_width = "55"
+        elif self.dolphie.connection_source == ConnectionSource.proxysql:
+            self.dashboard_section_1.styles.width = "24vw"
+            self.dashboard_section_2.styles.width = "20vw"
+            self.dashboard_section_3.styles.width = "22vw"
+            self.dashboard_section_4.styles.width = "13vw"
+
+            self.dashboard_section_5.display = False
+
+            self.dashboard_section_1.styles.max_width = "35"
+            self.dashboard_section_2.styles.max_width = "28"
+            self.dashboard_section_3.styles.max_width = "25"
+            self.dashboard_section_4.styles.max_width = "25"
+
+    def refresh_tab_properties(self):
+        self.main_container.display = True
+
+        self.size_dashboard_sections()
+
+        # Hide all graph tabs so we can show the ones we want
+        tabs = self.metric_graph_tabs.query(TabPane)
+        for graph_tab in tabs:
+            self.metric_graph_tabs.hide_tab(graph_tab.id)
+
+        # Show the tabs that are for the current connection source
+        for metric_instance in self.dolphie.metric_manager.metrics.__dict__.values():
+            if self.dolphie.connection_source in metric_instance.connection_source:
+                self.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
+
+        if self.dolphie.replay_file:
+            self.dashboard_replay_container.display = True
+        else:
+            self.dashboard_replay_container.display = False
+
+    def layout_graphs(self):
+        # These variables are dynamically created
+        if self.dolphie.is_mysql_version_at_least("8.0.30"):
+            if self.dolphie.replay_file:
+                self.graph_redo_log_data_written.styles.width = "88%"
+                self.graph_redo_log_bar.styles.width = "12%"
+                self.graph_redo_log_active_count.display = False
+            else:
+                self.graph_redo_log_data_written.styles.width = "55%"
+                self.graph_redo_log_bar.styles.width = "12%"
+                self.graph_redo_log_active_count.styles.width = "33%"
+                self.graph_redo_log_active_count.display = True
+                self.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+        else:
+            self.graph_redo_log_data_written.styles.width = "88%"
+            self.graph_redo_log_bar.styles.width = "12%"
+            self.graph_redo_log_active_count.display = False
+
+        self.graph_adaptive_hash_index.styles.width = "50%"
+        self.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
+
 
 class TabManager:
     def __init__(self, app: App, config: Config):
@@ -153,11 +267,17 @@ class TabManager:
                 self.topbar.connection_status = dolphie.connection_status
                 self.topbar.host = dolphie.host_with_port
 
-                if dolphie.record_for_replay and tab.replay_manager:
+                if (
+                    dolphie.record_for_replay
+                    and tab.replay_manager
+                    and dolphie.connection_status != ConnectionStatus.disconnected
+                ):
                     self.topbar.replay_file_size = tab.replay_manager.replay_file_size
+                else:
+                    self.topbar.replay_file_size = None
             else:
-                self.topbar.connection_status = None
                 self.topbar.replay_file_size = None
+                self.topbar.connection_status = None
                 self.topbar.host = ""
 
     def generate_tab_id(self) -> str:
@@ -176,18 +296,23 @@ class TabManager:
             LoadingIndicator(id="loading_indicator", classes="connection_loading_indicator"),
             VerticalScroll(
                 SpinnerWidget(id="spinner", text="Processing command"),
-                Container(
-                    Static(id="dashboard_replay", classes="dashboard_replay"),
-                    Static(id="dashboard_replay_start_end", classes="dashboard_replay"),
-                    Horizontal(
-                        Button("⏪ Back", id="back_button", classes="replay_button"),
-                        Button("⏸️  Pause", id="pause_button", classes="replay_button"),
-                        Button("⏩ Forward", id="forward_button", classes="replay_button"),
-                        Button("🔍 Seek", id="seek_button", classes="replay_button"),
-                        classes="button_container",
-                    ),
-                    id="dashboard_replay_container",
-                    classes="dashboard_replay",
+                Center(
+                    Container(
+                        Static(id="dashboard_replay", classes="dashboard_replay"),
+                        Static(id="dashboard_replay_start_end", classes="dashboard_replay"),
+                        Horizontal(
+                            Button("⏪ Back", id="back_button", classes="replay_button"),
+                            Button("⏸️  Pause", id="pause_button", classes="replay_button"),
+                            Button("⏩ Forward", id="forward_button", classes="replay_button"),
+                            Button("🔍 Seek", id="seek_button", classes="replay_button"),
+                            classes="replay_buttons",
+                        ),
+                        ProgressBar(
+                            id="dashboard_replay_progressbar", total=100, show_percentage=False, show_eta=False
+                        ),
+                        id="dashboard_replay_container",
+                        classes="dashboard_replay",
+                    )
                 ),
                 Container(
                     Center(
@@ -441,6 +566,7 @@ class TabManager:
         tab.proxysql_command_stats_datatable = self.app.query_one("#proxysql_command_stats_datatable", DataTable)
 
         tab.dashboard_replay_container = self.app.query_one("#dashboard_replay_container", Container)
+        tab.dashboard_replay_progressbar = self.app.query_one("#dashboard_replay_progressbar", ProgressBar)
         tab.dashboard_replay_start_end = self.app.query_one("#dashboard_replay_start_end", Static)
         tab.dashboard_replay = self.app.query_one("#dashboard_replay", Static)
         tab.dashboard_section_1 = self.app.query_one("#dashboard_section_1", Static)
@@ -605,27 +731,36 @@ class TabManager:
             if self.config.tab_setup:
                 self.config.tab_setup = False
 
-            host_port = data["host"].split(":")
+            # Universally set record_for_replay
+            self.config.record_for_replay = data.get("record_for_replay")
 
-            dolphie.credential_profile = data.get("credential_profile")
-            dolphie.host = host_port[0]
-            dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
-            dolphie.user = data.get("username")
-            dolphie.password = data.get("password")
             hostgroup = data.get("hostgroup")
-            dolphie.socket = data.get("socket_file")
-            dolphie.ssl = data.get("ssl")
-
             if hostgroup:
                 dolphie.app.connect_as_hostgroup(hostgroup)
             else:
+                host_port = data["host"].split(":")
+                dolphie.host = host_port[0]
+                dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
+                dolphie.credential_profile = data.get("credential_profile")
+                dolphie.user = data.get("username")
+                dolphie.password = data.get("password")
+                dolphie.socket = data.get("socket_file")
+                dolphie.ssl = data.get("ssl")
+                dolphie.record_for_replay = data.get("record_for_replay")
                 dolphie.replay_file = data.get("replay_file")
 
                 await self.disconnect_tab(tab)
 
                 tab.loading_indicator.display = True
+
+                # This is to prevent an edge case I experienced.
+                # Continue on with process after 5 seconds if it gets stuck in the loop
+                start_time = monotonic()
+
                 while True:
-                    if not tab.worker_running and not tab.replicas_worker_running:
+                    if (not tab.worker_running and not tab.replicas_worker_running) or (monotonic() - start_time > 5):
+                        tab.worker_running = False
+                        tab.replicas_worker_running = False
                         tab.worker_cancel_error = ""
 
                         tab.dashboard_replay_container.display = False
@@ -634,6 +769,11 @@ class TabManager:
 
                         if dolphie.replay_file:
                             tab.replay_manager = ReplayManager(dolphie)
+                            if not tab.replay_manager.verify_replay_file():
+                                tab.loading_indicator.display = False
+                                self.setup_host_tab(tab)
+                                return
+
                             self.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
                             dolphie.app.run_worker_replay(tab.id)
                         else:
@@ -666,6 +806,7 @@ class TabManager:
                 username=dolphie.user,
                 password=dolphie.password,
                 ssl=dolphie.ssl,
+                record_for_replay=dolphie.record_for_replay,
                 socket_file=dolphie.socket,
                 hostgroups=dolphie.hostgroup_hosts.keys(),
                 available_hosts=dolphie.tab_setup_available_hosts,

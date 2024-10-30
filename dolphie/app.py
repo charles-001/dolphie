@@ -29,7 +29,7 @@ from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
-from textual.widgets import Button, Switch, TabbedContent, TabPane, Tabs
+from textual.widgets import Button, Switch, TabbedContent, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
 import dolphie.Modules.MetricManager as MetricManager
@@ -164,7 +164,7 @@ class DolphieApp(App):
                 "white": "#e9e9e9",
                 "green": "#54efae",
                 "yellow": "#f6ff8f",
-                "dark_yellow": "#cad45f",
+                "dark_yellow": "#e6d733",
                 "red": "#fd8383",
                 "purple": "#b565f3",
                 "dark_gray": "#969aad",
@@ -214,33 +214,14 @@ class DolphieApp(App):
 
         # Get the next event from the replay file
         replay_event_data = tab.replay_manager.get_next_refresh_interval()
-        # If there's no more events, cancel the worker
+        # If there's no more events, stop here and cancel the worker
         if not replay_event_data:
+            tab.worker_running = False
             tab.worker.cancel()
 
-        min_timestamp = tab.replay_manager.min_timestamp
-        max_timestamp = tab.replay_manager.max_timestamp
-        current_timestamp = replay_event_data.timestamp
+            return
 
-        # Highlight if the min or max timestamp matches the current timestamp
-        min_timestamp = (
-            f"[b light_blue]{min_timestamp}[/b light_blue]" if min_timestamp == current_timestamp else min_timestamp
-        )
-        max_timestamp = (
-            f"[b light_blue]{max_timestamp}[/b light_blue]" if max_timestamp == current_timestamp else max_timestamp
-        )
-
-        # Update the dashboard title with the timestamp of the replay event
-        tab.dashboard_replay.update(f"[b]Replay[/b] ([dark_gray]{os.path.basename(dolphie.replay_file)}[/dark_gray])")
-        tab.dashboard_replay_start_end.update(
-            f"{min_timestamp} [b highlight]←[/b highlight] "
-            f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]→[/b highlight] "
-            f"{max_timestamp}"
-        )
-
-        dolphie.detect_global_variable_change(
-            old_data=dolphie.global_variables, new_data=replay_event_data.global_variables
-        )
+        tab.replay_manager.fetch_global_variable_changes_for_current_replay_id()
 
         # Common data for refreshing
         dolphie.global_variables = replay_event_data.global_variables
@@ -287,6 +268,8 @@ class DolphieApp(App):
             if metric_instance:
                 for metric_name, metric_values in metric_data.items():
                     metric_instance.__dict__[metric_name].values = metric_values
+
+        tab.worker_running = False
 
     @work(thread=True, group="main")
     async def run_worker_main(self, tab_id: int):
@@ -411,7 +394,7 @@ class DolphieApp(App):
                     return
 
                 if not tab.main_container.display:
-                    self.refresh_tab_properties()
+                    tab.refresh_tab_properties()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -477,7 +460,7 @@ class DolphieApp(App):
                     return
 
                 if not tab.main_container.display:
-                    self.refresh_tab_properties()
+                    tab.refresh_tab_properties()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -491,7 +474,7 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
-        dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
+        self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
         # At this point, we're connected so we need to do a few things
@@ -615,7 +598,7 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
-        dolphie.detect_global_variable_change(old_data=dolphie.global_variables, new_data=global_variables)
+        self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
 
         if dolphie.connection_status == ConnectionStatus.connecting:
@@ -720,6 +703,8 @@ class DolphieApp(App):
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
+        tab.refresh_replay_dashboard_section()
+
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
         if not dolphie.daemon_mode:
@@ -730,7 +715,7 @@ class DolphieApp(App):
 
         if tab.loading_indicator.display or dolphie.replay_file:
             tab.loading_indicator.display = False
-            self.layout_graphs(tab)
+            tab.layout_graphs()
 
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
@@ -747,11 +732,16 @@ class DolphieApp(App):
                     tab.sparkline.refresh()
 
         if dolphie.panels.graphs.visible:
-            # Hide/show replication tab based on replication status
+            # Hide/show certain tabs for graphs depending on specific things
             if dolphie.replication_status:
                 tab.metric_graph_tabs.show_tab("graph_tab_replication_lag")
             else:
                 tab.metric_graph_tabs.hide_tab("graph_tab_replication_lag")
+
+            if dolphie.global_variables.get("innodb_adaptive_hash_index") == "OFF":
+                tab.metric_graph_tabs.hide_tab("graph_tab_adaptive_hash_index")
+            else:
+                tab.metric_graph_tabs.show_tab("graph_tab_adaptive_hash_index")
 
             if (dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible) or dolphie.replay_file:
                 tab.metric_graph_tabs.show_tab("graph_tab_locks")
@@ -761,10 +751,54 @@ class DolphieApp(App):
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
+        tab.refresh_replay_dashboard_section()
+
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
         if not dolphie.daemon_mode:
             dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
+
+    def monitor_global_variable_change(self, tab: Tab, old_data: dict, new_data: dict):
+        if not old_data:
+            return
+
+        dolphie = tab.dolphie
+
+        # gtid is always changing so we don't want to alert on that
+        # The others are ones I've found to be spammy due to monitoring tools changing them
+        exclude_variables = {"gtid", "innodb_thread_sleep_delay"}
+
+        # Add to exclude_variables with user specified variables
+        if dolphie.exclude_notify_global_vars:
+            exclude_variables.update(dolphie.exclude_notify_global_vars)
+
+        for variable, new_value in new_data.items():
+            if any(item in variable.lower() for item in exclude_variables):
+                continue
+
+            old_value = old_data.get(variable)
+            if old_value != new_value:
+                tab.replay_manager.capture_global_variable_change(variable, old_value, new_value)
+
+                # read_only notification/log message is handled by monitor_read_only_change()
+                if variable == "read_only":
+                    continue
+
+                logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")
+
+                # If the tab is not active, include the host in the notification
+                include_host = ""
+                if self.tab_manager.active_tab.id != tab.id:
+                    include_host = f"Host:      [light_blue]{dolphie.host_with_port}[/light_blue]\n"
+                self.app.notify(
+                    f"[b][dark_yellow]{variable}[/b][/dark_yellow]\n"
+                    f"{include_host}"
+                    f"Old Value: [highlight]{old_value}[/highlight]\n"
+                    f"New Value: [highlight]{new_value}[/highlight]",
+                    title="Global Variable Change",
+                    severity="warning",
+                    timeout=15,
+                )
 
     def monitor_read_only_change(self, tab: Tab):
         dolphie = tab.dolphie
@@ -776,12 +810,12 @@ class DolphieApp(App):
         formatted_ro_status = ConnectionStatus.read_only if current_ro_status == "ON" else ConnectionStatus.read_write
         status = "read-only" if current_ro_status == "ON" else "read/write"
 
-        message = f"Host [highlight]{dolphie.host_with_port}[/highlight] is now [b highlight]{status}[/b highlight]"
+        message = f"Host [light_blue]{dolphie.host_with_port}[/light_blue] is now [b highlight]{status}[/b highlight]"
 
         if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
-            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+            message += " ([dark_yellow]SHOULD BE READ/WRITE?[/dark_yellow])"
         elif current_ro_status == "ON" and dolphie.group_replication and dolphie.is_group_replication_primary:
-            message += " ([yellow]SHOULD BE READ/WRITE?[/yellow])"
+            message += " ([dark_yellow]SHOULD BE READ/WRITE?[/dark_yellow])"
 
         if (
             dolphie.connection_status in [ConnectionStatus.read_write, ConnectionStatus.read_only]
@@ -819,38 +853,10 @@ class DolphieApp(App):
         self.loading_hostgroups = False
         self.notify(f"Finished connecting to hosts in hostgroup [highlight]{hostgroup}", severity="success")
 
-    async def on_mount(self):
-        self.tab_manager = TabManager(app=self.app, config=self.config)
-        await self.tab_manager.create_ui_widgets()
-
-        if self.config.hostgroup:
-            self.connect_as_hostgroup(self.config.hostgroup)
-        else:
-            tab = await self.tab_manager.create_tab(tab_name="Initial Tab")
-
-            if self.config.tab_setup:
-                self.tab_manager.setup_host_tab(tab)
-            elif self.tab_manager.active_tab.dolphie.replay_file:
-                self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
-                self.tab_manager.rename_tab(tab)
-                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
-                self.run_worker_replay(self.tab_manager.active_tab.id)
-            else:
-                self.run_worker_main(self.tab_manager.active_tab.id)
-
-                if not self.config.daemon_mode:
-                    self.run_worker_replicas(self.tab_manager.active_tab.id)
-
-        self.check_for_new_version()
-
-    def _handle_exception(self, error: Exception) -> None:
-        self.bell()
-        self.exit(message=Traceback(show_locals=True, width=None, locals_max_length=5))
-
     @on(Button.Pressed, "#back_button")
     def replay_back(self):
         # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
-        self.tab_manager.active_tab.replay_manager.current_index -= 2
+        self.tab_manager.active_tab.replay_manager.current_replay_id -= 2
         self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#forward_button")
@@ -888,27 +894,6 @@ class DolphieApp(App):
             command_get_input,
         )
 
-    def refresh_tab_properties(self):
-        tab = self.tab_manager.active_tab
-        tab.main_container.display = True
-
-        self.size_dashboard_sections(tab)
-
-        # Hide all graph tabs so we can show the ones we want
-        tabs = tab.metric_graph_tabs.query(TabPane)
-        for graph_tab in tabs:
-            tab.metric_graph_tabs.hide_tab(graph_tab.id)
-
-        # Show the tabs that are for the current connection source
-        for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
-            if tab.dolphie.connection_source in metric_instance.connection_source:
-                tab.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
-
-        if tab.dolphie.replay_file:
-            tab.dashboard_replay_container.display = True
-        else:
-            tab.dashboard_replay_container.display = False
-
     @on(Tabs.TabActivated, "#host_tabs")
     def tab_changed(self, event: TabbedContent.TabActivated):
         self.tab_manager.switch_tab(event.tab.id, set_active=False)
@@ -932,7 +917,7 @@ class DolphieApp(App):
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
 
-            self.refresh_tab_properties()
+            tab.refresh_tab_properties()
 
             # Set the display state for the replica container based on whether there are replicas
             tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
@@ -1015,47 +1000,9 @@ class DolphieApp(App):
 
             if need_current_data:
                 # We subtract 1 because get_next_refresh_interval will increment the index
-                tab.replay_manager.current_index -= 1
+                tab.replay_manager.current_replay_id -= 1
 
             self.run_worker_replay(tab.id, manual_control=True)
-
-    def size_dashboard_sections(self, tab: Tab):
-        if tab.dolphie.connection_source == ConnectionSource.mysql:
-            # Update the sizes of the panels depending if replication container is visible or not
-            if tab.dolphie.replication_status and not tab.dolphie.panels.replication.visible:
-                tab.dashboard_section_1.styles.width = "25vw"
-                tab.dashboard_section_2.styles.width = "17vw"
-                tab.dashboard_section_3.styles.width = "21vw"
-                tab.dashboard_section_4.styles.width = "12vw"
-                tab.dashboard_section_5.styles.width = "25vw"
-
-                tab.dashboard_section_5.display = True
-            else:
-                tab.dashboard_section_1.styles.width = "32vw"
-                tab.dashboard_section_2.styles.width = "24vw"
-                tab.dashboard_section_3.styles.width = "27vw"
-                tab.dashboard_section_4.styles.width = "17vw"
-                tab.dashboard_section_5.styles.width = "0"
-
-                tab.dashboard_section_5.display = False
-
-            tab.dashboard_section_1.styles.max_width = "45"
-            tab.dashboard_section_2.styles.max_width = "32"
-            tab.dashboard_section_3.styles.max_width = "38"
-            tab.dashboard_section_4.styles.max_width = "22"
-            tab.dashboard_section_5.styles.max_width = "55"
-        elif tab.dolphie.connection_source == ConnectionSource.proxysql:
-            tab.dashboard_section_1.styles.width = "24vw"
-            tab.dashboard_section_2.styles.width = "20vw"
-            tab.dashboard_section_3.styles.width = "22vw"
-            tab.dashboard_section_4.styles.width = "13vw"
-
-            tab.dashboard_section_5.display = False
-
-            tab.dashboard_section_1.styles.max_width = "35"
-            tab.dashboard_section_2.styles.max_width = "28"
-            tab.dashboard_section_3.styles.max_width = "25"
-            tab.dashboard_section_4.styles.max_width = "25"
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         panel_mapping = {
@@ -1093,27 +1040,6 @@ class DolphieApp(App):
                 # When replication panel status is changed, we need to refresh the dashboard panel as well since
                 # it adds/removes it from there
                 dashboard_panel.create_panel(tab)
-
-    def layout_graphs(self, tab: Tab):
-        # These variables are dynamically created
-        if tab.dolphie.is_mysql_version_at_least("8.0.30"):
-            if tab.dolphie.replay_file:
-                tab.graph_redo_log_data_written.styles.width = "88%"
-                tab.graph_redo_log_bar.styles.width = "12%"
-                tab.graph_redo_log_active_count.display = False
-            else:
-                tab.graph_redo_log_data_written.styles.width = "55%"
-                tab.graph_redo_log_bar.styles.width = "12%"
-                tab.graph_redo_log_active_count.styles.width = "33%"
-                tab.graph_redo_log_active_count.display = True
-                tab.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
-        else:
-            tab.graph_redo_log_data_written.styles.width = "88%"
-            tab.graph_redo_log_bar.styles.width = "12%"
-            tab.graph_redo_log_active_count.display = False
-
-        tab.graph_adaptive_hash_index.styles.width = "50%"
-        tab.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):
@@ -1198,7 +1124,7 @@ class DolphieApp(App):
                 return
 
             self.toggle_panel(dolphie.panels.replication.name)
-            self.size_dashboard_sections(tab)
+            tab.size_dashboard_sections()
 
             if dolphie.panels.replication.visible:
                 if dolphie.replica_manager.available_replicas:
@@ -1630,6 +1556,33 @@ class DolphieApp(App):
                 return
 
             self.run_command_in_worker(key=key, dolphie=dolphie)
+
+        elif key == "V":
+            global_variable_changes = tab.replay_manager.fetch_all_global_variable_changes()
+
+            if global_variable_changes:
+                table = Table(
+                    box=box.SIMPLE_HEAVY,
+                    show_edge=False,
+                    style="table_border",
+                )
+                table.add_column("Timestamp")
+                table.add_column("Variable")
+                table.add_column("Old Value", overflow="fold")
+                table.add_column("New Value", overflow="fold")
+
+                for timestamp, variable, old_value, new_value in global_variable_changes:
+                    table.add_row(f"[dark_gray]{timestamp}", f"[light_blue]{variable}", old_value, new_value)
+
+                screen_data = Group(
+                    Align.center(
+                        "[b light_blue]Global Variable Changes[/b light_blue] "
+                        f"([b highlight]{table.row_count}[/b highlight])\n"
+                    ),
+                    table,
+                )
+            else:
+                self.notify("There are no global variable changes in this replay")
 
         elif key == "v":
 
@@ -2218,9 +2171,42 @@ class DolphieApp(App):
         except Exception:
             pass
 
+    async def on_mount(self):
+        self.tab_manager = TabManager(app=self.app, config=self.config)
+        await self.tab_manager.create_ui_widgets()
+
+        if self.config.hostgroup:
+            self.connect_as_hostgroup(self.config.hostgroup)
+        else:
+            tab = await self.tab_manager.create_tab(tab_name="Initial Tab")
+
+            if self.config.tab_setup:
+                self.tab_manager.setup_host_tab(tab)
+            elif self.tab_manager.active_tab.dolphie.replay_file:
+                self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
+                if not tab.replay_manager.verify_replay_file():
+                    tab.replay_manager = None
+                    self.tab_manager.setup_host_tab(tab)
+                    return
+
+                self.tab_manager.rename_tab(tab)
+                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+                self.run_worker_replay(self.tab_manager.active_tab.id)
+            else:
+                self.run_worker_main(self.tab_manager.active_tab.id)
+
+                if not self.config.daemon_mode:
+                    self.run_worker_replicas(self.tab_manager.active_tab.id)
+
+        self.check_for_new_version()
+
     def compose(self):
         yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for commands")
         yield Tabs(id="host_tabs")
+
+    def _handle_exception(self, error: Exception) -> None:
+        self.bell()
+        self.exit(message=Traceback(show_locals=True, width=None, locals_max_length=5))
 
 
 def setup_logger(config: Config):
