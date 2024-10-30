@@ -732,11 +732,16 @@ class DolphieApp(App):
                     tab.sparkline.refresh()
 
         if dolphie.panels.graphs.visible:
-            # Hide/show replication tab based on replication status
+            # Hide/show certain tabs for graphs depending on specific things
             if dolphie.replication_status:
                 tab.metric_graph_tabs.show_tab("graph_tab_replication_lag")
             else:
                 tab.metric_graph_tabs.hide_tab("graph_tab_replication_lag")
+
+            if dolphie.global_variables.get("innodb_adaptive_hash_index") == "OFF":
+                tab.metric_graph_tabs.hide_tab("graph_tab_adaptive_hash_index")
+            else:
+                tab.metric_graph_tabs.show_tab("graph_tab_adaptive_hash_index")
 
             if (dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible) or dolphie.replay_file:
                 tab.metric_graph_tabs.show_tab("graph_tab_locks")
@@ -773,18 +778,18 @@ class DolphieApp(App):
 
             old_value = old_data.get(variable)
             if old_value != new_value:
-                logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")
                 tab.replay_manager.capture_global_variable_change(variable, old_value, new_value)
+
+                # read_only notification/log message is handled by monitor_read_only_change()
+                if variable == "read_only":
+                    continue
+
+                logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")
 
                 # If the tab is not active, include the host in the notification
                 include_host = ""
                 if self.tab_manager.active_tab.id != tab.id:
                     include_host = f"Host:      [light_blue]{dolphie.host_with_port}[/light_blue]\n"
-
-                # read_only notification is handled by monitor_read_only_change()
-                if variable == "read_only":
-                    continue
-
                 self.app.notify(
                     f"[b][dark_yellow]{variable}[/b][/dark_yellow]\n"
                     f"{include_host}"
@@ -847,10 +852,6 @@ class DolphieApp(App):
 
         self.loading_hostgroups = False
         self.notify(f"Finished connecting to hosts in hostgroup [highlight]{hostgroup}", severity="success")
-
-    def _handle_exception(self, error: Exception) -> None:
-        self.bell()
-        self.exit(message=Traceback(show_locals=True, width=None, locals_max_length=5))
 
     @on(Button.Pressed, "#back_button")
     def replay_back(self):
@@ -2183,6 +2184,11 @@ class DolphieApp(App):
                 self.tab_manager.setup_host_tab(tab)
             elif self.tab_manager.active_tab.dolphie.replay_file:
                 self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
+                if not tab.replay_manager.verify_replay_file():
+                    tab.replay_manager = None
+                    self.tab_manager.setup_host_tab(tab)
+                    return
+
                 self.tab_manager.rename_tab(tab)
                 self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
                 self.run_worker_replay(self.tab_manager.active_tab.id)
@@ -2197,6 +2203,10 @@ class DolphieApp(App):
     def compose(self):
         yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for commands")
         yield Tabs(id="host_tabs")
+
+    def _handle_exception(self, error: Exception) -> None:
+        self.bell()
+        self.exit(message=Traceback(show_locals=True, width=None, locals_max_length=5))
 
 
 def setup_logger(config: Config):

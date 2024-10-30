@@ -731,21 +731,22 @@ class TabManager:
             if self.config.tab_setup:
                 self.config.tab_setup = False
 
-            host_port = data["host"].split(":")
+            # Universally set record_for_replay
+            self.config.record_for_replay = data.get("record_for_replay")
 
-            dolphie.credential_profile = data.get("credential_profile")
-            dolphie.host = host_port[0]
-            dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
-            dolphie.user = data.get("username")
-            dolphie.password = data.get("password")
             hostgroup = data.get("hostgroup")
-            dolphie.socket = data.get("socket_file")
-            dolphie.ssl = data.get("ssl")
-            dolphie.record_for_replay = data.get("recording")
-
             if hostgroup:
                 dolphie.app.connect_as_hostgroup(hostgroup)
             else:
+                host_port = data["host"].split(":")
+                dolphie.host = host_port[0]
+                dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
+                dolphie.credential_profile = data.get("credential_profile")
+                dolphie.user = data.get("username")
+                dolphie.password = data.get("password")
+                dolphie.socket = data.get("socket_file")
+                dolphie.ssl = data.get("ssl")
+                dolphie.record_for_replay = data.get("record_for_replay")
                 dolphie.replay_file = data.get("replay_file")
 
                 await self.disconnect_tab(tab)
@@ -758,6 +759,8 @@ class TabManager:
 
                 while True:
                     if (not tab.worker_running and not tab.replicas_worker_running) or (monotonic() - start_time > 5):
+                        tab.worker_running = False
+                        tab.replicas_worker_running = False
                         tab.worker_cancel_error = ""
 
                         tab.dashboard_replay_container.display = False
@@ -766,6 +769,11 @@ class TabManager:
 
                         if dolphie.replay_file:
                             tab.replay_manager = ReplayManager(dolphie)
+                            if not tab.replay_manager.verify_replay_file():
+                                tab.loading_indicator.display = False
+                                self.setup_host_tab(tab)
+                                return
+
                             self.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
                             dolphie.app.run_worker_replay(tab.id)
                         else:
@@ -798,7 +806,7 @@ class TabManager:
                 username=dolphie.user,
                 password=dolphie.password,
                 ssl=dolphie.ssl,
-                recording=dolphie.record_for_replay,
+                record_for_replay=dolphie.record_for_replay,
                 socket_file=dolphie.socket,
                 hostgroups=dolphie.hostgroup_hosts.keys(),
                 available_hosts=dolphie.tab_setup_available_hosts,

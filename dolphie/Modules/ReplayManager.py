@@ -94,9 +94,6 @@ class ReplayManager:
         self._initialize_sqlite()
         self._manage_metadata()
 
-        if dolphie.replay_file:
-            self._get_replay_file_metadata()
-
     def _initialize_sqlite(self):
         """
         Initializes the SQLite database and creates the necessary tables.
@@ -276,17 +273,18 @@ class ReplayManager:
                         f"The connection source of the daemon's replay file ({connection_source}) "
                         f"differs from the current connection source ({self.dolphie.connection_source}). "
                         "You should never mix connection sources in the same replay file. Please rename "
-                        "the daemon's replay file and restart the daemon."
+                        "the daemon's replay file and restart the daemon"
                     )
 
             host = row[1]
             port = row[2]
-            host_distro = row[3]
+            # Add the host's distro to the metadata if it's different than the connection source
+            host_distro = f" ({row[3]})" if connection_source != row[3] else ""
             app_version = row[5]
             compress_dict = row[6]
 
             logger.info(
-                f"Replay database metadata - Host: {host}, Port: {port}, Source: {connection_source} ({host_distro}), "
+                f"Replay database metadata - Host: {host}, Port: {port}, Source: {connection_source}{host_distro}, "
                 f"Dolphie: {app_version}"
             )
 
@@ -296,30 +294,71 @@ class ReplayManager:
                     f"ZSTD compression dictionary loaded (size: {format_bytes(len(compress_dict), color=False)})"
                 )
 
+    def verify_replay_file(self):
+        """
+        Verifies that the replay file has data to replay and that the schema version matches.
+        """
+        if not self.dolphie.replay_file:
+            return
+
+        if not self._get_replay_file_metadata() or not self._verify_replay_has_data():
+            return False
+
+        return True
+
     def _get_replay_file_metadata(self):
         """
         Retrieves the replay's metadata from the metadata table.
+
+        Returns:
+            bool: True if metadata is found and schema matches; False otherwise.
         """
         row = self.cursor.execute("SELECT * FROM metadata").fetchone()
-        if row:
-            schema_version = row[0]
-            if schema_version != self.schema_version:
-                raise Exception(
-                    f"The schema version of the replay file ({schema_version}) differs from this version "
-                    f"of Dolphie's schema version ({self.schema_version}). You will need to use a compatiable version "
-                    "of Dolphie to replay this file."
-                )
+        if not row:
+            self._notify_error("Metadata not found in replay file", "Error reading replay file")
+            return False
 
-            self.dolphie.host = row[1]
-            self.dolphie.port = row[2]
-            self.dolphie.host_with_port = f"{self.dolphie.host}:{self.dolphie.port}"
-            self.dolphie.host_distro = row[3]
-            self.dolphie.connection_source = row[4]
+        schema_version = row[0]
+        if schema_version != self.schema_version:
+            self._notify_error(
+                f"The schema version of the replay file ({schema_version}) differs from Dolphie's schema version "
+                f"({self.schema_version}). Use a compatible version of Dolphie to replay this file",
+                "Schema version mismatch",
+            )
+            return False
 
-            if row[6]:
-                self.compression_dict = zstd.ZstdCompressionDict(row[6])
-        else:
-            raise Exception("Metadata not found in replay file.")
+        self.dolphie.host, self.dolphie.port, self.dolphie.host_distro, self.dolphie.connection_source = row[1:5]
+        self.dolphie.host_with_port = f"{self.dolphie.host}:{self.dolphie.port}"
+
+        if row[6]:
+            self.compression_dict = zstd.ZstdCompressionDict(row[6])
+
+        return True
+
+    def _verify_replay_has_data(self):
+        """
+        Verifies that the replay file has data to replay.
+
+        Returns:
+            bool: True if data is found, False if not.
+        """
+        row = self.cursor.execute("SELECT COUNT(*) FROM replay_data").fetchone()
+        if row[0] == 0:
+            self._notify_error("File has no data to replay", "No replay data found")
+            return False
+
+        return True
+
+    def _notify_error(self, message, title):
+        """
+        Helper method to display error notifications.
+        """
+        self.dolphie.app.notify(
+            f"[b]Replay file[/b]: [highlight]{self.replay_file}[/highlight]\n{message}",
+            title=title,
+            severity="error",
+            timeout=10,
+        )
 
     def _train_compression_dict(self) -> bytes:
         """
