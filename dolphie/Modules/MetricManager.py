@@ -659,7 +659,7 @@ class MetricManager:
                 ),
                 Memory_Used=MetricData(
                     label="Used",
-                    color=MetricColor.green,
+                    color=MetricColor.blue,
                     per_second_calculation=False,
                     create_switch=False,
                 ),
@@ -976,9 +976,20 @@ class MetricManager:
                         else:
                             metric_status_per_sec = current_metric_source_value
 
-                        if metric_name == "CPU_Percent" and metric_data.values:
-                            metric_data.values[-1] = metric_status_per_sec
-
+                        # If this metric is CPU_Percent, the first value is always 0,
+                        # so we need to set it to the current value of next run. Also, if the value is 0 or 100,
+                        # we need to check if the difference is greater than 10 to avoid inaccurate spikes
+                        if metric_name == "CPU_Percent":
+                            print(metric_status_per_sec)
+                            if len(metric_data.values) == 1:
+                                metric_data.values[0] = metric_status_per_sec
+                            elif (
+                                metric_status_per_sec in {0, 100}
+                                and abs(metric_status_per_sec - metric_data.last_value) > 10
+                            ):
+                                # Take a rolling median or average of the last 3 values
+                                recent_values = metric_data.values[-3:]
+                                metric_status_per_sec = sum(recent_values) / len(recent_values)
                         self.add_metric(metric_data, metric_status_per_sec)
 
     def update_metrics_last_value(self):

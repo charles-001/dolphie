@@ -153,6 +153,18 @@ class Dolphie:
 
         self.update_switches_after_reset()
 
+        try:
+            # Get the IP address of the monitored host
+            monitored_ip = socket.gethostbyname(self.host)
+
+            # Enable system metrics if monitored host is the same as local host or loopback
+            self.enable_system_metrics = monitored_ip == "127.0.0.1" or monitored_ip == socket.gethostbyname(
+                socket.gethostname()
+            )
+        except socket.gaierror:
+            # Handle case where the host cannot be resolved
+            self.enable_system_metrics = False
+
     def db_connect(self):
         self.main_db_connection.connect()
         if not self.daemon_mode:
@@ -231,6 +243,9 @@ class Dolphie:
             self.group_replication = True
 
     def collect_system_metrics(self):
+        if not self.enable_system_metrics:
+            return
+
         virtual_memory = psutil.virtual_memory()
         swap_memory = psutil.swap_memory()
         network_io = psutil.net_io_counters()
