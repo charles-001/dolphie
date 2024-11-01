@@ -1012,7 +1012,7 @@ class DolphieApp(App):
         tab = self.tab_manager.active_tab
 
         if tab.dolphie.replay_file:
-            self.workers.cancel_group(tab.worker, group="replay")
+            tab.worker.cancel()
             tab.worker_timer.stop()
 
             if need_current_data:
