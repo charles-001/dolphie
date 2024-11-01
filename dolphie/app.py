@@ -458,7 +458,7 @@ class DolphieApp(App):
 
                         return
                 else:
-                    # If the tab isn't active, do nothing anymore
+                    # If the tab isn't active, stop the loop
                     return
 
                 self.monitor_read_only_change(tab)
@@ -911,6 +911,12 @@ class DolphieApp(App):
 
     @on(Tabs.TabActivated, "#host_tabs")
     def tab_changed(self, event: TabbedContent.TabActivated):
+        previous_tab = self.tab_manager.active_tab
+        # If the previous tab is a replay file, cancel its worker and timer
+        if previous_tab.dolphie.replay_file and previous_tab.worker:
+            previous_tab.worker.cancel()
+            previous_tab.worker_timer.stop()
+
         self.tab_manager.switch_tab(event.tab.id, set_active=False)
 
         tab = self.tab_manager.active_tab
