@@ -762,6 +762,15 @@ class DolphieApp(App):
             else:
                 tab.metric_graph_tabs.hide_tab("graph_tab_locks")
 
+            if dolphie.system_metrics:
+                tab.metric_graph_tabs.show_tab("graph_tab_system_cpu")
+                tab.metric_graph_tabs.show_tab("graph_tab_system_memory")
+                tab.metric_graph_tabs.show_tab("graph_tab_system_network")
+            else:
+                tab.metric_graph_tabs.hide_tab("graph_tab_system_cpu")
+                tab.metric_graph_tabs.hide_tab("graph_tab_system_memory")
+                tab.metric_graph_tabs.hide_tab("graph_tab_system_network")
+
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
