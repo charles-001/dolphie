@@ -116,11 +116,11 @@ def create_panel(tab: Tab) -> Table:
 
             # Add row to table with the network metrics
             table_system_metrics.add_row(
-                "[label]Network/s",
+                "[label]Network",
                 (f"[label]Dn[/label] {last_network_down}\n[label]Up[/label] {last_network_up}"),
             )
         else:
-            table_system_metrics.add_row("[label]Network/s", "N/A")
+            table_system_metrics.add_row("[label]Network", "N/A")
 
         tab.dashboard_section_6.update(table_system_metrics)
 
