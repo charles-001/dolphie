@@ -260,7 +260,6 @@ class MetricData:
 @dataclass
 class SystemCPUMetrics:
     CPU_Percent: MetricData
-    CPU_Load_Avg: MetricData
     graphs: List[str]
     tab_name: str = "system_cpu"
     graph_tab_name = "System CPU"
@@ -275,9 +274,6 @@ class SystemCPUMetrics:
 class SystemMemoryMetrics:
     Memory_Total: MetricData
     Memory_Used: MetricData
-    Percent_Used: MetricData
-    Swap_Total: MetricData
-    Swap_Used: MetricData
     graphs: List[str]
     tab_name: str = "system_memory"
     graph_tab_name = "System Memory"
@@ -638,14 +634,6 @@ class MetricManager:
                 CPU_Percent=MetricData(
                     label="CPU %", color=MetricColor.blue, per_second_calculation=False, create_switch=False
                 ),
-                CPU_Load_Avg=MetricData(
-                    label="Load Avg",
-                    color=MetricColor.green,
-                    visible=False,
-                    save_history=False,
-                    graphable=False,
-                    per_second_calculation=False,
-                ),
             ),
             system_memory=SystemMemoryMetrics(
                 graphs=["graph_system_memory"],
@@ -662,30 +650,6 @@ class MetricManager:
                     color=MetricColor.blue,
                     per_second_calculation=False,
                     create_switch=False,
-                ),
-                Percent_Used=MetricData(
-                    label="% Used",
-                    color=MetricColor.red,
-                    per_second_calculation=False,
-                    visible=False,
-                    graphable=False,
-                    save_history=False,
-                ),
-                Swap_Total=MetricData(
-                    label="Swap Total",
-                    color=MetricColor.blue,
-                    per_second_calculation=False,
-                    save_history=False,
-                    visible=False,
-                    graphable=False,
-                ),
-                Swap_Used=MetricData(
-                    label="Swap Used",
-                    color=MetricColor.green,
-                    save_history=False,
-                    per_second_calculation=False,
-                    visible=False,
-                    graphable=False,
                 ),
             ),
             system_network=SystemNetworkMetrics(

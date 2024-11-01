@@ -257,7 +257,7 @@ class Dolphie:
             "CPU_Load_Avg": os.getloadavg(),  # 1, 5, and 15 minute load averages
             "Memory_Total": virtual_memory.total,
             "Memory_Used": virtual_memory.used,
-            "Percent_Used": virtual_memory.percent,
+            "Memory_Percent_Used": virtual_memory.percent,
             "Swap_Total": swap_memory.total,
             "Swap_Used": swap_memory.used,
             "Network_Up": network_io.bytes_sent,
