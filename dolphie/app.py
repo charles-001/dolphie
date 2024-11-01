@@ -11,7 +11,6 @@ import csv
 import os
 import re
 import sys
-import time
 from datetime import datetime, timedelta
 from functools import partial
 from importlib import metadata
@@ -193,7 +192,7 @@ class DolphieApp(App):
             )
             logger.info(f"Log file: {config.daemon_mode_log_file}")
 
-    @work(thread=True, group="replay")
+    @work(thread=True, group="replay", exclusive=True)
     async def run_worker_replay(self, tab_id: int, manual_control: bool = False):
         tab = self.tab_manager.get_tab(tab_id)
 
@@ -857,24 +856,12 @@ class DolphieApp(App):
 
     @on(Button.Pressed, "#back_button")
     def replay_back(self):
-        current_time = time.time()
-
-        # Run only if 100ms have passed since the last call
-        if current_time - self.tab_manager.last_replay_time >= 0.1:
-            self.tab_manager.last_replay_time = current_time
-
-            # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
-            self.tab_manager.active_tab.replay_manager.current_replay_id -= 2
-            self.force_refresh_for_replay()
+        self.tab_manager.active_tab.replay_manager.current_replay_id -= 2
+        self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#forward_button")
     def replay_forward(self):
-        current_time = time.time()
-
-        # Run only if 100ms have passed since the last call
-        if current_time - self.tab_manager.last_replay_time >= 0.1:
-            self.tab_manager.last_replay_time = current_time
-            self.force_refresh_for_replay()
+        self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#pause_button")
     def replay_pause(self, event: Button.Pressed):
