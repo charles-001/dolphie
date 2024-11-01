@@ -158,8 +158,6 @@ class DolphieApp(App):
 
         self.config = config
         self.command_manager = CommandManager()
-        self.loading_hostgroups: bool = False
-        self.last_replay_time: int = 0
 
         theme = Theme(
             {
@@ -413,7 +411,7 @@ class DolphieApp(App):
                 if tab.worker_cancel_error:
                     logger.critical(tab.worker_cancel_error)
 
-                    if self.tab_manager.active_tab.id != tab.id or self.loading_hostgroups:
+                    if self.tab_manager.active_tab.id != tab.id or self.tab_manager.loading_hostgroups:
                         self.notify(
                             (
                                 f"[b light_blue]{dolphie.host}:{dolphie.port}[/b light_blue]: "
@@ -424,7 +422,7 @@ class DolphieApp(App):
                             timeout=10,
                         )
 
-                    if not self.loading_hostgroups:
+                    if not self.tab_manager.loading_hostgroups:
                         self.tab_manager.switch_tab(tab.id)
 
                         self.tab_manager.setup_host_tab(tab)
@@ -836,7 +834,7 @@ class DolphieApp(App):
 
     @work()
     async def connect_as_hostgroup(self, hostgroup: str):
-        self.loading_hostgroups = True
+        self.tab_manager.loading_hostgroups = True
         self.notify(f"Connecting to hosts in hostgroup [highlight]{hostgroup}", severity="information")
 
         for hostgroup_member in self.config.hostgroup_hosts.get(hostgroup, []):
@@ -854,16 +852,16 @@ class DolphieApp(App):
             while tab.worker_running:
                 await asyncio.sleep(0.1)
 
-        self.loading_hostgroups = False
+        self.tab_manager.loading_hostgroups = False
         self.notify(f"Finished connecting to hosts in hostgroup [highlight]{hostgroup}", severity="success")
 
     @on(Button.Pressed, "#back_button")
     def replay_back(self):
         current_time = time.time()
 
-        # Run only if 0.08 seconds have passed since the last call
-        if current_time - self.last_replay_time >= 0.08:
-            self.last_replay_time = current_time
+        # Run only if 100ms have passed since the last call
+        if current_time - self.tab_manager.last_replay_time >= 0.1:
+            self.tab_manager.last_replay_time = current_time
 
             # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
             self.tab_manager.active_tab.replay_manager.current_replay_id -= 2
@@ -873,9 +871,9 @@ class DolphieApp(App):
     def replay_forward(self):
         current_time = time.time()
 
-        # Run only if 0.08 seconds have passed since the last call
-        if current_time - self.last_replay_time >= 0.08:
-            self.last_replay_time = current_time
+        # Run only if 100ms have passed since the last call
+        if current_time - self.tab_manager.last_replay_time >= 0.1:
+            self.tab_manager.last_replay_time = current_time
             self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#pause_button")
@@ -911,9 +909,9 @@ class DolphieApp(App):
 
     @on(Tabs.TabActivated, "#host_tabs")
     def tab_changed(self, event: TabbedContent.TabActivated):
-        previous_tab = self.tab_manager.active_tab
         # If the previous tab is a replay file, cancel its worker and timer
-        if previous_tab.dolphie.replay_file and previous_tab.worker:
+        previous_tab = self.tab_manager.active_tab
+        if previous_tab and previous_tab.dolphie.replay_file and previous_tab.worker:
             previous_tab.worker.cancel()
             previous_tab.worker_timer.stop()
 
@@ -1112,7 +1110,7 @@ class DolphieApp(App):
                 self.notify("You must be connected to a host to use commands")
                 return
 
-        if self.loading_hostgroups:
+        if self.tab_manager.loading_hostgroups:
             self.notify("You can't run commands while hosts are connecting as a hostgroup")
             return
 

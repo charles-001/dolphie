@@ -246,6 +246,9 @@ class TabManager:
         self.host_tabs = self.app.query_one("#host_tabs", Tabs)
         self.host_tabs.display = False
 
+        self.loading_hostgroups: bool = False
+        self.last_replay_time: int = 0
+
         self.topbar = self.app.query_one(TopBar)
 
     def update_connection_status(self, tab: Tab, connection_status: ConnectionStatus):
