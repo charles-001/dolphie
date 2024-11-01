@@ -312,6 +312,9 @@ def create_system_utilization_table(tab: Tab) -> Table:
                 (f"[label]Dn[/label] {last_network_down}\n[label]Up[/label] {last_network_up}"),
             )
         else:
-            table_system_utilization.add_row("[label]Network", "[dark_gray]N/A[/dark_gray]")
+            table_system_utilization.add_row(
+                "[label]Network",
+                "[label]Dn[/label] [dark_gray]N/A[/dark_gray]\n[label]Up[/label] [dark_gray]N/A[/dark_gray]",
+            )
 
     return table_system_utilization

@@ -156,11 +156,17 @@ class Tab:
             total=self.replay_manager.total_replay_rows,
         )
 
-    def toggle_dashboard_sections(self):
+    def toggle_entities_displays(self):
         if self.dolphie.system_utilization:
             self.dashboard_section_6.display = True
+            self.metric_graph_tabs.show_tab("graph_tab_system_cpu")
+            self.metric_graph_tabs.show_tab("graph_tab_system_memory")
+            self.metric_graph_tabs.show_tab("graph_tab_system_network")
         else:
             self.dashboard_section_6.display = False
+            self.metric_graph_tabs.hide_tab("graph_tab_system_cpu")
+            self.metric_graph_tabs.hide_tab("graph_tab_system_memory")
+            self.metric_graph_tabs.hide_tab("graph_tab_system_network")
 
         if self.dolphie.connection_source == ConnectionSource.mysql:
             if self.dolphie.replication_status and not self.dolphie.panels.replication.visible:
@@ -168,13 +174,27 @@ class Tab:
             else:
                 self.dashboard_section_5.display = False
 
+            if self.dolphie.replication_status:
+                self.metric_graph_tabs.show_tab("graph_tab_replication_lag")
+            else:
+                self.metric_graph_tabs.hide_tab("graph_tab_replication_lag")
+
+            if self.dolphie.global_variables.get("innodb_adaptive_hash_index") == "OFF":
+                self.metric_graph_tabs.hide_tab("graph_tab_adaptive_hash_index")
+            else:
+                self.metric_graph_tabs.show_tab("graph_tab_adaptive_hash_index")
+
+            if (self.dolphie.metadata_locks_enabled and self.dolphie.panels.metadata_locks.visible) or (
+                self.dolphie.replay_file and self.dolphie.metadata_locks
+            ):
+                self.metric_graph_tabs.show_tab("graph_tab_locks")
+            else:
+                self.metric_graph_tabs.hide_tab("graph_tab_locks")
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             self.dashboard_section_5.display = False
 
     def refresh_tab_properties(self):
         self.main_container.display = True
-
-        self.toggle_dashboard_sections()
 
         # Hide all graph tabs so we can show the ones we want
         tabs = self.metric_graph_tabs.query(TabPane)

@@ -222,8 +222,6 @@ class DolphieApp(App):
 
         tab.replay_manager.fetch_global_variable_changes_for_current_replay_id()
 
-        tab.toggle_dashboard_sections()
-
         # Common data for refreshing
         dolphie.system_utilization = replay_event_data.system_utilization
         dolphie.global_variables = replay_event_data.global_variables
@@ -273,8 +271,10 @@ class DolphieApp(App):
             metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
             if metric_instance:
                 for metric_name, metric_values in metric_data.items():
-                    metric_instance.__dict__[metric_name].values = metric_values
-                    metric_instance.__dict__[metric_name].last_value = metric_values[-1]
+                    metric: MetricManager.MetricData = metric_instance.__dict__.get(metric_name)
+                    if metric:
+                        metric.values = metric_values
+                        metric.last_value = metric_values[-1]
 
         tab.worker_running = False
 
@@ -413,6 +413,8 @@ class DolphieApp(App):
                 if dolphie.record_for_replay:
                     self.tab_manager.update_topbar(tab=tab)
 
+                tab.toggle_entities_displays()
+
                 tab.worker_timer = self.set_timer(refresh_interval, partial(self.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
@@ -477,6 +479,8 @@ class DolphieApp(App):
                     replication_panel.create_replica_panel(tab)
                 elif dolphie.connection_source == ConnectionSource.proxysql:
                     self.refresh_screen_proxysql(tab)
+
+                tab.toggle_entities_displays()
 
                 tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_replay, tab.id))
 
@@ -744,32 +748,6 @@ class DolphieApp(App):
                     # Update the sparkline for queries per second
                     tab.sparkline.data = dolphie.metric_manager.metrics.dml.Queries.values
                     tab.sparkline.refresh()
-
-        if dolphie.panels.graphs.visible:
-            # Hide/show certain tabs for graphs depending on specific things
-            if dolphie.replication_status:
-                tab.metric_graph_tabs.show_tab("graph_tab_replication_lag")
-            else:
-                tab.metric_graph_tabs.hide_tab("graph_tab_replication_lag")
-
-            if dolphie.global_variables.get("innodb_adaptive_hash_index") == "OFF":
-                tab.metric_graph_tabs.hide_tab("graph_tab_adaptive_hash_index")
-            else:
-                tab.metric_graph_tabs.show_tab("graph_tab_adaptive_hash_index")
-
-            if (dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible) or dolphie.replay_file:
-                tab.metric_graph_tabs.show_tab("graph_tab_locks")
-            else:
-                tab.metric_graph_tabs.hide_tab("graph_tab_locks")
-
-            if dolphie.system_utilization:
-                tab.metric_graph_tabs.show_tab("graph_tab_system_cpu")
-                tab.metric_graph_tabs.show_tab("graph_tab_system_memory")
-                tab.metric_graph_tabs.show_tab("graph_tab_system_network")
-            else:
-                tab.metric_graph_tabs.hide_tab("graph_tab_system_cpu")
-                tab.metric_graph_tabs.hide_tab("graph_tab_system_memory")
-                tab.metric_graph_tabs.hide_tab("graph_tab_system_network")
 
             # Refresh the graph(s) for the selected tab
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
@@ -1154,7 +1132,7 @@ class DolphieApp(App):
                 return
 
             self.toggle_panel(dolphie.panels.replication.name)
-            tab.toggle_dashboard_sections()
+            tab.toggle_entities_displays()
 
             if dolphie.panels.replication.visible:
                 if dolphie.replica_manager.available_replicas:
