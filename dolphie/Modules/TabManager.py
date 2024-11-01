@@ -128,8 +128,8 @@ class Tab:
         if not self.dolphie.replay_file:
             return
 
-        min_timestamp = self.replay_manager.min_timestamp
-        max_timestamp = self.replay_manager.max_timestamp
+        min_timestamp = self.replay_manager.min_replay_timestamp
+        max_timestamp = self.replay_manager.max_replay_timestamp
         current_timestamp = self.replay_manager.current_replay_timestamp
 
         # Highlight if the max timestamp matches the current timestamp
@@ -146,10 +146,10 @@ class Tab:
         )
 
         # Update the progress bar with the current replay progress
-        if self.replay_manager.current_replay_id == self.replay_manager.min_id:
+        if self.replay_manager.current_replay_id == self.replay_manager.min_replay_id:
             current_position = 0
         else:
-            current_position = self.replay_manager.current_replay_id - self.replay_manager.min_id + 1
+            current_position = self.replay_manager.current_replay_id - self.replay_manager.min_replay_id + 1
         self.dashboard_replay_progressbar.update(
             progress=current_position,
             total=self.replay_manager.total_replay_rows,

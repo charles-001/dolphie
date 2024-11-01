@@ -193,7 +193,7 @@ class DolphieApp(App):
             )
             logger.info(f"Log file: {config.daemon_mode_log_file}")
 
-    @work(thread=True, group="replay")
+    @work(thread=True, group="replay", exclusive=True)
     async def run_worker_replay(self, tab_id: int, manual_control: bool = False):
         tab = self.tab_manager.get_tab(tab_id)
 
@@ -889,7 +889,7 @@ class DolphieApp(App):
             CommandModal(
                 command=HotkeyCommands.replay_seek,
                 message="What time would you like to seek to?",
-                max_replay_timestamp=self.tab_manager.active_tab.replay_manager.max_timestamp,
+                max_replay_timestamp=self.tab_manager.active_tab.replay_manager.max_replay_timestamp,
             ),
             command_get_input,
         )
@@ -907,6 +907,8 @@ class DolphieApp(App):
                 or tab.dolphie.replay_file
             )
         ):
+            self.force_refresh_for_replay(need_current_data=True)
+
             # Set each panel's display status based on the tab's panel visibility
             for panel in tab.dolphie.panels.get_all_panels():
                 tab_panel = tab.get_panel_widget(panel.name)

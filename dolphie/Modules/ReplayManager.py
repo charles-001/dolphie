@@ -1,8 +1,9 @@
 import os
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Union
+from typing import Any, List, Optional, Tuple, Union
 
 import orjson
 import zstandard as zstd
@@ -59,21 +60,20 @@ class ReplayManager:
         """
         self.dolphie = dolphie
         # We will increment this to force a new replay file if the schema changes in future versions
-        self.schema_version = 2
+        self.schema_version: int = 2
         self.connection: sqlite3.Connection = None
-        self.cursor: sqlite3.Cursor = None
-        self.current_replay_id = 0  # This is used to keep track of the last primary key read from the database
-        self.current_replay_timestamp = None  # Only used for dashboard replay section
-        self.total_replay_rows = 0
-        self.min_timestamp = None
-        self.max_timestamp = None
-        self.min_id = None
-        self.max_id = None
+        self.current_replay_id: int = 0  # This is used to keep track of the last primary key read from the database
+        self.min_replay_id: int = 0
+        self.max_replay_id: int = 0
+        self.current_replay_timestamp: str = None  # Only used for dashboard replay section
+        self.min_replay_timestamp: str = None
+        self.max_replay_timestamp: str = None
+        self.total_replay_rows: int = 0
         self.last_purge_time = datetime.now() - timedelta(hours=1)  # Initialize to an hour ago
-        self.replay_file_size = 0
-        self.compression_dict = None
-        self.dict_samples = []
-        self.global_variable_change_ids = []  # Used to keep track of the primary keys of global variable changes
+        self.replay_file_size: int = 0
+        self.compression_dict: zstd.ZstdCompressionDict = None
+        self.dict_samples: List[bytes] = []
+        self.global_variable_change_ids: List[int] = []
 
         # Determine filename used for replay file
         hostname = f"{dolphie.host}_{dolphie.port}"
@@ -94,6 +94,45 @@ class ReplayManager:
         self._initialize_sqlite()
         self._manage_metadata()
 
+    def _execute_query(
+        self,
+        query: str,
+        params: Optional[Union[Tuple[Any, ...], List[Tuple[Any, ...]]]] = (),
+        fetchone: bool = False,
+        executemany: bool = False,
+        return_lastrowid: bool = False,
+    ) -> Union[Optional[Tuple[Any, ...]], int, None]:
+        """
+        Executes a query or batch of queries using a cursor
+
+        Args:
+            query: The SQL query to execute.
+            params: The parameters to bind to the query.
+            fetchone: If True, returns a single row. If False, returns all rows.
+            return_lastrowid: If True, returns the last inserted row ID after an INSERT operation.
+            executemany: If True, uses executemany() for batch execution of the query.
+
+        Returns:
+            Union[Optional[Tuple[Any, ...]], int, None]: A single row if `fetchone` is True, otherwise a list of rows.
+                                                        Returns lastrowid if `return_lastrowid` is True.
+        """
+        try:
+            with closing(self.connection.cursor()) as cursor:
+                if executemany and isinstance(params, list):
+                    cursor.executemany(query, params)
+                else:
+                    cursor.execute(query, params)
+
+                if return_lastrowid:
+                    return cursor.lastrowid
+
+                return cursor.fetchone() if fetchone else cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error executing SQLite query: {e}")
+            self.dolphie.app.notify(f"Query: {query}\n{e}", title="Error executing SQLite query", severity="error")
+
+            return None
+
     def _initialize_sqlite(self):
         """
         Initializes the SQLite database and creates the necessary tables.
@@ -101,7 +140,6 @@ class ReplayManager:
         database_exists = True if os.path.exists(self.replay_file) else False
 
         self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
-        self.cursor = self.connection.cursor()
 
         # Lock down the permissions of the replay file
         os.chmod(self.replay_file, 0o660)
@@ -112,7 +150,7 @@ class ReplayManager:
             logger.info("Connected to SQLite")
 
         # Create replay_data table if it doesn't exist
-        self.cursor.execute(
+        self._execute_query(
             """
             CREATE TABLE IF NOT EXISTS replay_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,10 +158,10 @@ class ReplayManager:
                 data BLOB
             )"""
         )
-        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
+        self._execute_query("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
 
         # Create metadata table if it doesn't exist
-        self.cursor.execute(
+        self._execute_query(
             """
             CREATE TABLE IF NOT EXISTS metadata (
                 schema_version INTEGER DEFAULT 1,
@@ -137,7 +175,7 @@ class ReplayManager:
         )
 
         # Create variable_changes table if it doesn't exist
-        self.cursor.execute(
+        self._execute_query(
             """
             CREATE TABLE IF NOT EXISTS variable_changes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -148,13 +186,14 @@ class ReplayManager:
                 new_value VARCHAR(255)
             )"""
         )
-        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_variable_changes_timestamp ON variable_changes (timestamp)")
-        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_variable_changes_replay_id ON variable_changes (replay_id)")
+        self._execute_query("CREATE INDEX IF NOT EXISTS idx_variable_changes_timestamp ON variable_changes (timestamp)")
+        self._execute_query("CREATE INDEX IF NOT EXISTS idx_variable_changes_replay_id ON variable_changes (replay_id)")
 
         # Enable auto-vacuum if it's not already enabled. This will help keep the database file size down.
-        if self.cursor.execute("PRAGMA auto_vacuum").fetchone()[0] != 1:
-            self.cursor.execute("PRAGMA auto_vacuum = FULL")
-            self.cursor.execute("VACUUM")
+        result = self._execute_query("PRAGMA auto_vacuum", fetchone=True)
+        if result and result[0] != 1:
+            self._execute_query("PRAGMA auto_vacuum = FULL")
+            self._execute_query("VACUUM")
 
         self.purge_old_data()
 
@@ -174,8 +213,8 @@ class ReplayManager:
             "%Y-%m-%d %H:%M:%S"
         )
 
-        self.cursor.execute("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
-        self.cursor.execute("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
+        self._execute_query("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
+        self._execute_query("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
 
         self.last_purge_time = current_time
 
@@ -186,7 +225,7 @@ class ReplayManager:
         Args:
             timestamp: The timestamp to seek to.
         """
-        row = self.cursor.execute("SELECT id FROM replay_data WHERE timestamp = ?", (timestamp,)).fetchone()
+        row = self._execute_query("SELECT id FROM replay_data WHERE timestamp = ?", (timestamp,), fetchone=True)
         if row:
             # We subtract 1 because get_next_refresh_interval naturally increments the index
             self.current_replay_id = row[0] - 1
@@ -197,10 +236,11 @@ class ReplayManager:
             return True
         else:
             # Try to find a timestamp before the specified timestamp
-            row = self.cursor.execute(
+            row = self._execute_query(
                 "SELECT id, timestamp FROM replay_data WHERE timestamp < ? ORDER BY timestamp DESC LIMIT 1",
                 (timestamp,),
-            ).fetchone()
+                fetchone=True,
+            )
             if row:
                 # We subtract 1 because get_next_refresh_interval naturally increments the index
                 self.current_replay_id = row[0] - 1
@@ -236,9 +276,9 @@ class ReplayManager:
         if not self.dolphie.record_for_replay:
             return
 
-        row = self.cursor.execute("SELECT * FROM metadata").fetchone()
+        row = self._execute_query("SELECT * FROM metadata", fetchone=True)
         if row is None:
-            self.cursor.execute(
+            self._execute_query(
                 "INSERT INTO metadata (schema_version, host, port, host_distro, connection_source, dolphie_version)"
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (
@@ -313,7 +353,7 @@ class ReplayManager:
         Returns:
             bool: True if metadata is found and schema matches; False otherwise.
         """
-        row = self.cursor.execute("SELECT * FROM metadata").fetchone()
+        row = self._execute_query("SELECT * FROM metadata", fetchone=True)
         if not row:
             self._notify_error("Metadata not found in replay file", "Error reading replay file")
             return False
@@ -342,8 +382,8 @@ class ReplayManager:
         Returns:
             bool: True if data is found, False if not.
         """
-        row = self.cursor.execute("SELECT COUNT(*) FROM replay_data").fetchone()
-        if row[0] == 0:
+        row = self._execute_query("SELECT COUNT(*) FROM replay_data", fetchone=True)
+        if row and row[0] == 0:
             self._notify_error("File has no data to replay", "No replay data found")
             return False
 
@@ -375,7 +415,7 @@ class ReplayManager:
         )
 
         # Store the compression dictionary in the metadata table to be used with decompression
-        self.cursor.execute("UPDATE metadata SET compression_dict = ?", (compression_dict.as_bytes(),))
+        self._execute_query("UPDATE metadata SET compression_dict = ?", (compression_dict.as_bytes(),))
 
         return compression_dict
 
@@ -528,21 +568,21 @@ class ReplayManager:
                 del self.dict_samples
 
         # Execute the SQL insert using the constructed dictionary
-        self.cursor.execute(
+        self.current_replay_id = self._execute_query(
             "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
             (
                 timestamp,
                 self._compress_data(data_dict_bytes),
             ),
+            return_lastrowid=True,
         )
-
-        self.current_replay_id = self.cursor.lastrowid
 
         # Update the variable_changes table with the data of the replay row so they're linked
         if self.global_variable_change_ids:
-            self.cursor.executemany(
+            self._execute_query(
                 "UPDATE variable_changes SET replay_id = ?, timestamp = ? WHERE id = ?",
                 [(self.current_replay_id, timestamp, id) for id in self.global_variable_change_ids],
+                executemany=True,
             )
 
             # Clear the list of global variable change IDs now that they've been linked
@@ -561,32 +601,30 @@ class ReplayManager:
             ReplayData: The next replay data.
         """
 
-        try:
-            # Get the min and max timestamps and IDs from the database so we can update the UI
-            row = self.cursor.execute(
-                "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data"
-            ).fetchone()
-            if row:
-                self.min_timestamp = row[0]
-                self.max_timestamp = row[1]
-                self.min_id = row[2]
-                self.max_id = row[3]
-                self.total_replay_rows = row[4]
-
-            # Get the next row
-            row = self.cursor.execute(
-                "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
-                (self.current_replay_id,),
-            ).fetchone()
-            if not row:
-                return None
-
-        except sqlite3.ProgrammingError as e:
-            self.dolphie.app.notify(str(e), title="Error reading replay data", severity="error")
+        # Get the min and max timestamps and IDs from the database so we can update the UI
+        row = self._execute_query(
+            "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data", fetchone=True
+        )
+        if row:
+            self.min_replay_timestamp = row[0]
+            self.max_replay_timestamp = row[1]
+            self.min_replay_id = row[2]
+            self.max_replay_id = row[3]
+            self.total_replay_rows = row[4]
+        else:
             return None
 
-        self.current_replay_id = row[0]
-        self.current_replay_timestamp = row[1]
+        # Get the next row
+        row = self._execute_query(
+            "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
+            (self.current_replay_id,),
+            fetchone=True,
+        )
+        if row:
+            self.current_replay_id = row[0]
+            self.current_replay_timestamp = row[1]
+        else:
+            return None
 
         # Decompress and parse the JSON data
         data = orjson.loads(self._decompress_data(row[2]))
@@ -632,7 +670,7 @@ class ReplayManager:
         """
         Fetches global variable changes for the current replay ID.
         """
-        rows = self.cursor.execute(
+        rows = self._execute_query(
             "SELECT timestamp, variable_name, old_value, new_value FROM variable_changes WHERE replay_id = ?",
             (self.current_replay_id,),
         )
@@ -656,11 +694,11 @@ class ReplayManager:
         """
         Fetches all global variable changes for command 'V'
         """
-        rows = self.cursor.execute(
+        rows = self._execute_query(
             "SELECT timestamp, variable_name, old_value, new_value FROM variable_changes ORDER BY timestamp"
         )
 
-        return rows.fetchall()
+        return rows
 
     def capture_global_variable_change(self, variable_name: str, old_value: str, new_value: str):
         """
@@ -676,10 +714,11 @@ class ReplayManager:
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        self.cursor.execute(
+        last_row_id = self._execute_query(
             "INSERT INTO variable_changes (timestamp, variable_name, old_value, new_value) VALUES (?, ?, ?, ?)",
             (timestamp, variable_name, old_value, new_value),
+            return_lastrowid=True,
         )
 
         # Keep track of the primary key of the global variable change so we can link it to the replay data
-        self.global_variable_change_ids.append(self.cursor.lastrowid)
+        self.global_variable_change_ids.append(last_row_id)
