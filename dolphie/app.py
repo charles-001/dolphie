@@ -922,8 +922,6 @@ class DolphieApp(App):
                 or tab.dolphie.replay_file
             )
         ):
-            self.force_refresh_for_replay(need_current_data=True)
-
             # Set each panel's display status based on the tab's panel visibility
             for panel in tab.dolphie.panels.get_all_panels():
                 tab_panel = tab.get_panel_widget(panel.name)
@@ -953,6 +951,8 @@ class DolphieApp(App):
                 containers = self.query(".member_container")
                 for container in containers:
                     container.display = tab.id in container.id
+
+            self.force_refresh_for_replay(need_current_data=True)
 
     @on(TabbedContent.TabActivated, ".metrics_host_tabs")
     def metric_tab_changed(self, event: TabbedContent.TabActivated):
