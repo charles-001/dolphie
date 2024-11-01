@@ -41,9 +41,9 @@ def create_panel(tab: Tab) -> Table:
         table.add_row("[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)")
     tab.dashboard_section_1.update(table)
 
-    ##################
-    # System Metrics #
-    ##################
+    ######################
+    # System Utilization #
+    ######################
     table = create_system_utilization_table(tab)
 
     if table:

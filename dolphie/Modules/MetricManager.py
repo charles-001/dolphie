@@ -949,7 +949,7 @@ class MetricManager:
                                 metric_status_per_sec in {0, 100}
                                 and abs(metric_status_per_sec - metric_data.last_value) > 10
                             ):
-                                # Take a rolling median or average of the last 3 values
+                                # Take a rolling average of the last 3 values
                                 recent_values = metric_data.values[-3:]
                                 metric_status_per_sec = sum(recent_values) / len(recent_values)
 

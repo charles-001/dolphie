@@ -79,9 +79,9 @@ def create_panel(tab: Tab) -> Table:
 
     tab.dashboard_section_1.update(table_information)
 
-    ##################
-    # System Metrics #
-    ##################
+    ######################
+    # System Utilization #
+    ######################
     table = create_system_utilization_table(tab)
 
     if table:
@@ -240,9 +240,9 @@ def create_system_utilization_table(tab: Tab) -> Table:
 
         table_system_utilization.add_row("Uptime", str(timedelta(seconds=dolphie.system_utilization.get("Uptime"))))
 
-        cpu_percent = dolphie.metric_manager.metrics.system_cpu.CPU_Percent.last_value
-        if cpu_percent:
-            cpu_percent = round(cpu_percent, 2)
+        cpu_percent_values = dolphie.metric_manager.metrics.system_cpu.CPU_Percent.values
+        if cpu_percent_values:
+            cpu_percent = round(cpu_percent_values[-1], 2)
             if cpu_percent > 90:
                 formatted_cpu_percent = f"[red]{cpu_percent}%[/red]"
             elif cpu_percent > 80:
@@ -263,8 +263,10 @@ def create_system_utilization_table(tab: Tab) -> Table:
         else:
             table_system_utilization.add_row("[label]Load", "[dark_gray]N/A[/dark_gray]")
 
-        memory_percent_used = dolphie.system_utilization.get("Memory_Percent_Used")
-        if dolphie.metric_manager.metrics.system_memory.Memory_Used.last_value:
+        memory_used = dolphie.metric_manager.metrics.system_memory.Memory_Used.last_value
+        memory_total = dolphie.metric_manager.metrics.system_memory.Memory_Total.last_value
+        if memory_used and memory_total:
+            memory_percent_used = round((memory_used / memory_total) * 100, 2)
             if memory_percent_used > 90:
                 formatted_memory_percent_used = f"[red]{memory_percent_used}%[/red]"
             elif memory_percent_used > 80:
@@ -276,9 +278,9 @@ def create_system_utilization_table(tab: Tab) -> Table:
                 "[label]Memory",
                 (
                     f"{formatted_memory_percent_used}\n"
-                    f"{format_bytes(dolphie.metric_manager.metrics.system_memory.Memory_Used.last_value)}"
+                    f"{format_bytes(memory_used)}"
                     f"[dark_gray]/[/dark_gray]"
-                    f"{format_bytes(dolphie.metric_manager.metrics.system_memory.Memory_Total.last_value)}"
+                    f"{format_bytes(memory_total)}"
                 ),
             )
         else:
