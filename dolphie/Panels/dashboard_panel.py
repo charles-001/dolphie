@@ -84,7 +84,7 @@ def create_panel(tab: Tab) -> Table:
     ##################
     table_system_metrics = Table(show_header=False, box=None, title="System Metrics", title_style=table_title_style)
     table_system_metrics.add_column()
-    table_system_metrics.add_column(width=22)
+    table_system_metrics.add_column(width=20)
 
     table_system_metrics.add_row("Uptime", str(timedelta(seconds=dolphie.system_metrics.get("Uptime"))))
 
@@ -98,7 +98,7 @@ def create_panel(tab: Tab) -> Table:
 
     load_averages = dolphie.metric_manager.metrics.system_cpu.CPU_Load_Avg.last_value
     load_1, load_5, load_15 = load_averages
-    formatted_load = f"[label]1[/label]  {load_1:.2f}\n[label]5[/label]  {load_5:.2f}\n[label]15[/label] {load_15:.2f}"
+    formatted_load = f"[label]1[/label]  {load_1:.2f} [label]5[/label] {load_5:.2f}\n[label]15[/label] {load_15:.2f}"
     table_system_metrics.add_row("[label]Load", formatted_load)
 
     memory_percent_used = dolphie.metric_manager.metrics.system_memory.Percent_Used.last_value
@@ -141,8 +141,8 @@ def create_panel(tab: Tab) -> Table:
 
     # Add row to table with the network metrics
     table_system_metrics.add_row(
-        "[label]Network",
-        (f"[label]Dn[/label] {last_network_down} [label]Up[/label] {last_network_up}"),
+        "[label]Network/s",
+        (f"[label]Dn[/label] {last_network_down}\n[label]Up[/label] {last_network_up}"),
     )
 
     tab.dashboard_section_6.update(table_system_metrics)
