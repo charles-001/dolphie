@@ -84,7 +84,7 @@ def create_panel(tab: Tab) -> Table:
     ##################
     table_system_metrics = Table(show_header=False, box=None, title="System Metrics", title_style=table_title_style)
     table_system_metrics.add_column()
-    table_system_metrics.add_column(width=20)
+    table_system_metrics.add_column(min_width=20, max_width=25)
 
     table_system_metrics.add_row("Uptime", str(timedelta(seconds=dolphie.system_metrics.get("Uptime"))))
 
