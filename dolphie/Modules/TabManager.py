@@ -184,9 +184,9 @@ class Tab:
             else:
                 self.metric_graph_tabs.show_tab("graph_tab_adaptive_hash_index")
 
-            if (self.dolphie.metadata_locks_enabled and self.dolphie.panels.metadata_locks.visible) or (
-                self.dolphie.replay_file and self.dolphie.metadata_locks
-            ):
+            if (
+                self.dolphie.metadata_locks_enabled and self.dolphie.panels.metadata_locks.visible
+            ) or self.dolphie.replay_file:
                 self.metric_graph_tabs.show_tab("graph_tab_locks")
             else:
                 self.metric_graph_tabs.hide_tab("graph_tab_locks")
