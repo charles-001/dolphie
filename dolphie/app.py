@@ -306,6 +306,7 @@ class DolphieApp(App):
             dolphie.metric_manager.refresh_data(
                 worker_start_time=worker_start_time,
                 polling_latency=dolphie.polling_latency,
+                system_metrics=dolphie.system_metrics,
                 global_variables=dolphie.global_variables,
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
@@ -474,6 +475,8 @@ class DolphieApp(App):
     def process_mysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
+        dolphie.collect_system_metrics()
+
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
         self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
@@ -597,6 +600,8 @@ class DolphieApp(App):
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
+
+        dolphie.collect_system_metrics()
 
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
         self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
@@ -1132,7 +1137,7 @@ class DolphieApp(App):
                 return
 
             self.toggle_panel(dolphie.panels.replication.name)
-            tab.size_dashboard_sections()
+            tab.toggle_dashboard_sections()
 
             if dolphie.panels.replication.visible:
                 if dolphie.replica_manager.available_replicas:

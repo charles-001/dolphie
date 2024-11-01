@@ -3,10 +3,11 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Union
 
 import plotext as plt
-from dolphie.DataTypes import ConnectionSource
-from dolphie.Modules.Functions import format_bytes, format_number, format_time
 from rich.text import Text
 from textual.widgets import Static
+
+from dolphie.DataTypes import ConnectionSource
+from dolphie.Modules.Functions import format_bytes, format_number, format_time
 
 
 class Graph(Static):
@@ -151,6 +152,30 @@ class Graph(Static):
                     color=self.metric_instance.Active_redo_log_count.color,
                 )
                 max_y_value = 32
+        elif isinstance(self.metric_instance, SystemMemoryMetrics):
+            x = self.datetimes
+            y = self.metric_instance.Memory_Used.values
+
+            if y and x:
+                plt.hline(0, (10, 14, 27))
+                plt.hline(self.metric_instance.Memory_Total.last_value, (252, 121, 121))
+                plt.text(
+                    "Total",
+                    y=self.metric_instance.Memory_Total.last_value,
+                    x=max(x),
+                    alignment="right",
+                    color=(233, 233, 233),
+                    style="bold",
+                )
+
+                plt.plot(
+                    x,
+                    y,
+                    marker=self.marker,
+                    label=self.metric_instance.Memory_Used.label,
+                    color=self.metric_instance.Memory_Used.color,
+                )
+                max_y_value = self.metric_instance.Memory_Total.last_value
         else:
             for metric_data in self.metric_instance.__dict__.values():
                 if isinstance(metric_data, MetricData) and metric_data.visible:
@@ -190,6 +215,8 @@ def get_number_format_function(data, color=False):
         ProxySQLMultiplexEfficiency: lambda val: f"{round(val)}%",
         DiskIOMetrics: lambda val: format_bytes(val, color=color),
         ProxySQLQueriesDataNetwork: lambda val: format_bytes(val, color=color),
+        SystemMemoryMetrics: lambda val: format_bytes(val, color=color),
+        SystemNetworkMetrics: lambda val: format_bytes(val, color=color),
     }
 
     return data_formatters.get(type(data), lambda val: format_number(val, color=color))
@@ -197,6 +224,7 @@ def get_number_format_function(data, color=False):
 
 @dataclass
 class MetricSource:
+    system_metrics: str = "system_metrics"
     global_status: str = "global_status"
     innodb_metrics: str = "innodb_metrics"
     disk_io_metrics: str = "disk_io_metrics"
@@ -227,6 +255,51 @@ class MetricData:
     graphable: bool = True
     create_switch: bool = True
     values: List[int] = field(default_factory=list)
+
+
+@dataclass
+class SystemCPUMetrics:
+    CPU_Percent: MetricData
+    CPU_Load_Avg: MetricData
+    graphs: List[str]
+    tab_name: str = "system_cpu"
+    graph_tab_name = "System CPU"
+    metric_source: MetricSource = MetricSource.system_metrics
+    connection_source: List[ConnectionSource] = field(
+        default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
+    )
+    use_with_replay: bool = True
+
+
+@dataclass
+class SystemMemoryMetrics:
+    Memory_Total: MetricData
+    Memory_Used: MetricData
+    Percent_Used: MetricData
+    Swap_Total: MetricData
+    Swap_Used: MetricData
+    graphs: List[str]
+    tab_name: str = "system_memory"
+    graph_tab_name = "System Memory"
+    metric_source: MetricSource = MetricSource.system_metrics
+    connection_source: List[ConnectionSource] = field(
+        default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
+    )
+    use_with_replay: bool = True
+
+
+@dataclass
+class SystemNetworkMetrics:
+    Network_Up: MetricData
+    Network_Down: MetricData
+    graphs: List[str]
+    tab_name: str = "system_network"
+    graph_tab_name = "System Network"
+    metric_source: MetricSource = MetricSource.system_metrics
+    connection_source: List[ConnectionSource] = field(
+        default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
+    )
+    use_with_replay: bool = True
 
 
 @dataclass
@@ -517,6 +590,9 @@ class ProxySQLTotalCommandStats:
 
 @dataclass
 class MetricInstances:
+    system_cpu: SystemCPUMetrics
+    system_memory: SystemMemoryMetrics
+    system_network: SystemNetworkMetrics
     dml: DMLMetrics
     buffer_pool_requests: BufferPoolRequestsMetrics
     history_list_length: HistoryListLength
@@ -557,6 +633,66 @@ class MetricManager:
 
         self.datetimes: List[str] = []
         self.metrics = MetricInstances(
+            system_cpu=SystemCPUMetrics(
+                graphs=["graph_system_cpu"],
+                CPU_Percent=MetricData(
+                    label="CPU %", color=MetricColor.blue, per_second_calculation=False, create_switch=False
+                ),
+                CPU_Load_Avg=MetricData(
+                    label="Load Avg",
+                    color=MetricColor.green,
+                    visible=False,
+                    save_history=False,
+                    graphable=False,
+                    per_second_calculation=False,
+                ),
+            ),
+            system_memory=SystemMemoryMetrics(
+                graphs=["graph_system_memory"],
+                Memory_Total=MetricData(
+                    label="Total",
+                    color=MetricColor.blue,
+                    per_second_calculation=False,
+                    visible=False,
+                    save_history=False,
+                    create_switch=False,
+                ),
+                Memory_Used=MetricData(
+                    label="Used",
+                    color=MetricColor.green,
+                    per_second_calculation=False,
+                    create_switch=False,
+                ),
+                Percent_Used=MetricData(
+                    label="% Used",
+                    color=MetricColor.red,
+                    per_second_calculation=False,
+                    visible=False,
+                    graphable=False,
+                    save_history=False,
+                ),
+                Swap_Total=MetricData(
+                    label="Swap Total",
+                    color=MetricColor.blue,
+                    per_second_calculation=False,
+                    save_history=False,
+                    visible=False,
+                    graphable=False,
+                ),
+                Swap_Used=MetricData(
+                    label="Swap Used",
+                    color=MetricColor.green,
+                    save_history=False,
+                    per_second_calculation=False,
+                    visible=False,
+                    graphable=False,
+                ),
+            ),
+            system_network=SystemNetworkMetrics(
+                graphs=["graph_system_network"],
+                Network_Up=MetricData(label="Up", color=MetricColor.blue),
+                Network_Down=MetricData(label="Down", color=MetricColor.green),
+            ),
             dml=DMLMetrics(
                 graphs=["graph_dml"],
                 Queries=MetricData(label="Queries", color=MetricColor.gray, visible=False),
@@ -729,6 +865,7 @@ class MetricManager:
         self,
         worker_start_time: datetime = None,
         polling_latency: float = 0,
+        system_metrics: Dict[str, int] = {},
         global_variables: Dict[str, Union[int, str]] = {},
         global_status: Dict[str, int] = {},
         innodb_metrics: Dict[str, int] = {},
@@ -739,6 +876,7 @@ class MetricManager:
     ):
         self.worker_start_time = worker_start_time
         self.polling_latency = polling_latency
+        self.system_metrics = system_metrics
         self.global_variables = global_variables
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
@@ -780,6 +918,7 @@ class MetricManager:
     def add_metric(self, metric_data: MetricData, value: int):
         if self.initialized:
             if metric_data.save_history:
+
                 metric_data.values.append(value)
             else:
                 metric_data.values = [value]
@@ -789,7 +928,9 @@ class MetricManager:
             self.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def get_metric_source_data(self, metric_source):
-        if metric_source == MetricSource.global_status:
+        if metric_source == MetricSource.system_metrics:
+            metric_source_data = self.system_metrics
+        elif metric_source == MetricSource.global_status:
             metric_source_data = self.global_status
         elif metric_source == MetricSource.innodb_metrics:
             metric_source_data = self.innodb_metrics
@@ -835,6 +976,9 @@ class MetricManager:
                         else:
                             metric_status_per_sec = current_metric_source_value
 
+                        if metric_name == "CPU_Percent" and metric_data.values:
+                            metric_data.values[-1] = metric_status_per_sec
+
                         self.add_metric(metric_data, metric_status_per_sec)
 
     def update_metrics_last_value(self):
@@ -843,7 +987,7 @@ class MetricManager:
             metric_source_data = self.get_metric_source_data(metric_instance.metric_source)
 
             for metric_name, metric_data in metric_instance.__dict__.items():
-                if isinstance(metric_data, MetricData) and metric_data.per_second_calculation:
+                if isinstance(metric_data, MetricData) and metric_source_data:
                     metric_data.last_value = metric_source_data.get(metric_name, 0)
 
     def update_proxysql_command_stats(self, proxysql_command_stats):

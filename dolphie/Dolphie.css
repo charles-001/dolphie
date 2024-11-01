@@ -178,6 +178,8 @@ TopBar {
     border: tall #1b233a;
     height: 11;
     width: auto;
+    padding-left: 1;
+    padding-right: 1;
 }
 
 .metadata_locks {

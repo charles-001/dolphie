@@ -1,9 +1,11 @@
 import ipaddress
 import os
 import socket
+import time
 from datetime import datetime
 from typing import Dict, Union
 
+import psutil
 from loguru import logger
 from packaging.version import parse as parse_version
 from textual.app import App
@@ -87,6 +89,7 @@ class Dolphie:
         self.pause_refresh: bool = False
         self.innodb_metrics: dict = {}
         self.disk_io_metrics: dict = {}
+        self.system_metrics: dict = {}
         self.global_variables: dict = {}
         self.innodb_trx_lock_metrics: dict = {}
         self.global_status: dict = {}
@@ -226,6 +229,24 @@ class Dolphie:
         # Check to see if this is a Group Replication host
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
+
+    def collect_system_metrics(self):
+        virtual_memory = psutil.virtual_memory()
+        swap_memory = psutil.swap_memory()
+        network_io = psutil.net_io_counters()
+
+        self.system_metrics = {
+            "Uptime": int(time.time() - psutil.boot_time()),
+            "CPU_Percent": psutil.cpu_percent(interval=0),
+            "CPU_Load_Avg": os.getloadavg(),  # 1, 5, and 15 minute load averages
+            "Memory_Total": virtual_memory.total,
+            "Memory_Used": virtual_memory.used,
+            "Percent_Used": virtual_memory.percent,
+            "Swap_Total": swap_memory.total,
+            "Swap_Used": swap_memory.used,
+            "Network_Up": network_io.bytes_sent,
+            "Network_Down": network_io.bytes_recv,
+        }
 
     def get_group_replication_metadata(self):
         # Check to get information on what cluster/instance type it is

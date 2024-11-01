@@ -85,6 +85,7 @@ class Tab:
     dashboard_section_3: Static = None
     dashboard_section_4: Static = None
     dashboard_section_5: Static = None
+    dashboard_section_6: Static = None
 
     ddl_title: Label = None
     ddl_datatable: DataTable = None
@@ -155,48 +156,25 @@ class Tab:
             total=self.replay_manager.total_replay_rows,
         )
 
-    def size_dashboard_sections(self):
-        if self.dolphie.connection_source == ConnectionSource.mysql:
-            # Update the sizes of the panels depending if replication container is visible or not
-            if self.dolphie.replication_status and not self.dolphie.panels.replication.visible:
-                self.dashboard_section_1.styles.width = "25vw"
-                self.dashboard_section_2.styles.width = "17vw"
-                self.dashboard_section_3.styles.width = "21vw"
-                self.dashboard_section_4.styles.width = "12vw"
-                self.dashboard_section_5.styles.width = "25vw"
+    def toggle_dashboard_sections(self):
+        if self.dolphie.system_metrics:
+            self.dashboard_section_6.display = True
+        else:
+            self.dashboard_section_6.display = False
 
+        if self.dolphie.connection_source == ConnectionSource.mysql:
+            if self.dolphie.replication_status and not self.dolphie.panels.replication.visible:
                 self.dashboard_section_5.display = True
             else:
-                self.dashboard_section_1.styles.width = "32vw"
-                self.dashboard_section_2.styles.width = "24vw"
-                self.dashboard_section_3.styles.width = "27vw"
-                self.dashboard_section_4.styles.width = "17vw"
-                self.dashboard_section_5.styles.width = "0"
-
                 self.dashboard_section_5.display = False
 
-            self.dashboard_section_1.styles.max_width = "45"
-            self.dashboard_section_2.styles.max_width = "32"
-            self.dashboard_section_3.styles.max_width = "38"
-            self.dashboard_section_4.styles.max_width = "22"
-            self.dashboard_section_5.styles.max_width = "55"
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
-            self.dashboard_section_1.styles.width = "24vw"
-            self.dashboard_section_2.styles.width = "20vw"
-            self.dashboard_section_3.styles.width = "22vw"
-            self.dashboard_section_4.styles.width = "13vw"
-
             self.dashboard_section_5.display = False
-
-            self.dashboard_section_1.styles.max_width = "35"
-            self.dashboard_section_2.styles.max_width = "28"
-            self.dashboard_section_3.styles.max_width = "25"
-            self.dashboard_section_4.styles.max_width = "25"
 
     def refresh_tab_properties(self):
         self.main_container.display = True
 
-        self.size_dashboard_sections()
+        self.toggle_dashboard_sections()
 
         # Hide all graph tabs so we can show the ones we want
         tabs = self.metric_graph_tabs.query(TabPane)
@@ -319,11 +297,12 @@ class TabManager:
                 ),
                 Container(
                     Center(
-                        Static(id="dashboard_section_1", classes="dashboard_section_1"),
-                        Static(id="dashboard_section_2", classes="dashboard_section_2_information"),
-                        Static(id="dashboard_section_3", classes="dashboard_section_3"),
-                        Static(id="dashboard_section_5", classes="dashboard_section_5"),
-                        Static(id="dashboard_section_4", classes="dashboard_section_4"),
+                        Static(id="dashboard_section_1"),
+                        Static(id="dashboard_section_6"),
+                        Static(id="dashboard_section_2"),
+                        Static(id="dashboard_section_3"),
+                        Static(id="dashboard_section_5"),
+                        Static(id="dashboard_section_4"),
                     ),
                     Sparkline([], id="panel_dashboard_queries_qps"),
                     id="panel_dashboard",
@@ -577,6 +556,7 @@ class TabManager:
         tab.dashboard_section_3 = self.app.query_one("#dashboard_section_3", Static)
         tab.dashboard_section_4 = self.app.query_one("#dashboard_section_4", Static)
         tab.dashboard_section_5 = self.app.query_one("#dashboard_section_5", Static)
+        tab.dashboard_section_6 = self.app.query_one("#dashboard_section_6", Static)
 
         tab.group_replication_container = self.app.query_one("#group_replication_container", Container)
         tab.group_replication_grid = self.app.query_one("#group_replication_grid", Container)
