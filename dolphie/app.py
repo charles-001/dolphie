@@ -222,10 +222,17 @@ class DolphieApp(App):
 
         tab.replay_manager.fetch_global_variable_changes_for_current_replay_id()
 
+        tab.toggle_dashboard_sections()
+
         # Common data for refreshing
+        dolphie.system_metrics = replay_event_data.system_metrics
         dolphie.global_variables = replay_event_data.global_variables
         dolphie.global_status = replay_event_data.global_status
-        common_metrics = {"global_variables": dolphie.global_variables, "global_status": dolphie.global_status}
+        common_metrics = {
+            "system_metrics": dolphie.system_metrics,
+            "global_variables": dolphie.global_variables,
+            "global_status": dolphie.global_status,
+        }
 
         if dolphie.connection_source == ConnectionSource.mysql:
             dolphie.set_host_version(dolphie.global_variables.get("version"))
@@ -267,6 +274,7 @@ class DolphieApp(App):
             if metric_instance:
                 for metric_name, metric_values in metric_data.items():
                     metric_instance.__dict__[metric_name].values = metric_values
+                    metric_instance.__dict__[metric_name].last_value = metric_values[-1]
 
         tab.worker_running = False
 
@@ -1007,7 +1015,7 @@ class DolphieApp(App):
         # This function lets us force a refresh of the worker thread when we're in a replay
         tab = self.tab_manager.active_tab
 
-        if tab.dolphie.replay_file:
+        if tab.dolphie.replay_file and not tab.worker_running:
             tab.worker.cancel()
             tab.worker_timer.stop()
 

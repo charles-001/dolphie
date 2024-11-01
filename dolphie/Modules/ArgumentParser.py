@@ -97,7 +97,6 @@ class ArgumentParser:
                 "ssl",
                 "hostgroup_hosts",
                 "credential_profiles",
-                "enable_system_metrics",
             ]:
                 self.config_object_options[variable.name] = variable.type
 

@@ -22,6 +22,7 @@ from dolphie.Modules.Functions import format_bytes, minify_query
 @dataclass
 class MySQLReplayData:
     timestamp: str
+    system_metrics: dict
     global_status: dict
     global_variables: dict
     binlog_status: dict
@@ -38,6 +39,7 @@ class MySQLReplayData:
 @dataclass
 class ProxySQLReplayData:
     timestamp: str
+    system_metrics: dict
     global_status: dict
     global_variables: dict
     command_stats: dict
@@ -510,6 +512,9 @@ class ReplayManager:
             "metric_manager": self._condition_metrics(self.dolphie.metric_manager),
         }
 
+        if self.dolphie.system_metrics:
+            data_dict.update({"system_metrics": self.dolphie.system_metrics})
+
         if self.dolphie.connection_source == ConnectionSource.mysql:
             # Remove some global status variables that are not useful for replaying
             keys_to_remove = [
@@ -632,6 +637,7 @@ class ReplayManager:
         processlist = {}
         common_params = {
             "timestamp": row[1],
+            "system_metrics": data.get("system_metrics", {}),
             "global_status": data.get("global_status", {}),
             "global_variables": data.get("global_variables", {}),
             "metric_manager": data.get("metric_manager", {}),

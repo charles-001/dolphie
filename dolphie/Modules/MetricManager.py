@@ -918,7 +918,6 @@ class MetricManager:
     def add_metric(self, metric_data: MetricData, value: int):
         if self.initialized:
             if metric_data.save_history:
-
                 metric_data.values.append(value)
             else:
                 metric_data.values = [value]
@@ -980,8 +979,7 @@ class MetricManager:
                         # so we need to set it to the current value of next run. Also, if the value is 0 or 100,
                         # we need to check if the difference is greater than 10 to avoid inaccurate spikes
                         if metric_name == "CPU_Percent":
-                            print(metric_status_per_sec)
-                            if len(metric_data.values) == 1:
+                            if len(metric_data.values) == 1 and metric_data.values[0] == 0:
                                 metric_data.values[0] = metric_status_per_sec
                             elif (
                                 metric_status_per_sec in {0, 100}
@@ -990,6 +988,7 @@ class MetricManager:
                                 # Take a rolling median or average of the last 3 values
                                 recent_values = metric_data.values[-3:]
                                 metric_status_per_sec = sum(recent_values) / len(recent_values)
+
                         self.add_metric(metric_data, metric_status_per_sec)
 
     def update_metrics_last_value(self):
