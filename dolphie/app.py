@@ -195,7 +195,7 @@ class DolphieApp(App):
             )
             logger.info(f"Log file: {config.daemon_mode_log_file}")
 
-    @work(thread=True, group="replay", exclusive=True)
+    @work(thread=True, group="replay")
     async def run_worker_replay(self, tab_id: int, manual_control: bool = False):
         tab = self.tab_manager.get_tab(tab_id)
 
@@ -861,8 +861,8 @@ class DolphieApp(App):
     def replay_back(self):
         current_time = time.time()
 
-        # Run only if 0.1 seconds have passed since the last call
-        if current_time - self.last_replay_time >= 0.1:
+        # Run only if 0.08 seconds have passed since the last call
+        if current_time - self.last_replay_time >= 0.08:
             self.last_replay_time = current_time
 
             # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
@@ -873,8 +873,8 @@ class DolphieApp(App):
     def replay_forward(self):
         current_time = time.time()
 
-        # Run only if 0.1 seconds have passed since the last call
-        if current_time - self.last_replay_time >= 0.1:
+        # Run only if 0.08 seconds have passed since the last call
+        if current_time - self.last_replay_time >= 0.08:
             self.last_replay_time = current_time
             self.force_refresh_for_replay()
 
@@ -1012,7 +1012,7 @@ class DolphieApp(App):
         tab = self.tab_manager.active_tab
 
         if tab.dolphie.replay_file:
-            tab.worker.cancel()
+            self.workers.cancel_group(tab.worker, group="replay")
             tab.worker_timer.stop()
 
             if need_current_data:
