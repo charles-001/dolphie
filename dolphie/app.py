@@ -860,7 +860,7 @@ class DolphieApp(App):
         current_time = time.time()
 
         # Run only if 0.1 seconds have passed since the last call
-        if current_time - self.last_replay_time >= 0.05:
+        if current_time - self.last_replay_time >= 0.1:
             self.last_replay_time = current_time
 
             # Because of how get_next_refresh_interval works, we need to go back 2 to get the previous event
@@ -872,7 +872,7 @@ class DolphieApp(App):
         current_time = time.time()
 
         # Run only if 0.1 seconds have passed since the last call
-        if current_time - self.last_replay_time >= 0.05:
+        if current_time - self.last_replay_time >= 0.1:
             self.last_replay_time = current_time
             self.force_refresh_for_replay()
 
