@@ -252,6 +252,7 @@ class Dolphie:
 
         self.system_metrics = {
             "Uptime": int(time.time() - psutil.boot_time()),
+            "CPU_Count": psutil.cpu_count(logical=True),
             "CPU_Percent": psutil.cpu_percent(interval=0),
             "CPU_Load_Avg": os.getloadavg(),  # 1, 5, and 15 minute load averages
             "Memory_Total": virtual_memory.total,

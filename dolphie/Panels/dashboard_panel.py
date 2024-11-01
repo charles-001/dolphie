@@ -85,7 +85,7 @@ def create_panel(tab: Tab) -> Table:
     if dolphie.system_metrics:
         table_system_metrics = Table(show_header=False, box=None, title="System Metrics", title_style=table_title_style)
         table_system_metrics.add_column()
-        table_system_metrics.add_column(min_width=20, max_width=25)
+        table_system_metrics.add_column(min_width=18, max_width=25)
 
         table_system_metrics.add_row("Uptime", str(timedelta(seconds=dolphie.system_metrics.get("Uptime"))))
 
@@ -99,7 +99,9 @@ def create_panel(tab: Tab) -> Table:
                 formatted_cpu_percent = f"[green]{cpu_percent}%[/green]"
         else:
             formatted_cpu_percent = "N/A"
-        table_system_metrics.add_row("[label]CPU", formatted_cpu_percent)
+        table_system_metrics.add_row(
+            "[label]CPU", f"{formatted_cpu_percent} (cores: {dolphie.system_metrics.get('CPU_Count')})"
+        )
 
         load_averages = dolphie.metric_manager.metrics.system_cpu.CPU_Load_Avg.last_value
         if load_averages:
