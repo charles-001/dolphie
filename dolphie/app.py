@@ -450,16 +450,18 @@ class DolphieApp(App):
             tab.worker_running = False
 
             if event.state == WorkerState.SUCCESS:
-                self.monitor_read_only_change(tab)
+                if tab.id == self.tab_manager.active_tab.id:
+                    if len(self.screen_stack) > 1 or (dolphie.pause_refresh and not tab.replay_manual_control):
+                        tab.worker_timer = self.set_timer(
+                            dolphie.refresh_interval, partial(self.run_worker_replay, tab.id)
+                        )
 
-                if (
-                    len(self.screen_stack) > 1
-                    or (dolphie.pause_refresh and not tab.replay_manual_control)
-                    or tab.id != self.tab_manager.active_tab.id
-                ):
-                    tab.worker_timer = self.set_timer(dolphie.refresh_interval, partial(self.run_worker_replay, tab.id))
-
+                        return
+                else:
+                    # If the tab isn't active, do nothing anymore
                     return
+
+                self.monitor_read_only_change(tab)
 
                 if not tab.main_container.display:
                     tab.refresh_tab_properties()
