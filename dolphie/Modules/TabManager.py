@@ -157,7 +157,7 @@ class Tab:
         )
 
     def toggle_dashboard_sections(self):
-        if self.dolphie.system_metrics:
+        if self.dolphie.system_utilization:
             self.dashboard_section_6.display = True
         else:
             self.dashboard_section_6.display = False

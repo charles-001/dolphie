@@ -225,11 +225,11 @@ class DolphieApp(App):
         tab.toggle_dashboard_sections()
 
         # Common data for refreshing
-        dolphie.system_metrics = replay_event_data.system_metrics
+        dolphie.system_utilization = replay_event_data.system_utilization
         dolphie.global_variables = replay_event_data.global_variables
         dolphie.global_status = replay_event_data.global_status
         common_metrics = {
-            "system_metrics": dolphie.system_metrics,
+            "system_utilization": dolphie.system_utilization,
             "global_variables": dolphie.global_variables,
             "global_status": dolphie.global_status,
         }
@@ -314,7 +314,7 @@ class DolphieApp(App):
             dolphie.metric_manager.refresh_data(
                 worker_start_time=worker_start_time,
                 polling_latency=dolphie.polling_latency,
-                system_metrics=dolphie.system_metrics,
+                system_utilization=dolphie.system_utilization,
                 global_variables=dolphie.global_variables,
                 global_status=dolphie.global_status,
                 innodb_metrics=dolphie.innodb_metrics,
@@ -483,7 +483,7 @@ class DolphieApp(App):
     def process_mysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.collect_system_metrics()
+        dolphie.collect_system_utilization()
 
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
         self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
@@ -609,7 +609,7 @@ class DolphieApp(App):
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.collect_system_metrics()
+        dolphie.collect_system_utilization()
 
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
         self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
@@ -762,7 +762,7 @@ class DolphieApp(App):
             else:
                 tab.metric_graph_tabs.hide_tab("graph_tab_locks")
 
-            if dolphie.system_metrics:
+            if dolphie.system_utilization:
                 tab.metric_graph_tabs.show_tab("graph_tab_system_cpu")
                 tab.metric_graph_tabs.show_tab("graph_tab_system_memory")
                 tab.metric_graph_tabs.show_tab("graph_tab_system_network")

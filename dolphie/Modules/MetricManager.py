@@ -224,7 +224,7 @@ def get_number_format_function(data, color=False):
 
 @dataclass
 class MetricSource:
-    system_metrics: str = "system_metrics"
+    system_utilization: str = "system_utilization"
     global_status: str = "global_status"
     innodb_metrics: str = "innodb_metrics"
     disk_io_metrics: str = "disk_io_metrics"
@@ -263,7 +263,7 @@ class SystemCPUMetrics:
     graphs: List[str]
     tab_name: str = "system_cpu"
     graph_tab_name = "System CPU"
-    metric_source: MetricSource = MetricSource.system_metrics
+    metric_source: MetricSource = MetricSource.system_utilization
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
     )
@@ -277,7 +277,7 @@ class SystemMemoryMetrics:
     graphs: List[str]
     tab_name: str = "system_memory"
     graph_tab_name = "System Memory"
-    metric_source: MetricSource = MetricSource.system_metrics
+    metric_source: MetricSource = MetricSource.system_utilization
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
     )
@@ -291,7 +291,7 @@ class SystemNetworkMetrics:
     graphs: List[str]
     tab_name: str = "system_network"
     graph_tab_name = "System Network"
-    metric_source: MetricSource = MetricSource.system_metrics
+    metric_source: MetricSource = MetricSource.system_utilization
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
     )
@@ -829,7 +829,7 @@ class MetricManager:
         self,
         worker_start_time: datetime = None,
         polling_latency: float = 0,
-        system_metrics: Dict[str, int] = {},
+        system_utilization: Dict[str, int] = {},
         global_variables: Dict[str, Union[int, str]] = {},
         global_status: Dict[str, int] = {},
         innodb_metrics: Dict[str, int] = {},
@@ -840,7 +840,7 @@ class MetricManager:
     ):
         self.worker_start_time = worker_start_time
         self.polling_latency = polling_latency
-        self.system_metrics = system_metrics
+        self.system_utilization = system_utilization
         self.global_variables = global_variables
         self.global_status = global_status
         self.innodb_metrics = innodb_metrics
@@ -891,8 +891,8 @@ class MetricManager:
             self.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
 
     def get_metric_source_data(self, metric_source):
-        if metric_source == MetricSource.system_metrics:
-            metric_source_data = self.system_metrics
+        if metric_source == MetricSource.system_utilization:
+            metric_source_data = self.system_utilization
         elif metric_source == MetricSource.global_status:
             metric_source_data = self.global_status
         elif metric_source == MetricSource.innodb_metrics:

@@ -89,7 +89,7 @@ class Dolphie:
         self.pause_refresh: bool = False
         self.innodb_metrics: dict = {}
         self.disk_io_metrics: dict = {}
-        self.system_metrics: dict = {}
+        self.system_utilization: dict = {}
         self.global_variables: dict = {}
         self.innodb_trx_lock_metrics: dict = {}
         self.global_status: dict = {}
@@ -158,12 +158,12 @@ class Dolphie:
             monitored_ip = socket.gethostbyname(self.host)
 
             # Enable system metrics if monitored host is the same as local host or loopback
-            self.enable_system_metrics = monitored_ip == "127.0.0.1" or monitored_ip == socket.gethostbyname(
+            self.enable_system_utilization = monitored_ip == "127.0.0.1" or monitored_ip == socket.gethostbyname(
                 socket.gethostname()
             )
         except socket.gaierror:
             # Handle case where the host cannot be resolved
-            self.enable_system_metrics = False
+            self.enable_system_utilization = False
 
     def db_connect(self):
         self.main_db_connection.connect()
@@ -242,15 +242,15 @@ class Dolphie:
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
 
-    def collect_system_metrics(self):
-        if not self.enable_system_metrics:
+    def collect_system_utilization(self):
+        if not self.enable_system_utilization:
             return
 
         virtual_memory = psutil.virtual_memory()
         swap_memory = psutil.swap_memory()
         network_io = psutil.net_io_counters()
 
-        self.system_metrics = {
+        self.system_utilization = {
             "Uptime": int(time.time() - psutil.boot_time()),
             "CPU_Count": psutil.cpu_count(logical=True),
             "CPU_Percent": psutil.cpu_percent(interval=0),

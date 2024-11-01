@@ -82,12 +82,14 @@ def create_panel(tab: Tab) -> Table:
     ##################
     # System Metrics #
     ##################
-    if dolphie.system_metrics:
-        table_system_metrics = Table(show_header=False, box=None, title="System Metrics", title_style=table_title_style)
-        table_system_metrics.add_column()
-        table_system_metrics.add_column(min_width=18, max_width=25)
+    if dolphie.system_utilization:
+        table_system_utilization = Table(
+            show_header=False, box=None, title="System Utilization", title_style=table_title_style
+        )
+        table_system_utilization.add_column()
+        table_system_utilization.add_column(min_width=18, max_width=25)
 
-        table_system_metrics.add_row("Uptime", str(timedelta(seconds=dolphie.system_metrics.get("Uptime"))))
+        table_system_utilization.add_row("Uptime", str(timedelta(seconds=dolphie.system_utilization.get("Uptime"))))
 
         cpu_percent = dolphie.metric_manager.metrics.system_cpu.CPU_Percent.last_value
         if cpu_percent:
@@ -100,19 +102,19 @@ def create_panel(tab: Tab) -> Table:
                 formatted_cpu_percent = f"[green]{cpu_percent}%[/green]"
         else:
             formatted_cpu_percent = "N/A"
-        table_system_metrics.add_row(
-            "[label]CPU", f"{formatted_cpu_percent} [label]cores[/label] {dolphie.system_metrics.get('CPU_Count')}"
+        table_system_utilization.add_row(
+            "[label]CPU", f"{formatted_cpu_percent} [label]cores[/label] {dolphie.system_utilization.get('CPU_Count')}"
         )
 
-        load_averages = dolphie.system_metrics.get("CPU_Load_Avg")
+        load_averages = dolphie.system_utilization.get("CPU_Load_Avg")
         if load_averages:
             load_1, load_5, load_15 = load_averages
             formatted_load = f"{load_1:.2f} {load_5:.2f} {load_15:.2f}"
-            table_system_metrics.add_row("[label]Load", formatted_load)
+            table_system_utilization.add_row("[label]Load", formatted_load)
         else:
-            table_system_metrics.add_row("[label]Load", "N/A")
+            table_system_utilization.add_row("[label]Load", "N/A")
 
-        memory_percent_used = dolphie.system_metrics.get("Memory_Percent_Used")
+        memory_percent_used = dolphie.system_utilization.get("Memory_Percent_Used")
         if dolphie.metric_manager.metrics.system_memory.Memory_Used.last_value:
             if memory_percent_used > 90:
                 formatted_memory_percent_used = f"[red]{memory_percent_used}%[/red]"
@@ -121,7 +123,7 @@ def create_panel(tab: Tab) -> Table:
             else:
                 formatted_memory_percent_used = f"[green]{memory_percent_used}%[/green]"
 
-            table_system_metrics.add_row(
+            table_system_utilization.add_row(
                 "[label]Memory",
                 (
                     f"{formatted_memory_percent_used}\n"
@@ -131,14 +133,14 @@ def create_panel(tab: Tab) -> Table:
                 ),
             )
         else:
-            table_system_metrics.add_row("[label]Memory", "N/A")
+            table_system_utilization.add_row("[label]Memory", "N/A")
 
-        table_system_metrics.add_row(
+        table_system_utilization.add_row(
             "[label]Swap",
             (
-                f"{format_bytes(dolphie.system_metrics.get('Swap_Used'))}"
+                f"{format_bytes(dolphie.system_utilization.get('Swap_Used'))}"
                 f"[dark_gray]/[/dark_gray]"
-                f"{format_bytes(dolphie.system_metrics.get('Swap_Total'))}"
+                f"{format_bytes(dolphie.system_utilization.get('Swap_Total'))}"
             ),
         )
 
@@ -154,14 +156,14 @@ def create_panel(tab: Tab) -> Table:
                 last_network_up = "0"
 
             # Add row to table with the network metrics
-            table_system_metrics.add_row(
+            table_system_utilization.add_row(
                 "[label]Network",
                 (f"[label]Dn[/label] {last_network_down}\n[label]Up[/label] {last_network_up}"),
             )
         else:
-            table_system_metrics.add_row("[label]Network", "N/A")
+            table_system_utilization.add_row("[label]Network", "N/A")
 
-        tab.dashboard_section_6.update(table_system_metrics)
+        tab.dashboard_section_6.update(table_system_utilization)
 
     ###########
     # InnoDB  #
