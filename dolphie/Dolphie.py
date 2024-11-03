@@ -160,8 +160,9 @@ class Dolphie:
             # Enable system metrics if using a socket file or if monitored host is localhost
             if self.socket or monitored_ip == "127.0.0.1" or monitored_ip == socket.gethostbyname(socket.gethostname()):
                 self.enable_system_utilization = True
+            else:
+                self.enable_system_utilization = False
         except socket.gaierror:
-            # Handle case where the host cannot be resolved
             self.enable_system_utilization = False
 
     def db_connect(self):
