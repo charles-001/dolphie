@@ -951,7 +951,8 @@ class MetricManager:
                             ):
                                 # Take a rolling average of the last 3 values
                                 recent_values = metric_data.values[-3:]
-                                metric_status_per_sec = sum(recent_values) / len(recent_values)
+                                if recent_values:
+                                    metric_status_per_sec = sum(recent_values) / len(recent_values)
 
                         self.add_metric(metric_data, metric_status_per_sec)
 

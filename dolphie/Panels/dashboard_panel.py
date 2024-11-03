@@ -248,7 +248,7 @@ def create_system_utilization_table(tab: Tab) -> Table:
 
     # Uptime
     uptime = dolphie.system_utilization.get("Uptime", "N/A")
-    table.add_row("Uptime", str(timedelta(seconds=uptime)) if uptime != "N/A" else "N/A")
+    table.add_row("[label]Uptime", str(timedelta(seconds=uptime)) if uptime != "N/A" else "N/A")
 
     # CPU
     cpu_percent_values = dolphie.metric_manager.metrics.system_cpu.CPU_Percent.values
