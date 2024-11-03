@@ -248,7 +248,11 @@ The System Utilization section in the Dashboard panel will display when Dolphie 
 - Load Averages (1 min, 5 min, 15 min)
 - Memory Usage (Percentage, Used/Total)
 - Swap Usage (Used/Total)
-- Network Traffic (Down/Up)
+- Network Traffic (Down, Up)
+
+Example:
+
+<img width="235" alt="Screenshot 2024-11-03 at 1 19 00 AM" src="https://github.com/user-attachments/assets/664269bc-c303-4222-b0d2-fb1e65ce6202">
 
 
 ## Credential Profiles
