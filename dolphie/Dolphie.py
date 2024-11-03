@@ -157,10 +157,10 @@ class Dolphie:
             # Get the IP address of the monitored host
             monitored_ip = socket.gethostbyname(self.host)
 
-            # Enable system metrics if monitored host is the same as localhost or socket file is used
-            self.enable_system_utilization = monitored_ip == "127.0.0.1" or monitored_ip == socket.gethostbyname(
-                socket.gethostname() or self.socket
-            )
+            # Enable system metrics if monitored host is localhost or if using a socket file
+            if monitored_ip == "127.0.0.1" or monitored_ip == socket.gethostbyname(socket.gethostname()) or self.socket:
+                self.enable_system_utilization = True
+
         except socket.gaierror:
             # Handle case where the host cannot be resolved
             self.enable_system_utilization = False
