@@ -240,6 +240,17 @@ Example log messages in daemon mode:
 [INFO] Global variable innodb_io_capacity changed: 1000 -> 2000
 ```
 
+## System Utilization in the Dashboard Panel
+
+The System Utilization section in the Dashboard panel will display when Dolphie is running on the same host as the MySQL server you're connected to. It will display the following information:
+- Uptime
+- CPU Usage (Percentage, # of cores)
+- Load Averages (1 min, 5 min, 15 min)
+- Memory Usage (Percentage, Used/Total)
+- Swap Usage (Used/Total)
+- Network Traffic (Down/Up)
+
+
 ## Credential Profiles
 
 Credential profiles can be defined in Dolphie's config file as a way to store credentials for easy access. A profile can be created by adding a section in the config file with the format: `[credential_profile_<name>]`
