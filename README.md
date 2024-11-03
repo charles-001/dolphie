@@ -242,7 +242,7 @@ Example log messages in daemon mode:
 
 ## System Utilization in the Dashboard Panel
 
-The System Utilization section in the Dashboard panel will display when Dolphie is running on the same host as the MySQL server you're connected to. It will display the following information:
+The System Utilization section in the Dashboard panel will only display when Dolphie is running on the same host as the server you're connected to. It displays the following information:
 - Uptime
 - CPU Usage (Percentage, # of cores)
 - Load Averages (1 min, 5 min, 15 min)
