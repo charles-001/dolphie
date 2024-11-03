@@ -245,7 +245,7 @@ Example log messages in daemon mode:
 The System Utilization section in the Dashboard panel will only display when Dolphie is running on the same host as the server you're connected to. It displays the following information:
 - Uptime
 - CPU Usage (Percentage, # of cores)
-- Load Averages (1 min, 5 min, 15 min)
+- Load Averages (1, 5, and 15 minutes)
 - Memory Usage (Percentage, Used/Total)
 - Swap Usage (Used/Total)
 - Network Traffic (Down, Up)

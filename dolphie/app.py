@@ -2009,9 +2009,9 @@ class DolphieApp(App):
                                 "[dark_yellow]performance_schema_max_digest_length[/dark_yellow]/"
                                 "[dark_yellow]max_digest_length[/dark_yellow] as a preventive measure. "
                                 "If adjusting those settings isn't an option, then use command "
-                                "[dark_yellow]P[/dark_yellow] "
-                                "which will use the Processlist instead of Performance Schema to "
-                                "avoid truncation.\n\n"
+                                "[dark_yellow]P[/dark_yellow]. "
+                                "This will switch to using SHOW PROCESSLIST instead of the Performance Schema, "
+                                "which does not truncate queries.\n\n"
                                 if e.code == 1064
                                 else ""
                             )
