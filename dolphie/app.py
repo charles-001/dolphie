@@ -2003,7 +2003,20 @@ class DolphieApp(App):
                             if explain_fetched_json_data:
                                 explain_json_data = explain_fetched_json_data.get("EXPLAIN")
                         except ManualException as e:
-                            explain_failure = "[b indian_red]EXPLAIN ERROR:[/b indian_red] [indian_red]%s" % e.reason
+                            # Error 1064 means bad syntax which would result in a truncated query
+                            tip = (
+                                ":bulb: [b][yellow]Tip![/b][/yellow] If the query is truncated, consider increasing "
+                                "[dark_yellow]performance_schema_max_digest_length[/dark_yellow]/"
+                                "[dark_yellow]max_digest_length[/dark_yellow] as a preventive measure. "
+                                "If adjusting those settings isn't an option, then use command "
+                                "[dark_yellow]P[/dark_yellow] "
+                                "which will use the Processlist instead of Performance Schema to "
+                                "avoid truncation.\n\n"
+                                if e.code == 1064
+                                else ""
+                            )
+
+                            explain_failure = f"{tip}[b][indian_red]EXPLAIN ERROR:[/b] [indian_red]{e.reason}"
 
                 user_thread_attributes_table = None
                 if dolphie.performance_schema_enabled:

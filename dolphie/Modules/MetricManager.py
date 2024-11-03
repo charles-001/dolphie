@@ -956,7 +956,7 @@ class MetricManager:
                         self.add_metric(metric_data, metric_status_per_sec)
 
     def update_metrics_last_value(self):
-        # We set the last value for specific metrics that need it so they can get per second values
+        # We set the last metric value so next refresh interval can subtract from it to get per second values
         for metric_instance in self.metrics.__dict__.values():
             metric_source_data = self.get_metric_source_data(metric_instance.metric_source)
 
