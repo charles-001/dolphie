@@ -264,10 +264,11 @@ class Database:
                         # Retry the query
                         return self.execute(query, values)
                     else:
-                        raise ManualException(error_message, query=query)
+                        raise ManualException(error_message, query=query, code=error_code)
 
         if not self.connection.open:
             raise ManualException(
-                f"Failed to execute query after {self.max_reconnect_attempts} reconnection attempts",
+                f"Failed to reconnect to {self.source} after {self.max_reconnect_attempts} attempts",
                 query=query,
+                code=error_code,
             )

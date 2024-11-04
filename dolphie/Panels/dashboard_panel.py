@@ -1,12 +1,13 @@
 from datetime import datetime, timedelta
 
+from rich.style import Style
+from rich.table import Table
+
 from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.MetricManager import MetricData
 from dolphie.Modules.MySQL import ConnectionSource
 from dolphie.Modules.TabManager import Tab
 from dolphie.Panels import replication_panel
-from rich.style import Style
-from rich.table import Table
 
 
 def create_panel(tab: Tab) -> Table:
@@ -18,9 +19,9 @@ def create_panel(tab: Tab) -> Table:
 
     table_title_style = Style(color="#bbc8e8", bold=True)
 
-    ################
-    # Information #
-    ###############
+    ####################
+    # Host Information #
+    ####################
     table_information = Table(show_header=False, box=None, title="Host Information", title_style=table_title_style)
 
     if dolphie.replicaset:
@@ -77,6 +78,14 @@ def create_panel(tab: Tab) -> Table:
         )
 
     tab.dashboard_section_1.update(table_information)
+
+    ######################
+    # System Utilization #
+    ######################
+    table = create_system_utilization_table(tab)
+
+    if table:
+        tab.dashboard_section_6.update(create_system_utilization_table(tab))
 
     ###########
     # InnoDB  #
@@ -216,3 +225,78 @@ def create_panel(tab: Tab) -> Table:
             table_stats.add_row(f"[label]{label}", "0")
 
     tab.dashboard_section_4.update(table_stats)
+
+
+def create_system_utilization_table(tab: Tab) -> Table:
+    dolphie = tab.dolphie
+
+    if not dolphie.system_utilization:
+        return None
+
+    table = Table(
+        show_header=False, box=None, title="System Utilization", title_style=Style(color="#bbc8e8", bold=True)
+    )
+    table.add_column()
+    table.add_column(min_width=18, max_width=25)
+
+    def format_percent(value, thresholds=(80, 90), colors=("green", "yellow", "red")):
+        if value > thresholds[1]:
+            return f"[{colors[2]}]{value}%[/{colors[2]}]"
+        elif value > thresholds[0]:
+            return f"[{colors[1]}]{value}%[/{colors[1]}]"
+        return f"[{colors[0]}]{value}%[/{colors[0]}]"
+
+    # Uptime
+    uptime = dolphie.system_utilization.get("Uptime", "N/A")
+    table.add_row("[label]Uptime", str(timedelta(seconds=uptime)) if uptime != "N/A" else "N/A")
+
+    # CPU
+    cpu_percent_values = dolphie.metric_manager.metrics.system_cpu.CPU_Percent.values
+    if cpu_percent_values:
+        cpu_percent = round(cpu_percent_values[-1], 2)
+        formatted_cpu_percent = format_percent(cpu_percent)
+        cpu_cores = dolphie.system_utilization.get("CPU_Count", "N/A")
+        table.add_row("[label]CPU", f"{formatted_cpu_percent} [label]cores[/label] {cpu_cores}")
+    else:
+        table.add_row("[label]CPU", "N/A")
+
+    # CPU Load
+    load_averages = dolphie.system_utilization.get("CPU_Load_Avg", "N/A")
+    formatted_load = " ".join(f"{avg:.2f}" for avg in load_averages) if load_averages != "N/A" else "N/A"
+    table.add_row("[label]Load", formatted_load)
+
+    # Memory
+    memory_used = dolphie.metric_manager.metrics.system_memory.Memory_Used.last_value
+    memory_total = dolphie.metric_manager.metrics.system_memory.Memory_Total.last_value
+    if memory_used and memory_total:
+        memory_percent_used = round((memory_used / memory_total) * 100, 2)
+        formatted_memory_percent_used = format_percent(memory_percent_used)
+        table.add_row(
+            "[label]Memory",
+            (
+                f"{formatted_memory_percent_used}\n{format_bytes(memory_used)}"
+                f"[dark_gray]/[/dark_gray]{format_bytes(memory_total)}"
+            ),
+        )
+    else:
+        table.add_row("[label]Memory", "N/A\n")
+
+    # Swap
+    swap_used = format_bytes(dolphie.system_utilization.get("Swap_Used", "N/A"))
+    swap_total = format_bytes(dolphie.system_utilization.get("Swap_Total", "N/A"))
+    table.add_row("[label]Swap", f"{swap_used}[dark_gray]/[/dark_gray]{swap_total}")
+
+    # Network
+    network_down_values = dolphie.metric_manager.metrics.system_network.Network_Down.values
+    network_up_values = dolphie.metric_manager.metrics.system_network.Network_Up.values
+    if network_down_values and network_up_values:
+        last_network_down = format_bytes(network_down_values[-1])
+        last_network_up = format_bytes(network_up_values[-1])
+        table.add_row("[label]Network", f"[label]Dn[/label] {last_network_down}\n[label]Up[/label] {last_network_up}")
+    else:
+        table.add_row(
+            "[label]Network",
+            "[label]Dn[/label] N/A\n[label]Up[/label] N/A",
+        )
+
+    return table

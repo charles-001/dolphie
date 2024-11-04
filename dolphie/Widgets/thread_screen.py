@@ -1,5 +1,3 @@
-from dolphie.Modules.Functions import format_number
-from dolphie.Widgets.topbar import TopBar
 from rich.style import Style
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -15,6 +13,9 @@ from textual.widgets import (
     TextArea,
 )
 from textual.widgets.text_area import TextAreaTheme
+
+from dolphie.Modules.Functions import format_number
+from dolphie.Widgets.topbar import TopBar
 
 
 class ThreadScreen(Screen):
@@ -33,6 +34,7 @@ class ThreadScreen(Screen):
         }
         ThreadScreen #explain_failure {
             margin-top: 1;
+            max-width: 120;
         }
         ThreadScreen Container {
             height: auto;

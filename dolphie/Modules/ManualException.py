@@ -1,13 +1,15 @@
-from dolphie.Modules.Functions import format_query, minify_query
 from loguru import logger
 from rich import box
 from rich.table import Table
 
+from dolphie.Modules.Functions import format_query, minify_query
+
 
 class ManualException(Exception):
-    def __init__(self, reason: str, query: str = ""):
+    def __init__(self, reason: str, query: str = "", code: int = None):
         self.reason = reason
         self.query = query
+        self.code = code
 
     def output(self):
         table_exception = Table(box=box.SQUARE, show_header=True, style="#ec8888")

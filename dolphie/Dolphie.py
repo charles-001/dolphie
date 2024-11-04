@@ -1,9 +1,11 @@
 import ipaddress
 import os
 import socket
+import time
 from datetime import datetime
 from typing import Dict, Union
 
+import psutil
 from loguru import logger
 from packaging.version import parse as parse_version
 from textual.app import App
@@ -87,6 +89,7 @@ class Dolphie:
         self.pause_refresh: bool = False
         self.innodb_metrics: dict = {}
         self.disk_io_metrics: dict = {}
+        self.system_utilization: dict = {}
         self.global_variables: dict = {}
         self.innodb_trx_lock_metrics: dict = {}
         self.global_status: dict = {}
@@ -149,6 +152,18 @@ class Dolphie:
         self.host_cache_from_file = load_host_cache_file(self.host_cache_file)
 
         self.update_switches_after_reset()
+
+        try:
+            # Get the IP address of the monitored host
+            monitored_ip = socket.gethostbyname(self.host)
+
+            # Enable system metrics if using a socket file or if monitored host is localhost
+            if self.socket or monitored_ip == "127.0.0.1" or monitored_ip == socket.gethostbyname(socket.gethostname()):
+                self.enable_system_utilization = True
+            else:
+                self.enable_system_utilization = False
+        except socket.gaierror:
+            self.enable_system_utilization = False
 
     def db_connect(self):
         self.main_db_connection.connect()
@@ -226,6 +241,27 @@ class Dolphie:
         # Check to see if this is a Group Replication host
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
+
+    def collect_system_utilization(self):
+        if not self.enable_system_utilization:
+            return
+
+        virtual_memory = psutil.virtual_memory()
+        swap_memory = psutil.swap_memory()
+        network_io = psutil.net_io_counters()
+
+        self.system_utilization = {
+            "Uptime": int(time.time() - psutil.boot_time()),
+            "CPU_Count": psutil.cpu_count(logical=True),
+            "CPU_Percent": psutil.cpu_percent(interval=0),
+            "CPU_Load_Avg": os.getloadavg(),  # 1, 5, and 15 minute load averages
+            "Memory_Total": virtual_memory.total,
+            "Memory_Used": virtual_memory.used,
+            "Swap_Total": swap_memory.total,
+            "Swap_Used": swap_memory.used,
+            "Network_Up": network_io.bytes_sent,
+            "Network_Down": network_io.bytes_recv,
+        }
 
     def get_group_replication_metadata(self):
         # Check to get information on what cluster/instance type it is

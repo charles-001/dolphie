@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta
 
+from rich.style import Style
+from rich.table import Table
+
 from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.MetricManager import MetricData
 from dolphie.Modules.TabManager import Tab
-from rich.style import Style
-from rich.table import Table
+from dolphie.Panels.dashboard_panel import create_system_utilization_table
 
 
 def create_panel(tab: Tab) -> Table:
@@ -38,6 +40,14 @@ def create_panel(tab: Tab) -> Table:
     if not dolphie.replay_file:
         table.add_row("[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)")
     tab.dashboard_section_1.update(table)
+
+    ######################
+    # System Utilization #
+    ######################
+    table = create_system_utilization_table(tab)
+
+    if table:
+        tab.dashboard_section_6.update(create_system_utilization_table(tab))
 
     ##########################
     # Connection Information #
