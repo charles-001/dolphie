@@ -1100,7 +1100,7 @@ class MetricManager:
         # Update metrics data based on datetimes
         for metric_instance in self.metrics.__dict__.values():
             for metric_data in metric_instance.__dict__.values():
-                if isinstance(metric_data, MetricData):
+                if isinstance(metric_data, MetricData) and metric_data.save_history:
                     metric_data.values = [
                         value for dt, value in zip(self.datetimes, metric_data.values) if dt in filtered_set
                     ]
