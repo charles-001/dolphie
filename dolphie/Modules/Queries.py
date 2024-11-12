@@ -328,6 +328,20 @@ class MySQLQueries:
         GROUP BY
             t.processlist_id
     """
+    file_summary_by_instance: str = """
+        SELECT
+            FILE_NAME,
+            SUM_TIMER_WAIT AS Latency,
+            COUNT_READ AS ReadOps,
+            COUNT_WRITE AS WriteOps,
+            COUNT_MISC AS MiscOps,
+            SUM_NUMBER_OF_BYTES_READ AS ReadBytes,
+            SUM_NUMBER_OF_BYTES_WRITE AS WriteBytes
+        FROM
+            performance_schema.file_summary_by_instance
+        WHERE
+            COUNT_STAR > 0
+    """
     metadata_locks: str = """
         SELECT
             OBJECT_INSTANCE_BEGIN AS id,

@@ -69,6 +69,7 @@ class Tab:
     panel_replication: Container = None
     panel_metadata_locks: Container = None
     panel_ddl: Container = None
+    panel_performance_schema_metrics: Container = None
     panel_processlist: Container = None
     panel_proxysql_hostgroup_summary: Container = None
     panel_proxysql_mysql_query_rules: Container = None
@@ -89,6 +90,9 @@ class Tab:
 
     ddl_title: Label = None
     ddl_datatable: DataTable = None
+
+    performance_schema_metrics_title: Label = None
+    performance_schema_metrics_datatable: DataTable = None
 
     metadata_locks_title: Label = None
     metadata_locks_datatable: DataTable = None
@@ -379,6 +383,12 @@ class TabManager:
                     classes="ddl",
                 ),
                 Container(
+                    Label(id="performance_schema_metrics_title"),
+                    DataTable(id="performance_schema_metrics_datatable", show_cursor=False),
+                    id="panel_performance_schema_metrics",
+                    classes="performance_schema_metrics",
+                ),
+                Container(
                     Label(id="proxysql_hostgroup_summary_title"),
                     DataTable(
                         id="proxysql_hostgroup_summary_datatable",
@@ -543,6 +553,7 @@ class TabManager:
         tab.panel_metadata_locks = self.app.query_one("#panel_metadata_locks", Container)
         tab.panel_processlist = self.app.query_one("#panel_processlist", Container)
         tab.panel_ddl = self.app.query_one("#panel_ddl", Container)
+        tab.panel_performance_schema_metrics = self.app.query_one("#panel_performance_schema_metrics", Container)
         tab.panel_proxysql_hostgroup_summary = self.app.query_one("#panel_proxysql_hostgroup_summary", Container)
         tab.panel_proxysql_mysql_query_rules = self.app.query_one("#panel_proxysql_mysql_query_rules", Container)
         tab.panel_proxysql_command_stats = self.app.query_one("#panel_proxysql_command_stats", Container)
@@ -552,6 +563,12 @@ class TabManager:
 
         tab.ddl_title = self.app.query_one("#ddl_title", Label)
         tab.ddl_datatable = self.app.query_one("#ddl_datatable", DataTable)
+
+        tab.performance_schema_metrics_title = self.app.query_one("#performance_schema_metrics_title", Label)
+        tab.performance_schema_metrics_datatable = self.app.query_one(
+            "#performance_schema_metrics_datatable", DataTable
+        )
+
         tab.processlist_title = self.app.query_one("#processlist_title", Label)
         tab.processlist_datatable = self.app.query_one("#processlist_data", DataTable)
         tab.metadata_locks_title = self.app.query_one("#metadata_locks_title", Label)

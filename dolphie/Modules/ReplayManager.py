@@ -106,17 +106,17 @@ class ReplayManager:
     ) -> Union[Optional[Tuple[Any, ...]], int, None]:
         """
         Executes a query or batch of queries using a cursor
-
         Args:
             query: The SQL query to execute.
             params: The parameters to bind to the query.
             fetchone: If True, returns a single row. If False, returns all rows.
             return_lastrowid: If True, returns the last inserted row ID after an INSERT operation.
             executemany: If True, uses executemany() for batch execution of the query.
-
         Returns:
             Union[Optional[Tuple[Any, ...]], int, None]: A single row if `fetchone` is True, otherwise a list of rows.
                                                         Returns lastrowid if `return_lastrowid` is True.
+                                                        Returns row count for UPDATE/DELETE queries if neither
+                                                            `fetchone` nor `return_lastrowid` are set.
         """
         try:
             with closing(self.connection.cursor()) as cursor:
@@ -125,10 +125,18 @@ class ReplayManager:
                 else:
                     cursor.execute(query, params)
 
+                # Will only be used for INSERT queries
                 if return_lastrowid:
                     return cursor.lastrowid
 
-                return cursor.fetchone() if fetchone else cursor.fetchall()
+                if fetchone:
+                    return cursor.fetchone()
+                elif cursor.description is not None:
+                    # If there's a description, it's a SELECT query with results
+                    return cursor.fetchall()
+                else:
+                    # For everything else, which have no results, return row count
+                    return cursor.rowcount
         except sqlite3.Error as e:
             logger.error(f"Error executing SQLite query: {e}")
             self.dolphie.app.notify(f"Query: {query}\n{e}", title="Error executing SQLite query", severity="error")

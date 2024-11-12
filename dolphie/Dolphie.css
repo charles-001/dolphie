@@ -194,7 +194,6 @@ TopBar {
     text-style: bold;
     color: #bbc8e8;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 .processlist {
@@ -208,7 +207,6 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 
@@ -303,6 +301,24 @@ TopBar {
     content-align: center middle;
 }
 
+.performance_schema_metrics {
+    height: auto;
+    max-height: 100%;
+    background: #0f1525;
+    border: tall #1b233a;
+    margin-bottom: 1;
+}
+.performance_schema_metrics > Container {
+    height: auto;
+    width: auto;
+}
+.performance_schema_metrics > Label {
+    width: 100%;
+    color: #bbc8e8;
+    text-style: bold;
+    content-align: center middle;
+}
+
 .proxysql_hostgroup_summary_datatable {
     overflow-x: auto;
 }
@@ -322,7 +338,6 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 .proxysql_mysql_query_rules_datatable {
@@ -344,7 +359,6 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 .proxysql_command_stats {
@@ -366,7 +380,6 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 .pad_bottom_1 {

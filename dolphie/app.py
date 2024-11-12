@@ -50,6 +50,7 @@ from dolphie.Modules.Functions import (
     format_sys_table_memory,
 )
 from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaDeltaTracker
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Modules.TabManager import Tab, TabManager
@@ -57,6 +58,7 @@ from dolphie.Panels import (
     dashboard_panel,
     ddl_panel,
     metadata_locks_panel,
+    performance_schema_metrics_panel,
     processlist_panel,
     proxysql_command_stats_panel,
     proxysql_dashboard_panel,
@@ -610,6 +612,15 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.ddls)
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
 
+            dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
+            file_io_by_instance = dolphie.main_db_connection.fetchall()
+            if not dolphie.file_io_by_instance_tracker:
+                dolphie.file_io_by_instance_tracker = PerformanceSchemaDeltaTracker(file_io_by_instance)
+            else:
+                dolphie.file_io_by_instance_tracker.update_cumulative_sums(file_io_by_instance)
+
+            # print(dolphie.file_io_by_instance_tracker.get_cumulative_sums())
+
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
@@ -1025,6 +1036,9 @@ class DolphieApp(App):
             },
             tab.dolphie.panels.metadata_locks.name: {ConnectionSource.mysql: metadata_locks_panel},
             tab.dolphie.panels.ddl.name: {ConnectionSource.mysql: ddl_panel},
+            tab.dolphie.panels.performance_schema_metrics.name: {
+                ConnectionSource.mysql: performance_schema_metrics_panel
+            },
             tab.dolphie.panels.proxysql_hostgroup_summary.name: {
                 ConnectionSource.proxysql: proxysql_hostgroup_summary_panel
             },
@@ -1197,6 +1211,11 @@ class DolphieApp(App):
                 self.toggle_panel(dolphie.panels.ddl.name)
                 self.tab_manager.active_tab.ddl_datatable.clear()
                 tab.ddl_title.update("DDL ([highlight]0[/highlight])")
+
+        elif key == "7":
+            self.toggle_panel(dolphie.panels.performance_schema_metrics.name)
+            self.tab_manager.active_tab.performance_schema_metrics_datatable.clear()
+            tab.performance_schema_metrics_title.update("file_summary_by_instance ([highlight]0[/highlight])")
 
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)

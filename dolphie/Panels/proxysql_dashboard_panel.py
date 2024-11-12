@@ -117,7 +117,7 @@ def create_panel(tab: Tab) -> Table:
     table = Table(show_header=False, box=None, title="Query Data Rates/s", title_style=table_title_style)
 
     table.add_column()
-    table.add_column(min_width=7)
+    table.add_column(min_width=9)
     data_dict = {
         "[label]FE Sent": proxysql_queries_network_data.Queries_frontends_bytes_sent.values,
         "[label]BE Sent": proxysql_queries_network_data.Queries_backends_bytes_sent.values,
@@ -145,7 +145,7 @@ def create_panel(tab: Tab) -> Table:
     table = Table(show_header=False, box=None, title="Statistics/s", title_style=table_title_style)
 
     table.add_column()
-    table.add_column(min_width=6)
+    table.add_column(min_width=7)
 
     # Add DML statistics
     metrics = dolphie.metric_manager.metrics.dml

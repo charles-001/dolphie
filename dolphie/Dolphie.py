@@ -16,6 +16,7 @@ import dolphie.Modules.MetricManager as MetricManager
 from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
+from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaDeltaTracker
 from dolphie.Modules.Queries import MySQLQueries
 
 
@@ -92,6 +93,7 @@ class Dolphie:
         self.system_utilization: dict = {}
         self.global_variables: dict = {}
         self.innodb_trx_lock_metrics: dict = {}
+        self.file_io_by_instance_tracker: PerformanceSchemaDeltaTracker = None
         self.global_status: dict = {}
         self.binlog_status: dict = {}
         self.replication_status: dict = {}

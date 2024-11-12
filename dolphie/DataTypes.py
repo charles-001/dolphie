@@ -77,6 +77,7 @@ class Panels:
         self.replication = Panel("replication")
         self.metadata_locks = Panel("metadata_locks")
         self.ddl = Panel("ddl")
+        self.performance_schema_metrics = Panel("performance_schema_metrics")
         self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary")
         self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules")
         self.proxysql_command_stats = Panel("proxysql_command_stats")
