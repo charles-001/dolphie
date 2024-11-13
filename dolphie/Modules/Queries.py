@@ -331,6 +331,7 @@ class MySQLQueries:
     file_summary_by_instance: str = """
         SELECT
             FILE_NAME,
+            EVENT_NAME,
             SUM_TIMER_WAIT AS Latency,
             COUNT_READ AS ReadOps,
             COUNT_WRITE AS WriteOps,

@@ -17,6 +17,7 @@ from dolphie.DataTypes import (
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
+from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaDeltaTracker
 
 
 @dataclass
@@ -32,6 +33,7 @@ class MySQLReplayData:
     processlist: dict
     metric_manager: dict
     metadata_locks: dict
+    file_io_by_instance_tracker: dict
     group_replication_data: dict
     group_replication_members: dict
 
@@ -559,6 +561,13 @@ class ReplayManager:
                         "group_replication_members": self.dolphie.group_replication_members,
                     }
                 )
+
+            if self.dolphie.file_io_by_instance_tracker:
+                data_dict.update(
+                    {
+                        "file_io_by_instance_tracker": self.dolphie.file_io_by_instance_tracker.filtered_data,
+                    }
+                )
         else:
             # Add ProxySQL specific data to the dictionary
             data_dict.update(
@@ -655,6 +664,9 @@ class ReplayManager:
             for thread_data in data["processlist"]:
                 processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
 
+            file_io_by_instance_tracker = PerformanceSchemaDeltaTracker({}, False)
+            file_io_by_instance_tracker.filtered_data = data.get("file_io_by_instance_tracker", {})
+
             return MySQLReplayData(
                 **common_params,
                 binlog_status=data.get("binlog_status", {}),
@@ -665,6 +677,7 @@ class ReplayManager:
                 processlist=processlist,
                 group_replication_data=data.get("group_replication_data", {}),
                 group_replication_members=data.get("group_replication_members", {}),
+                file_io_by_instance_tracker=file_io_by_instance_tracker,
             )
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist

@@ -21,6 +21,8 @@ from textual.widgets import (
     Label,
     LoadingIndicator,
     ProgressBar,
+    RadioButton,
+    RadioSet,
     Sparkline,
     Static,
     Switch,
@@ -93,6 +95,7 @@ class Tab:
 
     performance_schema_metrics_title: Label = None
     performance_schema_metrics_datatable: DataTable = None
+    performance_schema_metrics_radio_set: RadioSet = None
 
     metadata_locks_title: Label = None
     metadata_locks_datatable: DataTable = None
@@ -384,6 +387,15 @@ class TabManager:
                 ),
                 Container(
                     Label(id="performance_schema_metrics_title"),
+                    RadioSet(
+                        *(
+                            [
+                                RadioButton("Total since MySQL restart", id="total"),
+                                RadioButton("Delta since last reset", id="delta", value=True),
+                            ]
+                        ),
+                        id="performance_schema_metrics_radio_set",
+                    ),
                     DataTable(id="performance_schema_metrics_datatable", show_cursor=False),
                     id="panel_performance_schema_metrics",
                     classes="performance_schema_metrics",
@@ -568,6 +580,7 @@ class TabManager:
         tab.performance_schema_metrics_datatable = self.app.query_one(
             "#performance_schema_metrics_datatable", DataTable
         )
+        tab.performance_schema_metrics_radio_set = self.app.query_one("#performance_schema_metrics_radio_set", RadioSet)
 
         tab.processlist_title = self.app.query_one("#processlist_title", Label)
         tab.processlist_datatable = self.app.query_one("#processlist_data", DataTable)

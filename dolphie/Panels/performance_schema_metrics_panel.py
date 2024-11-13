@@ -9,14 +9,17 @@ from dolphie.Modules.TabManager import Tab
 def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
+    if not dolphie.file_io_by_instance_tracker:
+        return
+
     columns = {
         "Instance": {"field": "FILE_NAME", "width": None},
         "Latency": {"field": "Latency", "width": 10, "format": "time"},
-        "ReadOps": {"field": "ReadOps", "width": 10, "format": "number"},
-        "WriteOps": {"field": "WriteOps", "width": 10, "format": "number"},
-        "MiscOps": {"field": "MiscOps", "width": 10, "format": "number"},
-        "ReadBytes": {"field": "ReadBytes", "width": 10, "format": "bytes"},
-        "WriteBytes": {"field": "WriteBytes", "width": 10, "format": "bytes"},
+        "Read Ops": {"field": "ReadOps", "width": 10, "format": "number"},
+        "Write Ops": {"field": "WriteOps", "width": 10, "format": "number"},
+        "Misc Ops": {"field": "MiscOps", "width": 10, "format": "number"},
+        "Read Bytes": {"field": "ReadBytes", "width": 10, "format": "bytes"},
+        "Write Bytes": {"field": "WriteBytes", "width": 11, "format": "bytes"},
         "latency_ps": {"field": "Latency", "width": 0},
     }
 
@@ -29,20 +32,21 @@ def create_panel(tab: Tab) -> DataTable:
             column_width = column_data["width"]
             datatable.add_column(column_key, key=column_key, width=column_width)
 
-    # Get the cumulative sums from the tracker
-    cumulative_sums = dolphie.file_io_by_instance_tracker.get_cumulative_sums()
-
-    for file_name, metrics in cumulative_sums.items():
-        row_id = file_name  # Using the file_name as the unique row ID
+    data = dolphie.file_io_by_instance_tracker.filtered_data
+    for file_name, metrics in data.items():
+        row_id = file_name
         row_values = []
 
-        if ".ibd" in file_name:
-            path_parts = file_name.strip("/").split(os.sep)
+        match = dolphie.file_io_by_instance_tracker.combined_table_pattern.search(file_name)
+        if file_name.endswith("mysql.ibd"):
+            file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
+        elif match:
+            file_name = f"{match.group(1)}.{match.group(2)}"
+        elif "/" in file_name:
+            file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
+        else:
+            file_name = f"[b][light_blue]*[/light_blue][/b] [highlight]{file_name}"
 
-            database = path_parts[-2]
-            table = os.path.splitext(path_parts[-1])[0]
-
-            file_name = f"{database}.{table}"
         row_values.append(file_name)
 
         # Check if row already exists before processing columns
@@ -55,11 +59,18 @@ def create_panel(tab: Tab) -> DataTable:
             if column_name == "Instance":
                 continue
 
-            column_value = metrics.get(column_data["field"], None)
+            column_value = metrics.get(column_data["field"], {})
+            if tab.performance_schema_metrics_radio_set.pressed_button.id == "total":
+                column_value = column_value.get("total", None)
+            else:
+                column_value = column_value.get("delta", None)
 
             # Handle special formatting
             if column_value == 0 or column_value is None:
-                column_value = "[dark_gray]0"
+                if column_name == "latency_ps":
+                    column_value = 0
+                else:
+                    column_value = "[dark_gray]0"
             elif column_data.get("format") == "time":
                 column_value = format_time(column_value, picoseconds=True)
             elif column_data.get("format") == "number":
@@ -81,8 +92,8 @@ def create_panel(tab: Tab) -> DataTable:
             datatable.add_row(*row_values, key=row_id)
 
     # Clean up rows that no longer exist in the data
-    if cumulative_sums:
-        current_rows = set(cumulative_sums.keys())
+    if data:
+        current_rows = set(data.keys())
         existing_rows = set(datatable.rows.keys())
 
         rows_to_remove = existing_rows - current_rows

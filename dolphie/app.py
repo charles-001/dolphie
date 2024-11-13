@@ -245,6 +245,7 @@ class DolphieApp(App):
             dolphie.metadata_locks = replay_event_data.metadata_locks
             dolphie.group_replication_members = replay_event_data.group_replication_members
             dolphie.group_replication_data = replay_event_data.group_replication_data
+            dolphie.file_io_by_instance_tracker = replay_event_data.file_io_by_instance_tracker
 
             connection_source_metrics = {
                 "innodb_metrics": dolphie.innodb_metrics,
@@ -612,14 +613,15 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.ddls)
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-            dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
-            file_io_by_instance = dolphie.main_db_connection.fetchall()
-            if not dolphie.file_io_by_instance_tracker:
-                dolphie.file_io_by_instance_tracker = PerformanceSchemaDeltaTracker(file_io_by_instance)
-            else:
-                dolphie.file_io_by_instance_tracker.update_cumulative_sums(file_io_by_instance)
-
-            # print(dolphie.file_io_by_instance_tracker.get_cumulative_sums())
+            if dolphie.panels.performance_schema_metrics.visible or dolphie.record_for_replay:
+                dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
+                file_io_by_instance = dolphie.main_db_connection.fetchall()
+                if not dolphie.file_io_by_instance_tracker:
+                    dolphie.file_io_by_instance_tracker = PerformanceSchemaDeltaTracker(
+                        file_io_by_instance, dolphie.daemon_mode
+                    )
+                else:
+                    dolphie.file_io_by_instance_tracker.update_tracked_data(file_io_by_instance)
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -1215,7 +1217,7 @@ class DolphieApp(App):
         elif key == "7":
             self.toggle_panel(dolphie.panels.performance_schema_metrics.name)
             self.tab_manager.active_tab.performance_schema_metrics_datatable.clear()
-            tab.performance_schema_metrics_title.update("file_summary_by_instance ([highlight]0[/highlight])")
+            tab.performance_schema_metrics_title.update("File IO by Instance ([highlight]0[/highlight])")
 
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)
@@ -1493,6 +1495,7 @@ class DolphieApp(App):
 
         elif key == "R":
             dolphie.metric_manager.reset()
+            dolphie.file_io_by_instance_tracker.reset_deltas()
 
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
             dolphie.update_switches_after_reset()

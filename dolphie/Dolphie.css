@@ -318,6 +318,9 @@ TopBar {
     text-style: bold;
     content-align: center middle;
 }
+.performance_schema_metrics > RadioSet {
+    margin-bottom: 1;
+}
 
 .proxysql_hostgroup_summary_datatable {
     overflow-x: auto;
@@ -531,10 +534,11 @@ Switch.-on:hover > .switch--slider {
 }
 
 RadioSet {
-    background: #121626;
+    background: #0f1525;
     border: none;
-    align: center middle;
+    /* align: center middle; */
     width: 100%;
+    layout: horizontal;
 }
 RadioButton .toggle--button {
     background: #343d56;

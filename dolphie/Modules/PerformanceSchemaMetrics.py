@@ -1,70 +1,150 @@
+import re
+from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 
 class PerformanceSchemaDeltaTracker:
-    def __init__(self, query_data: List[Dict[str, Any]]):
-        """
-        Initializes the tracker to store initial data and cumulative sums for each file name.
-        """
-        self.initial_data: Dict[str, Dict[str, int]] = {}
-        self.cumulative_sums: Dict[str, Dict[str, int]] = {}
+    def __init__(self, query_data: List[Dict[str, Any]], daemon_mode: bool):
+        self.daemon_mode = daemon_mode
+        self.tracked_data: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self.filtered_data: Dict[str, Dict[str, Dict[str, int]]] = {}
+        self.last_reset_time: datetime = datetime.now()
+        self.combined_table_pattern = re.compile(r"([^/]+)/([^/]+)\.(frm|ibd|MYD|MYI|CSM|CSV|par)$")
+        self.events_to_combine = {
+            "wait/io/file/innodb/innodb_temp_file": "Temporary tables",
+            "wait/io/file/sql/binlog": "Binary logs",
+            "wait/io/file/sql/relaylog": "Relay logs",
+            "wait/io/file/sql/io_cache": "IO cache",
+            "wait/io/file/innodb/innodb_dblwr_file": "Doublewrite buffer",
+            "wait/io/file/innodb/innodb_log_file": "InnoDB redo log files",
+        }
 
+        # Initialize the tracked data from query_data
+        for row in query_data:
+            self.tracked_data[row["FILE_NAME"]] = {
+                "event_name": row["EVENT_NAME"],
+                "metrics": {
+                    metric: {"total": value, "delta": 0} for metric, value in row.items() if isinstance(value, int)
+                },
+            }
+
+    def update_tracked_data(self, query_data: List[Dict[str, int]]):
+        current_time = datetime.now()
+
+        if self.daemon_mode and current_time - self.last_reset_time >= timedelta(minutes=10):
+            self.reset_deltas()
+            self.last_reset_time = current_time
+
+        # Track current file names and remove missing ones
+        current_file_names = {row["FILE_NAME"] for row in query_data}
+        files_to_remove = set(self.tracked_data) - current_file_names
+
+        # Process current query data
         for row in query_data:
             file_name = row["FILE_NAME"]
-            # Initialize each metric for this file
-            self.initial_data[file_name] = {}
-            self.cumulative_sums[file_name] = {}
-            for metric, value in row.items():
-                if metric != "FILE_NAME":  # Exclude FILE_NAME from metrics
-                    self.initial_data[file_name][metric] = value
-                    # Initialize cumulative sums for each metric for this file
-                    self.cumulative_sums[file_name][metric] = 0
+            event_name = row["EVENT_NAME"]
+            metrics = {metric: value for metric, value in row.items() if isinstance(value, int)}
 
-    def update_cumulative_sums(self, query_data: Dict[str, Dict[str, int]]):
-        """
-        Updates cumulative sums by calculating deltas from the initial snapshot for each file name.
+            # Initialize file in tracked_data if not present
+            if file_name not in self.tracked_data:
+                self.tracked_data[file_name] = {
+                    "event_name": event_name,
+                    "metrics": {metric: {"total": value, "delta": 0} for metric, value in metrics.items()},
+                }
 
-        :param query_data: List of dictionaries containing the current snapshot of metrics for each file name.
-        """
-        for row in query_data:
-            file_name = row["FILE_NAME"]
+            deltas_changed = False
+            all_deltas_zero = True
 
-            # If we have initial data for this file, calculate deltas
-            if file_name in self.initial_data:
-                for metric, current_value in row.items():
-                    if metric != "FILE_NAME" and metric in self.initial_data[file_name]:
-                        initial_value = self.initial_data[file_name][metric]
-                        delta = current_value - initial_value
+            # Update deltas for each metric
+            for metric, current_value in metrics.items():
+                metric_data = self.tracked_data[file_name]["metrics"][metric]
+                initial_value = metric_data["total"]
+                delta = current_value - initial_value
 
-                        # Only add positive deltas to cumulative sums for this file
-                        if delta > 0:
-                            # Initialize the file_name entry if it doesn't exist
-                            if file_name not in self.cumulative_sums:
-                                self.cumulative_sums[file_name] = {}
+                metric_data["total"] = current_value
+                if delta > 0:
+                    metric_data["delta"] += delta
+                    deltas_changed = True
 
-                            # Initialize the metric entry if it doesn't exist
-                            if metric not in self.cumulative_sums[file_name]:
-                                self.cumulative_sums[file_name][metric] = 0
+                if metric_data["delta"] > 0:
+                    all_deltas_zero = False
 
-                            # Add the delta to cumulative sums
-                            self.cumulative_sums[file_name][metric] += delta
+            # Update filtered_data if necessary
+            if deltas_changed or file_name not in self.filtered_data:
+                self.filtered_data[file_name] = {}
 
-            # Update the initial data to reflect the current snapshot for next delta calculation
-            self.initial_data[file_name] = {metric: value for metric, value in row.items() if metric != "FILE_NAME"}
+                for metric, values in self.tracked_data[file_name]["metrics"].items():
+                    # Update total with the new value (whether or not delta is positive)
+                    total = values["total"]
 
-    def get_cumulative_sums(self) -> Dict[str, Dict[str, int]]:
-        """
-        Returns the cumulative sums for each file name, excluding metrics with a cumulative sum of 0.
+                    # Only add delta if it's greater than 0
+                    delta = values["delta"] if values["delta"] > 0 else 0
 
-        :return: Dictionary of cumulative sums for each metric, organized by file name, with non-zero values only.
-        """
-        filtered_sums = {}
+                    # Only include the metric in filtered_data if it has a delta greater than 0
+                    if delta > 0:
+                        self.filtered_data[file_name][metric] = {"total": total, "delta": delta}
+                    else:
+                        # If delta is 0, you may decide to only store the total or skip it.
+                        self.filtered_data[file_name][metric] = {"total": total}
 
-        for file_name, metrics in self.cumulative_sums.items():
-            # Filter out metrics with a cumulative sum of 0 for each file
-            non_zero_metrics = {metric: value for metric, value in metrics.items() if value != 0}
+            if all_deltas_zero:
+                self.filtered_data.pop(file_name, None)
 
-            if non_zero_metrics:  # Only include files with non-zero metrics
-                filtered_sums[file_name] = non_zero_metrics
+        # Remove files no longer in the query data
+        for file_name in files_to_remove:
+            del self.tracked_data[file_name]
 
-        return filtered_sums
+        self.aggregate_combined_events()
+
+    def aggregate_combined_events(self):
+        combined_results = {}
+        combined_files = set()
+
+        # Initialize combined results for events
+        for event_name, combined_name in self.events_to_combine.items():
+            if combined_name not in combined_results:
+                combined_results[combined_name] = {}
+
+        # Aggregate deltas for combined events
+        for event_name, combined_name in self.events_to_combine.items():
+            for file_name, file_data in self.tracked_data.items():
+                if file_data["event_name"] == event_name:
+                    combined_files.add(file_name)
+
+                    if combined_name not in combined_results:
+                        combined_results[combined_name] = {}
+
+                    for metric_name, metric_data in file_data["metrics"].items():
+                        if metric_name not in combined_results[combined_name]:
+                            combined_results[combined_name][metric_name] = {"total": 0, "delta": 0}
+
+                        # Accumulate deltas for the combined event
+                        combined_results[combined_name][metric_name]["total"] += metric_data["total"]
+                        combined_results[combined_name][metric_name]["delta"] += metric_data["delta"]
+
+        # Update filtered_data with combined results
+        for combined_name, combined_metrics in combined_results.items():
+            for metric_name, combined_data in combined_metrics.items():
+                if combined_data["delta"] > 0:
+                    if combined_name not in self.filtered_data:
+                        self.filtered_data[combined_name] = {}
+
+                    self.filtered_data[combined_name][metric_name] = {
+                        "total": combined_data["total"],
+                        "delta": combined_data["delta"],
+                    }
+
+        # Remove combined events from filtered_data
+        for file_name in combined_files:
+            self.filtered_data.pop(file_name, None)
+
+    def reset_deltas(self):
+        for file_data in self.tracked_data.values():
+            for metric_data in file_data["metrics"].values():
+                metric_data["delta"] = 0
+            file_data["same_delta_count"] = 0
+
+        # Reset deltas in filtered_data
+        for file_data in self.filtered_data.values():
+            for metric_data in file_data.values():
+                metric_data["delta"] = 0
