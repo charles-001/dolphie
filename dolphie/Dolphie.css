@@ -300,14 +300,14 @@ TopBar {
     content-align: center middle;
 }
 
-.performance_schema_metrics {
+.pfs_metrics {
     height: auto;
     max-height: 100%;
     background: #0f1525;
     border: tall #1b233a;
     margin-bottom: 1;
 }
-#performance_schema_metrics_format {
+#pfs_metrics_format {
     color: #bbc8e8;
     content-align: left middle;
     text-style: none;

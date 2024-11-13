@@ -28,7 +28,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
     }
 
     # Get the DataTable object
-    datatable = tab.performance_schema_metrics_table_io_waits_summary_by_table_datatable
+    datatable = tab.pfs_metrics_table_io_waits_datatable
 
     # Add columns to the datatable if it is empty
     if not datatable.columns:
@@ -62,7 +62,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
                 count_value = metrics.get(count_field, {})
                 latency_value = metrics.get(latency_field, {})
 
-                if tab.performance_schema_metrics_radio_set.pressed_button.id == "total":
+                if tab.pfs_metrics_radio_set.pressed_button.id == "total":
                     count_value = count_value.get("total", 0)
                     latency_value = latency_value.get("total", 0)
                 else:
@@ -75,7 +75,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
                     column_value = "[dark_gray]N/A"
             else:
                 column_value = metrics.get(field, {})
-                if tab.performance_schema_metrics_radio_set.pressed_button.id == "total":
+                if tab.pfs_metrics_radio_set.pressed_button.id == "total":
                     column_value = column_value.get("total", 0)
                 else:
                     column_value = column_value.get("delta", 0)
@@ -107,9 +107,9 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
     datatable.sort("latency_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.dolphie.app.query_one("#performance_schema_metrics_tabs").get_tab(
-        "performance_schema_metrics_table_io_waits_summary_by_table_tab"
-    ).label = f"Table I/O Waits by Table ([highlight]{datatable.row_count}[/highlight])"
+    tab.dolphie.app.query_one("#pfs_metrics_tabs").get_tab(
+        "pfs_metrics_table_io_waits_summary_by_table_tab"
+    ).label = f"Table I/O Waits ([highlight]{datatable.row_count}[/highlight])"
 
 
 def update_file_io_by_instance(tab: Tab) -> DataTable:
@@ -119,7 +119,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
         return
 
     columns = {
-        "Instance": {"field": "FILE_NAME", "width": None},
+        "File/Table": {"field": "FILE_NAME", "width": None},
         "Latency": {"field": "SUM_TIMER_WAIT", "width": 10, "format": "time"},
         "Read Ops": {"field": "COUNT_READ", "width": 10, "format": "number"},
         "Write Ops": {"field": "COUNT_WRITE", "width": 10, "format": "number"},
@@ -130,7 +130,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
     }
 
     # Get the DataTable object
-    datatable = tab.performance_schema_metrics_file_io_by_instance_datatable
+    datatable = tab.pfs_metrics_file_io_datatable
 
     # Add columns to the datatable if it is empty
     if not datatable.columns:
@@ -162,11 +162,11 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
             row_exists = False
 
         for column_id, (column_name, column_data) in enumerate(columns.items()):
-            if column_name == "Instance":
+            if column_name == "File/Table":
                 continue
 
             column_value = metrics.get(column_data["field"], {})
-            if tab.performance_schema_metrics_radio_set.pressed_button.id == "total":
+            if tab.pfs_metrics_radio_set.pressed_button.id == "total":
                 column_value = column_value.get("total", 0)
             else:
                 column_value = column_value.get("delta", 0)
@@ -212,6 +212,6 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
     datatable.sort("latency_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.dolphie.app.query_one("#performance_schema_metrics_tabs").get_tab(
-        "performance_schema_metrics_file_io_by_instance_tab"
-    ).label = f"File I/O by Instance ([highlight]{datatable.row_count}[/highlight])"
+    tab.dolphie.app.query_one("#pfs_metrics_tabs").get_tab(
+        "pfs_metrics_file_io_by_instance_tab"
+    ).label = f"File I/O ([highlight]{datatable.row_count}[/highlight])"

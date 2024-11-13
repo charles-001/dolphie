@@ -1049,9 +1049,7 @@ class DolphieApp(App):
             },
             tab.dolphie.panels.metadata_locks.name: {ConnectionSource.mysql: metadata_locks_panel},
             tab.dolphie.panels.ddl.name: {ConnectionSource.mysql: ddl_panel},
-            tab.dolphie.panels.performance_schema_metrics.name: {
-                ConnectionSource.mysql: performance_schema_metrics_panel
-            },
+            tab.dolphie.panels.pfs_metrics.name: {ConnectionSource.mysql: performance_schema_metrics_panel},
             tab.dolphie.panels.proxysql_hostgroup_summary.name: {
                 ConnectionSource.proxysql: proxysql_hostgroup_summary_panel
             },
@@ -1226,7 +1224,7 @@ class DolphieApp(App):
                 tab.ddl_title.update("DDL ([highlight]0[/highlight])")
 
         elif key == "7":
-            self.toggle_panel(dolphie.panels.performance_schema_metrics.name)
+            self.toggle_panel(dolphie.panels.pfs_metrics.name)
 
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)

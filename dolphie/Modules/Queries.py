@@ -333,7 +333,7 @@ class MySQLQueries:
             FILE_NAME,
             EVENT_NAME,
             SUM_TIMER_WAIT,
-            COUNT_READ
+            COUNT_READ,
             COUNT_WRITE,
             COUNT_MISC,
             SUM_NUMBER_OF_BYTES_READ,
@@ -360,6 +360,17 @@ class MySQLQueries:
             performance_schema.table_io_waits_summary_by_table
         WHERE
             COUNT_STAR > 0
+    """
+    events_waits_summary_global_by_event_name: str = """
+        SELECT
+            EVENT_NAME,
+            COUNT_STAR,
+            SUM_TIMER_WAIT,
+        FROM
+            performance_schema.events_waits_summary_global_by_event_name
+        WHERE
+            COUNT_STAR > 0 AND
+            EVENT_NAME LIKE 'wait/synch/mutex/innodb/%'
     """
     metadata_locks: str = """
         SELECT
