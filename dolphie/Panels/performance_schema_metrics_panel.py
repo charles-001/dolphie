@@ -108,7 +108,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
 
     # Update the title to reflect the number of active rows
     tab.dolphie.app.query_one("#pfs_metrics_tabs").get_tab(
-        "pfs_metrics_table_io_waits_summary_by_table_tab"
+        "pfs_metrics_table_io_waits_tab"
     ).label = f"Table I/O Waits ([highlight]{datatable.row_count}[/highlight])"
 
 
@@ -213,5 +213,5 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
 
     # Update the title to reflect the number of active rows
     tab.dolphie.app.query_one("#pfs_metrics_tabs").get_tab(
-        "pfs_metrics_file_io_by_instance_tab"
+        "pfs_metrics_file_io_tab"
     ).label = f"File I/O ([highlight]{datatable.row_count}[/highlight])"

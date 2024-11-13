@@ -249,6 +249,7 @@ class DolphieApp(App):
             dolphie.group_replication_members = replay_event_data.group_replication_members
             dolphie.group_replication_data = replay_event_data.group_replication_data
             dolphie.file_io_data = replay_event_data.file_io_data
+            dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
 
             connection_source_metrics = {
                 "innodb_metrics": dolphie.innodb_metrics,

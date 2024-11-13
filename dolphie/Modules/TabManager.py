@@ -448,7 +448,7 @@ class TabManager:
             TabPane(
                 "File I/O",
                 DataTable(id="pfs_metrics_file_io_datatable", show_cursor=False),
-                id="pfs_metrics_file_io_by_instance_tab",
+                id="pfs_metrics_file_io_tab",
             )
         )
         await pfs_metrics_tabs.add_pane(
@@ -459,7 +459,7 @@ class TabManager:
                     id="pfs_metrics_format",
                 ),
                 DataTable(id="pfs_metrics_table_io_waits_datatable", show_cursor=False),
-                id="pfs_metrics_table_io_waits_summary_by_table_tab",
+                id="pfs_metrics_table_io_waits_tab",
             ),
         )
 

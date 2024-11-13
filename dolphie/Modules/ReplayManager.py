@@ -8,7 +8,6 @@ from typing import Any, List, Optional, Tuple, Union
 import orjson
 import zstandard as zstd
 from loguru import logger
-from rich import table
 
 from dolphie.DataTypes import (
     ConnectionSource,
@@ -18,7 +17,10 @@ from dolphie.DataTypes import (
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
-from dolphie.Modules.PerformanceSchemaMetrics import FileIOByInstance
+from dolphie.Modules.PerformanceSchemaMetrics import (
+    FileIOByInstance,
+    TableIOWaitsByTable,
+)
 
 
 @dataclass
@@ -35,7 +37,7 @@ class MySQLReplayData:
     metric_manager: dict
     metadata_locks: dict
     file_io_data: dict
-    table_io_waits_summary_by_table: dict
+    table_io_waits_data: dict
     group_replication_data: dict
     group_replication_members: dict
 
@@ -565,14 +567,10 @@ class ReplayManager:
                 )
 
             if self.dolphie.file_io_data:
-                data_dict.update(
-                    {
-                        "file_io_data": self.dolphie.file_io_data.filtered_data,
-                    }
-                )
+                data_dict.update({"file_io_data": self.dolphie.file_io_data.filtered_data})
 
             if self.dolphie.table_io_waits_data:
-                data_dict.update({"table_io_waits_summary_by_table": self.dolphie.table_io_waits_data.filtered_data})
+                data_dict.update({"table_io_waits_data": self.dolphie.table_io_waits_data.filtered_data})
         else:
             # Add ProxySQL specific data to the dictionary
             data_dict.update(
@@ -672,6 +670,9 @@ class ReplayManager:
             file_io_data = FileIOByInstance({}, False)
             file_io_data.filtered_data = data.get("file_io_data", {})
 
+            table_io_waits = TableIOWaitsByTable({}, False)
+            table_io_waits.filtered_data = data.get("table_io_waits_data", {})
+
             return MySQLReplayData(
                 **common_params,
                 binlog_status=data.get("binlog_status", {}),
@@ -683,6 +684,7 @@ class ReplayManager:
                 group_replication_data=data.get("group_replication_data", {}),
                 group_replication_members=data.get("group_replication_members", {}),
                 file_io_data=file_io_data,
+                table_io_waits_data=table_io_waits,
             )
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist

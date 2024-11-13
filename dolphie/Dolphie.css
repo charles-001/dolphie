@@ -314,6 +314,12 @@ TopBar {
     margin-left: 1;
     margin-bottom: 1;
 }
+#pfs_metrics_file_io_datatable {
+    overflow-x: auto;
+}
+#pfs_metrics_table_io_waits_datatable {
+    overflow-x: auto;
+}
 
 .proxysql_hostgroup_summary_datatable {
     overflow-x: auto;
