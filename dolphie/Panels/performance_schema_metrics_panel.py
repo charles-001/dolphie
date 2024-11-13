@@ -14,7 +14,7 @@ def create_panel(tab: Tab):
 def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
-    if not dolphie.table_io_waits_summary_by_table_tracker:
+    if not dolphie.table_io_waits_data:
         return
 
     columns = {
@@ -36,7 +36,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
             column_width = column_data["width"]
             datatable.add_column(column_key, key=column_key, width=column_width)
 
-    data = dolphie.table_io_waits_summary_by_table_tracker.filtered_data
+    data = dolphie.table_io_waits_data.filtered_data
     for file_name, metrics in data.items():
         row_id = file_name
         row_values = []
@@ -115,7 +115,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
 def update_file_io_by_instance(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
-    if not dolphie.file_io_by_instance_tracker:
+    if not dolphie.file_io_data:
         return
 
     columns = {
@@ -138,12 +138,12 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
             column_width = column_data["width"]
             datatable.add_column(column_key, key=column_key, width=column_width)
 
-    data = dolphie.file_io_by_instance_tracker.filtered_data
+    data = dolphie.file_io_data.filtered_data
     for file_name, metrics in data.items():
         row_id = file_name
         row_values = []
 
-        match = dolphie.file_io_by_instance_tracker.combined_table_pattern.search(file_name)
+        match = dolphie.file_io_data.combined_table_pattern.search(file_name)
         if file_name.endswith("mysql.ibd"):
             file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
         elif match:

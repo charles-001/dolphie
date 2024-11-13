@@ -248,7 +248,7 @@ class DolphieApp(App):
             dolphie.metadata_locks = replay_event_data.metadata_locks
             dolphie.group_replication_members = replay_event_data.group_replication_members
             dolphie.group_replication_data = replay_event_data.group_replication_data
-            dolphie.file_io_by_instance_tracker = replay_event_data.file_io_by_instance_tracker
+            dolphie.file_io_data = replay_event_data.file_io_data
 
             connection_source_metrics = {
                 "innodb_metrics": dolphie.innodb_metrics,
@@ -617,22 +617,18 @@ class DolphieApp(App):
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
 
             dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
-            file_io_by_instance = dolphie.main_db_connection.fetchall()
-            if not dolphie.file_io_by_instance_tracker:
-                dolphie.file_io_by_instance_tracker = FileIOByInstance(file_io_by_instance, dolphie.daemon_mode)
+            file_io_data = dolphie.main_db_connection.fetchall()
+            if not dolphie.file_io_data:
+                dolphie.file_io_data = FileIOByInstance(file_io_data, dolphie.daemon_mode)
             else:
-                dolphie.file_io_by_instance_tracker.update_tracked_data(file_io_by_instance)
+                dolphie.file_io_data.update_tracked_data(file_io_data)
 
             dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
-            table_io_waits_summary_by_table_tracker = dolphie.main_db_connection.fetchall()
-            if not dolphie.table_io_waits_summary_by_table_tracker:
-                dolphie.table_io_waits_summary_by_table_tracker = TableIOWaitsByTable(
-                    table_io_waits_summary_by_table_tracker, dolphie.daemon_mode
-                )
+            table_io_waits_data = dolphie.main_db_connection.fetchall()
+            if not dolphie.table_io_waits_data:
+                dolphie.table_io_waits_data = TableIOWaitsByTable(table_io_waits_data, dolphie.daemon_mode)
             else:
-                dolphie.table_io_waits_summary_by_table_tracker.update_tracked_data(
-                    table_io_waits_summary_by_table_tracker
-                )
+                dolphie.table_io_waits_data.update_tracked_data(table_io_waits_data)
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -1502,8 +1498,8 @@ class DolphieApp(App):
 
         elif key == "R":
             dolphie.metric_manager.reset()
-            dolphie.file_io_by_instance_tracker.reset_deltas()
-            dolphie.table_io_waits_summary_by_table_tracker.reset_deltas()
+            dolphie.file_io_data.reset_deltas()
+            dolphie.table_io_waits_data.reset_deltas()
 
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
             dolphie.update_switches_after_reset()

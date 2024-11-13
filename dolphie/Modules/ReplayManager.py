@@ -8,6 +8,7 @@ from typing import Any, List, Optional, Tuple, Union
 import orjson
 import zstandard as zstd
 from loguru import logger
+from rich import table
 
 from dolphie.DataTypes import (
     ConnectionSource,
@@ -33,7 +34,8 @@ class MySQLReplayData:
     processlist: dict
     metric_manager: dict
     metadata_locks: dict
-    file_io_by_instance_tracker: dict
+    file_io_data: dict
+    table_io_waits_summary_by_table: dict
     group_replication_data: dict
     group_replication_members: dict
 
@@ -562,12 +564,15 @@ class ReplayManager:
                     }
                 )
 
-            if self.dolphie.file_io_by_instance_tracker:
+            if self.dolphie.file_io_data:
                 data_dict.update(
                     {
-                        "file_io_by_instance_tracker": self.dolphie.file_io_by_instance_tracker.filtered_data,
+                        "file_io_data": self.dolphie.file_io_data.filtered_data,
                     }
                 )
+
+            if self.dolphie.table_io_waits_data:
+                data_dict.update({"table_io_waits_summary_by_table": self.dolphie.table_io_waits_data.filtered_data})
         else:
             # Add ProxySQL specific data to the dictionary
             data_dict.update(
@@ -664,8 +669,8 @@ class ReplayManager:
             for thread_data in data["processlist"]:
                 processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
 
-            file_io_by_instance_tracker = FileIOByInstance({}, False)
-            file_io_by_instance_tracker.filtered_data = data.get("file_io_by_instance_tracker", {})
+            file_io_data = FileIOByInstance({}, False)
+            file_io_data.filtered_data = data.get("file_io_data", {})
 
             return MySQLReplayData(
                 **common_params,
@@ -677,7 +682,7 @@ class ReplayManager:
                 processlist=processlist,
                 group_replication_data=data.get("group_replication_data", {}),
                 group_replication_members=data.get("group_replication_members", {}),
-                file_io_by_instance_tracker=file_io_by_instance_tracker,
+                file_io_data=file_io_data,
             )
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist

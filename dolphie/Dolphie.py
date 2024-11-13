@@ -96,8 +96,8 @@ class Dolphie:
         self.system_utilization: dict = {}
         self.global_variables: dict = {}
         self.innodb_trx_lock_metrics: dict = {}
-        self.file_io_by_instance_tracker: FileIOByInstance = None
-        self.table_io_waits_summary_by_table_tracker: TableIOWaitsByTable = None
+        self.file_io_data: FileIOByInstance = None
+        self.table_io_waits_data: TableIOWaitsByTable = None
         self.global_status: dict = {}
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
