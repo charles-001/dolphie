@@ -332,14 +332,32 @@ class MySQLQueries:
         SELECT
             FILE_NAME,
             EVENT_NAME,
-            SUM_TIMER_WAIT AS Latency,
-            COUNT_READ AS ReadOps,
-            COUNT_WRITE AS WriteOps,
-            COUNT_MISC AS MiscOps,
-            SUM_NUMBER_OF_BYTES_READ AS ReadBytes,
-            SUM_NUMBER_OF_BYTES_WRITE AS WriteBytes
+            SUM_TIMER_WAIT,
+            COUNT_READ
+            COUNT_WRITE,
+            COUNT_MISC,
+            SUM_NUMBER_OF_BYTES_READ,
+            SUM_NUMBER_OF_BYTES_WRITE
         FROM
             performance_schema.file_summary_by_instance
+        WHERE
+            COUNT_STAR > 0
+    """
+    table_io_waits_summary_by_table: str = """
+        SELECT
+            CONCAT(OBJECT_SCHEMA,'.', OBJECT_NAME) AS TABLE_NAME,
+            COUNT_STAR,
+            SUM_TIMER_WAIT,
+            COUNT_FETCH,
+            SUM_TIMER_FETCH,
+            COUNT_INSERT,
+            SUM_TIMER_INSERT,
+            COUNT_UPDATE,
+            SUM_TIMER_UPDATE,
+            COUNT_DELETE,
+            SUM_TIMER_DELETE
+        FROM
+            performance_schema.table_io_waits_summary_by_table
         WHERE
             COUNT_STAR > 0
     """

@@ -17,7 +17,7 @@ from dolphie.DataTypes import (
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
-from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaDeltaTracker
+from dolphie.Modules.PerformanceSchemaMetrics import FileIOByInstance
 
 
 @dataclass
@@ -664,7 +664,7 @@ class ReplayManager:
             for thread_data in data["processlist"]:
                 processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
 
-            file_io_by_instance_tracker = PerformanceSchemaDeltaTracker({}, False)
+            file_io_by_instance_tracker = FileIOByInstance({}, False)
             file_io_by_instance_tracker.filtered_data = data.get("file_io_by_instance_tracker", {})
 
             return MySQLReplayData(

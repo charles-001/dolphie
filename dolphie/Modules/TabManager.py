@@ -93,8 +93,10 @@ class Tab:
     ddl_title: Label = None
     ddl_datatable: DataTable = None
 
-    performance_schema_metrics_title: Label = None
-    performance_schema_metrics_datatable: DataTable = None
+    performance_schema_metrics_file_io_by_instance_tab: TabPane = None
+    performance_schema_metrics_file_io_by_instance_datatable: DataTable = None
+    performance_schema_metrics_table_io_waits_summary_by_table_tab: TabPane = None
+    performance_schema_metrics_table_io_waits_summary_by_table_datatable: DataTable = None
     performance_schema_metrics_radio_set: RadioSet = None
 
     metadata_locks_title: Label = None
@@ -386,7 +388,6 @@ class TabManager:
                     classes="ddl",
                 ),
                 Container(
-                    Label(id="performance_schema_metrics_title"),
                     RadioSet(
                         *(
                             [
@@ -396,7 +397,7 @@ class TabManager:
                         ),
                         id="performance_schema_metrics_radio_set",
                     ),
-                    DataTable(id="performance_schema_metrics_datatable", show_cursor=False),
+                    TabbedContent(id="performance_schema_metrics_tabs"),
                     id="panel_performance_schema_metrics",
                     classes="performance_schema_metrics",
                 ),
@@ -443,6 +444,26 @@ class TabManager:
 
         self.app.query_one("#main_container").display = False
         self.app.query_one("#loading_indicator").display = False
+
+        performance_schema_metrics_tabs = self.app.query_one("#performance_schema_metrics_tabs", TabbedContent)
+        await performance_schema_metrics_tabs.add_pane(
+            TabPane(
+                "File I/O by Instance",
+                DataTable(id="performance_schema_metrics_file_io_by_instance_datatable", show_cursor=False),
+                id="performance_schema_metrics_file_io_by_instance_tab",
+            )
+        )
+        await performance_schema_metrics_tabs.add_pane(
+            TabPane(
+                "Table I/O Waits Summary by Table",
+                Label(
+                    ":bulb: Format for each metric: Latency (Operations count)",
+                    id="performance_schema_metrics_format",
+                ),
+                DataTable(id="performance_schema_metrics_table_io_waits_summary_by_table_datatable", show_cursor=False),
+                id="performance_schema_metrics_table_io_waits_summary_by_table_tab",
+            ),
+        )
 
     async def create_tab(
         self, tab_name: str = None, hostgroup_member: HostGroupMember = None, switch_tab: bool = True
@@ -576,9 +597,17 @@ class TabManager:
         tab.ddl_title = self.app.query_one("#ddl_title", Label)
         tab.ddl_datatable = self.app.query_one("#ddl_datatable", DataTable)
 
-        tab.performance_schema_metrics_title = self.app.query_one("#performance_schema_metrics_title", Label)
-        tab.performance_schema_metrics_datatable = self.app.query_one(
-            "#performance_schema_metrics_datatable", DataTable
+        tab.performance_schema_metrics_file_io_by_instance_tab = self.app.query_one(
+            "#performance_schema_metrics_file_io_by_instance_tab", TabPane
+        )
+        tab.performance_schema_metrics_file_io_by_instance_datatable = self.app.query_one(
+            "#performance_schema_metrics_file_io_by_instance_datatable", DataTable
+        )
+        tab.performance_schema_metrics_table_io_waits_summary_by_table_tab = self.app.query_one(
+            "#performance_schema_metrics_table_io_waits_summary_by_table_tab", TabPane
+        )
+        tab.performance_schema_metrics_table_io_waits_summary_by_table_datatable = self.app.query_one(
+            "#performance_schema_metrics_table_io_waits_summary_by_table_datatable", DataTable
         )
         tab.performance_schema_metrics_radio_set = self.app.query_one("#performance_schema_metrics_radio_set", RadioSet)
 

@@ -6,7 +6,113 @@ from dolphie.Modules.Functions import format_bytes, format_number, format_time
 from dolphie.Modules.TabManager import Tab
 
 
-def create_panel(tab: Tab) -> DataTable:
+def create_panel(tab: Tab):
+    update_file_io_by_instance(tab)
+    update_table_io_waits_summary_by_table(tab)
+
+
+def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
+    dolphie = tab.dolphie
+
+    if not dolphie.table_io_waits_summary_by_table_tracker:
+        return
+
+    columns = {
+        "Table": {"field": "TABLE_NAME", "width": None},
+        "Total": {"field": ["COUNT_STAR", "SUM_TIMER_WAIT"], "width": 23},
+        "Fetch": {"field": ["COUNT_FETCH", "SUM_TIMER_FETCH"], "width": 23},
+        "Insert": {"field": ["COUNT_INSERT", "SUM_TIMER_INSERT"], "width": 23},
+        "Update": {"field": ["COUNT_UPDATE", "SUM_TIMER_UPDATE"], "width": 23},
+        "Delete": {"field": ["COUNT_DELETE", "SUM_TIMER_DELETE"], "width": 23},
+        "latency_ps": {"field": "SUM_TIMER_WAIT", "width": 0},
+    }
+
+    # Get the DataTable object
+    datatable = tab.performance_schema_metrics_table_io_waits_summary_by_table_datatable
+
+    # Add columns to the datatable if it is empty
+    if not datatable.columns:
+        for column_key, column_data in columns.items():
+            column_width = column_data["width"]
+            datatable.add_column(column_key, key=column_key, width=column_width)
+
+    data = dolphie.table_io_waits_summary_by_table_tracker.filtered_data
+    for file_name, metrics in data.items():
+        row_id = file_name
+        row_values = []
+
+        row_values.append(file_name)
+
+        # Check if row already exists before processing columns
+        if row_id in datatable.rows:
+            row_exists = True
+        else:
+            row_exists = False
+
+        for column_id, (column_name, column_data) in enumerate(columns.items()):
+            if column_name == "Table":
+                continue
+
+            field = column_data["field"]
+            column_value = None
+
+            # Handle fields that may contain arrays
+            if isinstance(field, list):
+                count_field, latency_field = field
+                count_value = metrics.get(count_field, {})
+                latency_value = metrics.get(latency_field, {})
+
+                if tab.performance_schema_metrics_radio_set.pressed_button.id == "total":
+                    count_value = count_value.get("total", 0)
+                    latency_value = latency_value.get("total", 0)
+                else:
+                    count_value = count_value.get("delta", 0)
+                    latency_value = latency_value.get("delta", 0)
+
+                if count_value and latency_value:
+                    column_value = f"{format_time(latency_value, picoseconds=True)} ({format_number(count_value)})"
+                else:
+                    column_value = "[dark_gray]N/A"
+            else:
+                column_value = metrics.get(field, {})
+                if tab.performance_schema_metrics_radio_set.pressed_button.id == "total":
+                    column_value = column_value.get("total", 0)
+                else:
+                    column_value = column_value.get("delta", 0)
+
+            # Handle row updates
+            if row_exists:
+                current_value = datatable.get_row(row_id)[column_id]
+                if column_value != current_value:
+                    datatable.update_cell(row_id, column_name, column_value)
+            else:
+                row_values.append(column_value)
+
+        # Add the row if it's new
+        if not row_exists and row_values:
+            datatable.add_row(*row_values, key=row_id)
+
+    # Clean up rows that no longer exist in the data
+    if data:
+        current_rows = set(data.keys())
+        existing_rows = set(datatable.rows.keys())
+
+        rows_to_remove = existing_rows - current_rows
+        for row_id in rows_to_remove:
+            datatable.remove_row(row_id)
+    else:
+        if datatable.row_count:
+            datatable.clear()
+
+    datatable.sort("latency_ps", reverse=True)
+
+    # Update the title to reflect the number of active rows
+    tab.dolphie.app.query_one("#performance_schema_metrics_tabs").get_tab(
+        "performance_schema_metrics_table_io_waits_summary_by_table_tab"
+    ).label = f"Table I/O Waits by Table ([highlight]{datatable.row_count}[/highlight])"
+
+
+def update_file_io_by_instance(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
     if not dolphie.file_io_by_instance_tracker:
@@ -14,17 +120,17 @@ def create_panel(tab: Tab) -> DataTable:
 
     columns = {
         "Instance": {"field": "FILE_NAME", "width": None},
-        "Latency": {"field": "Latency", "width": 10, "format": "time"},
-        "Read Ops": {"field": "ReadOps", "width": 10, "format": "number"},
-        "Write Ops": {"field": "WriteOps", "width": 10, "format": "number"},
-        "Misc Ops": {"field": "MiscOps", "width": 10, "format": "number"},
-        "Read Bytes": {"field": "ReadBytes", "width": 10, "format": "bytes"},
-        "Write Bytes": {"field": "WriteBytes", "width": 11, "format": "bytes"},
-        "latency_ps": {"field": "Latency", "width": 0},
+        "Latency": {"field": "SUM_TIMER_WAIT", "width": 10, "format": "time"},
+        "Read Ops": {"field": "COUNT_READ", "width": 10, "format": "number"},
+        "Write Ops": {"field": "COUNT_WRITE", "width": 10, "format": "number"},
+        "Misc Ops": {"field": "COUNT_MISC", "width": 10, "format": "number"},
+        "Read Bytes": {"field": "SUM_NUMBER_OF_BYTES_READ", "width": 10, "format": "bytes"},
+        "Write Bytes": {"field": "SUM_NUMBER_OF_BYTES_WRITE", "width": 11, "format": "bytes"},
+        "latency_ps": {"field": "SUM_TIMER_WAIT", "width": 0},
     }
 
     # Get the DataTable object
-    datatable = tab.performance_schema_metrics_datatable
+    datatable = tab.performance_schema_metrics_file_io_by_instance_datatable
 
     # Add columns to the datatable if it is empty
     if not datatable.columns:
@@ -61,9 +167,9 @@ def create_panel(tab: Tab) -> DataTable:
 
             column_value = metrics.get(column_data["field"], {})
             if tab.performance_schema_metrics_radio_set.pressed_button.id == "total":
-                column_value = column_value.get("total", None)
+                column_value = column_value.get("total", 0)
             else:
-                column_value = column_value.get("delta", None)
+                column_value = column_value.get("delta", 0)
 
             # Handle special formatting
             if column_value == 0 or column_value is None:
@@ -106,4 +212,6 @@ def create_panel(tab: Tab) -> DataTable:
     datatable.sort("latency_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.performance_schema_metrics_title.update(f"File IO by Instance ([highlight]{datatable.row_count}[/highlight])")
+    tab.dolphie.app.query_one("#performance_schema_metrics_tabs").get_tab(
+        "performance_schema_metrics_file_io_by_instance_tab"
+    ).label = f"File I/O by Instance ([highlight]{datatable.row_count}[/highlight])"

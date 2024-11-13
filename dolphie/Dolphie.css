@@ -29,7 +29,7 @@ Rule {
 }
 DataTable {
     overflow-x: hidden;
-    max-height: 98%;
+    max-height: 40;
 }
 DataTable > .datatable--odd-row {
     background: #131a2c;
@@ -111,7 +111,6 @@ TopBar {
     content-align: right middle;
     color: #8f9fc1;
 }
-
 
 .dashboard_replay {
     height: auto;
@@ -308,17 +307,11 @@ TopBar {
     border: tall #1b233a;
     margin-bottom: 1;
 }
-.performance_schema_metrics > Container {
-    height: auto;
-    width: auto;
-}
-.performance_schema_metrics > Label {
-    width: 100%;
+#performance_schema_metrics_format {
     color: #bbc8e8;
-    text-style: bold;
-    content-align: center middle;
-}
-.performance_schema_metrics > RadioSet {
+    content-align: left middle;
+    text-style: none;
+    margin-left: 1;
     margin-bottom: 1;
 }
 
