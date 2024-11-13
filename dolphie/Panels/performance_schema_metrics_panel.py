@@ -58,7 +58,10 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
 
             # Handle fields that may contain arrays
             if isinstance(field, list):
+                # If the field is an array, it contains two fields to be combined
                 count_field, latency_field = field
+
+                # Get the count and latency values from the combined fields
                 count_value = metrics.get(count_field, {})
                 latency_value = metrics.get(latency_field, {})
 

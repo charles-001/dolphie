@@ -361,17 +361,6 @@ class MySQLQueries:
         WHERE
             COUNT_STAR > 0
     """
-    events_waits_summary_global_by_event_name: str = """
-        SELECT
-            EVENT_NAME,
-            COUNT_STAR,
-            SUM_TIMER_WAIT,
-        FROM
-            performance_schema.events_waits_summary_global_by_event_name
-        WHERE
-            COUNT_STAR > 0 AND
-            EVENT_NAME LIKE 'wait/synch/mutex/innodb/%'
-    """
     metadata_locks: str = """
         SELECT
             OBJECT_INSTANCE_BEGIN AS id,

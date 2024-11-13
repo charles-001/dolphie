@@ -617,19 +617,20 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.ddls)
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-            dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
-            file_io_data = dolphie.main_db_connection.fetchall()
-            if not dolphie.file_io_data:
-                dolphie.file_io_data = FileIOByInstance(file_io_data, dolphie.daemon_mode)
-            else:
-                dolphie.file_io_data.update_tracked_data(file_io_data)
+            if dolphie.panels.pfs_metrics.visible or dolphie.record_for_replay:
+                dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
+                file_io_data = dolphie.main_db_connection.fetchall()
+                if not dolphie.file_io_data:
+                    dolphie.file_io_data = FileIOByInstance(file_io_data, dolphie.daemon_mode)
+                else:
+                    dolphie.file_io_data.update_tracked_data(file_io_data)
 
-            dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
-            table_io_waits_data = dolphie.main_db_connection.fetchall()
-            if not dolphie.table_io_waits_data:
-                dolphie.table_io_waits_data = TableIOWaitsByTable(table_io_waits_data, dolphie.daemon_mode)
-            else:
-                dolphie.table_io_waits_data.update_tracked_data(table_io_waits_data)
+                dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
+                table_io_waits_data = dolphie.main_db_connection.fetchall()
+                if not dolphie.table_io_waits_data:
+                    dolphie.table_io_waits_data = TableIOWaitsByTable(table_io_waits_data, dolphie.daemon_mode)
+                else:
+                    dolphie.table_io_waits_data.update_tracked_data(table_io_waits_data)
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
