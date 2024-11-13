@@ -93,9 +93,7 @@ class Tab:
     ddl_title: Label = None
     ddl_datatable: DataTable = None
 
-    performance_schema_metrics_file_io_by_instance_tab: TabPane = None
     performance_schema_metrics_file_io_by_instance_datatable: DataTable = None
-    performance_schema_metrics_table_io_waits_summary_by_table_tab: TabPane = None
     performance_schema_metrics_table_io_waits_summary_by_table_datatable: DataTable = None
     performance_schema_metrics_radio_set: RadioSet = None
 
@@ -597,14 +595,8 @@ class TabManager:
         tab.ddl_title = self.app.query_one("#ddl_title", Label)
         tab.ddl_datatable = self.app.query_one("#ddl_datatable", DataTable)
 
-        tab.performance_schema_metrics_file_io_by_instance_tab = self.app.query_one(
-            "#performance_schema_metrics_file_io_by_instance_tab", TabPane
-        )
         tab.performance_schema_metrics_file_io_by_instance_datatable = self.app.query_one(
             "#performance_schema_metrics_file_io_by_instance_datatable", DataTable
-        )
-        tab.performance_schema_metrics_table_io_waits_summary_by_table_tab = self.app.query_one(
-            "#performance_schema_metrics_table_io_waits_summary_by_table_tab", TabPane
         )
         tab.performance_schema_metrics_table_io_waits_summary_by_table_datatable = self.app.query_one(
             "#performance_schema_metrics_table_io_waits_summary_by_table_datatable", DataTable

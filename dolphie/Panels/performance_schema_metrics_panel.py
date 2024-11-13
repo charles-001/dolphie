@@ -151,7 +151,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
         elif "/" in file_name:
             file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
         else:
-            file_name = f"[b][light_blue]*[/light_blue][/b] [highlight]{file_name}"
+            file_name = f"[b][light_blue][[/light_blue][/b][highlight]{file_name}[b][light_blue]][/light_blue][/b]"
 
         row_values.append(file_name)
 

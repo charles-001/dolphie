@@ -616,24 +616,23 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.ddls)
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-            if dolphie.panels.performance_schema_metrics.visible or dolphie.record_for_replay:
-                dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
-                file_io_by_instance = dolphie.main_db_connection.fetchall()
-                if not dolphie.file_io_by_instance_tracker:
-                    dolphie.file_io_by_instance_tracker = FileIOByInstance(file_io_by_instance, dolphie.daemon_mode)
-                else:
-                    dolphie.file_io_by_instance_tracker.update_tracked_data(file_io_by_instance)
+            dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
+            file_io_by_instance = dolphie.main_db_connection.fetchall()
+            if not dolphie.file_io_by_instance_tracker:
+                dolphie.file_io_by_instance_tracker = FileIOByInstance(file_io_by_instance, dolphie.daemon_mode)
+            else:
+                dolphie.file_io_by_instance_tracker.update_tracked_data(file_io_by_instance)
 
-                dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
-                table_io_waits_summary_by_table_tracker = dolphie.main_db_connection.fetchall()
-                if not dolphie.table_io_waits_summary_by_table_tracker:
-                    dolphie.table_io_waits_summary_by_table_tracker = TableIOWaitsByTable(
-                        table_io_waits_summary_by_table_tracker, dolphie.daemon_mode
-                    )
-                else:
-                    dolphie.table_io_waits_summary_by_table_tracker.update_tracked_data(
-                        table_io_waits_summary_by_table_tracker
-                    )
+            dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
+            table_io_waits_summary_by_table_tracker = dolphie.main_db_connection.fetchall()
+            if not dolphie.table_io_waits_summary_by_table_tracker:
+                dolphie.table_io_waits_summary_by_table_tracker = TableIOWaitsByTable(
+                    table_io_waits_summary_by_table_tracker, dolphie.daemon_mode
+                )
+            else:
+                dolphie.table_io_waits_summary_by_table_tracker.update_tracked_data(
+                    table_io_waits_summary_by_table_tracker
+                )
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -1228,8 +1227,6 @@ class DolphieApp(App):
 
         elif key == "7":
             self.toggle_panel(dolphie.panels.performance_schema_metrics.name)
-            self.tab_manager.active_tab.performance_schema_metrics_file_io_by_instance_datatable.clear()
-            self.tab_manager.active_tab.performance_schema_metrics_table_io_waits_summary_by_table_datatable.clear()
 
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)
