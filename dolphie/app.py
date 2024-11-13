@@ -508,7 +508,12 @@ class DolphieApp(App):
             dolphie.configure_mysql_variables()
             dolphie.validate_metadata_locks_enabled()
 
-        dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
+        global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
+        self.monitor_uptime_change(
+            tab=tab, old_uptime=dolphie.global_status.get("Uptime"), new_uptime=global_status.get("Uptime")
+        )
+        dolphie.global_status = global_status
+
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
         if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
@@ -822,6 +827,22 @@ class DolphieApp(App):
                     severity="warning",
                     timeout=15,
                 )
+
+    def monitor_uptime_change(self, tab: Tab, old_uptime: int, new_uptime: int):
+        if old_uptime is None:
+            return
+
+        if old_uptime > new_uptime:
+            formatted_old_uptime = str(timedelta(seconds=old_uptime))
+            formatted_new_uptime = str(timedelta(seconds=new_uptime))
+
+            tab.replay_manager.capture_global_variable_change("Uptime", formatted_old_uptime, formatted_new_uptime)
+
+            logger.info(f"Uptime changed: {formatted_old_uptime} -> {formatted_new_uptime}")
+
+            # Reset deltas for Performance Schema metrics since those tables are reset on server restart
+            tab.dolphie.file_io_data.reset_deltas()
+            tab.dolphie.table_io_waits_data.reset_deltas()
 
     def monitor_read_only_change(self, tab: Tab):
         dolphie = tab.dolphie

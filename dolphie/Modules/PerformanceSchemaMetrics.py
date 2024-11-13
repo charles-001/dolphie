@@ -19,7 +19,6 @@ class TableIOWaitsByTable:
 
     def update_tracked_data(self, query_data: List[Dict[str, int]]):
         current_time = datetime.now()
-
         if self.daemon_mode and current_time - self.last_reset_time >= timedelta(minutes=10):
             self.reset_deltas()
             self.last_reset_time = current_time
@@ -82,13 +81,8 @@ class TableIOWaitsByTable:
             del self.tracked_data[table_name]
 
     def reset_deltas(self):
-        for table_data in self.tracked_data.values():
-            for metric_data in table_data.values():
-                metric_data["delta"] = 0
-
-        for table_data in self.filtered_data.values():
-            for metric_data in table_data.values():
-                metric_data["delta"] = 0
+        self.tracked_data = {}
+        self.filtered_data = {}
 
 
 class FileIOByInstance:
@@ -119,7 +113,6 @@ class FileIOByInstance:
 
     def update_tracked_data(self, query_data: List[Dict[str, int]]):
         current_time = datetime.now()
-
         if self.daemon_mode and current_time - self.last_reset_time >= timedelta(minutes=10):
             self.reset_deltas()
             self.last_reset_time = current_time
@@ -228,10 +221,5 @@ class FileIOByInstance:
             self.filtered_data.pop(file_name, None)
 
     def reset_deltas(self):
-        for file_data in self.tracked_data.values():
-            for metric_data in file_data["metrics"].values():
-                metric_data["delta"] = 0
-
-        for file_data in self.filtered_data.values():
-            for metric_data in file_data.values():
-                metric_data["delta"] = 0
+        self.tracked_data = {}
+        self.filtered_data = {}
