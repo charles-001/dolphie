@@ -300,7 +300,7 @@ TopBar {
     content-align: center middle;
 }
 
-.pfs_metrics {
+#panel_pfs_metrics {
     height: auto;
     max-height: 100%;
     background: #0f1525;

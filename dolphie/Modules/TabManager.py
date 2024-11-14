@@ -397,7 +397,6 @@ class TabManager:
                     ),
                     TabbedContent(id="pfs_metrics_tabs"),
                     id="panel_pfs_metrics",
-                    classes="pfs_metrics",
                 ),
                 Container(
                     Label(id="proxysql_hostgroup_summary_title"),

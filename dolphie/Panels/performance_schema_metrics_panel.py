@@ -147,7 +147,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
         row_values = []
 
         match = dolphie.file_io_data.combined_table_pattern.search(file_name)
-        if file_name.endswith("mysql.ibd"):
+        if file_name.endswith("/mysql.ibd"):
             file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
         elif match:
             file_name = f"{match.group(1)}.{match.group(2)}"
