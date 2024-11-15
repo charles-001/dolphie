@@ -330,7 +330,7 @@ class MySQLQueries:
     """
     file_summary_by_instance: str = """
         SELECT
-            FILE_NAME,
+            FILE_NAME AS NAME,
             EVENT_NAME,
             SUM_TIMER_WAIT,
             COUNT_READ,
@@ -345,7 +345,7 @@ class MySQLQueries:
     """
     table_io_waits_summary_by_table: str = """
         SELECT
-            CONCAT(OBJECT_SCHEMA,'.', OBJECT_NAME) AS TABLE_NAME,
+            CONCAT(OBJECT_SCHEMA,'.', OBJECT_NAME) AS NAME,
             COUNT_STAR,
             SUM_TIMER_WAIT,
             COUNT_FETCH,

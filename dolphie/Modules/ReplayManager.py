@@ -17,10 +17,7 @@ from dolphie.DataTypes import (
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
-from dolphie.Modules.PerformanceSchemaMetrics import (
-    FileIOByInstance,
-    TableIOWaitsByTable,
-)
+from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 
 
 @dataclass
@@ -526,6 +523,12 @@ class ReplayManager:
             "metric_manager": self._condition_metrics(self.dolphie.metric_manager),
         }
 
+        # Add the replay_pfs_metrics_last_reset_time to the global status dictionary
+        # It will be loaded into the UI for the replay section
+        data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
+            datetime.now().timestamp() - self.dolphie.pfs_metrics_last_reset_time.timestamp()
+        )
+
         if self.dolphie.system_utilization:
             data_dict.update({"system_utilization": self.dolphie.system_utilization})
 
@@ -667,10 +670,9 @@ class ReplayManager:
             for thread_data in data["processlist"]:
                 processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
 
-            file_io_data = FileIOByInstance({}, False)
+            file_io_data = PerformanceSchemaMetrics({})
             file_io_data.filtered_data = data.get("file_io_data", {})
-
-            table_io_waits = TableIOWaitsByTable({}, False)
+            table_io_waits = PerformanceSchemaMetrics({})
             table_io_waits.filtered_data = data.get("table_io_waits_data", {})
 
             return MySQLReplayData(

@@ -1,14 +1,28 @@
 import os
+from datetime import datetime
 
-from textual.widgets import DataTable
+from textual.widgets import DataTable, RadioButton
 
 from dolphie.Modules.Functions import format_bytes, format_number, format_time
 from dolphie.Modules.TabManager import Tab
 
 
 def create_panel(tab: Tab):
+    dolphie = tab.dolphie
+
     update_file_io_by_instance(tab)
     update_table_io_waits_summary_by_table(tab)
+
+    replay_pfs_metrics_last_reset_time = dolphie.global_status.get("replay_pfs_metrics_last_reset_time")
+    if replay_pfs_metrics_last_reset_time:
+        tab.dolphie.app.query_one("#pfs_metrics_delta", RadioButton).label = (
+            f"Delta since last reset ([highlight]{format_time(replay_pfs_metrics_last_reset_time, 0)}[/highlight])"
+        )
+    elif dolphie.pfs_metrics_last_reset_time:
+        time_since_reset = datetime.now() - dolphie.pfs_metrics_last_reset_time
+        tab.dolphie.app.query_one("#pfs_metrics_delta", RadioButton).label = (
+            f"Delta since last reset ([highlight]{format_time(time_since_reset.total_seconds(), 0)}[/highlight])"
+        )
 
 
 def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
@@ -65,7 +79,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
                 count_value = metrics.get(count_field, {})
                 latency_value = metrics.get(latency_field, {})
 
-                if tab.pfs_metrics_radio_set.pressed_button.id == "total":
+                if tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total":
                     count_value = count_value.get("total", 0)
                     latency_value = latency_value.get("total", 0)
                 else:
@@ -78,7 +92,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
                     column_value = "[dark_gray]N/A"
             else:
                 column_value = metrics.get(field, {})
-                if tab.pfs_metrics_radio_set.pressed_button.id == "total":
+                if tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total":
                     column_value = column_value.get("total", 0)
                 else:
                     column_value = column_value.get("delta", 0)
@@ -169,19 +183,19 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
                 continue
 
             column_value = metrics.get(column_data["field"], {})
-            if tab.pfs_metrics_radio_set.pressed_button.id == "total":
+            if tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total":
                 column_value = column_value.get("total", 0)
             else:
                 column_value = column_value.get("delta", 0)
 
             # Handle special formatting
-            if column_value == 0 or column_value is None:
+            if column_data.get("format") == "time":
+                column_value = format_time(column_value, picoseconds=True)
+            elif column_value == 0 or column_value is None:
                 if column_name == "latency_ps":
                     column_value = 0
                 else:
                     column_value = "[dark_gray]0"
-            elif column_data.get("format") == "time":
-                column_value = format_time(column_value, picoseconds=True)
             elif column_data.get("format") == "number":
                 column_value = format_number(column_value)
             elif column_data.get("format") == "bytes":

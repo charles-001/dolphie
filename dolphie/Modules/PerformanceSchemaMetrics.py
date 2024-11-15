@@ -1,95 +1,21 @@
 import re
-from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 
-class TableIOWaitsByTable:
-    def __init__(self, query_data: List[Dict[str, Any]], daemon_mode: bool):
-        self.daemon_mode = daemon_mode
+class PerformanceSchemaMetrics:
+    def __init__(self, query_data: List[Dict[str, Any]], combine_events: bool = False):
+        self.combine_events = combine_events
         self.filtered_data: Dict[str, Dict[str, Dict[str, int]]] = {}
-        self.last_reset_time: datetime = datetime.now()
-
-        # Initialize the tracked data from query_data
-        self.tracked_data: Dict[str, Dict[str, Dict[str, Any]]] = {
-            row["TABLE_NAME"]: {
-                metric: {"total": value, "delta": 0} for metric, value in row.items() if isinstance(value, int)
+        self.internal_data: Dict[str, Dict[str, Dict[str, Any]]] = {
+            row["NAME"]: {
+                "event_name": row.get("EVENT_NAME"),
+                "metrics": {
+                    metric: {"total": value, "delta": 0} for metric, value in row.items() if isinstance(value, int)
+                },
             }
             for row in query_data
         }
 
-    def update_tracked_data(self, query_data: List[Dict[str, int]]):
-        current_time = datetime.now()
-        if self.daemon_mode and current_time - self.last_reset_time >= timedelta(minutes=10):
-            self.reset_deltas()
-            self.last_reset_time = current_time
-
-        # Track current file names and remove missing ones
-        current_table_names = {row["TABLE_NAME"] for row in query_data}
-        tables_to_remove = set(self.tracked_data) - current_table_names
-
-        # Process current query data
-        for row in query_data:
-            table_name = row["TABLE_NAME"]
-            metrics = {metric: value for metric, value in row.items() if isinstance(value, int)}
-
-            # Initialize file in tracked_data if not present
-            if table_name not in self.tracked_data:
-                self.tracked_data[table_name] = {
-                    metric: {"total": value, "delta": 0} for metric, value in metrics.items()
-                }
-
-            deltas_changed = False
-            all_deltas_zero = True
-
-            # Update deltas for each metric
-            for metric, current_value in metrics.items():
-                metric_data = self.tracked_data[table_name][metric]
-                initial_value = metric_data["total"]
-                delta = current_value - initial_value
-
-                metric_data["total"] = current_value
-                if delta > 0:
-                    metric_data["delta"] += delta
-                    deltas_changed = True
-
-                if metric_data["delta"] > 0:
-                    all_deltas_zero = False
-
-            # Update filtered_data if necessary
-            if deltas_changed or table_name not in self.filtered_data:
-                self.filtered_data[table_name] = {}
-
-                for metric, values in self.tracked_data[table_name].items():
-                    # Update total with the new value (whether or not delta is positive)
-                    total = values["total"]
-
-                    # Only add delta if it's greater than 0
-                    delta = values["delta"] if values["delta"] > 0 else 0
-
-                    # Only include the metric in filtered_data if it has a delta greater than 0
-                    if delta > 0:
-                        self.filtered_data[table_name][metric] = {"total": total, "delta": delta}
-                    else:
-                        # If delta is 0, you may decide to only store the total or skip it.
-                        self.filtered_data[table_name][metric] = {"total": total}
-
-            if all_deltas_zero:
-                self.filtered_data.pop(table_name, None)
-
-        # Remove tables no longer in the query data
-        for table_name in tables_to_remove:
-            del self.tracked_data[table_name]
-
-    def reset_deltas(self):
-        self.tracked_data = {}
-        self.filtered_data = {}
-
-
-class FileIOByInstance:
-    def __init__(self, query_data: List[Dict[str, Any]], daemon_mode: bool):
-        self.daemon_mode = daemon_mode
-        self.filtered_data: Dict[str, Dict[str, Dict[str, int]]] = {}
-        self.last_reset_time: datetime = datetime.now()
         self.combined_table_pattern = re.compile(r"([^/]+)/([^/]+)\.(frm|ibd|MYD|MYI|CSM|CSV|par)$")
         self.events_to_combine = {
             "wait/io/file/innodb/innodb_temp_file": "Temporary tables",
@@ -100,37 +26,20 @@ class FileIOByInstance:
             "wait/io/file/innodb/innodb_log_file": "InnoDB redo log files",
         }
 
-        # Initialize the tracked data from query_data
-        self.tracked_data: Dict[str, Dict[str, Any]] = {
-            row["FILE_NAME"]: {
-                "event_name": row["EVENT_NAME"],
-                "metrics": {
-                    metric: {"total": value, "delta": 0} for metric, value in row.items() if isinstance(value, int)
-                },
-            }
-            for row in query_data
-        }
-
-    def update_tracked_data(self, query_data: List[Dict[str, int]]):
-        current_time = datetime.now()
-        if self.daemon_mode and current_time - self.last_reset_time >= timedelta(minutes=10):
-            self.reset_deltas()
-            self.last_reset_time = current_time
-
-        # Track current file names and remove missing ones
-        current_file_names = {row["FILE_NAME"] for row in query_data}
-        files_to_remove = set(self.tracked_data) - current_file_names
+    def update_internal_data(self, query_data: List[Dict[str, int]]):
+        # Track instances and remove missing ones
+        current_instance_names = {row["NAME"] for row in query_data}
+        instances_to_remove = set(self.internal_data) - current_instance_names
 
         # Process current query data
         for row in query_data:
-            file_name = row["FILE_NAME"]
-            event_name = row["EVENT_NAME"]
+            instance_name = row["NAME"]
             metrics = {metric: value for metric, value in row.items() if isinstance(value, int)}
 
-            # Initialize file in tracked_data if not present
-            if file_name not in self.tracked_data:
-                self.tracked_data[file_name] = {
-                    "event_name": event_name,
+            # Initialize instance in internal_data if not present
+            if instance_name not in self.internal_data:
+                self.internal_data[instance_name] = {
+                    "event_name": row.get("EVENT_NAME"),
                     "metrics": {metric: {"total": value, "delta": 0} for metric, value in metrics.items()},
                 }
 
@@ -139,7 +48,7 @@ class FileIOByInstance:
 
             # Update deltas for each metric
             for metric, current_value in metrics.items():
-                metric_data = self.tracked_data[file_name]["metrics"][metric]
+                metric_data = self.internal_data[instance_name]["metrics"][metric]
                 initial_value = metric_data["total"]
                 delta = current_value - initial_value
 
@@ -151,11 +60,11 @@ class FileIOByInstance:
                 if metric_data["delta"] > 0:
                     all_deltas_zero = False
 
-            # Update filtered_data if necessary
-            if deltas_changed or file_name not in self.filtered_data:
-                self.filtered_data[file_name] = {}
+            # Update filtered_data with new values if deltas changed or instance is new
+            if deltas_changed or instance_name not in self.filtered_data:
+                self.filtered_data[instance_name] = {}
 
-                for metric, values in self.tracked_data[file_name]["metrics"].items():
+                for metric, values in self.internal_data[instance_name]["metrics"].items():
                     # Update total with the new value (whether or not delta is positive)
                     total = values["total"]
 
@@ -164,23 +73,23 @@ class FileIOByInstance:
 
                     # Only include the metric in filtered_data if it has a delta greater than 0
                     if delta > 0:
-                        self.filtered_data[file_name][metric] = {"total": total, "delta": delta}
+                        self.filtered_data[instance_name][metric] = {"total": total, "delta": delta}
                     else:
-                        # If delta is 0, you may decide to only store the total or skip it.
-                        self.filtered_data[file_name][metric] = {"total": total}
+                        self.filtered_data[instance_name][metric] = {"total": total}
 
             if all_deltas_zero:
-                self.filtered_data.pop(file_name, None)
+                self.filtered_data.pop(instance_name, None)
 
-        # Remove files no longer in the query data
-        for file_name in files_to_remove:
-            del self.tracked_data[file_name]
+        # Remove instances no longer in the query data
+        for instance_name in instances_to_remove:
+            del self.internal_data[instance_name]
 
-        self.aggregate_combined_events()
+        if self.combine_events:
+            self.aggregate_combined_events()
 
     def aggregate_combined_events(self):
         combined_results = {}
-        combined_files = set()
+        combined_instances = set()
 
         # Initialize combined results for events
         for event_name, combined_name in self.events_to_combine.items():
@@ -189,14 +98,14 @@ class FileIOByInstance:
 
         # Aggregate deltas for combined events
         for event_name, combined_name in self.events_to_combine.items():
-            for file_name, file_data in self.tracked_data.items():
-                if file_data["event_name"] == event_name:
-                    combined_files.add(file_name)
+            for instance_name, instance_data in self.internal_data.items():
+                if instance_data["event_name"] == event_name:
+                    combined_instances.add(instance_name)
 
                     if combined_name not in combined_results:
                         combined_results[combined_name] = {}
 
-                    for metric_name, metric_data in file_data["metrics"].items():
+                    for metric_name, metric_data in instance_data["metrics"].items():
                         if metric_name not in combined_results[combined_name]:
                             combined_results[combined_name][metric_name] = {"total": 0, "delta": 0}
 
@@ -217,9 +126,5 @@ class FileIOByInstance:
                     }
 
         # Remove combined events from filtered_data
-        for file_name in combined_files:
-            self.filtered_data.pop(file_name, None)
-
-    def reset_deltas(self):
-        self.tracked_data = {}
-        self.filtered_data = {}
+        for instance_name in combined_instances:
+            self.filtered_data.pop(instance_name, None)

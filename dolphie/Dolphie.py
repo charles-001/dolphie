@@ -16,10 +16,7 @@ import dolphie.Modules.MetricManager as MetricManager
 from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
-from dolphie.Modules.PerformanceSchemaMetrics import (
-    FileIOByInstance,
-    TableIOWaitsByTable,
-)
+from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries
 
 
@@ -96,8 +93,15 @@ class Dolphie:
         self.system_utilization: dict = {}
         self.global_variables: dict = {}
         self.innodb_trx_lock_metrics: dict = {}
-        self.file_io_data: FileIOByInstance = None
-        self.table_io_waits_data: TableIOWaitsByTable = None
+        self.file_io_data: PerformanceSchemaMetrics = None
+        self.table_io_waits_data: PerformanceSchemaMetrics = None
+
+        if self.record_for_replay:
+            self.pfs_metrics_last_reset_time: datetime = datetime.now()
+        else:
+            # This will be set when user presses key to bring up panel
+            self.pfs_metrics_last_reset_time: datetime = None
+
         self.global_status: dict = {}
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
@@ -424,3 +428,10 @@ class Dolphie:
         replay_files.sort(key=lambda x: x[0])
 
         return replay_files
+
+    def reset_pfs_metrics_deltas(self):
+        for instance in [self.file_io_data, self.table_io_waits_data]:
+            instance.internal_data = {}
+            instance.filtered_data = {}
+
+        self.pfs_metrics_last_reset_time = datetime.now()

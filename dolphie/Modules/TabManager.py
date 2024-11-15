@@ -389,8 +389,8 @@ class TabManager:
                     RadioSet(
                         *(
                             [
-                                RadioButton("Total since MySQL restart", id="total"),
-                                RadioButton("Delta since last reset", id="delta", value=True),
+                                RadioButton("Total since MySQL restart", id="pfs_metrics_total"),
+                                RadioButton("Delta since last reset", id="pfs_metrics_delta", value=True),
                             ]
                         ),
                         id="pfs_metrics_radio_set",
