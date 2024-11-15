@@ -16,14 +16,16 @@ class PerformanceSchemaMetrics:
             for row in query_data
         }
 
-        self.combined_table_pattern = re.compile(r"([^/]+)/([^/]+)\.(frm|ibd|MYD|MYI|CSM|CSV|par)$")
+        self.table_pattern = re.compile(r"([^/]+)/([^/]+)\.(frm|ibd|MYD|MYI|CSM|CSV|par)$")
+        self.undo_logs_pattern = re.compile(r"undo_\d+$")
+
         self.events_to_combine = {
-            "wait/io/file/innodb/innodb_temp_file": "Temporary tables",
+            "wait/io/file/innodb/innodb_temp_file": "Temporary files",
             "wait/io/file/sql/binlog": "Binary logs",
             "wait/io/file/sql/relaylog": "Relay logs",
             "wait/io/file/sql/io_cache": "IO cache",
             "wait/io/file/innodb/innodb_dblwr_file": "Doublewrite buffer",
-            "wait/io/file/innodb/innodb_log_file": "InnoDB redo log files",
+            "wait/io/file/innodb/innodb_log_file": "InnoDB redo logs",
         }
 
     def update_internal_data(self, query_data: List[Dict[str, int]]):
@@ -89,42 +91,40 @@ class PerformanceSchemaMetrics:
 
     def aggregate_combined_events(self):
         combined_results = {}
-        combined_instances = set()
 
-        # Initialize combined results for events
-        for event_name, combined_name in self.events_to_combine.items():
-            if combined_name not in combined_results:
-                combined_results[combined_name] = {}
+        # Aggregate deltas for combined events and instances matching the regex
+        for instance_name, instance_data in self.internal_data.items():
+            event_name = instance_data["event_name"]
 
-        # Aggregate deltas for combined events
-        for event_name, combined_name in self.events_to_combine.items():
-            for instance_name, instance_data in self.internal_data.items():
-                if instance_data["event_name"] == event_name:
-                    combined_instances.add(instance_name)
+            # Determine the target name based on regex or specific event name
+            if self.undo_logs_pattern.search(instance_name):
+                target_name = "Undo Logs"
+            elif event_name in self.events_to_combine:
+                target_name = self.events_to_combine[event_name]
+            else:
+                continue  # Skip if it doesn't match any pattern or event to combine
 
-                    if combined_name not in combined_results:
-                        combined_results[combined_name] = {}
-
-                    for metric_name, metric_data in instance_data["metrics"].items():
-                        if metric_name not in combined_results[combined_name]:
-                            combined_results[combined_name][metric_name] = {"total": 0, "delta": 0}
-
-                        # Accumulate deltas for the combined event
-                        combined_results[combined_name][metric_name]["total"] += metric_data["total"]
-                        combined_results[combined_name][metric_name]["delta"] += metric_data["delta"]
-
-        # Update filtered_data with combined results
-        for combined_name, combined_metrics in combined_results.items():
-            for metric_name, combined_data in combined_metrics.items():
-                if combined_data["delta"] > 0:
-                    if combined_name not in self.filtered_data:
-                        self.filtered_data[combined_name] = {}
-
-                    self.filtered_data[combined_name][metric_name] = {
-                        "total": combined_data["total"],
-                        "delta": combined_data["delta"],
-                    }
-
-        # Remove combined events from filtered_data
-        for instance_name in combined_instances:
+            # Remove original instance from filtered_data if it exists
             self.filtered_data.pop(instance_name, None)
+
+            # Initialize target in combined results if not already present
+            target_metrics = combined_results.setdefault(target_name, {})
+
+            # Accumulate metrics for each matched or combined event
+            for metric_name, metric_data in instance_data["metrics"].items():
+                # Initialize the metric if not already in combined_results[target_name]
+                combined_metric = target_metrics.setdefault(metric_name, {"total": 0, "delta": 0})
+                combined_metric["total"] += metric_data["total"]
+                combined_metric["delta"] += metric_data["delta"]
+
+        # Update filtered_data with combined results only if there are non-zero deltas
+        for combined_name, combined_metrics in combined_results.items():
+            # Filter out combined entries with only zero deltas
+            if any(data["delta"] > 0 for data in combined_metrics.values()):
+                self.filtered_data[combined_name] = {
+                    metric_name: {"total": combined_data["total"], "delta": combined_data["delta"]}
+                    for metric_name, combined_data in combined_metrics.items()
+                }
+            else:
+                # Remove if all deltas are zero, ensuring no empty entries are added
+                self.filtered_data.pop(combined_name, None)

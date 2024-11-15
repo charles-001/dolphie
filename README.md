@@ -224,7 +224,7 @@ To activate Daemon mode, specify the `--daemon` option, which will automatically
 
 To run Dolphie in the background using daemon mode, I recommend `systemctl` for its flexibility and management capabilities (see the [service configuration example](https://github.com/charles-001/dolphie/blob/main/dolphie.service)). While alternatives like `nohup` or `tmux` can be used, they are not advisable due to their limited management features.
 
-With Daemon mode, 10 minutes of metric data are retained for graphing, and all performance schema metric deltas are routinely reset at 10-minute intervals.
+In Daemon mode, metrics are retained for the last 10 minutes to support graphing, with performance schema metric deltas automatically reset at 10-minute intervals. This approach keeps data fresh and relevant, providing an accurate view of recent activity.
 
 **Note**: Daemon mode's replay file can consume significant disk space, particularly on busy servers. To minimize disk usage, adjust the `--replay-retention-hours` and `--refresh-interval` options to control data retention and collection frequency.
 
