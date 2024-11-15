@@ -438,6 +438,10 @@ class Dolphie:
                 for data in (instance.internal_data, instance.filtered_data):
                     for file_data in data.values():
                         for metric_data in file_data.get("metrics", file_data).values():
-                            metric_data["delta"] = 0
+                            # For filtered_data so replay data is smaller in size
+                            if "d" in metric_data:
+                                metric_data["d"] = 0
+                            elif "delta" in metric_data:
+                                metric_data["delta"] = 0
 
         self.pfs_metrics_last_reset_time = datetime.now()

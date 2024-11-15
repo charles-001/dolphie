@@ -16,12 +16,12 @@ def create_panel(tab: Tab):
     replay_pfs_metrics_last_reset_time = dolphie.global_status.get("replay_pfs_metrics_last_reset_time")
     if replay_pfs_metrics_last_reset_time:
         tab.pfs_metrics_delta.label = (
-            f"Delta since last reset ([highlight]{format_time(replay_pfs_metrics_last_reset_time, 0)}[/highlight])"
+            f"Delta since last reset ([light_blue]{format_time(replay_pfs_metrics_last_reset_time, 0)}[/light_blue])"
         )
     elif dolphie.pfs_metrics_last_reset_time:
         time_since_reset = datetime.now() - dolphie.pfs_metrics_last_reset_time
         tab.pfs_metrics_delta.label = (
-            f"Delta since last reset ([highlight]{format_time(time_since_reset.total_seconds(), 0)}[/highlight])"
+            f"Delta since last reset ([light_blue]{format_time(time_since_reset.total_seconds(), 0)}[/light_blue])"
         )
 
 
@@ -80,11 +80,11 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
                 latency_value = metrics.get(latency_field, {})
 
                 if tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total":
-                    count_value = count_value.get("total", 0)
-                    latency_value = latency_value.get("total", 0)
+                    count_value = count_value.get("t", 0)
+                    latency_value = latency_value.get("t", 0)
                 else:
-                    count_value = count_value.get("delta", 0)
-                    latency_value = latency_value.get("delta", 0)
+                    count_value = count_value.get("d", 0)
+                    latency_value = latency_value.get("d", 0)
 
                 if count_value and latency_value:
                     column_value = f"{format_time(latency_value, picoseconds=True)} ({format_number(count_value)})"
@@ -93,9 +93,9 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
             else:
                 column_value = metrics.get(field, {})
                 if tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total":
-                    column_value = column_value.get("total", 0)
+                    column_value = column_value.get("t", 0)
                 else:
-                    column_value = column_value.get("delta", 0)
+                    column_value = column_value.get("d", 0)
 
             # Handle row updates
             if row_exists:
@@ -161,7 +161,9 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
         row_values = []
 
         table_match = dolphie.file_io_data.table_pattern.search(file_name)
-        if table_match:
+        if file_name.endswith("/mysql.ibd"):
+            file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
+        elif table_match:
             file_name = f"{table_match.group(1)}.{table_match.group(2)}"
         elif "/" in file_name:
             file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
@@ -182,9 +184,9 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
 
             column_value = metrics.get(column_data["field"], {})
             if tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total":
-                column_value = column_value.get("total", 0)
+                column_value = column_value.get("t", 0)
             else:
-                column_value = column_value.get("delta", 0)
+                column_value = column_value.get("d", 0)
 
             # Handle special formatting
             if column_data.get("format") == "time":

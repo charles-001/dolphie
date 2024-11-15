@@ -3,8 +3,8 @@ from typing import Any, Dict, List
 
 
 class PerformanceSchemaMetrics:
-    def __init__(self, query_data: List[Dict[str, Any]], combine_events: bool = False):
-        self.combine_events = combine_events
+    def __init__(self, query_data: List[Dict[str, Any]], combine_data: bool = False):
+        self.combine_data = combine_data
         self.filtered_data: Dict[str, Dict[str, Dict[str, int]]] = {}
         self.internal_data: Dict[str, Dict[str, Dict[str, Any]]] = {
             row["NAME"]: {
@@ -26,6 +26,8 @@ class PerformanceSchemaMetrics:
             "wait/io/file/sql/io_cache": "IO cache",
             "wait/io/file/innodb/innodb_dblwr_file": "Doublewrite buffer",
             "wait/io/file/innodb/innodb_log_file": "InnoDB redo logs",
+            "wait/io/file/sql/hash_join": "Hash joins",
+            "<pattern 1>": "Undo Logs",
         }
 
     def update_internal_data(self, query_data: List[Dict[str, int]]):
@@ -75,9 +77,9 @@ class PerformanceSchemaMetrics:
 
                     # Only include the metric in filtered_data if it has a delta greater than 0
                     if delta > 0:
-                        self.filtered_data[instance_name][metric] = {"total": total, "delta": delta}
+                        self.filtered_data[instance_name][metric] = {"t": total, "d": delta}
                     else:
-                        self.filtered_data[instance_name][metric] = {"total": total}
+                        self.filtered_data[instance_name][metric] = {"t": total}
 
             if all_deltas_zero:
                 self.filtered_data.pop(instance_name, None)
@@ -86,10 +88,10 @@ class PerformanceSchemaMetrics:
         for instance_name in instances_to_remove:
             del self.internal_data[instance_name]
 
-        if self.combine_events:
-            self.aggregate_combined_events()
+        if self.combine_data:
+            self.aggregate_and_combine_data()
 
-    def aggregate_combined_events(self):
+    def aggregate_and_combine_data(self):
         combined_results = {}
 
         # Aggregate deltas for combined events and instances matching the regex
@@ -112,19 +114,22 @@ class PerformanceSchemaMetrics:
 
             # Accumulate metrics for each matched or combined event
             for metric_name, metric_data in instance_data["metrics"].items():
-                # Initialize the metric if not already in combined_results[target_name]
                 combined_metric = target_metrics.setdefault(metric_name, {"total": 0, "delta": 0})
                 combined_metric["total"] += metric_data["total"]
                 combined_metric["delta"] += metric_data["delta"]
 
-        # Update filtered_data with combined results only if there are non-zero deltas
+        # Update filtered_data with combined results only if SUM_TIMER_WAIT delta > 0
         for combined_name, combined_metrics in combined_results.items():
-            # Filter out combined entries with only zero deltas
-            if any(data["delta"] > 0 for data in combined_metrics.values()):
+            # Skip if SUM_TIMER_WAIT delta is 0
+            if combined_metrics.get("SUM_TIMER_WAIT", {}).get("delta", 0) > 0:
                 self.filtered_data[combined_name] = {
-                    metric_name: {"total": combined_data["total"], "delta": combined_data["delta"]}
+                    metric_name: {"t": combined_data["total"], "d": combined_data["delta"]}
                     for metric_name, combined_data in combined_metrics.items()
                 }
-            else:
-                # Remove if all deltas are zero, ensuring no empty entries are added
-                self.filtered_data.pop(combined_name, None)
+
+        # Clean up filtered_data by removing instances with SUM_TIMER_WAIT delta of 0
+        self.filtered_data = {
+            instance_name: instance_metrics
+            for instance_name, instance_metrics in self.filtered_data.items()
+            if instance_metrics.get("SUM_TIMER_WAIT", {}).get("d", 0) != 0
+        }
