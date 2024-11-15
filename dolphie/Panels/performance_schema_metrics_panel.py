@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from textual.widgets import DataTable, RadioButton
+from textual.widgets import DataTable
 
 from dolphie.Modules.Functions import format_bytes, format_number, format_time
 from dolphie.Modules.TabManager import Tab
@@ -15,12 +15,12 @@ def create_panel(tab: Tab):
 
     replay_pfs_metrics_last_reset_time = dolphie.global_status.get("replay_pfs_metrics_last_reset_time")
     if replay_pfs_metrics_last_reset_time:
-        tab.dolphie.app.query_one("#pfs_metrics_delta", RadioButton).label = (
+        tab.pfs_metrics_delta.label = (
             f"Delta since last reset ([highlight]{format_time(replay_pfs_metrics_last_reset_time, 0)}[/highlight])"
         )
     elif dolphie.pfs_metrics_last_reset_time:
         time_since_reset = datetime.now() - dolphie.pfs_metrics_last_reset_time
-        tab.dolphie.app.query_one("#pfs_metrics_delta", RadioButton).label = (
+        tab.pfs_metrics_delta.label = (
             f"Delta since last reset ([highlight]{format_time(time_since_reset.total_seconds(), 0)}[/highlight])"
         )
 
@@ -124,9 +124,9 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
     datatable.sort("latency_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.dolphie.app.query_one("#pfs_metrics_tabs").get_tab(
-        "pfs_metrics_table_io_waits_tab"
-    ).label = f"Table I/O Waits ([highlight]{datatable.row_count}[/highlight])"
+    tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
+        f"Table I/O Waits ([highlight]{datatable.row_count}[/highlight])"
+    )
 
 
 def update_file_io_by_instance(tab: Tab) -> DataTable:
@@ -229,6 +229,6 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
     datatable.sort("latency_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.dolphie.app.query_one("#pfs_metrics_tabs").get_tab(
-        "pfs_metrics_file_io_tab"
-    ).label = f"File I/O ([highlight]{datatable.row_count}[/highlight])"
+    tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = (
+        f"File I/O ([highlight]{datatable.row_count}[/highlight])"
+    )

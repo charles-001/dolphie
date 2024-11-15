@@ -95,7 +95,9 @@ class Tab:
 
     pfs_metrics_file_io_datatable: DataTable = None
     pfs_metrics_table_io_waits_datatable: DataTable = None
+    pfs_metrics_tabs: TabbedContent = None
     pfs_metrics_radio_set: RadioSet = None
+    pfs_metrics_delta: RadioButton = None
 
     metadata_locks_title: Label = None
     metadata_locks_datatable: DataTable = None
@@ -599,6 +601,8 @@ class TabManager:
             "#pfs_metrics_table_io_waits_datatable", DataTable
         )
         tab.pfs_metrics_radio_set = self.app.query_one("#pfs_metrics_radio_set", RadioSet)
+        tab.pfs_metrics_delta = self.app.query_one("#pfs_metrics_delta", RadioButton)
+        tab.pfs_metrics_tabs = self.app.query_one("#pfs_metrics_tabs", TabbedContent)
 
         tab.processlist_title = self.app.query_one("#processlist_title", Label)
         tab.processlist_datatable = self.app.query_one("#processlist_data", DataTable)
