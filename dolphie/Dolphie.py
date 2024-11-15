@@ -429,9 +429,15 @@ class Dolphie:
 
         return replay_files
 
-    def reset_pfs_metrics_deltas(self):
+    def reset_pfs_metrics_deltas(self, reset_fully: bool = False):
         for instance in [self.file_io_data, self.table_io_waits_data]:
-            instance.internal_data = {}
-            instance.filtered_data = {}
+            if reset_fully:
+                instance.internal_data = {}
+                instance.filtered_data = {}
+            else:
+                for data in (instance.internal_data, instance.filtered_data):
+                    for file_data in data.values():
+                        for metric_data in file_data.get("metrics", file_data).values():
+                            metric_data["delta"] = 0
 
         self.pfs_metrics_last_reset_time = datetime.now()

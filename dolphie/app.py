@@ -624,6 +624,13 @@ class DolphieApp(App):
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
 
             if dolphie.panels.pfs_metrics.visible or dolphie.record_for_replay:
+                # Reset the PFS metrics deltas if we're in daemon mode and it's been 10 minutes since the last reset
+                # This is to keep a realistic point-in-time view of the metrics
+                if dolphie.daemon_mode and datetime.now() - dolphie.pfs_metrics_last_reset_time >= timedelta(
+                    minutes=10
+                ):
+                    dolphie.reset_pfs_metrics_deltas()
+
                 dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
                 file_io_data = dolphie.main_db_connection.fetchall()
                 if not dolphie.file_io_data:
@@ -637,11 +644,6 @@ class DolphieApp(App):
                     dolphie.table_io_waits_data = PerformanceSchemaMetrics(table_io_waits_data)
                 else:
                     dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
-
-        # Reset the PFS metrics deltas if we're in daemon mode and it's been 10 minutes since the last reset
-        # This is to keep a realistic point-in-time view of the metrics
-        if dolphie.daemon_mode and datetime.now() - dolphie.pfs_metrics_last_reset_time >= timedelta(minutes=10):
-            dolphie.reset_pfs_metrics_deltas()
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -845,8 +847,8 @@ class DolphieApp(App):
 
             logger.info(f"Uptime changed: {formatted_old_uptime} -> {formatted_new_uptime}")
 
-            # Reset deltas for Performance Schema metrics since those tables are reset on server restart
-            tab.dolphie.reset_pfs_metrics_deltas()
+            # Reset data for Performance Schema metrics since those tables are reset on server restart
+            tab.dolphie.reset_pfs_metrics_deltas(reset_fully=True)
 
     def monitor_read_only_change(self, tab: Tab):
         dolphie = tab.dolphie
