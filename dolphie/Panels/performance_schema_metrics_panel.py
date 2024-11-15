@@ -38,7 +38,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
         "Insert": {"field": ["COUNT_INSERT", "SUM_TIMER_INSERT"], "width": 23},
         "Update": {"field": ["COUNT_UPDATE", "SUM_TIMER_UPDATE"], "width": 23},
         "Delete": {"field": ["COUNT_DELETE", "SUM_TIMER_DELETE"], "width": 23},
-        "latency_ps": {"field": "SUM_TIMER_WAIT", "width": 0},
+        "wait_time_ps": {"field": "SUM_TIMER_WAIT", "width": 0},
     }
 
     # Get the DataTable object
@@ -73,21 +73,21 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
             # Handle fields that may contain arrays
             if isinstance(field, list):
                 # If the field is an array, it contains two fields to be combined
-                count_field, latency_field = field
+                count_field, wait_time_field = field
 
-                # Get the count and latency values from the combined fields
+                # Get the count and wait_time values from the combined fields
                 count_value = metrics.get(count_field, {})
-                latency_value = metrics.get(latency_field, {})
+                wait_time_value = metrics.get(wait_time_field, {})
 
                 if tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total":
                     count_value = count_value.get("t", 0)
-                    latency_value = latency_value.get("t", 0)
+                    wait_time_value = wait_time_value.get("t", 0)
                 else:
                     count_value = count_value.get("d", 0)
-                    latency_value = latency_value.get("d", 0)
+                    wait_time_value = wait_time_value.get("d", 0)
 
-                if count_value and latency_value:
-                    column_value = f"{format_time(latency_value, picoseconds=True)} ({format_number(count_value)})"
+                if count_value and wait_time_value:
+                    column_value = f"{format_time(wait_time_value, picoseconds=True)} ({format_number(count_value)})"
                 else:
                     column_value = "[dark_gray]N/A"
             else:
@@ -121,7 +121,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
         if datatable.row_count:
             datatable.clear()
 
-    datatable.sort("latency_ps", reverse=True)
+    datatable.sort("wait_time_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
     tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
@@ -137,13 +137,13 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
 
     columns = {
         "File/Table": {"field": "FILE_NAME", "width": None},
-        "Latency": {"field": "SUM_TIMER_WAIT", "width": 10, "format": "time"},
+        "Wait Time": {"field": "SUM_TIMER_WAIT", "width": 10, "format": "time"},
         "Read Ops": {"field": "COUNT_READ", "width": 10, "format": "number"},
         "Write Ops": {"field": "COUNT_WRITE", "width": 10, "format": "number"},
         "Misc Ops": {"field": "COUNT_MISC", "width": 10, "format": "number"},
         "Read Bytes": {"field": "SUM_NUMBER_OF_BYTES_READ", "width": 10, "format": "bytes"},
         "Write Bytes": {"field": "SUM_NUMBER_OF_BYTES_WRITE", "width": 11, "format": "bytes"},
-        "latency_ps": {"field": "SUM_TIMER_WAIT", "width": 0},
+        "wait_time_ps": {"field": "SUM_TIMER_WAIT", "width": 0},
     }
 
     # Get the DataTable object
@@ -192,7 +192,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
             if column_data.get("format") == "time":
                 column_value = format_time(column_value, picoseconds=True)
             elif column_value == 0 or column_value is None:
-                if column_name == "latency_ps":
+                if column_name == "wait_time_ps":
                     column_value = 0
                 else:
                     column_value = "[dark_gray]0"
@@ -226,7 +226,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
         if datatable.row_count:
             datatable.clear()
 
-    datatable.sort("latency_ps", reverse=True)
+    datatable.sort("wait_time_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
     tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = (

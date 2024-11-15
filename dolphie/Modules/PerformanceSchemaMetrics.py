@@ -20,6 +20,7 @@ class PerformanceSchemaMetrics:
         self.undo_logs_pattern = re.compile(r"undo_\d+$")
 
         self.events_to_combine = {
+            "<pattern 1>": "Undo Logs",
             "wait/io/file/innodb/innodb_temp_file": "Temporary files",
             "wait/io/file/sql/binlog": "Binary logs",
             "wait/io/file/sql/relaylog": "Relay logs",
@@ -27,7 +28,6 @@ class PerformanceSchemaMetrics:
             "wait/io/file/innodb/innodb_dblwr_file": "Doublewrite buffer",
             "wait/io/file/innodb/innodb_log_file": "InnoDB redo logs",
             "wait/io/file/sql/hash_join": "Hash joins",
-            "<pattern 1>": "Undo Logs",
         }
 
     def update_internal_data(self, query_data: List[Dict[str, int]]):
