@@ -29,7 +29,6 @@ class ProxySQLQueries:
     """
     connection_pool_data: str = """
         SELECT
-            SUM(Latency_us) / COUNT(*) AS avg_latency,
             SUM(ConnUsed) AS connection_pool_connections
         FROM
             stats_mysql_connection_pool

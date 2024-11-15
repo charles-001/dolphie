@@ -234,6 +234,8 @@ class DolphieApp(App):
             "global_status": dolphie.global_status,
         }
 
+        dolphie.worker_processing_time = dolphie.global_status.get("replay_polling_latency", 0)
+
         if dolphie.connection_source == ConnectionSource.mysql:
             dolphie.set_host_version(dolphie.global_variables.get("version"))
 
@@ -248,9 +250,7 @@ class DolphieApp(App):
             dolphie.file_io_data = replay_event_data.file_io_data
             dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
 
-            # Special handling for specific variables
             dolphie.pfs_metrics_last_reset_time = dolphie.global_status.get("pfs_metrics_last_reset_time", 0)
-            dolphie.worker_processing_time = dolphie.global_status.get("replay_polling_latency", 0)
 
             connection_source_metrics = {
                 "innodb_metrics": dolphie.innodb_metrics,
@@ -678,7 +678,6 @@ class DolphieApp(App):
 
         dolphie.main_db_connection.execute(ProxySQLQueries.connection_pool_data)
         data = dolphie.main_db_connection.fetchone()
-        dolphie.global_status["proxysql_backend_host_average_latency"] = int(data.get("avg_latency", 0))
 
         if dolphie.global_status.get("Client_Connections_connected", 0):  # Don't divide by 0
             dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = round(

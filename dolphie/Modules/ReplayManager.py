@@ -523,11 +523,6 @@ class ReplayManager:
             "metric_manager": self._condition_metrics(self.dolphie.metric_manager),
         }
 
-        # Add the replay_pfs_metrics_last_reset_time to the global status dictionary
-        # It will be loaded into the UI for the replay section
-        data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
-            datetime.now().timestamp() - self.dolphie.pfs_metrics_last_reset_time.timestamp()
-        )
         data_dict["global_status"]["replay_polling_latency"] = self.dolphie.worker_processing_time
 
         if self.dolphie.system_utilization:
@@ -546,6 +541,12 @@ class ReplayManager:
 
             for key in keys_to_remove:
                 self.dolphie.global_status.pop(key)
+
+            # Add the replay_pfs_metrics_last_reset_time to the global status dictionary
+            # It will be loaded into the UI for the replay section
+            data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
+                datetime.now().timestamp() - self.dolphie.pfs_metrics_last_reset_time.timestamp()
+            )
 
             # Add MySQL specific data to the dictionary
             data_dict.update(
