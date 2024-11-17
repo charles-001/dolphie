@@ -13,16 +13,15 @@ def create_panel(tab: Tab):
     update_file_io_by_instance(tab)
     update_table_io_waits_summary_by_table(tab)
 
-    replay_pfs_metrics_last_reset_time = dolphie.global_status.get("replay_pfs_metrics_last_reset_time")
-    if replay_pfs_metrics_last_reset_time:
-        tab.pfs_metrics_delta.label = (
-            f"Delta since last reset ([light_blue]{format_time(replay_pfs_metrics_last_reset_time, 0)}[/light_blue])"
+    if dolphie.replay_file:
+        time = dolphie.global_status.get("replay_pfs_metrics_last_reset_time2", 0)
+    else:
+        time = (
+            (datetime.now() - dolphie.pfs_metrics_last_reset_time).total_seconds()
+            if dolphie.pfs_metrics_last_reset_time
+            else 0
         )
-    elif dolphie.pfs_metrics_last_reset_time:
-        time_since_reset = datetime.now() - dolphie.pfs_metrics_last_reset_time
-        tab.pfs_metrics_delta.label = (
-            f"Delta since last reset ([light_blue]{format_time(time_since_reset.total_seconds(), 0)}[/light_blue])"
-        )
+    tab.pfs_metrics_delta.label = f"Delta since last reset ([light_blue]{format_time(time)}[/light_blue])"
 
 
 def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
