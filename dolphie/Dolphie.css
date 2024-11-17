@@ -29,7 +29,7 @@ Rule {
 }
 DataTable {
     overflow-x: hidden;
-    max-height: 98%;
+    max-height: 40;
 }
 DataTable > .datatable--odd-row {
     background: #131a2c;
@@ -112,7 +112,6 @@ TopBar {
     color: #8f9fc1;
 }
 
-
 .dashboard_replay {
     height: auto;
     width: 65;
@@ -194,7 +193,6 @@ TopBar {
     text-style: bold;
     color: #bbc8e8;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 .processlist {
@@ -208,7 +206,6 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 
@@ -303,6 +300,27 @@ TopBar {
     content-align: center middle;
 }
 
+#panel_pfs_metrics {
+    height: auto;
+    max-height: 100%;
+    background: #0f1525;
+    border: tall #1b233a;
+    margin-bottom: 1;
+}
+#pfs_metrics_format {
+    color: #bbc8e8;
+    content-align: left middle;
+    text-style: none;
+    margin-left: 1;
+    margin-bottom: 1;
+}
+#pfs_metrics_file_io_datatable {
+    overflow-x: auto;
+}
+#pfs_metrics_table_io_waits_datatable {
+    overflow-x: auto;
+}
+
 .proxysql_hostgroup_summary_datatable {
     overflow-x: auto;
 }
@@ -322,7 +340,6 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 .proxysql_mysql_query_rules_datatable {
@@ -344,7 +361,6 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 .proxysql_command_stats {
@@ -366,7 +382,6 @@ TopBar {
     color: #bbc8e8;
     text-style: bold;
     content-align: center middle;
-    margin-bottom: 1;
 }
 
 .pad_bottom_1 {
@@ -518,10 +533,10 @@ Switch.-on:hover > .switch--slider {
 }
 
 RadioSet {
-    background: #121626;
+    background: #0f1525;
     border: none;
-    align: center middle;
     width: 100%;
+    layout: horizontal;
 }
 RadioButton .toggle--button {
     background: #343d56;
@@ -531,36 +546,32 @@ RadioSet ToggleButton:hover {
     text-style: none;
 }
 RadioSet ToggleButton:hover .toggle--label {
-    text-style: underline;
-    color: #a5b8e7;
+    text-style: bold;
 }
 RadioSet:focus > RadioButton.-selected > .toggle--label {
-    text-style: underline;
-}
-RadioSet:focus RadioButton.-selected .toggle--label {
+    text-style: bold;
     color: #a5b8e7;
-}
-RadioSet > RadioButton.-selected > .toggle--label {
-    color: #9bb2eb;
 }
 
 Checkbox .toggle--button {
     background: #343d56;
 }
 RadioSet:focus > .toggle--label {
-    text-style: underline;
+    text-style: bold;
 }
 ToggleButton:focus > .toggle--label {
-    text-style: underline;
+    text-style: bold;
     color: #a5b8e7;
 }
 ToggleButton:hover > .toggle--label {
-    text-style: underline;
+    text-style: bold;
     color: #a5b8e7;
 }
 ToggleButton.-on > .toggle--button {
-    color: #62c39a;
     text-style: bold;
+    color: #74e3b5;
+    background: #305240;
+
 }
 
 Toast {

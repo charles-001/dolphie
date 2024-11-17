@@ -17,6 +17,7 @@ from dolphie.DataTypes import (
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
+from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 
 
 @dataclass
@@ -32,6 +33,8 @@ class MySQLReplayData:
     processlist: dict
     metric_manager: dict
     metadata_locks: dict
+    file_io_data: dict
+    table_io_waits_data: dict
     group_replication_data: dict
     group_replication_members: dict
 
@@ -106,17 +109,17 @@ class ReplayManager:
     ) -> Union[Optional[Tuple[Any, ...]], int, None]:
         """
         Executes a query or batch of queries using a cursor
-
         Args:
             query: The SQL query to execute.
             params: The parameters to bind to the query.
             fetchone: If True, returns a single row. If False, returns all rows.
             return_lastrowid: If True, returns the last inserted row ID after an INSERT operation.
             executemany: If True, uses executemany() for batch execution of the query.
-
         Returns:
             Union[Optional[Tuple[Any, ...]], int, None]: A single row if `fetchone` is True, otherwise a list of rows.
                                                         Returns lastrowid if `return_lastrowid` is True.
+                                                        Returns row count for UPDATE/DELETE queries if neither
+                                                            `fetchone` nor `return_lastrowid` are set.
         """
         try:
             with closing(self.connection.cursor()) as cursor:
@@ -125,10 +128,18 @@ class ReplayManager:
                 else:
                     cursor.execute(query, params)
 
+                # Will only be used for INSERT queries
                 if return_lastrowid:
                     return cursor.lastrowid
 
-                return cursor.fetchone() if fetchone else cursor.fetchall()
+                if fetchone:
+                    return cursor.fetchone()
+                elif cursor.description is not None:
+                    # If there's a description, it's a SELECT query with results
+                    return cursor.fetchall()
+                else:
+                    # For everything else, which have no results, return row count
+                    return cursor.rowcount
         except sqlite3.Error as e:
             logger.error(f"Error executing SQLite query: {e}")
             self.dolphie.app.notify(f"Query: {query}\n{e}", title="Error executing SQLite query", severity="error")
@@ -512,6 +523,8 @@ class ReplayManager:
             "metric_manager": self._condition_metrics(self.dolphie.metric_manager),
         }
 
+        data_dict["global_status"]["replay_polling_latency"] = self.dolphie.worker_processing_time
+
         if self.dolphie.system_utilization:
             data_dict.update({"system_utilization": self.dolphie.system_utilization})
 
@@ -528,6 +541,12 @@ class ReplayManager:
 
             for key in keys_to_remove:
                 self.dolphie.global_status.pop(key)
+
+            # Add the replay_pfs_metrics_last_reset_time to the global status dictionary
+            # It will be loaded into the UI for the replay section
+            data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
+                datetime.now().timestamp() - self.dolphie.pfs_metrics_last_reset_time.timestamp()
+            )
 
             # Add MySQL specific data to the dictionary
             data_dict.update(
@@ -551,6 +570,12 @@ class ReplayManager:
                         "group_replication_members": self.dolphie.group_replication_members,
                     }
                 )
+
+            if self.dolphie.file_io_data and self.dolphie.file_io_data.filtered_data:
+                data_dict.update({"file_io_data": self.dolphie.file_io_data.filtered_data})
+
+            if self.dolphie.table_io_waits_data and self.dolphie.table_io_waits_data.filtered_data:
+                data_dict.update({"table_io_waits_data": self.dolphie.table_io_waits_data.filtered_data})
         else:
             # Add ProxySQL specific data to the dictionary
             data_dict.update(
@@ -647,6 +672,11 @@ class ReplayManager:
             for thread_data in data["processlist"]:
                 processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
 
+            file_io_data = PerformanceSchemaMetrics({})
+            file_io_data.filtered_data = data.get("file_io_data", {})
+            table_io_waits = PerformanceSchemaMetrics({})
+            table_io_waits.filtered_data = data.get("table_io_waits_data", {})
+
             return MySQLReplayData(
                 **common_params,
                 binlog_status=data.get("binlog_status", {}),
@@ -657,6 +687,8 @@ class ReplayManager:
                 processlist=processlist,
                 group_replication_data=data.get("group_replication_data", {}),
                 group_replication_members=data.get("group_replication_members", {}),
+                file_io_data=file_io_data,
+                table_io_waits_data=table_io_waits,
             )
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist

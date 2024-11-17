@@ -33,12 +33,12 @@ def create_panel(tab: Tab) -> Table:
             f"[label]Workers[/label] {global_status['MySQL_Thread_Workers']}"
         ),
     )
-    table.add_row(
-        "[label]Latency",
-        f"[label]CP Avg[/label] {round(global_status.get('proxysql_backend_host_average_latency', 0) / 1000, 2)}ms",
-    )
     if not dolphie.replay_file:
-        table.add_row("[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)")
+        table.add_row("[label]Runtime", runtime)
+
+    if dolphie.worker_processing_time:
+        table.add_row("[label]Latency", f"{round(dolphie.worker_processing_time, 2)}s")
+
     tab.dashboard_section_1.update(table)
 
     ######################
@@ -117,7 +117,7 @@ def create_panel(tab: Tab) -> Table:
     table = Table(show_header=False, box=None, title="Query Data Rates/s", title_style=table_title_style)
 
     table.add_column()
-    table.add_column(min_width=7)
+    table.add_column(min_width=9)
     data_dict = {
         "[label]FE Sent": proxysql_queries_network_data.Queries_frontends_bytes_sent.values,
         "[label]BE Sent": proxysql_queries_network_data.Queries_backends_bytes_sent.values,
@@ -145,7 +145,7 @@ def create_panel(tab: Tab) -> Table:
     table = Table(show_header=False, box=None, title="Statistics/s", title_style=table_title_style)
 
     table.add_column()
-    table.add_column(min_width=6)
+    table.add_column(min_width=7)
 
     # Add DML statistics
     metrics = dolphie.metric_manager.metrics.dml

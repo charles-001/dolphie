@@ -21,6 +21,8 @@ from textual.widgets import (
     Label,
     LoadingIndicator,
     ProgressBar,
+    RadioButton,
+    RadioSet,
     Sparkline,
     Static,
     Switch,
@@ -69,6 +71,7 @@ class Tab:
     panel_replication: Container = None
     panel_metadata_locks: Container = None
     panel_ddl: Container = None
+    panel_pfs_metrics: Container = None
     panel_processlist: Container = None
     panel_proxysql_hostgroup_summary: Container = None
     panel_proxysql_mysql_query_rules: Container = None
@@ -89,6 +92,12 @@ class Tab:
 
     ddl_title: Label = None
     ddl_datatable: DataTable = None
+
+    pfs_metrics_file_io_datatable: DataTable = None
+    pfs_metrics_table_io_waits_datatable: DataTable = None
+    pfs_metrics_tabs: TabbedContent = None
+    pfs_metrics_radio_set: RadioSet = None
+    pfs_metrics_delta: RadioButton = None
 
     metadata_locks_title: Label = None
     metadata_locks_datatable: DataTable = None
@@ -379,6 +388,19 @@ class TabManager:
                     classes="ddl",
                 ),
                 Container(
+                    RadioSet(
+                        *(
+                            [
+                                RadioButton("Delta since last reset", id="pfs_metrics_delta", value=True),
+                                RadioButton("Total since MySQL restart", id="pfs_metrics_total"),
+                            ]
+                        ),
+                        id="pfs_metrics_radio_set",
+                    ),
+                    TabbedContent(id="pfs_metrics_tabs"),
+                    id="panel_pfs_metrics",
+                ),
+                Container(
                     Label(id="proxysql_hostgroup_summary_title"),
                     DataTable(
                         id="proxysql_hostgroup_summary_datatable",
@@ -421,6 +443,26 @@ class TabManager:
 
         self.app.query_one("#main_container").display = False
         self.app.query_one("#loading_indicator").display = False
+
+        pfs_metrics_tabs = self.app.query_one("#pfs_metrics_tabs", TabbedContent)
+        await pfs_metrics_tabs.add_pane(
+            TabPane(
+                "File I/O",
+                DataTable(id="pfs_metrics_file_io_datatable", show_cursor=False),
+                id="pfs_metrics_file_io_tab",
+            )
+        )
+        await pfs_metrics_tabs.add_pane(
+            TabPane(
+                "Table I/O Waits Summary",
+                Label(
+                    ":bulb: Format for each metric: Wait time (Operations count)",
+                    id="pfs_metrics_format",
+                ),
+                DataTable(id="pfs_metrics_table_io_waits_datatable", show_cursor=False),
+                id="pfs_metrics_table_io_waits_tab",
+            ),
+        )
 
     async def create_tab(
         self, tab_name: str = None, hostgroup_member: HostGroupMember = None, switch_tab: bool = True
@@ -543,6 +585,7 @@ class TabManager:
         tab.panel_metadata_locks = self.app.query_one("#panel_metadata_locks", Container)
         tab.panel_processlist = self.app.query_one("#panel_processlist", Container)
         tab.panel_ddl = self.app.query_one("#panel_ddl", Container)
+        tab.panel_pfs_metrics = self.app.query_one("#panel_pfs_metrics", Container)
         tab.panel_proxysql_hostgroup_summary = self.app.query_one("#panel_proxysql_hostgroup_summary", Container)
         tab.panel_proxysql_mysql_query_rules = self.app.query_one("#panel_proxysql_mysql_query_rules", Container)
         tab.panel_proxysql_command_stats = self.app.query_one("#panel_proxysql_command_stats", Container)
@@ -552,6 +595,15 @@ class TabManager:
 
         tab.ddl_title = self.app.query_one("#ddl_title", Label)
         tab.ddl_datatable = self.app.query_one("#ddl_datatable", DataTable)
+
+        tab.pfs_metrics_file_io_datatable = self.app.query_one("#pfs_metrics_file_io_datatable", DataTable)
+        tab.pfs_metrics_table_io_waits_datatable = self.app.query_one(
+            "#pfs_metrics_table_io_waits_datatable", DataTable
+        )
+        tab.pfs_metrics_radio_set = self.app.query_one("#pfs_metrics_radio_set", RadioSet)
+        tab.pfs_metrics_delta = self.app.query_one("#pfs_metrics_delta", RadioButton)
+        tab.pfs_metrics_tabs = self.app.query_one("#pfs_metrics_tabs", TabbedContent)
+
         tab.processlist_title = self.app.query_one("#processlist_title", Label)
         tab.processlist_datatable = self.app.query_one("#processlist_data", DataTable)
         tab.metadata_locks_title = self.app.query_one("#metadata_locks_title", Label)

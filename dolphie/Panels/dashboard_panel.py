@@ -45,7 +45,7 @@ def create_panel(tab: Tab) -> Table:
         replicas = len(dolphie.replica_manager.available_replicas)
 
     table_information.add_column()
-    table_information.add_column(min_width=25, max_width=27)
+    table_information.add_column(min_width=25, max_width=35)
     table_information.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
     table_information.add_row(
         "[label]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
@@ -74,8 +74,11 @@ def create_panel(tab: Tab) -> Table:
     if not dolphie.replay_file:
         runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
         table_information.add_row(
-            "[label]Runtime", f"{runtime} [dark_gray]({round(dolphie.worker_processing_time, 2)}s)"
+            "[label]Runtime", f"{runtime} [label]Latency[/label] {round(dolphie.worker_processing_time, 2)}s"
         )
+    else:
+        if dolphie.worker_processing_time:
+            table_information.add_row("[label]Latency", f"{round(dolphie.worker_processing_time, 2)}s")
 
     tab.dashboard_section_1.update(table_information)
 

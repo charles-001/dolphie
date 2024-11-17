@@ -16,6 +16,7 @@ import dolphie.Modules.MetricManager as MetricManager
 from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
+from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries
 
 
@@ -92,6 +93,15 @@ class Dolphie:
         self.system_utilization: dict = {}
         self.global_variables: dict = {}
         self.innodb_trx_lock_metrics: dict = {}
+        self.file_io_data: PerformanceSchemaMetrics = None
+        self.table_io_waits_data: PerformanceSchemaMetrics = None
+
+        if self.record_for_replay:
+            self.pfs_metrics_last_reset_time: datetime = datetime.now()
+        else:
+            # This will be set when user presses key to bring up panel
+            self.pfs_metrics_last_reset_time: datetime = None
+
         self.global_status: dict = {}
         self.binlog_status: dict = {}
         self.replication_status: dict = {}
@@ -363,7 +373,7 @@ class Dolphie:
     def validate_metadata_locks_enabled(self):
         if not self.is_mysql_version_at_least("5.7") or not self.performance_schema_enabled:
             logger.warning(
-                "Metadata Locks requires MySQL 5.7+ with Performance Schema enabled - will not capture that data."
+                "Metadata Locks requires MySQL 5.7+ with Performance Schema enabled - will not capture that data"
             )
             return
 
@@ -375,7 +385,7 @@ class Dolphie:
         if row and row.get("enabled") == "NO":
             logger.warning(
                 "Metadata Locks requires Performance Schema to have"
-                " wait/lock/metadata/sql/mdl enabled in setup_instruments table - will not capture that data."
+                " wait/lock/metadata/sql/mdl enabled in setup_instruments table - will not capture that data"
             )
             return
 
@@ -418,3 +428,23 @@ class Dolphie:
         replay_files.sort(key=lambda x: x[0])
 
         return replay_files
+
+    def reset_pfs_metrics_deltas(self, reset_fully: bool = False):
+        for instance in [self.file_io_data, self.table_io_waits_data]:
+            if not instance:
+                continue
+
+            if reset_fully:
+                instance.internal_data = {}
+                instance.filtered_data = {}
+            else:
+                for data in (instance.internal_data, instance.filtered_data):
+                    for file_data in data.values():
+                        for metric_data in file_data.get("metrics", file_data).values():
+                            # For filtered_data so replay data is smaller in size
+                            if "d" in metric_data:
+                                metric_data["d"] = 0
+                            elif "delta" in metric_data:
+                                metric_data["delta"] = 0
+
+        self.pfs_metrics_last_reset_time = datetime.now()
