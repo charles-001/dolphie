@@ -312,6 +312,7 @@ class DolphieApp(App):
             dolphie.polling_latency = (worker_start_time - dolphie.worker_previous_start_time).total_seconds()
             dolphie.worker_previous_start_time = worker_start_time
 
+            dolphie.collect_system_utilization()
             if dolphie.connection_source == ConnectionSource.mysql:
                 self.process_mysql_data(tab)
             elif dolphie.connection_source == ConnectionSource.proxysql:
@@ -495,8 +496,6 @@ class DolphieApp(App):
     def process_mysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
-        dolphie.collect_system_utilization()
-
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
         self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
         dolphie.global_variables = global_variables
@@ -623,7 +622,7 @@ class DolphieApp(App):
                 dolphie.main_db_connection.execute(MySQLQueries.ddls)
                 dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-            if dolphie.panels.pfs_metrics.visible or dolphie.record_for_replay:
+            if dolphie.performance_schema_enabled and (dolphie.panels.pfs_metrics.visible or dolphie.record_for_replay):
                 # Reset the PFS metrics deltas if we're in daemon mode and it's been 10 minutes since the last reset
                 # This is to keep a realistic point-in-time view of the metrics
                 if dolphie.daemon_mode and datetime.now() - dolphie.pfs_metrics_last_reset_time >= timedelta(
@@ -647,8 +646,6 @@ class DolphieApp(App):
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
-
-        dolphie.collect_system_utilization()
 
         global_variables = dolphie.main_db_connection.fetch_status_and_variables("variables")
         self.monitor_global_variable_change(tab=tab, old_data=dolphie.global_variables, new_data=global_variables)
@@ -681,7 +678,7 @@ class DolphieApp(App):
         dolphie.main_db_connection.execute(ProxySQLQueries.connection_pool_data)
         data = dolphie.main_db_connection.fetchone()
 
-        if dolphie.global_status.get("Client_Connections_connected", 0):  # Don't divide by 0
+        if dolphie.global_status.get("Client_Connections_connected", 0):
             dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = round(
                 100
                 - (
@@ -1249,9 +1246,12 @@ class DolphieApp(App):
                 tab.ddl_title.update("DDL ([highlight]0[/highlight])")
 
         elif key == "7":
-            if not dolphie.pfs_metrics_last_reset_time:
-                dolphie.pfs_metrics_last_reset_time = datetime.now()
-            self.toggle_panel(dolphie.panels.pfs_metrics.name)
+            if dolphie.is_mysql_version_at_least("5.7") and dolphie.performance_schema_enabled:
+                if not dolphie.pfs_metrics_last_reset_time:
+                    dolphie.pfs_metrics_last_reset_time = datetime.now()
+                self.toggle_panel(dolphie.panels.pfs_metrics.name)
+            else:
+                self.notify("Performance Schema Metrics panel requires MySQL 5.7+ with Performance Schema enabled")
 
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)

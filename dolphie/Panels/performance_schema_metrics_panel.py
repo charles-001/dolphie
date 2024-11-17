@@ -28,7 +28,7 @@ def create_panel(tab: Tab):
 def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
-    if not dolphie.table_io_waits_data:
+    if not dolphie.table_io_waits_data or not dolphie.table_io_waits_data.filtered_data:
         return
 
     columns = {
@@ -132,11 +132,11 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
 def update_file_io_by_instance(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
-    if not dolphie.file_io_data:
+    if not dolphie.file_io_data or not dolphie.file_io_data.filtered_data:
         return
 
     columns = {
-        "File/Table": {"field": "FILE_NAME", "width": None},
+        "File or Table": {"field": "FILE_NAME", "width": None},
         "Wait Time": {"field": "SUM_TIMER_WAIT", "width": 10, "format": "time"},
         "Read Ops": {"field": "COUNT_READ", "width": 10, "format": "number"},
         "Write Ops": {"field": "COUNT_WRITE", "width": 10, "format": "number"},
@@ -179,7 +179,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
             row_exists = False
 
         for column_id, (column_name, column_data) in enumerate(columns.items()):
-            if column_name == "File/Table":
+            if column_data["field"] == "FILE_NAME":
                 continue
 
             column_value = metrics.get(column_data["field"], {})

@@ -55,8 +55,8 @@ def create_panel(tab: Tab) -> Table:
     table_information.add_row("[label]Replicas", "%s" % replicas)
     table_information.add_row(
         "[label]Threads",
-        "[label]con[/label] %s[highlight]/[/highlight][label]run[/label]"
-        " %s[highlight]/[/highlight][label]cac[/label] %s"
+        "[label]Con[/label] %s[highlight]/[/highlight][label]Run[/label]"
+        " %s[highlight]/[/highlight][label]Cac[/label] %s"
         % (
             format_number(global_status["Threads_connected"]),
             format_number(global_status["Threads_running"]),
@@ -65,7 +65,7 @@ def create_panel(tab: Tab) -> Table:
     )
     table_information.add_row(
         "[label]Tables",
-        "[label]open[/label] %s[highlight]/[/highlight][label]opened[/label] %s"
+        "[label]Open[/label] %s[highlight]/[/highlight][label]Opened[/label] %s"
         % (
             format_number(global_status["Open_tables"]),
             format_number(global_status["Opened_tables"]),
