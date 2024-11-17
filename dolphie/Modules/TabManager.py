@@ -764,11 +764,6 @@ class TabManager:
 
         tab.sparkline.data = [0]
 
-        # Hide all the panels as they will be re-enabled if needed
-        tab.replication_container.display = False
-        tab.replicas_container.display = False
-        tab.group_replication_container.display = False
-
         # Remove all the replica and member containers
         queries = [f".replica_container_{tab.id}", f".member_container_{tab.id}"]
         for query in queries:

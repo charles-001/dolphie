@@ -55,8 +55,6 @@ class Dolphie:
         self.replay_retention_hours = config.replay_retention_hours
         self.exclude_notify_global_vars = config.exclude_notify_global_vars
 
-        self.reset_runtime_variables()
-
         # Set the default panels based on startup_panels to be visible
         self.panels = DataTypes.Panels()
         for panel in self.panels.all():
@@ -68,6 +66,8 @@ class Dolphie:
 
         self.show_idle_threads: bool = False
         self.sort_by_time_descending: bool = True
+
+        self.reset_runtime_variables()
 
     def reset_runtime_variables(self):
         self.metric_manager = MetricManager.MetricManager(self.replay_file, self.daemon_mode)
@@ -96,7 +96,7 @@ class Dolphie:
         self.file_io_data: PerformanceSchemaMetrics = None
         self.table_io_waits_data: PerformanceSchemaMetrics = None
 
-        if self.record_for_replay:
+        if self.record_for_replay or self.panels.pfs_metrics.visible:
             self.pfs_metrics_last_reset_time: datetime = datetime.now()
         else:
             # This will be set when user presses key to bring up panel
