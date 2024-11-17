@@ -510,7 +510,7 @@ class DolphieApp(App):
 
         global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         self.monitor_uptime_change(
-            tab=tab, old_uptime=dolphie.global_status.get("Uptime"), new_uptime=global_status.get("Uptime")
+            tab=tab, old_uptime=dolphie.global_status.get("Uptime", 0), new_uptime=global_status.get("Uptime", 0)
         )
         dolphie.global_status = global_status
 
@@ -655,7 +655,13 @@ class DolphieApp(App):
             self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
             dolphie.set_host_version(dolphie.global_variables.get("admin-version"))
 
-        dolphie.global_status = dolphie.main_db_connection.fetch_status_and_variables("mysql_stats")
+        global_status = dolphie.main_db_connection.fetch_status_and_variables("mysql_stats")
+        self.monitor_uptime_change(
+            tab=tab,
+            old_uptime=dolphie.global_status.get("ProxySQL_Uptime", 0),
+            new_uptime=global_status.get("ProxySQL_Uptime", 0),
+        )
+        dolphie.global_status = global_status
 
         dolphie.main_db_connection.execute(ProxySQLQueries.command_stats)
         dolphie.proxysql_command_stats = dolphie.main_db_connection.fetchall()
@@ -833,9 +839,6 @@ class DolphieApp(App):
                 )
 
     def monitor_uptime_change(self, tab: Tab, old_uptime: int, new_uptime: int):
-        if old_uptime is None:
-            return
-
         if old_uptime > new_uptime:
             formatted_old_uptime = str(timedelta(seconds=old_uptime))
             formatted_new_uptime = str(timedelta(seconds=new_uptime))

@@ -431,6 +431,9 @@ class Dolphie:
 
     def reset_pfs_metrics_deltas(self, reset_fully: bool = False):
         for instance in [self.file_io_data, self.table_io_waits_data]:
+            if not instance:
+                continue
+
             if reset_fully:
                 instance.internal_data = {}
                 instance.filtered_data = {}

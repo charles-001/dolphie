@@ -571,10 +571,10 @@ class ReplayManager:
                     }
                 )
 
-            if self.dolphie.file_io_data:
+            if self.dolphie.file_io_data and self.dolphie.file_io_data.filtered_data:
                 data_dict.update({"file_io_data": self.dolphie.file_io_data.filtered_data})
 
-            if self.dolphie.table_io_waits_data:
+            if self.dolphie.table_io_waits_data and self.dolphie.table_io_waits_data.filtered_data:
                 data_dict.update({"table_io_waits_data": self.dolphie.table_io_waits_data.filtered_data})
         else:
             # Add ProxySQL specific data to the dictionary
