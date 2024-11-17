@@ -20,7 +20,6 @@ class PerformanceSchemaMetrics:
         self.undo_logs_pattern = re.compile(r"undo_\d+$")
 
         self.events_to_combine = {
-            "<pattern 1>": "Undo Logs",
             "wait/io/file/innodb/innodb_temp_file": "Temporary files",
             "wait/io/file/sql/binlog": "Binary logs",
             "wait/io/file/sql/relaylog": "Relay logs",
@@ -98,7 +97,7 @@ class PerformanceSchemaMetrics:
         for instance_name, instance_data in self.internal_data.items():
             event_name = instance_data["event_name"]
 
-            # Determine the target name based on regex or specific event name
+            # Determine the target name based on instance name pattern or specific event name
             if self.undo_logs_pattern.search(instance_name):
                 target_name = "Undo Logs"
             elif event_name in self.events_to_combine:
