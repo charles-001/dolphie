@@ -14,7 +14,7 @@ def create_panel(tab: Tab):
     update_table_io_waits_summary_by_table(tab)
 
     if dolphie.replay_file:
-        time = dolphie.global_status.get("replay_pfs_metrics_last_reset_time2", 0)
+        time = dolphie.global_status.get("replay_pfs_metrics_last_reset_time", 0)
     else:
         time = (
             (datetime.now() - dolphie.pfs_metrics_last_reset_time).total_seconds()
