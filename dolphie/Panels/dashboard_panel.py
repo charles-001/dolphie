@@ -264,9 +264,10 @@ def create_system_utilization_table(tab: Tab) -> Table:
         table.add_row("[label]CPU", "N/A")
 
     # CPU Load
-    load_averages = dolphie.system_utilization.get("CPU_Load_Avg", "N/A")
-    formatted_load = " ".join(f"{avg:.2f}" for avg in load_averages) if load_averages != "N/A" else "N/A"
-    table.add_row("[label]Load", formatted_load)
+    load_averages = dolphie.system_utilization.get("CPU_Load_Avg")
+    if load_averages:
+        formatted_load = " ".join(f"{avg:.2f}" for avg in load_averages)
+        table.add_row("[label]Load", formatted_load)
 
     # Memory
     memory_used = dolphie.metric_manager.metrics.system_memory.Memory_Used.last_value

@@ -439,6 +439,29 @@ class MySQLQueries:
         WHERE
             host != "background"
     """
+    table_sizes: str = """
+        SELECT
+            CONCAT( t.TABLE_SCHEMA, '.', t.TABLE_NAME ) AS DATABASE_TABLE,
+            t.ENGINE,
+            t.ROW_FORMAT,
+            s.FILE_SIZE,
+            s.ALLOCATED_SIZE,
+            t.DATA_LENGTH,
+            t.INDEX_LENGTH,
+            t.DATA_FREE,
+            CONVERT(
+                ROUND(( t.DATA_FREE / ( t.DATA_LENGTH + t.INDEX_LENGTH )) * 100, 2 ), UNSIGNED
+            ) AS fragmentation_ratio
+        FROM
+            information_schema.TABLES t LEFT JOIN
+            information_schema.$1 s ON CONCAT( t.TABLE_SCHEMA, '/', t.TABLE_NAME ) = s.NAME
+        WHERE
+            t.DATA_LENGTH + t.INDEX_LENGTH > 10 * 1024 * 1024
+            AND t.TABLE_SCHEMA NOT IN ( 'mysql' )
+        ORDER BY
+            s.FILE_SIZE DESC,
+            fragmentation_ratio DESC;
+    """
     databases: str = """
         SELECT
             SCHEMA_NAME

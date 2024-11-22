@@ -49,6 +49,13 @@ class CommandManager:
                     "u": {"human_key": "u", "description": "Display active connected users and their statistics"},
                     "v": {"human_key": "v", "description": "Display variables from SHOW GLOBAL VARIABLES"},
                     "z": {"human_key": "z", "description": "Display all entries in the host cache"},
+                    "Z": {
+                        "human_key": "Z",
+                        "description": (
+                            "Display table sizes and fragmentation for all databases - "
+                            "[yellow]Heed caution if you have a lot of tables![/yellow]"
+                        ),
+                    },
                     "placeholder_4": {"human_key": "", "description": ""},
                     "c": {"human_key": "c", "description": "Clear all filters set"},
                     "f": {"human_key": "f", "description": "Filter threads by field(s)"},

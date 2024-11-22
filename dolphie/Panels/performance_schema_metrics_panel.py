@@ -26,15 +26,16 @@ def create_panel(tab: Tab):
 
 def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
+    datatable = tab.pfs_metrics_table_io_waits_datatable
 
     if not dolphie.table_io_waits_data or not dolphie.table_io_waits_data.filtered_data:
-        tab.pfs_metrics_table_io_waits_datatable.display = False
+        datatable.display = False
         tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
             "Table I/O Waits ([highlight]0[/highlight])"
         )
         return
 
-    tab.pfs_metrics_table_io_waits_datatable.display = True
+    datatable.display = True
 
     columns = {
         "Table": {"field": "TABLE_NAME", "width": None},
@@ -45,9 +46,6 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
         "Delete": {"field": ["COUNT_DELETE", "SUM_TIMER_DELETE"], "width": 23},
         "wait_time_ps": {"field": "SUM_TIMER_WAIT", "width": 0},
     }
-
-    # Get the DataTable object
-    datatable = tab.pfs_metrics_table_io_waits_datatable
 
     # Add columns to the datatable if it is empty
     if not datatable.columns:
@@ -136,13 +134,14 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
 
 def update_file_io_by_instance(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
+    datatable = tab.pfs_metrics_file_io_datatable
 
     if not dolphie.file_io_data or not dolphie.file_io_data.filtered_data:
-        tab.pfs_metrics_file_io_datatable.display = False
+        datatable.display = False
         tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = "File I/O ([highlight]0[/highlight])"
         return
 
-    tab.pfs_metrics_file_io_datatable.display = True
+    datatable.display = True
 
     columns = {
         "File or Table": {"field": "FILE_NAME", "width": None},
@@ -154,9 +153,6 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
         "Write Bytes": {"field": "SUM_NUMBER_OF_BYTES_WRITE", "width": 11, "format": "bytes"},
         "wait_time_ps": {"field": "SUM_TIMER_WAIT", "width": 0},
     }
-
-    # Get the DataTable object
-    datatable = tab.pfs_metrics_file_io_datatable
 
     # Add columns to the datatable if it is empty
     if not datatable.columns:

@@ -264,7 +264,6 @@ class Dolphie:
             "Uptime": int(time.time() - psutil.boot_time()),
             "CPU_Count": psutil.cpu_count(logical=True),
             "CPU_Percent": psutil.cpu_percent(interval=0),
-            "CPU_Load_Avg": os.getloadavg(),  # 1, 5, and 15 minute load averages
             "Memory_Total": virtual_memory.total,
             "Memory_Used": virtual_memory.used,
             "Swap_Total": swap_memory.total,
@@ -272,6 +271,12 @@ class Dolphie:
             "Network_Up": network_io.bytes_sent,
             "Network_Down": network_io.bytes_recv,
         }
+
+        # Include the load average if it's available
+        try:
+            self.system_utilization["CPU_Load_Avg"] = psutil.getloadavg()  # 1, 5, and 15 minute load averages
+        except AttributeError:
+            pass
 
     def get_group_replication_metadata(self):
         # Check to get information on what cluster/instance type it is

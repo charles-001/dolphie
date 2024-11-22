@@ -1717,6 +1717,12 @@ class DolphieApp(App):
                 command_get_input,
             )
 
+        elif key == "Z":
+            if dolphie.is_mysql_version_at_least("5.7"):
+                self.run_command_in_worker(key=key, dolphie=dolphie)
+            else:
+                self.notify("Table size command requires MySQL 5.7+")
+
         elif key == "z":
             if dolphie.host_cache:
                 table = Table(
@@ -2062,6 +2068,7 @@ class DolphieApp(App):
                             if explain_fetched_json_data:
                                 explain_json_data = explain_fetched_json_data.get("EXPLAIN")
                         except ManualException as e:
+                            # Error 1054 means unknown column which would result in a truncated query
                             # Error 1064 means bad syntax which would result in a truncated query
                             tip = (
                                 ":bulb: [b][yellow]Tip![/b][/yellow] If the query is truncated, consider increasing "
@@ -2071,11 +2078,13 @@ class DolphieApp(App):
                                 "[dark_yellow]P[/dark_yellow]. "
                                 "This will switch to using SHOW PROCESSLIST instead of the Performance Schema, "
                                 "which does not truncate queries.\n\n"
-                                if e.code == 1064
+                                if e.code in (1054, 1064)
                                 else ""
                             )
 
-                            explain_failure = f"{tip}[b][indian_red]EXPLAIN ERROR:[/b] [indian_red]{e.reason}"
+                            explain_failure = (
+                                f"{tip}[b][indian_red]EXPLAIN ERROR ({e.code}):[/b] [indian_red]{e.reason}"
+                            )
 
                 user_thread_attributes_table = None
                 if dolphie.performance_schema_enabled:
@@ -2212,6 +2221,74 @@ class DolphieApp(App):
 
                 screen_data = Group(
                     Align.center(f"[b light_blue]{title} Connected ([highlight]{len(users)}[/highlight])\n"),
+                    Align.center(table),
+                )
+
+                self.call_from_thread(show_command_screen)
+
+            elif key == "Z":
+                query = MySQLQueries.table_sizes.replace("$1", "INNODB_SYS_TABLESPACES")
+                if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt == ConnectionSource.mysql:
+                    query = MySQLQueries.table_sizes.replace("$1", "INNODB_TABLESPACES")
+
+                dolphie.secondary_db_connection.execute(query)
+                database_tables_data = dolphie.secondary_db_connection.fetchall()
+
+                columns = {
+                    "Table": {"field": "DATABASE_TABLE", "format_bytes": False},
+                    "Engine": {"field": "ENGINE", "format_bytes": False},
+                    "Row Format": {"field": "ROW_FORMAT", "format_bytes": False},
+                    "File Size": {"field": "FILE_SIZE", "format_bytes": True},
+                    "Allocated Size": {"field": "ALLOCATED_SIZE", "format_bytes": True},
+                    "Clustered Index": {"field": "DATA_LENGTH", "format_bytes": True},
+                    "Secondary Indexes": {"field": "INDEX_LENGTH", "format_bytes": True},
+                    "Free Space": {"field": "DATA_FREE", "format_bytes": True},
+                    "Frag Ratio": {"field": "fragmentation_ratio", "format_bytes": False},
+                }
+
+                table = Table(
+                    header_style="b",
+                    box=box.SIMPLE_HEAVY,
+                    show_edge=False,
+                    style="table_border",
+                )
+                for column, data in columns.items():
+                    table.add_column(column, no_wrap=True)
+
+                for database_table_row in database_tables_data:
+                    row_values = []
+
+                    for column, data in columns.items():
+                        value = database_table_row.get(data.get("field"), "N/A")
+
+                        if data["format_bytes"]:
+                            row_values.append(format_bytes(value) if value else "0")
+                        elif column == "Frag Ratio":
+                            if value:
+                                if value >= 30:
+                                    row_values.append(f"[red]{value}%[/red]")
+                                elif value >= 20:
+                                    row_values.append(f"[yellow]{value}%[/yellow]")
+                                else:
+                                    row_values.append(f"[green]{value}%[/green]")
+                            else:
+                                row_values.append("[green]0%[/green]")
+
+                        elif column == "Table":
+                            # Color the database name. Format is database/table
+                            database_table = value.split(".")
+                            row_values.append(f"[dark_gray]{database_table[0]}[/dark_gray].{database_table[1]}")
+
+                        else:
+                            row_values.append(str(value) or "")
+
+                    table.add_row(*row_values)
+
+                screen_data = Group(
+                    Align.center(
+                        "[b light_blue]Table Sizes & Fragmentation[/b light_blue] ([highlight]%s[/highlight])\n"
+                        % len(database_tables_data)
+                    ),
                     Align.center(table),
                 )
 

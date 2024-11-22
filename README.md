@@ -45,7 +45,7 @@ $ brew install dolphie
 ```sh
 $ docker pull ghcr.io/charles-001/dolphie:latest
 $ docker run -dit --name dolphie ghcr.io/charles-001/dolphie:latest
-$ docker exec -it dolphie dolphie -h host.docker.internal -u root --ask-pass
+$ docker exec -it dolphie dolphie --tab-setup
 ```
 
 ## Usage
