@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Union
 
 from rich.table import Table
 
@@ -30,7 +30,7 @@ class Replica:
     host: str
     connection: str = None
     table: Table = None
-    replication_status: Dict[str, str] = field(default_factory=dict)
+    replication_status: Dict[str, Union[str, int]] = field(default_factory=dict)
     mysql_version: str = None
 
 

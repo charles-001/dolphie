@@ -12,54 +12,65 @@ from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
 
 class CommandModal(ModalScreen):
     CSS = """
-        CommandModal > Vertical {
-            background: #131626;
-            border: tall #384673;
-            height: auto;
-            width: auto;
-        }
-        CommandModal > Vertical > * {
-            width: auto;
-            height: auto;
-            content-align: center middle;
-        }
-        CommandModal #filter_container {
-            width: auto;
-            height: auto;
-        }
-        CommandModal #kill_container {
-            width: auto;
-            height: auto;
-        }
-        CommandModal #filter_container Input {
-            width: 60;
-            border-title-color: #d2d2d2;
-        }
-        CommandModal #kill_container Input {
-            width: 60;
-            border-title-color: #d2d2d2;
-        }
-        CommandModal Label {
-            width: 100%;
-            content-align: center middle;
-            padding-bottom: 1;
-        }
-        CommandModal #error_response {
-            color: #fe5c5c;
-            width: 100%;
-            height: auto;
-            content-align: center middle;
-            padding-bottom: 1;
-        }
-        CommandModal Checkbox {
-            background: #131626;
-            border: none;
-            content-align: center middle;
-            padding-top: 1;
-            width: 100%;
-        }
-        CommandModal #sleeping_queries {
-            padding-bottom: 1;
+        CommandModal {
+            & > Vertical {
+                background: #131626;
+                border: tall #384673;
+                height: auto;
+                width: auto;
+
+                & > * {
+                    width: auto;
+                    height: auto;
+                    content-align: center middle;
+                }
+            }
+
+            & #filter_container {
+                width: auto;
+                height: auto;
+
+                & Input {
+                    width: 60;
+                    border-title-color: #d2d2d2;
+                }
+            }
+
+            & #kill_container {
+                width: auto;
+                height: auto;
+
+                & Input {
+                    width: 60;
+                    border-title-color: #d2d2d2;
+                }
+            }
+
+            & Label {
+                width: 100%;
+                content-align: center middle;
+                padding-bottom: 1;
+            }
+
+            & #error_response {
+                color: #fe5c5c;
+                width: 100%;
+                height: auto;
+                content-align: center middle;
+                padding-bottom: 1;
+            }
+
+            & Checkbox {
+                background: #131626;
+                border: none;
+                content-align: center middle;
+                padding-top: 1;
+                width: 100%;
+            }
+
+            & #sleeping_queries {
+                padding-bottom: 1;
+            }
         }
     """
     BINDINGS = [

@@ -15,33 +15,38 @@ class ProxySQLThreadScreen(Screen):
     CSS = """
         ProxySQLThreadScreen {
             background: #0a0e1b;
-        }
-        ProxySQLThreadScreen Container {
-            height: auto;
-        }
-        ProxySQLThreadScreen #thread_container {
-            margin-top: 1;
-            height: auto;
-        }
-        ProxySQLThreadScreen .title {
-            width: 100%;
-            content-align: center middle;
-            color: #bbc8e8;
-            text-style: bold;
-        }
-        ProxySQLThreadScreen .table {
-            content-align: center middle;
-            background: #101626;
-            border: tall #1d253e;
-            padding-left: 1;
-            padding-right: 1;
-            height: auto;
-            width: auto;
-        }
-        ProxySQLThreadScreen TextArea {
-            border: tall #1d253e;
-            width: 100;
-            height: 35;
+
+            & Container {
+                height: auto;
+            }
+
+            & #thread_container {
+                margin-top: 1;
+                height: auto;
+            }
+
+            & .title {
+                width: 100%;
+                content-align: center middle;
+                color: #bbc8e8;
+                text-style: bold;
+            }
+
+            & .table {
+                content-align: center middle;
+                background: #101626;
+                border: tall #1d253e;
+                padding-left: 1;
+                padding-right: 1;
+                height: auto;
+                width: auto;
+            }
+
+            & TextArea {
+                border: tall #1d253e;
+                width: 100;
+                height: 35;
+            }
         }
     """
 

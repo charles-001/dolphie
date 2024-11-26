@@ -303,7 +303,7 @@ class TabManager:
             return
 
         await self.app.mount(
-            LoadingIndicator(id="loading_indicator", classes="connection_loading_indicator"),
+            LoadingIndicator(id="loading_indicator"),
             VerticalScroll(
                 SpinnerWidget(id="spinner", text="Processing command"),
                 Center(
@@ -326,22 +326,18 @@ class TabManager:
                 ),
                 Container(
                     Center(
-                        Static(id="dashboard_section_1"),
-                        Static(id="dashboard_section_6"),
-                        Static(id="dashboard_section_2"),
-                        Static(id="dashboard_section_3"),
-                        Static(id="dashboard_section_5"),
-                        Static(id="dashboard_section_4"),
+                        Static(id="dashboard_section_1", classes="panel_container"),
+                        Static(id="dashboard_section_6", classes="panel_container"),
+                        Static(id="dashboard_section_2", classes="panel_container"),
+                        Static(id="dashboard_section_3", classes="panel_container"),
+                        Static(id="dashboard_section_5", classes="panel_container"),
+                        Static(id="dashboard_section_4", classes="panel_container"),
                     ),
                     Sparkline([], id="panel_dashboard_queries_qps"),
                     id="panel_dashboard",
-                    classes="panel_container dashboard",
+                    classes="dashboard",
                 ),
-                Container(
-                    TabbedContent(id="metric_graph_tabs", classes="metrics_host_tabs"),
-                    id="panel_graphs",
-                    classes="panel_container",
-                ),
+                Container(TabbedContent(id="metric_graph_tabs", classes="metrics_host_tabs"), id="panel_graphs"),
                 Container(
                     Static(id="replication_container_title", classes="replication_container_title"),
                     Container(
@@ -373,19 +369,19 @@ class TabManager:
                         classes="replicas",
                     ),
                     id="panel_replication",
-                    classes="panel_container replication_panel",
+                    classes="replication_panel",
                 ),
                 Container(
                     Label(id="metadata_locks_title"),
                     DataTable(id="metadata_locks_datatable", show_cursor=False, zebra_stripes=True),
                     id="panel_metadata_locks",
-                    classes="metadata_locks",
+                    classes="panel_container",
                 ),
                 Container(
                     Label(id="ddl_title"),
                     DataTable(id="ddl_datatable", show_cursor=False),
                     id="panel_ddl",
-                    classes="ddl",
+                    classes="panel_container",
                 ),
                 Container(
                     RadioSet(
@@ -402,13 +398,9 @@ class TabManager:
                 ),
                 Container(
                     Label(id="proxysql_hostgroup_summary_title"),
-                    DataTable(
-                        id="proxysql_hostgroup_summary_datatable",
-                        classes="proxysql_hostgroup_summary_datatable",
-                        show_cursor=False,
-                    ),
+                    DataTable(id="proxysql_hostgroup_summary_datatable", show_cursor=False),
                     id="panel_proxysql_hostgroup_summary",
-                    classes="proxysql_hostgroup_summary",
+                    classes="panel_container",
                 ),
                 Container(
                     Label(id="proxysql_mysql_query_rules_title"),
@@ -418,7 +410,7 @@ class TabManager:
                         show_cursor=False,
                     ),
                     id="panel_proxysql_mysql_query_rules",
-                    classes="proxysql_mysql_query_rules",
+                    classes="panel_container",
                 ),
                 Container(
                     Label(id="proxysql_command_stats_title"),
@@ -428,13 +420,13 @@ class TabManager:
                         show_cursor=False,
                     ),
                     id="panel_proxysql_command_stats",
-                    classes="proxysql_command_stats",
+                    classes="panel_container",
                 ),
                 Container(
                     Label(id="processlist_title"),
                     DataTable(id="processlist_data", show_cursor=False),
                     id="panel_processlist",
-                    classes="processlist",
+                    classes="panel_container",
                 ),
                 classes="tab",
                 id="main_container",

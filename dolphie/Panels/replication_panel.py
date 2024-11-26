@@ -232,8 +232,11 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     replica_lag = data.get("Seconds_Behind", 0)
     formatted_replica_lag = None
     if replica_lag is not None:
-        if data.get("SQL_Delay"):
-            replica_lag -= data["SQL_Delay"]
+        sql_delay = data.get("SQL_Delay")
+        if sql_delay:
+            # Check if it's already an int or a string representing an int
+            if isinstance(sql_delay, int) or (isinstance(sql_delay, str) and sql_delay.isdigit()):
+                replica_lag -= int(sql_delay)
 
         lag_color = "green"
         if replica_lag >= 20:

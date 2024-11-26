@@ -154,7 +154,7 @@ class Dolphie:
 
         self.performance_schema_enabled: bool = False
         self.metadata_locks_enabled: bool = False
-        self.use_performance_schema: bool = True
+        self.use_performance_schema_for_processlist: bool = False
         self.server_uuid: str = None
         self.host_version: str = None
         self.host_distro: str = None
@@ -233,6 +233,7 @@ class Dolphie:
 
         if global_variables.get("performance_schema") == "ON":
             self.performance_schema_enabled = True
+            self.use_performance_schema_for_processlist = True
 
         # Check to see if the host is in a Galera cluster
         if global_variables.get("wsrep_on") == "ON" or global_variables.get("wsrep_cluster_address"):

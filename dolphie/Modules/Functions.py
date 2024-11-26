@@ -21,7 +21,7 @@ from rich.syntax import Syntax
 
 
 class NordModifiedTheme(Style):
-    nord0 = "#101626"
+    nord0 = "#0f1525"
     nord1 = "#3b4252"
     nord2 = "#434c5e"
     nord3 = "#4c566a"

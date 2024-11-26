@@ -12,17 +12,11 @@ from dolphie.Modules.TabManager import Tab
 def create_panel(tab: Tab) -> DataTable:
     dolphie = tab.dolphie
 
-    if not dolphie.performance_schema_enabled and dolphie.use_performance_schema and not dolphie.replay_file:
-        dolphie.app.notify(
-            "Performance Schema is not enabled on this host, using Information Schema instead for Processlist"
-        )
-        dolphie.use_performance_schema = False
-
     columns = [
         {"name": "Thread ID", "field": "id", "width": None, "format_number": False},
     ]
 
-    if dolphie.use_performance_schema:
+    if dolphie.use_performance_schema_for_processlist:
         columns.extend([{"name": "Protocol", "field": "protocol", "width": 8, "format_number": False}])
 
     columns.extend(
@@ -180,7 +174,7 @@ def create_panel(tab: Tab) -> DataTable:
 def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
     dolphie = tab.dolphie
 
-    if dolphie.use_performance_schema:
+    if dolphie.performance_schema_enabled and dolphie.use_performance_schema_for_processlist:
         processlist_query = MySQLQueries.ps_query
         if not dolphie.is_mysql_version_at_least("5.7"):
             # Remove the connection_type field for MySQL versions below 5.7 since it doesn't exist
@@ -195,7 +189,7 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
 
     # Filter out idle threads if specified
     if not dolphie.show_idle_threads:
-        if dolphie.use_performance_schema:
+        if dolphie.use_performance_schema_for_processlist:
             where_clause.append(
                 "(processlist_command != 'Sleep' AND processlist_command NOT LIKE 'Binlog Dump%') AND (processlist_info"
                 " IS NOT NULL OR trx_query IS NOT NULL) AND IFNULL(processlist_state, '') NOT LIKE 'Group Replication"
@@ -216,14 +210,14 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
 
     # Filter user
     if dolphie.user_filter:
-        if dolphie.use_performance_schema:
+        if dolphie.use_performance_schema_for_processlist:
             where_clause.append("processlist_user = '%s'" % dolphie.user_filter)
         else:
             where_clause.append("User = '%s'" % dolphie.user_filter)
 
     # Filter database
     if dolphie.db_filter:
-        if dolphie.use_performance_schema:
+        if dolphie.use_performance_schema_for_processlist:
             where_clause.append("processlist_db = '%s'" % dolphie.db_filter)
         else:
             where_clause.append("db = '%s'" % dolphie.db_filter)
@@ -231,21 +225,21 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
     # Filter hostname/IP
     if dolphie.host_filter:
         # Have to use LIKE since there's a port at the end
-        if dolphie.use_performance_schema:
+        if dolphie.use_performance_schema_for_processlist:
             where_clause.append("processlist_host LIKE '%s%%'" % dolphie.host_filter)
         else:
             where_clause.append("Host LIKE '%s%%'" % dolphie.host_filter)
 
     # Filter time
     if dolphie.query_time_filter:
-        if dolphie.use_performance_schema:
+        if dolphie.use_performance_schema_for_processlist:
             where_clause.append("processlist_time >= '%s'" % dolphie.query_time_filter)
         else:
             where_clause.append("Time >= '%s'" % dolphie.query_time_filter)
 
     # Filter query
     if dolphie.query_filter:
-        if dolphie.use_performance_schema:
+        if dolphie.use_performance_schema_for_processlist:
             where_clause.append(
                 "(processlist_info LIKE '%%%s%%' OR trx_query LIKE '%%%s%%')"
                 % (dolphie.query_filter, dolphie.query_filter),
@@ -273,7 +267,7 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
             continue
 
         # Use trx_query over Performance Schema query since it's more accurate
-        if dolphie.use_performance_schema and thread["trx_query"]:
+        if dolphie.use_performance_schema_for_processlist and thread["trx_query"]:
             thread["query"] = thread["trx_query"]
         thread["query"] = "" if thread["query"] is None else thread["query"]
 

@@ -24,144 +24,180 @@ from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
 
 class TabSetupModal(ModalScreen):
     CSS = """
-        TabSetupModal > Vertical {
-            background: #131626;
-            border: tall #384673;
-            height: auto;
-            width: 70;
-        }
-        TabSetupModal > Vertical > * {
-            width: auto;
-            height: auto;
-            align: center middle;
-        }
-        TabSetupModal > Vertical > Vertical  > Container {
-            width: 100%;
-            height: auto;
-        }
-        TabSetupModal Label {
-            text-style: bold;
-            width: 100%;
-            content-align: center middle;
-            padding-bottom: 1;
-        }
-        TabSetupModal Rule {
-            width: 100%;
-            margin-bottom: 1;
-        }
-        TabSetupModal Input {
-            width: 100%;
-            border-title-color: #d2d2d2;
-        }
-        TabSetupModal .main_container {
-            width: 100%;
-            content-align: center middle;
-        }
-        TabSetupModal RadioSet {
-            background: #131626;
-            border: none;
-            padding-bottom: 1;
-            align: center middle;
-            width: 100%;
-            layout: horizontal;
-        }
-        TabSetupModal AutoComplete {
-            width: 100%;
-            height: auto;
-        }
-        TabSetupModal #password {
-            width: 53;
-        }
-        TabSetupModal #show_password {
-            max-width: 8;
-            height: 3;
-            background: #262c4b;
-            border: blank #344063;
-        }
-        TabSetupModal #show_password:hover {
-            background:  #313960;
-            border: blank #344063;
-        }
-        TabSetupModal #show_password:focus {
-            background:  #313960;
-            border: blank #344063;
-        }
-        TabSetupModal #modal_footer {
-            color: #d3565c;
-            width: 100%;
-            padding-bottom: 0;
-            padding-top: 1;
-            margin: 0 2;
-        }
-        TabSetupModal #replay_directory {
-            padding-left: 3;
-            padding-bottom: 1;
-        }
-        TabSetupModal Checkbox {
-            background: #131626;
-            border: none;
-            padding-left: 2;
-            padding-bottom: 1;
-            content-align: left middle;
-        }
-        TabSetupModal Select {
-            margin: 0 2;
-            margin-bottom: 1;
-            width: 100%;
-        }
-        TabSetupModal SelectCurrent Static#label {
-            color: #606e88;
-        }
-        TabSetupModal SelectCurrent.-has-value Static#label {
-            color: #e9e9e9;
-        }
-        TabSetupModal Select:focus > SelectCurrent {
-            border: tall #384673;
-        }
-        TabSetupModal SelectCurrent {
-            background: #111322;
-            border: tall #252e49;
-        }
-        TabSetupModal Select > OptionList:focus {
-            margin: 0 0 0 0;
-            height: auto;
-            max-height: 15;
-            border: tall #3c476b;
-        }
-        TabSetupModal OptionList {
-            background: #111322;
-            border: tall #252e49;
-            width: 100%;
-            height: 15;
-            margin: 0 1 0 1;
-        }
-        TabSetupModal #replay_file > SelectOverlay > .option-list--option {
-            padding: 0;
-        }
-        TabSetupModal #replay_file > OptionList {
-            width: auto;
-            min-width: 100%;
-        }
-        TabSetupModal OptionList:focus {
-            border: tall #475484;
-        }
-        TabSetupModal OptionList > .option-list--option-highlighted {
-            text-style: none;
-            background: #131626;
-        }
-        TabSetupModal OptionList:focus > .option-list--option-highlighted {
-            background: #283048;
-        }
-        TabSetupModal OptionList > .option-list--option-hover {
-            background: #283048;
-        }
-        TabSetupModal OptionList > .option-list--option-hover-highlighted {
-            background: #283048;
-            text-style: none;
-        }
-        TabSetupModal OptionList:focus > .option-list--option-hover-highlighted {
-            background: #283048;
-            text-style: none;
+        TabSetupModal {
+            & > Vertical {
+                background: #131626;
+                border: tall #384673;
+                height: auto;
+                width: 70;
+
+                & > * {
+                    width: auto;
+                    height: auto;
+                    align: center middle;
+                }
+
+                & > Vertical > Container {
+                    width: 100%;
+                    height: auto;
+                }
+            }
+
+            & Label {
+                text-style: bold;
+                width: 100%;
+                content-align: center middle;
+                padding-bottom: 1;
+            }
+
+            & Rule {
+                width: 100%;
+                margin-bottom: 1;
+            }
+
+            & Input {
+                width: 100%;
+                border-title-color: #d2d2d2;
+            }
+
+            & .main_container {
+                width: 100%;
+                content-align: center middle;
+            }
+
+            & RadioSet {
+                background: #131626;
+                border: none;
+                padding-bottom: 1;
+                align: center middle;
+                width: 100%;
+                layout: horizontal;
+            }
+
+            & AutoComplete {
+                width: 100%;
+                height: auto;
+            }
+
+            & #password {
+                width: 53;
+            }
+
+            & #show_password {
+                max-width: 8;
+                height: 3;
+                background: #262c4b;
+                border: blank #344063;
+
+                &:hover {
+                    background: #313960;
+                    border: blank #344063;
+                }
+
+                &:focus {
+                    background: #313960;
+                    border: blank #344063;
+                }
+            }
+
+            & #modal_footer {
+                color: #d3565c;
+                width: 100%;
+                padding-bottom: 0;
+                padding-top: 1;
+                margin: 0 2;
+            }
+
+            & #replay_directory {
+                padding-left: 3;
+                padding-bottom: 1;
+            }
+
+            & Checkbox {
+                background: #131626;
+                border: none;
+                padding-left: 2;
+                padding-bottom: 1;
+                content-align: left middle;
+            }
+
+            & Select {
+                margin: 0 2;
+                margin-bottom: 1;
+                width: 100%;
+
+                & > SelectOverlay {
+                    background: #111322;
+
+                    &:focus {
+                        background-tint: transparent;
+                    }
+                }
+
+                &:focus > SelectCurrent {
+                    border: tall #384673;
+                    background-tint: transparent;
+                    background: transparent;
+                }
+            }
+
+            & SelectCurrent {
+                background: #111322;
+                border: tall #252e49;
+
+                & Static#label {
+                    color: #606e88;
+                }
+
+                &.-has-value Static#label {
+                    color: #e9e9e9;
+                }
+            }
+
+            & Select > OptionList {
+                background: #111322;
+                border: tall #252e49;
+                width: 100%;
+                height: 15;
+                margin: 0 1 0 1;
+
+                &:focus {
+                    margin: 0;
+                    height: auto;
+                    max-height: 15;
+                    border: tall #3c476b;
+                }
+
+                & > .option-list--option-highlighted {
+                    text-style: none;
+                    background: #131626;
+                }
+                &:focus > .option-list--option-highlighted {
+                    background: #283048;
+                }
+                & > .option-list--option-hover {
+                    background: #283048;
+                }
+                & > .option-list--option-hover-highlighted {
+                    background: #283048;
+                    text-style: none;
+                }
+                &:focus > .option-list--option-hover-highlighted {
+                    background: #283048;
+                    text-style: none;
+                }
+            }
+
+            & #replay_file {
+                & > SelectOverlay > .option-list--option {
+                    padding: 0;
+                }
+
+                & > OptionList {
+                    width: auto;
+                    min-width: 100%;
+                }
+            }
         }
     """
     BINDINGS = [

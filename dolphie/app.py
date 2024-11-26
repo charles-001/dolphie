@@ -23,7 +23,7 @@ from rich.align import Align
 from rich.console import Group
 from rich.style import Style
 from rich.table import Table
-from rich.theme import Theme
+from rich.theme import Theme as RichTheme
 from rich.traceback import Traceback
 from sqlparse import format as sqlformat
 from textual import events, on, work
@@ -150,7 +150,7 @@ class CommandPaletteCommands(Provider):
 
 class DolphieApp(App):
     TITLE = "Dolphie"
-    CSS_PATH = "Dolphie.css"
+    CSS_PATH = "Dolphie.tcss"
     COMMANDS = {CommandPaletteCommands}
     COMMAND_PALETTE_BINDING = "question_mark"
 
@@ -160,7 +160,7 @@ class DolphieApp(App):
         self.config = config
         self.command_manager = CommandManager()
 
-        theme = Theme(
+        theme = RichTheme(
             {
                 "white": "#e9e9e9",
                 "green": "#54efae",
@@ -513,8 +513,13 @@ class DolphieApp(App):
             tab=tab, old_uptime=dolphie.global_status.get("Uptime", 0), new_uptime=global_status.get("Uptime", 0)
         )
         dolphie.global_status = global_status
+        # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
+        # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
+        if not dolphie.global_status.get("Innodb_lsn_current"):
+            dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status["Innodb_os_log_written"]
 
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
+        dolphie.replication_status = replication_panel.fetch_replication_data(tab)
 
         if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
             if dolphie.connection_source_alt == ConnectionSource.mariadb:
@@ -556,44 +561,6 @@ class DolphieApp(App):
 
                 dolphie.replica_manager.available_replicas = available_replicas
 
-        dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
-        dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
-
-        dolphie.replication_status = replication_panel.fetch_replication_data(tab)
-
-        # If using MySQL 8, fetch the replication applier status data
-        if (
-            dolphie.is_mysql_version_at_least("8.0")
-            and dolphie.panels.replication.visible
-            and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
-        ):
-            dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
-            dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
-
-        if (
-            not dolphie.daemon_mode
-            and dolphie.is_mysql_version_at_least("8.0.30")
-            and dolphie.connection_source_alt != ConnectionSource.mariadb
-        ):
-            active_redo_logs_count = dolphie.main_db_connection.fetch_value_from_field(
-                MySQLQueries.active_redo_logs, "count"
-            )
-            dolphie.global_status["Active_redo_log_count"] = active_redo_logs_count
-
-        # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
-        # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
-        if not dolphie.global_status.get("Innodb_lsn_current"):
-            dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status["Innodb_os_log_written"]
-
-        if dolphie.group_replication or dolphie.innodb_cluster:
-            if dolphie.is_mysql_version_at_least("8.0.13"):
-                dolphie.group_replication_data["write_concurrency"] = dolphie.main_db_connection.fetch_value_from_field(
-                    MySQLQueries.group_replication_get_write_concurrency, "write_concurrency"
-                )
-
-            dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
-            dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
-
         if dolphie.panels.dashboard.visible or dolphie.record_for_replay:
             if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
                 dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
@@ -613,36 +580,71 @@ class DolphieApp(App):
         if dolphie.panels.processlist.visible or dolphie.record_for_replay:
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
-        if dolphie.is_mysql_version_at_least("5.7"):
-            dolphie.metadata_locks = {}
-            if dolphie.metadata_locks_enabled and (dolphie.panels.metadata_locks.visible or dolphie.record_for_replay):
-                dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
+        if dolphie.performance_schema_enabled:
+            dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
+            dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
 
-            if dolphie.panels.ddl.visible:
-                dolphie.main_db_connection.execute(MySQLQueries.ddls)
-                dolphie.ddl = dolphie.main_db_connection.fetchall()
+            if (
+                dolphie.is_mysql_version_at_least("8.0")
+                and dolphie.panels.replication.visible
+                and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
+            ):
+                dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
+                dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
 
-            if dolphie.performance_schema_enabled and (dolphie.panels.pfs_metrics.visible or dolphie.record_for_replay):
-                # Reset the PFS metrics deltas if we're in daemon mode and it's been 10 minutes since the last reset
-                # This is to keep a realistic point-in-time view of the metrics
-                if dolphie.daemon_mode and datetime.now() - dolphie.pfs_metrics_last_reset_time >= timedelta(
-                    minutes=10
+            if (
+                not dolphie.daemon_mode
+                and dolphie.is_mysql_version_at_least("8.0.30")
+                and dolphie.connection_source_alt != ConnectionSource.mariadb
+            ):
+                active_redo_logs_count = dolphie.main_db_connection.fetch_value_from_field(
+                    MySQLQueries.active_redo_logs, "count"
+                )
+                dolphie.global_status["Active_redo_log_count"] = active_redo_logs_count
+
+            if dolphie.group_replication or dolphie.innodb_cluster:
+                if dolphie.is_mysql_version_at_least("8.0.13"):
+                    dolphie.group_replication_data["write_concurrency"] = (
+                        dolphie.main_db_connection.fetch_value_from_field(
+                            MySQLQueries.group_replication_get_write_concurrency, "write_concurrency"
+                        )
+                    )
+
+                dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
+                dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
+
+            if dolphie.is_mysql_version_at_least("5.7"):
+                dolphie.metadata_locks = {}
+                if dolphie.metadata_locks_enabled and (
+                    dolphie.panels.metadata_locks.visible or dolphie.record_for_replay
                 ):
-                    dolphie.reset_pfs_metrics_deltas()
+                    dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
 
-                dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
-                file_io_data = dolphie.main_db_connection.fetchall()
-                if not dolphie.file_io_data:
-                    dolphie.file_io_data = PerformanceSchemaMetrics(file_io_data, True)
-                else:
-                    dolphie.file_io_data.update_internal_data(file_io_data)
+                if dolphie.panels.ddl.visible:
+                    dolphie.main_db_connection.execute(MySQLQueries.ddls)
+                    dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-                dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
-                table_io_waits_data = dolphie.main_db_connection.fetchall()
-                if not dolphie.table_io_waits_data:
-                    dolphie.table_io_waits_data = PerformanceSchemaMetrics(table_io_waits_data)
-                else:
-                    dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
+                if dolphie.panels.pfs_metrics.visible or dolphie.record_for_replay:
+                    # Reset the PFS metrics deltas if we're in daemon mode and it's been 10 minutes since the last reset
+                    # This is to keep a realistic point-in-time view of the metrics
+                    if dolphie.daemon_mode and datetime.now() - dolphie.pfs_metrics_last_reset_time >= timedelta(
+                        minutes=10
+                    ):
+                        dolphie.reset_pfs_metrics_deltas()
+
+                    dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
+                    file_io_data = dolphie.main_db_connection.fetchall()
+                    if not dolphie.file_io_data:
+                        dolphie.file_io_data = PerformanceSchemaMetrics(file_io_data, True)
+                    else:
+                        dolphie.file_io_data.update_internal_data(file_io_data)
+
+                    dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
+                    table_io_waits_data = dolphie.main_db_connection.fetchall()
+                    if not dolphie.table_io_waits_data:
+                        dolphie.table_io_waits_data = PerformanceSchemaMetrics(table_io_waits_data)
+                    else:
+                        dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -1502,15 +1504,18 @@ class DolphieApp(App):
                     self.notify("Refreshing has resumed", severity="success")
 
         if key == "P":
-            if dolphie.use_performance_schema:
-                dolphie.use_performance_schema = False
-                self.notify("Switched to using [b highlight]Processlist")
+            if dolphie.use_performance_schema_for_processlist:
+                dolphie.use_performance_schema_for_processlist = False
+                self.notify("Switched to using [b highlight]Information Schema[/b highlight] for processlist")
             else:
                 if dolphie.performance_schema_enabled:
-                    dolphie.use_performance_schema = True
-                    self.notify("Switched to using [b highlight]Performance Schema")
+                    dolphie.use_performance_schema_for_processlist = True
+                    self.notify("Switched to using [b highlight]Performance Schema[/b highlight] for processlist")
                 else:
-                    self.notify("You can't switch to Performance Schema because it isn't enabled")
+                    self.notify(
+                        "You can't switch to [b highlight]Performance Schema[/b highlight] for "
+                        "processlist because it isn't enabled"
+                    )
 
         elif key == "q":
             self.app.exit()
