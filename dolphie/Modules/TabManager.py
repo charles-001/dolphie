@@ -198,7 +198,7 @@ class Tab:
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             self.dashboard_section_5.display = False
 
-    def refresh_tab_properties(self):
+    def refresh_metric_graph_tabs_display(self):
         self.main_container.display = True
 
         # Hide all graph tabs so we can show the ones we want
@@ -210,11 +210,6 @@ class Tab:
         for metric_instance in self.dolphie.metric_manager.metrics.__dict__.values():
             if self.dolphie.connection_source in metric_instance.connection_source:
                 self.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
-
-        if self.dolphie.replay_file:
-            self.dashboard_replay_container.display = True
-        else:
-            self.dashboard_replay_container.display = False
 
     def layout_graphs(self):
         # These variables are dynamically created
@@ -510,7 +505,7 @@ class TabManager:
         self.host_tabs.add_tab(TabWidget(intial_tab_name, id=tab_id))
 
         # Loop the metric instances and create the graph tabs
-        for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
+        for metric_instance_name, metric_instance in dolphie.metric_manager.metrics.__dict__.items():
             metric_tab_name = metric_instance.tab_name
             graph_names = metric_instance.graphs
             graph_tab_name = metric_instance.graph_tab_name
@@ -552,7 +547,7 @@ class TabManager:
                 setattr(tab, graph_name, self.app.query_one(f"#{graph_name}"))
 
             for metric, metric_data in metric_instance.__dict__.items():
-                switch = self.app.query(f"#switch_container_{metric_tab_name} #{metric}")
+                switch = self.app.query(f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}")
 
                 if not switch:
                     if (
@@ -564,12 +559,14 @@ class TabManager:
                             Label(metric_data.label)
                         )
                         await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
-                            Switch(animate=False, id=metric, name=metric_tab_name)
+                            Switch(animate=False, id=f"{metric_instance_name}-{metric}", name=metric_tab_name)
                         )
 
                         # Toggle the switch if the metric is visible (means to enable it by default)
                         if metric_data.visible:
-                            self.app.query_one(f"#switch_container_{metric_tab_name} #{metric}", Switch).toggle()
+                            self.app.query_one(
+                                f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}", Switch
+                            ).toggle()
 
         if tab.manual_tab_name:
             self.rename_tab(tab, tab.manual_tab_name)

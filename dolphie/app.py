@@ -411,7 +411,8 @@ class DolphieApp(App):
                     return
 
                 if not tab.main_container.display:
-                    tab.refresh_tab_properties()
+                    tab.dashboard_replay_container.display = False
+                    tab.refresh_metric_graph_tabs_display()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -481,7 +482,8 @@ class DolphieApp(App):
                 self.monitor_read_only_change(tab)
 
                 if not tab.main_container.display:
-                    tab.refresh_tab_properties()
+                    tab.dashboard_replay_container.display = True
+                    tab.refresh_metric_graph_tabs_display()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -756,9 +758,8 @@ class DolphieApp(App):
                     tab.sparkline.data = dolphie.metric_manager.metrics.dml.Queries.values
                     tab.sparkline.refresh()
 
-        if dolphie.panels.graphs.visible:
-            # Refresh the graph(s) for the selected tab
-            self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
+        # Refresh the graph(s) for the selected tab
+        self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
         tab.refresh_replay_dashboard_section()
 
@@ -788,8 +789,8 @@ class DolphieApp(App):
                     tab.sparkline.data = dolphie.metric_manager.metrics.dml.Queries.values
                     tab.sparkline.refresh()
 
-            # Refresh the graph(s) for the selected tab
-            self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
+        # Refresh the graph(s) for the selected tab
+        self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
         tab.refresh_replay_dashboard_section()
 
@@ -974,7 +975,7 @@ class DolphieApp(App):
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
 
-            tab.refresh_tab_properties()
+            tab.refresh_metric_graph_tabs_display()
 
             # Set the display state for the replica container based on whether there are replicas
             tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
@@ -998,10 +999,10 @@ class DolphieApp(App):
 
     @on(TabbedContent.TabActivated, ".metrics_host_tabs")
     def metric_tab_changed(self, event: TabbedContent.TabActivated):
-        metric_instance_name = event.pane.name
+        metric_tab_name = event.pane.name
 
-        if metric_instance_name:
-            self.update_graphs(metric_instance_name)
+        if metric_tab_name:
+            self.update_graphs(metric_tab_name)
 
     def update_graphs(self, metric_tab_name: str):
         if not self.tab_manager.active_tab or not self.tab_manager.active_tab.panel_graphs.display:
@@ -1107,16 +1108,15 @@ class DolphieApp(App):
             return
 
         metric_tab_name = event.switch.name
-        metric = event.switch.id
 
-        # Loop all metric instances and set the visibility of the metric
-        for tab in self.tab_manager.tabs.values():
-            for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
-                if tab.dolphie.connection_source in metric_instance.connection_source and hasattr(
-                    metric_instance, metric
-                ):
-                    metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
-                    metric_data.visible = event.value
+        # The switch id is in the format of metric_instance_name-metric
+        metric_split = event.switch.id.split("-")
+        metric_instance_name = metric_split[0]
+        metric = metric_split[1]
+
+        metric_instance = getattr(self.tab_manager.active_tab.dolphie.metric_manager.metrics, metric_instance_name)
+        metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+        metric_data.visible = event.value
 
         self.update_graphs(metric_tab_name)
 

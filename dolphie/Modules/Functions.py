@@ -102,7 +102,7 @@ def minify_query(query: str) -> str:
     return markup_escape(re.sub(r"\s+", " ", query))
 
 
-def format_bytes(bytes_value, color=True, round_to=2):
+def format_bytes(bytes_value, color=True, decimal=2):
     if isinstance(bytes_value, str):
         return bytes_value
 
@@ -114,11 +114,11 @@ def format_bytes(bytes_value, color=True, round_to=2):
         unit_index += 1
 
     # Format with specified rounding precision
-    formatted_value = f"{bytes_value:.{round_to}f}"
+    formatted_value = f"{bytes_value:.{decimal}f}"
 
     # Remove unnecessary ".00" if rounding results in a whole number
-    if formatted_value.endswith(f".{'0' * round_to}"):
-        formatted_value = formatted_value[: -round_to - 1]
+    if formatted_value.endswith(f".{'0' * decimal}"):
+        formatted_value = formatted_value[: -decimal - 1]
 
     if bytes_value == 0:
         return "0"
