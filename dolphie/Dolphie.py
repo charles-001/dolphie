@@ -260,6 +260,7 @@ class Dolphie:
         virtual_memory = psutil.virtual_memory()
         swap_memory = psutil.swap_memory()
         network_io = psutil.net_io_counters()
+        disk_io = psutil.disk_io_counters()
 
         self.system_utilization = {
             "Uptime": int(time.time() - psutil.boot_time()),
@@ -271,6 +272,8 @@ class Dolphie:
             "Swap_Used": swap_memory.used,
             "Network_Up": network_io.bytes_sent,
             "Network_Down": network_io.bytes_recv,
+            "Disk_Read": disk_io.read_count,
+            "Disk_Write": disk_io.write_count,
         }
 
         # Include the load average if it's available

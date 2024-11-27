@@ -168,14 +168,10 @@ class Tab:
     def toggle_entities_displays(self):
         if self.dolphie.system_utilization:
             self.dashboard_section_6.display = True
-            self.metric_graph_tabs.show_tab("graph_tab_system_cpu")
-            self.metric_graph_tabs.show_tab("graph_tab_system_memory")
-            self.metric_graph_tabs.show_tab("graph_tab_system_network")
+            self.metric_graph_tabs.show_tab("graph_tab_system")
         else:
             self.dashboard_section_6.display = False
-            self.metric_graph_tabs.hide_tab("graph_tab_system_cpu")
-            self.metric_graph_tabs.hide_tab("graph_tab_system_memory")
-            self.metric_graph_tabs.hide_tab("graph_tab_system_network")
+            self.metric_graph_tabs.hide_tab("graph_tab_system")
 
         if self.dolphie.connection_source == ConnectionSource.mysql:
             if self.dolphie.replication_status and not self.dolphie.panels.replication.visible:
@@ -240,6 +236,11 @@ class Tab:
 
         self.graph_adaptive_hash_index.styles.width = "50%"
         self.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
+
+        self.graph_system_cpu.styles.width = "50%"
+        self.graph_system_network.styles.width = "50%"
+        self.graph_system_memory.styles.width = "50%"
+        self.graph_system_disk_io.styles.width = "50%"
 
 
 class TabManager:
@@ -521,6 +522,7 @@ class TabManager:
                         graph_tab_name,
                         Label(id=f"stats_{metric_tab_name}", classes="stats_data"),
                         Horizontal(id=f"graph_container_{metric_tab_name}"),
+                        Horizontal(id=f"graph_container2_{metric_tab_name}"),
                         Horizontal(
                             id=f"switch_container_{metric_tab_name}",
                             classes="switch_container switch_container",
@@ -536,7 +538,13 @@ class TabManager:
             for graph_name in graph_names:
                 graph = self.app.query(f"#{graph_name}")
                 if not graph:
-                    await self.app.query_one(f"#graph_container_{metric_tab_name}", Horizontal).mount(
+                    graph_container = (
+                        "graph_container2"
+                        if graph_name in ["graph_system_network", "graph_system_disk_io"]
+                        else "graph_container"
+                    )
+
+                    await self.app.query_one(f"#{graph_container}_{metric_tab_name}", Horizontal).mount(
                         MetricManager.Graph(id=f"{graph_name}", classes="panel_data")
                     )
 

@@ -135,9 +135,9 @@ class TabSetupModal(ModalScreen):
                 }
 
                 &:focus > SelectCurrent {
-                    border: tall #384673;
+                    border: tall #43548b;
                     background-tint: transparent;
-                    background: transparent;
+                    background: #151729;
                 }
             }
 

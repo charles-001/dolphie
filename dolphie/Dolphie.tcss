@@ -13,10 +13,6 @@
 #_default, CommandScreen, EventLog {
     background: #0a0e1b;
 }
-
-RichLog {
-    background: #0a0e1b;
-}
 Graph {
     height: 16;
 }
@@ -142,6 +138,7 @@ TopBar {
     }
 }
 
+
 .replay_buttons {
     height: auto;
     width: 65;
@@ -179,7 +176,6 @@ TopBar {
 #panel_graphs, #panel_replication {
     height: auto;
 }
-
 #panel_pfs_metrics {
     height: auto;
     max-height: 100%;
@@ -349,7 +345,7 @@ Input {
     &:focus {
         background-tint: transparent;
         background: #151729;
-        border: tall #384673;
+        border: tall #43548b;
     }
 
     & > .input--placeholder {
@@ -358,7 +354,7 @@ Input {
 }
 
 .datatable--header {
-    background: #00000000;
+    background: transparent;
     color: #c5c7d2;
     text-style: bold;
 }
@@ -393,15 +389,6 @@ Sparkline {
         color: #384c7a;
     }
 }
-
-
-.pad_top_0 {
-    padding-top: 0;
-}
-.top_pad_1 {
-    padding-top: 1;
-}
-
 
 Button {
     background: #282c42;

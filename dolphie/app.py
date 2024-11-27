@@ -1003,24 +1003,24 @@ class DolphieApp(App):
         if metric_instance_name:
             self.update_graphs(metric_instance_name)
 
-    def update_graphs(self, tab_metric_instance_name: str):
+    def update_graphs(self, metric_tab_name: str):
         if not self.tab_manager.active_tab or not self.tab_manager.active_tab.panel_graphs.display:
             return
 
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
-            if tab_metric_instance_name == metric_instance.tab_name:
+            if metric_tab_name == metric_instance.tab_name:
                 for graph_name in metric_instance.graphs:
                     getattr(self.tab_manager.active_tab, graph_name).render_graph(
                         metric_instance, self.tab_manager.active_tab.dolphie.metric_manager.datetimes
                     )
 
-        self.update_stats_label(tab_metric_instance_name)
+        self.update_stats_label(metric_tab_name)
 
-    def update_stats_label(self, tab_metric_instance_name: str):
+    def update_stats_label(self, metric_tab_name: str):
         stat_data = {}
 
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
-            if metric_instance.tab_name == tab_metric_instance_name:
+            if metric_instance.tab_name == metric_tab_name:
                 number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
                 for metric_name, metric_data in metric_instance.__dict__.items():
                     if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
@@ -1032,7 +1032,7 @@ class DolphieApp(App):
         formatted_stat_data = "  ".join(
             f"[b light_blue]{label}[/b light_blue] {value}" for label, value in stat_data.items()
         )
-        getattr(self.tab_manager.active_tab, tab_metric_instance_name).update(formatted_stat_data)
+        getattr(self.tab_manager.active_tab, metric_tab_name).update(formatted_stat_data)
 
     def toggle_panel(self, panel_name: str):
         # We store the panel objects in the tab object (i.e. tab.panel_dashboard, tab.panel_processlist, etc.)
@@ -1106,20 +1106,19 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1 or not self.tab_manager.active_tab:
             return
 
-        event_metric_instance_name = event.switch.name
+        metric_tab_name = event.switch.name
         metric = event.switch.id
 
         # Loop all metric instances and set the visibility of the metric
         for tab in self.tab_manager.tabs.values():
-            for metric_instance_name, metric_instance in tab.dolphie.metric_manager.metrics.__dict__.items():
-                if (
-                    tab.dolphie.connection_source in metric_instance.connection_source
-                    and event_metric_instance_name == metric_instance_name
+            for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
+                if tab.dolphie.connection_source in metric_instance.connection_source and hasattr(
+                    metric_instance, metric
                 ):
                     metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
                     metric_data.visible = event.value
 
-        self.update_graphs(event_metric_instance_name)
+        self.update_graphs(metric_tab_name)
 
     async def on_key(self, event: events.Key):
         if len(self.screen_stack) > 1:

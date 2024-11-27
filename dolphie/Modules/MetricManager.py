@@ -209,14 +209,14 @@ class Graph(Static):
 def get_number_format_function(data, color=False):
     data_formatters = {
         ReplicationLagMetrics: lambda val: format_time(val),
-        CheckpointMetrics: lambda val: format_bytes(val, color=color),
-        RedoLogMetrics: lambda val: format_bytes(val, color=color),
+        CheckpointMetrics: lambda val: format_bytes(val, color=color, round_to=0),
+        RedoLogMetrics: lambda val: format_bytes(val, color=color, round_to=0),
         AdaptiveHashIndexHitRatio: lambda val: f"{round(val)}%",
         ProxySQLMultiplexEfficiency: lambda val: f"{round(val)}%",
-        DiskIOMetrics: lambda val: format_bytes(val, color=color),
+        DiskIOMetrics: lambda val: format_bytes(val, color=color, round_to=0),
         ProxySQLQueriesDataNetwork: lambda val: format_bytes(val, color=color),
-        SystemMemoryMetrics: lambda val: format_bytes(val, color=color),
-        SystemNetworkMetrics: lambda val: format_bytes(val, color=color),
+        SystemMemoryMetrics: lambda val: format_bytes(val, color=color, round_to=0),
+        SystemNetworkMetrics: lambda val: format_bytes(val, color=color, round_to=0),
     }
 
     return data_formatters.get(type(data), lambda val: format_number(val, color=color))
@@ -261,8 +261,8 @@ class MetricData:
 class SystemCPUMetrics:
     CPU_Percent: MetricData
     graphs: List[str]
-    tab_name: str = "system_cpu"
-    graph_tab_name = "System CPU"
+    tab_name: str = "system"
+    graph_tab_name = "System"
     metric_source: MetricSource = MetricSource.system_utilization
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
@@ -275,8 +275,8 @@ class SystemMemoryMetrics:
     Memory_Total: MetricData
     Memory_Used: MetricData
     graphs: List[str]
-    tab_name: str = "system_memory"
-    graph_tab_name = "System Memory"
+    tab_name: str = "system"
+    graph_tab_name = "System"
     metric_source: MetricSource = MetricSource.system_utilization
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
@@ -289,8 +289,22 @@ class SystemNetworkMetrics:
     Network_Up: MetricData
     Network_Down: MetricData
     graphs: List[str]
-    tab_name: str = "system_network"
-    graph_tab_name = "System Network"
+    tab_name: str = "system"
+    graph_tab_name = "System"
+    metric_source: MetricSource = MetricSource.system_utilization
+    connection_source: List[ConnectionSource] = field(
+        default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
+    )
+    use_with_replay: bool = True
+
+
+@dataclass
+class SystemDiskIOMetrics:
+    Disk_Read: MetricData
+    Disk_Write: MetricData
+    graphs: List[str]
+    tab_name: str = "system"
+    graph_tab_name = "System"
     metric_source: MetricSource = MetricSource.system_utilization
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
@@ -588,6 +602,7 @@ class ProxySQLTotalCommandStats:
 class MetricInstances:
     system_cpu: SystemCPUMetrics
     system_memory: SystemMemoryMetrics
+    system_disk_io: SystemDiskIOMetrics
     system_network: SystemNetworkMetrics
     dml: DMLMetrics
     buffer_pool_requests: BufferPoolRequestsMetrics
@@ -646,16 +661,21 @@ class MetricManager:
                     create_switch=False,
                 ),
                 Memory_Used=MetricData(
-                    label="Used",
+                    label="Memory Used",
                     color=MetricColor.blue,
                     per_second_calculation=False,
                     create_switch=False,
                 ),
             ),
+            system_disk_io=SystemDiskIOMetrics(
+                graphs=["graph_system_disk_io"],
+                Disk_Read=MetricData(label="IOPS Read", color=MetricColor.blue),
+                Disk_Write=MetricData(label="IOPS Write", color=MetricColor.yellow),
+            ),
             system_network=SystemNetworkMetrics(
                 graphs=["graph_system_network"],
-                Network_Up=MetricData(label="Up", color=MetricColor.blue),
-                Network_Down=MetricData(label="Down", color=MetricColor.green),
+                Network_Down=MetricData(label="Net Dn", color=MetricColor.green),
+                Network_Up=MetricData(label="Net Up", color=MetricColor.red),
             ),
             dml=DMLMetrics(
                 graphs=["graph_dml"],
