@@ -1161,7 +1161,7 @@ class DolphieApp(App):
 
         elif key == "3":
             self.toggle_panel(dolphie.panels.graphs.name)
-            self.app.update_graphs("dml")
+            self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
         elif key == "4":
             if dolphie.connection_source == ConnectionSource.proxysql:
