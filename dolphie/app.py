@@ -411,7 +411,6 @@ class DolphieApp(App):
                     return
 
                 if not tab.main_container.display:
-                    tab.dashboard_replay_container.display = False
                     tab.refresh_metric_graph_tabs_display()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
@@ -482,7 +481,6 @@ class DolphieApp(App):
                 self.monitor_read_only_change(tab)
 
                 if not tab.main_container.display:
-                    tab.dashboard_replay_container.display = True
                     tab.refresh_metric_graph_tabs_display()
 
                 if dolphie.connection_source == ConnectionSource.mysql:

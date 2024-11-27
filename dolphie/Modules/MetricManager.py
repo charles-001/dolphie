@@ -287,8 +287,8 @@ class SystemMemoryMetrics:
 
 @dataclass
 class SystemNetworkMetrics:
-    Network_Up: MetricData
     Network_Down: MetricData
+    Network_Up: MetricData
     graphs: List[str]
     tab_name: str = "system"
     graph_tab_name = "System"
@@ -663,7 +663,7 @@ class MetricManager:
                 ),
                 Memory_Used=MetricData(
                     label="Memory Used",
-                    color=MetricColor.blue,
+                    color=MetricColor.green,
                     per_second_calculation=False,
                     create_switch=False,
                 ),
@@ -675,8 +675,8 @@ class MetricManager:
             ),
             system_network=SystemNetworkMetrics(
                 graphs=["graph_system_network"],
-                Network_Down=MetricData(label="Net Dn", color=MetricColor.green),
-                Network_Up=MetricData(label="Net Up", color=MetricColor.red),
+                Network_Down=MetricData(label="Net Dn", color=MetricColor.blue),
+                Network_Up=MetricData(label="Net Up", color=MetricColor.gray),
             ),
             dml=DMLMetrics(
                 graphs=["graph_dml"],
@@ -702,7 +702,7 @@ class MetricManager:
             checkpoint=CheckpointMetrics(
                 graphs=["graph_checkpoint"],
                 Innodb_checkpoint_age=MetricData(
-                    label="Uncheckpointed", color=MetricColor.blue, per_second_calculation=False, create_switch=False
+                    label="Uncheckpointed", color=MetricColor.green, per_second_calculation=False, create_switch=False
                 ),
             ),
             buffer_pool_requests=BufferPoolRequestsMetrics(
@@ -769,7 +769,7 @@ class MetricManager:
             disk_io=DiskIOMetrics(
                 graphs=["graph_disk_io"],
                 io_read=MetricData(label="Read", color=MetricColor.blue),
-                io_write=MetricData(label="Write", color=MetricColor.green),
+                io_write=MetricData(label="Write", color=MetricColor.yellow),
             ),
             locks=LocksMetrics(
                 graphs=["graph_locks"],

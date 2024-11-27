@@ -211,6 +211,13 @@ class Tab:
             if self.dolphie.connection_source in metric_instance.connection_source:
                 self.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
 
+        if self.dolphie.replay_file:
+            if not self.dashboard_replay_container.display:
+                self.dashboard_replay_container.display = True
+        else:
+            if self.dashboard_replay_container.display:
+                self.dashboard_replay_container.display = False
+
     def layout_graphs(self):
         # These variables are dynamically created
         if self.dolphie.is_mysql_version_at_least("8.0.30"):
