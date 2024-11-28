@@ -43,6 +43,7 @@ LoadingIndicator {
     color: #8fb0ee;
     height: auto;
     content-align: center middle;
+    margin-top: 3;
 }
 ModalScreen {
     background: #0d1015 70%;
@@ -59,9 +60,7 @@ SpinnerWidget {
     height: auto;
     content-align: center middle;
 }
-LoadingIndicator {
-    margin-top: 3;
-}
+
 CommandList {
     text-style: none;
     border-bottom: hkey #1c2440;
@@ -175,7 +174,12 @@ TopBar {
 
 #panel_graphs, #panel_replication {
     height: auto;
+
+    & Tabs {
+        margin-top: 0;
+    }
 }
+
 #panel_pfs_metrics {
     height: auto;
     max-height: 100%;
@@ -276,6 +280,9 @@ TopBar {
     & > Label {
         width: 100%;
         content-align: center middle;
+    }
+    & > LoadingIndicator {
+        margin-top: 0;
     }
 }
 .group_replication > Container {

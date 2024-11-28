@@ -2,7 +2,7 @@ import asyncio
 import copy
 import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import monotonic
 from typing import Dict, List
 
@@ -61,6 +61,8 @@ class Tab:
     replicas_worker: Worker = None
     replicas_worker_timer: Timer = None
     replicas_worker_running: bool = False
+
+    available_graph_tabs: Dict[str, bool] = field(default_factory=dict)
 
     main_container: VerticalScroll = None
     metric_graph_tabs: TabbedContent = None
@@ -198,18 +200,25 @@ class Tab:
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             self.dashboard_section_5.display = False
 
-    def refresh_metric_graph_tabs_display(self):
+    def toggle_metric_graph_tabs_display(self):
         self.main_container.display = True
 
-        # Hide all graph tabs so we can show the ones we want
-        tabs = self.metric_graph_tabs.query(TabPane)
-        for graph_tab in tabs:
-            self.metric_graph_tabs.hide_tab(graph_tab.id)
-
-        # Show the tabs that are for the current connection source
+        # Hide/show the tabs that are available for the current connection source
         for metric_instance in self.dolphie.metric_manager.metrics.__dict__.values():
             if self.dolphie.connection_source in metric_instance.connection_source:
                 self.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
+            else:
+                self.metric_graph_tabs.hide_tab(f"graph_tab_{metric_instance.tab_name}")
+
+        # Show graph tabs based on the host tab's history
+        if self.available_graph_tabs and len(self.available_graph_tabs) != 1:
+            graph_tabs = self.metric_graph_tabs.query(TabPane)
+            for graph_tab in graph_tabs:
+                graph_visible = self.available_graph_tabs.get(graph_tab.id)
+                if graph_visible:
+                    self.metric_graph_tabs.show_tab(graph_tab.id)
+                else:
+                    self.metric_graph_tabs.hide_tab(graph_tab.id)
 
         if self.dolphie.replay_file:
             if not self.dashboard_replay_container.display:
@@ -340,7 +349,7 @@ class TabManager:
                     id="panel_dashboard",
                     classes="dashboard",
                 ),
-                Container(TabbedContent(id="metric_graph_tabs", classes="metrics_host_tabs"), id="panel_graphs"),
+                Container(TabbedContent(id="metric_graph_tabs"), id="panel_graphs"),
                 Container(
                     Static(id="replication_container_title", classes="replication_container_title"),
                     Container(

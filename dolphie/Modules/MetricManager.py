@@ -209,15 +209,14 @@ class Graph(Static):
 def get_number_format_function(data, color=False):
     data_formatters = {
         ReplicationLagMetrics: lambda val: format_time(val),
-        CheckpointMetrics: lambda val: format_bytes(val, color=color, decimal=0),
-        RedoLogMetrics: lambda val: format_bytes(val, color=color, decimal=0),
+        CheckpointMetrics: lambda val: format_bytes(val, color=color),
+        RedoLogMetrics: lambda val: format_bytes(val, color=color),
         AdaptiveHashIndexHitRatio: lambda val: f"{round(val)}%",
         ProxySQLMultiplexEfficiency: lambda val: f"{round(val)}%",
-        DiskIOMetrics: lambda val: format_bytes(val, color=color, decimal=0),
+        DiskIOMetrics: lambda val: format_bytes(val, color=color),
         ProxySQLQueriesDataNetwork: lambda val: format_bytes(val, color=color),
-        SystemMemoryMetrics: lambda val: format_bytes(val, color=color, decimal=0),
-        SystemNetworkMetrics: lambda val: format_bytes(val, color=color, decimal=0),
-        SystemDiskIOMetrics: lambda val: format_number(val, color=color, decimal=0),
+        SystemMemoryMetrics: lambda val: format_bytes(val, color=color),
+        SystemNetworkMetrics: lambda val: format_bytes(val, color=color),
     }
 
     return data_formatters.get(type(data), lambda val: format_number(val, color=color))

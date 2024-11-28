@@ -30,6 +30,7 @@ from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
 from textual.widgets import Button, Switch, TabbedContent, Tabs
+from textual.widgets.tabbed_content import ContentTab
 from textual.worker import Worker, WorkerState, get_current_worker
 
 import dolphie.Modules.MetricManager as MetricManager
@@ -411,7 +412,7 @@ class DolphieApp(App):
                     return
 
                 if not tab.main_container.display:
-                    tab.refresh_metric_graph_tabs_display()
+                    tab.toggle_metric_graph_tabs_display()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -481,7 +482,7 @@ class DolphieApp(App):
                 self.monitor_read_only_change(tab)
 
                 if not tab.main_container.display:
-                    tab.refresh_metric_graph_tabs_display()
+                    tab.toggle_metric_graph_tabs_display()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -945,7 +946,7 @@ class DolphieApp(App):
         )
 
     @on(Tabs.TabActivated, "#host_tabs")
-    def tab_changed(self, event: TabbedContent.TabActivated):
+    def host_tab_changed(self, event: Tabs.TabActivated):
         # If the previous tab is a replay file, cancel its worker and timer
         previous_tab = self.tab_manager.active_tab
         if previous_tab and previous_tab.dolphie.replay_file and previous_tab.worker:
@@ -968,12 +969,13 @@ class DolphieApp(App):
                 tab_panel = tab.get_panel_widget(panel.name)
                 tab_panel.display = getattr(tab.dolphie.panels, panel.name).visible
 
+            tab.toggle_metric_graph_tabs_display()
+            tab.toggle_entities_displays()
+
             if tab.dolphie.connection_source == ConnectionSource.mysql:
                 self.refresh_screen_mysql(tab)
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
-
-            tab.refresh_metric_graph_tabs_display()
 
             # Set the display state for the replica container based on whether there are replicas
             tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
@@ -995,25 +997,28 @@ class DolphieApp(App):
 
             self.force_refresh_for_replay(need_current_data=True)
 
-    @on(TabbedContent.TabActivated, ".metrics_host_tabs")
-    def metric_tab_changed(self, event: TabbedContent.TabActivated):
+    @on(TabbedContent.TabActivated, "#metric_graph_tabs")
+    def metric_graph_tab_changed(self, event: TabbedContent.TabActivated):
         metric_tab_name = event.pane.name
 
         if metric_tab_name:
             self.update_graphs(metric_tab_name)
 
     def update_graphs(self, metric_tab_name: str):
-        if not self.tab_manager.active_tab or not self.tab_manager.active_tab.panel_graphs.display:
+        tab = self.tab_manager.active_tab
+        if not tab or not tab.panel_graphs.display:
             return
 
-        for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
+        for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
             if metric_tab_name == metric_instance.tab_name:
                 for graph_name in metric_instance.graphs:
-                    getattr(self.tab_manager.active_tab, graph_name).render_graph(
-                        metric_instance, self.tab_manager.active_tab.dolphie.metric_manager.datetimes
-                    )
+                    getattr(tab, graph_name).render_graph(metric_instance, tab.dolphie.metric_manager.datetimes)
 
         self.update_stats_label(metric_tab_name)
+
+        graph_tabs = tab.metric_graph_tabs.query(ContentTab)
+        for graph_tab in graph_tabs:
+            tab.available_graph_tabs[graph_tab.id.replace("--content-tab-", "")] = graph_tab.display
 
     def update_stats_label(self, metric_tab_name: str):
         stat_data = {}
