@@ -210,16 +210,6 @@ class Tab:
             else:
                 self.metric_graph_tabs.hide_tab(f"graph_tab_{metric_instance.tab_name}")
 
-        # Show graph tabs based on the host tab's history
-        if self.available_graph_tabs and len(self.available_graph_tabs) != 1:
-            graph_tabs = self.metric_graph_tabs.query(TabPane)
-            for graph_tab in graph_tabs:
-                graph_visible = self.available_graph_tabs.get(graph_tab.id)
-                if graph_visible:
-                    self.metric_graph_tabs.show_tab(graph_tab.id)
-                else:
-                    self.metric_graph_tabs.hide_tab(graph_tab.id)
-
         if self.dolphie.replay_file:
             if not self.dashboard_replay_container.display:
                 self.dashboard_replay_container.display = True

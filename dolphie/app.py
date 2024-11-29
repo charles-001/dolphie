@@ -30,7 +30,6 @@ from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
 from textual.widgets import Button, Switch, TabbedContent, Tabs
-from textual.widgets.tabbed_content import ContentTab
 from textual.worker import Worker, WorkerState, get_current_worker
 
 import dolphie.Modules.MetricManager as MetricManager
@@ -1015,10 +1014,6 @@ class DolphieApp(App):
                     getattr(tab, graph_name).render_graph(metric_instance, tab.dolphie.metric_manager.datetimes)
 
         self.update_stats_label(metric_tab_name)
-
-        graph_tabs = tab.metric_graph_tabs.query(ContentTab)
-        for graph_tab in graph_tabs:
-            tab.available_graph_tabs[graph_tab.id.replace("--content-tab-", "")] = graph_tab.display
 
     def update_stats_label(self, metric_tab_name: str):
         stat_data = {}
