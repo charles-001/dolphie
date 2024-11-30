@@ -1119,6 +1119,7 @@ class DolphieApp(App):
         metric_instance_name = metric_split[0]
         metric = metric_split[1]
 
+        # Set the visible boolean of the metric data to the switch value
         metric_instance = getattr(self.tab_manager.active_tab.dolphie.metric_manager.metrics, metric_instance_name)
         metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
         metric_data.visible = event.value

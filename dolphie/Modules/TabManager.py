@@ -210,12 +210,27 @@ class Tab:
             else:
                 self.metric_graph_tabs.hide_tab(f"graph_tab_{metric_instance.tab_name}")
 
+        # Only show the replay section if we're in replay mode
         if self.dolphie.replay_file:
             if not self.dashboard_replay_container.display:
                 self.dashboard_replay_container.display = True
         else:
             if self.dashboard_replay_container.display:
                 self.dashboard_replay_container.display = False
+
+        # Loop the metrics and update the graph switch values based on the tab's metric data so each tab can have
+        # its own set of visible graphs
+        for metric_instance_name, metric_instance in self.dolphie.metric_manager.metrics.__dict__.items():
+            for metric, metric_data in metric_instance.__dict__.items():
+                if (
+                    isinstance(metric_data, MetricManager.MetricData)
+                    and metric_data.graphable
+                    and metric_data.create_switch
+                ):
+                    switch = self.dolphie.app.query_one(
+                        f"#switch_container_{metric_instance.tab_name} #{metric_instance_name}-{metric}", Switch
+                    )
+                    switch.value = metric_data.visible
 
     def layout_graphs(self):
         # These variables are dynamically created
