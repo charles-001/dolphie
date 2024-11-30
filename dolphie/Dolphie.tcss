@@ -66,10 +66,13 @@ CommandList {
     border-bottom: hkey #1c2440;
     max-height: 80vh;
 
+    & > .option-list--option {
+        text-style: none;
+        padding: 0;
+    }
     & > .option-list--option-highlighted {
         background: #171d2d;
     }
-
     & > .option-list--option-hover {
         background: #171d2d;
         text-style: bold;
@@ -91,6 +94,8 @@ CommandInput, CommandInput:focus {
     border: blank !important;
     padding-left: 0 !important;
     margin: 0 1 !important;
+    border-top: hkey #1c2440 !important;
+    border-bottom: hkey #1c2440 !important;
 }
 
 TopBar {
