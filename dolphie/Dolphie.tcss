@@ -185,13 +185,7 @@ TopBar {
     }
 }
 
-#panel_pfs_metrics {
-    height: auto;
-    max-height: 100%;
-    background: #0f1525;
-    border: tall #1b233a;
-    margin-bottom: 1;
-}
+
 #pfs_metrics_file_io_datatable, #pfs_metrics_table_io_waits_datatable, #proxysql_hostgroup_summary_datatable, #proxysql_mysql_query_rules_datatable {
     overflow-x: auto;
 }

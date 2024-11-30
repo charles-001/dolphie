@@ -29,7 +29,7 @@ from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
-from textual.widgets import Button, Switch, TabbedContent, Tabs
+from textual.widgets import Button, RadioSet, Switch, TabbedContent, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
 import dolphie.Modules.MetricManager as MetricManager
@@ -943,6 +943,13 @@ class DolphieApp(App):
             ),
             command_get_input,
         )
+
+    @on(RadioSet.Changed, "#pfs_metrics_radio_set")
+    def replay_pfs_metrics_radio_set_changed(self, event: RadioSet.Changed):
+        tab = self.tab_manager.active_tab
+
+        if tab:
+            self.refresh_panel(tab, tab.dolphie.panels.pfs_metrics.name)
 
     @on(Tabs.TabActivated, "#host_tabs")
     def host_tab_changed(self, event: Tabs.TabActivated):
