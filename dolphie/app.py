@@ -90,8 +90,8 @@ class CommandPaletteCommands(Provider):
         self.dolphie_app: DolphieApp = self.app
 
     def async_command(self, key: str):
-        """Helper function to call the capture_key command asynchronously."""
-        self.app.call_later(self.dolphie_app.capture_key, key)
+        """Helper function to call the process_key_event command asynchronously."""
+        self.app.call_later(self.dolphie_app.process_key_event, key)
 
     def get_command_hits(self):
         """Helper function to get all commands and format them for discovery or search."""
@@ -1130,9 +1130,9 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1:
             return
 
-        await self.capture_key(event.key)
+        await self.process_key_event(event.key)
 
-    async def capture_key(self, key):
+    async def process_key_event(self, key):
         tab = self.tab_manager.active_tab
         if not tab:
             return
@@ -1511,15 +1511,16 @@ class DolphieApp(App):
         if key == "P":
             if dolphie.use_performance_schema_for_processlist:
                 dolphie.use_performance_schema_for_processlist = False
-                self.notify("Switched to using [b highlight]Information Schema[/b highlight] for processlist")
+                self.notify("Switched to using [b highlight]Information Schema[/b highlight] for Processlist panel")
             else:
                 if dolphie.performance_schema_enabled:
                     dolphie.use_performance_schema_for_processlist = True
-                    self.notify("Switched to using [b highlight]Performance Schema[/b highlight] for processlist")
+                    self.notify("Switched to using [b highlight]Performance Schema[/b highlight] for Processlist panel")
                 else:
                     self.notify(
                         "You can't switch to [b highlight]Performance Schema[/b highlight] for "
-                        "processlist because it isn't enabled"
+                        "Processlist panel because it isn't enabled",
+                        severity="warning",
                     )
 
         elif key == "q":

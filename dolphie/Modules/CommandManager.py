@@ -35,6 +35,12 @@ class CommandManager:
                         "description": "Toggle display of threads that only have an active transaction",
                     },
                     "p": {"human_key": "p", "description": "Toggle pause for refreshing of panels"},
+                    "P": {
+                        "human_key": "P",
+                        "description": (
+                            "Toggle between Information Schema and Performance Schema for the Processlist panel"
+                        ),
+                    },
                     "s": {"human_key": "s", "description": "Toggle sorting for Age in Processlist panel"},
                     "placeholder_3": {"human_key": "", "description": ""},
                     "l": {"human_key": "l", "description": "Display the most recent deadlock"},
@@ -62,10 +68,6 @@ class CommandManager:
                     "E": {"human_key": "E", "description": "Export the processlist to a CSV file"},
                     "k": {"human_key": "k", "description": "Kill thread by its ID"},
                     "K": {"human_key": "K", "description": "Kill threads by parameter(s)"},
-                    "P": {
-                        "human_key": "P",
-                        "description": "Switch between using Info/Perf Schema for Processlist panel",
-                    },
                     "q": {"human_key": "q", "description": "Quit"},
                     "r": {"human_key": "r", "description": "Set the refresh interval"},
                     "R": {"human_key": "R", "description": "Reset all metrics"},

@@ -1,0 +1,11 @@
+[dolphie]
+user     = dolphie
+password = super_secret_password
+socket   = /var/run/mysqld/mysqld.sock
+
+refresh_interval        = 2
+replay_retention_hours  = 48
+
+daemon_mode             = true
+daemon_mode_log_file    = /var/log/dolphie/daemon.log
+replay_dir              = /var/lib/dolphie/replays

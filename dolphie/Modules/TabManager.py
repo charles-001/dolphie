@@ -219,7 +219,7 @@ class Tab:
                 self.dashboard_replay_container.display = False
 
         # Loop the metrics and update the graph switch values based on the tab's metric data so each tab can have
-        # its own set of visible graphs
+        # its own set of visible metrics
         for metric_instance_name, metric_instance in self.dolphie.metric_manager.metrics.__dict__.items():
             for metric, metric_data in metric_instance.__dict__.items():
                 if (
