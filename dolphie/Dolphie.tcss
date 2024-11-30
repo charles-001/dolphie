@@ -94,8 +94,6 @@ CommandInput, CommandInput:focus {
     border: blank !important;
     padding-left: 0 !important;
     margin: 0 1 !important;
-    border-top: hkey #1c2440 !important;
-    border-bottom: hkey #1c2440 !important;
 }
 
 TopBar {
