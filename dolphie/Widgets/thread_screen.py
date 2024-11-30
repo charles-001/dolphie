@@ -22,60 +22,70 @@ class ThreadScreen(Screen):
     CSS = """
         ThreadScreen {
             background: #0a0e1b;
-        }
-        ThreadScreen #explain_table {
-            margin-top: 1;
-            background: #101626;
-            border: tall #1d253e;
-            overflow-x: auto;
-            min-height: 5;
-            max-height: 15;
-            width: 100%;
-        }
-        ThreadScreen #explain_failure {
-            margin-top: 1;
-            max-width: 120;
-        }
-        ThreadScreen Container {
-            height: auto;
-        }
-        ThreadScreen #thread_container {
-            margin-top: 1;
-            height: auto;
-            layout: horizontal;
-        }
-        ThreadScreen .title {
-            width: 100%;
-            content-align: center middle;
-            color: #bbc8e8;
-            text-style: bold;
-        }
-        ThreadScreen Center {
-            height: auto;
-        }
-        ThreadScreen #query {
-            width: auto;
-        }
-        ThreadScreen .container > Center {
-            layout: horizontal;
-        }
-        ThreadScreen ScrollableContainer {
-            height: auto;
-            width: 50vw;
-            max-height: 15;
-        }
 
-        ThreadScreen .table {
-            content-align: center middle;
-            background: #101626;
-            border: tall #1d253e;
-            padding-left: 1;
-            padding-right: 1;
-            height: auto;
-        }
-        ThreadScreen TextArea {
-            border: tall #1d253e;
-            max-height: 25;
+            & #explain_table {
+                margin-top: 1;
+                background: #101626;
+                border: tall #1d253e;
+                overflow-x: auto;
+                min-height: 5;
+                max-height: 15;
+                width: 100%;
+            }
+
+            & #explain_failure {
+                margin-top: 1;
+                max-width: 120;
+            }
+
+            & Container {
+                height: auto;
+            }
+
+            & #thread_container {
+                margin-top: 1;
+                height: auto;
+                layout: horizontal;
+            }
+
+            & .title {
+                width: 100%;
+                content-align: center middle;
+                color: #bbc8e8;
+                text-style: bold;
+            }
+
+            & Center {
+                height: auto;
+            }
+
+            & #query {
+                width: auto;
+            }
+
+            & .container > Center {
+                layout: horizontal;
+            }
+
+            & ScrollableContainer {
+                height: auto;
+                width: 50vw;
+                max-height: 15;
+            }
+
+            & .table {
+                content-align: center middle;
+                background: #101626;
+                border: tall #1d253e;
+                padding-left: 1;
+                padding-right: 1;
+                height: auto;
+            }
+
+            & TextArea {
+                border: tall #1d253e;
+                max-height: 25;
+            }
         }
 
     """

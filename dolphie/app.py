@@ -23,13 +23,13 @@ from rich.align import Align
 from rich.console import Group
 from rich.style import Style
 from rich.table import Table
-from rich.theme import Theme
+from rich.theme import Theme as RichTheme
 from rich.traceback import Traceback
 from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
-from textual.widgets import Button, Switch, TabbedContent, Tabs
+from textual.widgets import Button, RadioSet, Switch, TabbedContent, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
 import dolphie.Modules.MetricManager as MetricManager
@@ -150,7 +150,7 @@ class CommandPaletteCommands(Provider):
 
 class DolphieApp(App):
     TITLE = "Dolphie"
-    CSS_PATH = "Dolphie.css"
+    CSS_PATH = "Dolphie.tcss"
     COMMANDS = {CommandPaletteCommands}
     COMMAND_PALETTE_BINDING = "question_mark"
 
@@ -160,7 +160,7 @@ class DolphieApp(App):
         self.config = config
         self.command_manager = CommandManager()
 
-        theme = Theme(
+        theme = RichTheme(
             {
                 "white": "#e9e9e9",
                 "green": "#54efae",
@@ -411,7 +411,7 @@ class DolphieApp(App):
                     return
 
                 if not tab.main_container.display:
-                    tab.refresh_tab_properties()
+                    tab.toggle_metric_graph_tabs_display()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -481,7 +481,7 @@ class DolphieApp(App):
                 self.monitor_read_only_change(tab)
 
                 if not tab.main_container.display:
-                    tab.refresh_tab_properties()
+                    tab.toggle_metric_graph_tabs_display()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -513,8 +513,13 @@ class DolphieApp(App):
             tab=tab, old_uptime=dolphie.global_status.get("Uptime", 0), new_uptime=global_status.get("Uptime", 0)
         )
         dolphie.global_status = global_status
+        # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
+        # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
+        if not dolphie.global_status.get("Innodb_lsn_current"):
+            dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status["Innodb_os_log_written"]
 
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
+        dolphie.replication_status = replication_panel.fetch_replication_data(tab)
 
         if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
             if dolphie.connection_source_alt == ConnectionSource.mariadb:
@@ -556,44 +561,6 @@ class DolphieApp(App):
 
                 dolphie.replica_manager.available_replicas = available_replicas
 
-        dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
-        dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
-
-        dolphie.replication_status = replication_panel.fetch_replication_data(tab)
-
-        # If using MySQL 8, fetch the replication applier status data
-        if (
-            dolphie.is_mysql_version_at_least("8.0")
-            and dolphie.panels.replication.visible
-            and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
-        ):
-            dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
-            dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
-
-        if (
-            not dolphie.daemon_mode
-            and dolphie.is_mysql_version_at_least("8.0.30")
-            and dolphie.connection_source_alt != ConnectionSource.mariadb
-        ):
-            active_redo_logs_count = dolphie.main_db_connection.fetch_value_from_field(
-                MySQLQueries.active_redo_logs, "count"
-            )
-            dolphie.global_status["Active_redo_log_count"] = active_redo_logs_count
-
-        # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
-        # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
-        if not dolphie.global_status.get("Innodb_lsn_current"):
-            dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status["Innodb_os_log_written"]
-
-        if dolphie.group_replication or dolphie.innodb_cluster:
-            if dolphie.is_mysql_version_at_least("8.0.13"):
-                dolphie.group_replication_data["write_concurrency"] = dolphie.main_db_connection.fetch_value_from_field(
-                    MySQLQueries.group_replication_get_write_concurrency, "write_concurrency"
-                )
-
-            dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
-            dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
-
         if dolphie.panels.dashboard.visible or dolphie.record_for_replay:
             if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
                 dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
@@ -613,36 +580,71 @@ class DolphieApp(App):
         if dolphie.panels.processlist.visible or dolphie.record_for_replay:
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
 
-        if dolphie.is_mysql_version_at_least("5.7"):
-            dolphie.metadata_locks = {}
-            if dolphie.metadata_locks_enabled and (dolphie.panels.metadata_locks.visible or dolphie.record_for_replay):
-                dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
+        if dolphie.performance_schema_enabled:
+            dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
+            dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
 
-            if dolphie.panels.ddl.visible:
-                dolphie.main_db_connection.execute(MySQLQueries.ddls)
-                dolphie.ddl = dolphie.main_db_connection.fetchall()
+            if (
+                dolphie.is_mysql_version_at_least("8.0")
+                and dolphie.panels.replication.visible
+                and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
+            ):
+                dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
+                dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
 
-            if dolphie.performance_schema_enabled and (dolphie.panels.pfs_metrics.visible or dolphie.record_for_replay):
-                # Reset the PFS metrics deltas if we're in daemon mode and it's been 10 minutes since the last reset
-                # This is to keep a realistic point-in-time view of the metrics
-                if dolphie.daemon_mode and datetime.now() - dolphie.pfs_metrics_last_reset_time >= timedelta(
-                    minutes=10
+            if (
+                not dolphie.daemon_mode
+                and dolphie.is_mysql_version_at_least("8.0.30")
+                and dolphie.connection_source_alt != ConnectionSource.mariadb
+            ):
+                active_redo_logs_count = dolphie.main_db_connection.fetch_value_from_field(
+                    MySQLQueries.active_redo_logs, "count"
+                )
+                dolphie.global_status["Active_redo_log_count"] = active_redo_logs_count
+
+            if dolphie.group_replication or dolphie.innodb_cluster:
+                if dolphie.is_mysql_version_at_least("8.0.13"):
+                    dolphie.group_replication_data["write_concurrency"] = (
+                        dolphie.main_db_connection.fetch_value_from_field(
+                            MySQLQueries.group_replication_get_write_concurrency, "write_concurrency"
+                        )
+                    )
+
+                dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
+                dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
+
+            if dolphie.is_mysql_version_at_least("5.7"):
+                dolphie.metadata_locks = {}
+                if dolphie.metadata_locks_enabled and (
+                    dolphie.panels.metadata_locks.visible or dolphie.record_for_replay
                 ):
-                    dolphie.reset_pfs_metrics_deltas()
+                    dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
 
-                dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
-                file_io_data = dolphie.main_db_connection.fetchall()
-                if not dolphie.file_io_data:
-                    dolphie.file_io_data = PerformanceSchemaMetrics(file_io_data, True)
-                else:
-                    dolphie.file_io_data.update_internal_data(file_io_data)
+                if dolphie.panels.ddl.visible:
+                    dolphie.main_db_connection.execute(MySQLQueries.ddls)
+                    dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-                dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
-                table_io_waits_data = dolphie.main_db_connection.fetchall()
-                if not dolphie.table_io_waits_data:
-                    dolphie.table_io_waits_data = PerformanceSchemaMetrics(table_io_waits_data)
-                else:
-                    dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
+                if dolphie.panels.pfs_metrics.visible or dolphie.record_for_replay:
+                    # Reset the PFS metrics deltas if we're in daemon mode and it's been 10 minutes since the last reset
+                    # This is to keep a realistic point-in-time view of the metrics
+                    if dolphie.daemon_mode and datetime.now() - dolphie.pfs_metrics_last_reset_time >= timedelta(
+                        minutes=10
+                    ):
+                        dolphie.reset_pfs_metrics_deltas()
+
+                    dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
+                    file_io_data = dolphie.main_db_connection.fetchall()
+                    if not dolphie.file_io_data:
+                        dolphie.file_io_data = PerformanceSchemaMetrics(file_io_data, True)
+                    else:
+                        dolphie.file_io_data.update_internal_data(file_io_data)
+
+                    dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
+                    table_io_waits_data = dolphie.main_db_connection.fetchall()
+                    if not dolphie.table_io_waits_data:
+                        dolphie.table_io_waits_data = PerformanceSchemaMetrics(table_io_waits_data)
+                    else:
+                        dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -754,9 +756,8 @@ class DolphieApp(App):
                     tab.sparkline.data = dolphie.metric_manager.metrics.dml.Queries.values
                     tab.sparkline.refresh()
 
-        if dolphie.panels.graphs.visible:
-            # Refresh the graph(s) for the selected tab
-            self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
+        # Refresh the graph(s) for the selected tab
+        self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
         tab.refresh_replay_dashboard_section()
 
@@ -786,8 +787,8 @@ class DolphieApp(App):
                     tab.sparkline.data = dolphie.metric_manager.metrics.dml.Queries.values
                     tab.sparkline.refresh()
 
-            # Refresh the graph(s) for the selected tab
-            self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
+        # Refresh the graph(s) for the selected tab
+        self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
         tab.refresh_replay_dashboard_section()
 
@@ -943,8 +944,15 @@ class DolphieApp(App):
             command_get_input,
         )
 
+    @on(RadioSet.Changed, "#pfs_metrics_radio_set")
+    def replay_pfs_metrics_radio_set_changed(self, event: RadioSet.Changed):
+        tab = self.tab_manager.active_tab
+
+        if tab:
+            self.refresh_panel(tab, tab.dolphie.panels.pfs_metrics.name)
+
     @on(Tabs.TabActivated, "#host_tabs")
-    def tab_changed(self, event: TabbedContent.TabActivated):
+    def host_tab_changed(self, event: Tabs.TabActivated):
         # If the previous tab is a replay file, cancel its worker and timer
         previous_tab = self.tab_manager.active_tab
         if previous_tab and previous_tab.dolphie.replay_file and previous_tab.worker:
@@ -967,12 +975,13 @@ class DolphieApp(App):
                 tab_panel = tab.get_panel_widget(panel.name)
                 tab_panel.display = getattr(tab.dolphie.panels, panel.name).visible
 
+            tab.toggle_metric_graph_tabs_display()
+            tab.toggle_entities_displays()
+
             if tab.dolphie.connection_source == ConnectionSource.mysql:
                 self.refresh_screen_mysql(tab)
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
-
-            tab.refresh_tab_properties()
 
             # Set the display state for the replica container based on whether there are replicas
             tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
@@ -994,31 +1003,30 @@ class DolphieApp(App):
 
             self.force_refresh_for_replay(need_current_data=True)
 
-    @on(TabbedContent.TabActivated, ".metrics_host_tabs")
-    def metric_tab_changed(self, event: TabbedContent.TabActivated):
-        metric_instance_name = event.pane.name
+    @on(TabbedContent.TabActivated, "#metric_graph_tabs")
+    def metric_graph_tab_changed(self, event: TabbedContent.TabActivated):
+        metric_tab_name = event.pane.name
 
-        if metric_instance_name:
-            self.update_graphs(metric_instance_name)
+        if metric_tab_name:
+            self.update_graphs(metric_tab_name)
 
-    def update_graphs(self, tab_metric_instance_name: str):
-        if not self.tab_manager.active_tab or not self.tab_manager.active_tab.panel_graphs.display:
+    def update_graphs(self, metric_tab_name: str):
+        tab = self.tab_manager.active_tab
+        if not tab or not tab.panel_graphs.display:
             return
 
-        for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
-            if tab_metric_instance_name == metric_instance.tab_name:
+        for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
+            if metric_tab_name == metric_instance.tab_name:
                 for graph_name in metric_instance.graphs:
-                    getattr(self.tab_manager.active_tab, graph_name).render_graph(
-                        metric_instance, self.tab_manager.active_tab.dolphie.metric_manager.datetimes
-                    )
+                    getattr(tab, graph_name).render_graph(metric_instance, tab.dolphie.metric_manager.datetimes)
 
-        self.update_stats_label(tab_metric_instance_name)
+        self.update_stats_label(metric_tab_name)
 
-    def update_stats_label(self, tab_metric_instance_name: str):
+    def update_stats_label(self, metric_tab_name: str):
         stat_data = {}
 
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
-            if metric_instance.tab_name == tab_metric_instance_name:
+            if metric_instance.tab_name == metric_tab_name:
                 number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
                 for metric_name, metric_data in metric_instance.__dict__.items():
                     if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
@@ -1030,7 +1038,7 @@ class DolphieApp(App):
         formatted_stat_data = "  ".join(
             f"[b light_blue]{label}[/b light_blue] {value}" for label, value in stat_data.items()
         )
-        getattr(self.tab_manager.active_tab, tab_metric_instance_name).update(formatted_stat_data)
+        getattr(self.tab_manager.active_tab, metric_tab_name).update(formatted_stat_data)
 
     def toggle_panel(self, panel_name: str):
         # We store the panel objects in the tab object (i.e. tab.panel_dashboard, tab.panel_processlist, etc.)
@@ -1104,20 +1112,18 @@ class DolphieApp(App):
         if len(self.screen_stack) > 1 or not self.tab_manager.active_tab:
             return
 
-        event_metric_instance_name = event.switch.name
-        metric = event.switch.id
+        metric_tab_name = event.switch.name
 
-        # Loop all metric instances and set the visibility of the metric
-        for tab in self.tab_manager.tabs.values():
-            for metric_instance_name, metric_instance in tab.dolphie.metric_manager.metrics.__dict__.items():
-                if (
-                    tab.dolphie.connection_source in metric_instance.connection_source
-                    and event_metric_instance_name == metric_instance_name
-                ):
-                    metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
-                    metric_data.visible = event.value
+        # The switch id is in the format of metric_instance_name-metric
+        metric_split = event.switch.id.split("-")
+        metric_instance_name = metric_split[0]
+        metric = metric_split[1]
 
-        self.update_graphs(event_metric_instance_name)
+        metric_instance = getattr(self.tab_manager.active_tab.dolphie.metric_manager.metrics, metric_instance_name)
+        metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
+        metric_data.visible = event.value
+
+        self.update_graphs(metric_tab_name)
 
     async def on_key(self, event: events.Key):
         if len(self.screen_stack) > 1:
@@ -1162,7 +1168,7 @@ class DolphieApp(App):
 
         elif key == "3":
             self.toggle_panel(dolphie.panels.graphs.name)
-            self.app.update_graphs("dml")
+            self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
         elif key == "4":
             if dolphie.connection_source == ConnectionSource.proxysql:
@@ -1502,15 +1508,18 @@ class DolphieApp(App):
                     self.notify("Refreshing has resumed", severity="success")
 
         if key == "P":
-            if dolphie.use_performance_schema:
-                dolphie.use_performance_schema = False
-                self.notify("Switched to using [b highlight]Processlist")
+            if dolphie.use_performance_schema_for_processlist:
+                dolphie.use_performance_schema_for_processlist = False
+                self.notify("Switched to using [b highlight]Information Schema[/b highlight] for processlist")
             else:
                 if dolphie.performance_schema_enabled:
-                    dolphie.use_performance_schema = True
-                    self.notify("Switched to using [b highlight]Performance Schema")
+                    dolphie.use_performance_schema_for_processlist = True
+                    self.notify("Switched to using [b highlight]Performance Schema[/b highlight] for processlist")
                 else:
-                    self.notify("You can't switch to Performance Schema because it isn't enabled")
+                    self.notify(
+                        "You can't switch to [b highlight]Performance Schema[/b highlight] for "
+                        "processlist because it isn't enabled"
+                    )
 
         elif key == "q":
             self.app.exit()

@@ -290,17 +290,14 @@ def create_system_utilization_table(tab: Tab) -> Table:
     swap_total = format_bytes(dolphie.system_utilization.get("Swap_Total", "N/A"))
     table.add_row("[label]Swap", f"{swap_used}[dark_gray]/[/dark_gray]{swap_total}")
 
-    # Network
-    network_down_values = dolphie.metric_manager.metrics.system_network.Network_Down.values
-    network_up_values = dolphie.metric_manager.metrics.system_network.Network_Up.values
-    if network_down_values and network_up_values:
-        last_network_down = format_bytes(network_down_values[-1])
-        last_network_up = format_bytes(network_up_values[-1])
-        table.add_row("[label]Network", f"[label]Dn[/label] {last_network_down}\n[label]Up[/label] {last_network_up}")
+    # Disk I/O
+    disk_read_values = dolphie.metric_manager.metrics.system_disk_io.Disk_Read.values
+    disk_write_values = dolphie.metric_manager.metrics.system_disk_io.Disk_Write.values
+    if disk_read_values and disk_write_values:
+        last_disk_read = format_number(disk_read_values[-1])
+        last_disk_write = format_number(disk_write_values[-1])
+        table.add_row("[label]Disk", f"[label]IOPS R[/label] {last_disk_read}\n[label]IOPS W[/label] {last_disk_write}")
     else:
-        table.add_row(
-            "[label]Network",
-            "[label]Dn[/label] N/A\n[label]Up[/label] N/A",
-        )
+        table.add_row("[label]Disk", "[label]IOPS R[/label] N/A\n[label]IOPS W[/label] N/A")
 
     return table

@@ -1,0 +1,552 @@
+* {
+    scrollbar-background: #161e31;
+    scrollbar-background-hover: #161e31;
+    scrollbar-background-active: #161e31;
+
+    scrollbar-color: #33405d;
+    scrollbar-color-hover: #404f71;
+    scrollbar-color-active: #4f608a;
+
+    color: #e9e9e9;
+}
+
+#_default, CommandScreen, EventLog {
+    background: #0a0e1b;
+}
+Graph {
+    height: 16;
+}
+Horizontal {
+    height: auto;
+}
+Rule {
+    color: #32416a;
+    margin: 0;
+}
+DataTable {
+    background: #0f1525;
+    overflow-x: hidden;
+    max-height: 40;
+
+    &:focus {
+        background-tint: #0f1525;
+    }
+
+    & > .datatable--odd-row {
+        background: #131a2c;
+    }
+    & > .datatable--even-row {
+        background: #0f1525;
+    }
+}
+LoadingIndicator {
+    color: #8fb0ee;
+    height: auto;
+    content-align: center middle;
+    margin-top: 3;
+}
+ModalScreen {
+    background: #0d1015 70%;
+    align: center middle;
+    height: 40;
+    color: #4d5a85;
+}
+Sparkline {
+    margin-top: 1;
+    margin-bottom: 1;
+}
+SpinnerWidget {
+    color: #8fb0ee;
+    height: auto;
+    content-align: center middle;
+}
+
+CommandList {
+    text-style: none;
+    border-bottom: hkey #1c2440;
+    max-height: 80vh;
+
+    & > .option-list--option {
+        text-style: none;
+        padding: 0;
+    }
+    & > .option-list--option-highlighted {
+        background: #171d2d;
+    }
+    & > .option-list--option-hover {
+        background: #171d2d;
+        text-style: bold;
+    }
+}
+CommandPalette {
+    background: #0d1015 70%;
+
+    & > Vertical {
+        background: #0a0e1b;
+    }
+    & #--input {
+        border-top: hkey #1c2440;
+    }
+}
+CommandInput, CommandInput:focus {
+    background: #0a0e1b !important;
+    width: 1fr !important;
+    border: blank !important;
+    padding-left: 0 !important;
+    margin: 0 1 !important;
+}
+
+TopBar {
+    dock: top;
+    background: #192036;
+    height: 1;
+    layout: horizontal;
+}
+#topbar_title {
+    width: 15%;
+    content-align: left middle;
+}
+#topbar_host {
+    color: #bbc8e8;
+    width: 70%;
+    content-align: center middle;
+    text-style: bold;
+}
+#topbar_help {
+    width: 15%;
+    content-align: right middle;
+    color: #8f9fc1;
+}
+
+.dashboard_replay {
+    height: auto;
+    width: 65;
+    content-align: center middle;
+    align: center middle;
+}
+#dashboard_replay_progressbar {
+    width: 100%;
+
+    & > #bar {
+        width: 65;
+    }
+
+    & > #bar > .bar--bar {
+        color: #91abec;
+        background: #3a3f51;
+    }
+    & > #bar > .bar--complete {
+        color: #54efae;
+    }
+}
+
+
+.replay_buttons {
+    height: auto;
+    width: 65;
+    background: #20283b;
+    border-top: tall #192033;
+    border-bottom: tall #192033;
+}
+.replay_button {
+    text-style: none;
+    background: #20283b;
+    background-tint: transparent;
+    border: none;
+
+    &:hover {
+        background: #20283b;
+        color: #91abec;
+        border: none;
+        text-style: bold;
+    }
+    &:focus {
+        background: #20283b;
+        color: #91abec;
+        border: none;
+        text-style: bold;
+    }
+    &.-active {
+        background: #20283b;
+        color: #5475c7;
+        border: none;
+        text-style: bold;
+        tint: #273148 0%;
+    }
+}
+
+#panel_graphs, #panel_replication {
+    height: auto;
+
+    & Tabs {
+        margin-top: 0;
+    }
+}
+
+
+#pfs_metrics_file_io_datatable, #pfs_metrics_table_io_waits_datatable, #proxysql_hostgroup_summary_datatable, #proxysql_mysql_query_rules_datatable {
+    overflow-x: auto;
+}
+
+.panel_container {
+    height: auto;
+    width: 100%;
+    background: #0f1525;
+    border: tall #1b233a;
+    margin-bottom: 1;
+
+    & > Label {
+        width: 100%;
+        color: #bbc8e8;
+        text-style: bold;
+        content-align: center middle;
+    }
+}
+
+.dashboard {
+    height: auto;
+
+    & > Center {
+        height: auto;
+        layout: horizontal;
+        content-align: center middle;
+
+        & > * {
+            content-align: center top;
+            height: 11;
+            width: auto;
+            padding-left: 1;
+            padding-right: 1;
+            margin-bottom: 0;
+        }
+    }
+}
+
+.replication {
+    height: auto;
+    width: auto;
+    margin-bottom: 1;
+
+    & > Label {
+        width: 100%;
+        content-align: center middle;
+    }
+
+    & > Center {
+        layout: horizontal;
+        width: auto;
+        content-align: center middle;
+
+        & > ScrollableContainer {
+            content-align: center top;
+            background: #0f1525;
+            border: tall #1b233a;
+            height: auto;
+            max-height: 18;
+
+            & > Static {
+                width: auto;
+            }
+        }
+
+        & > .replication_status {
+            max-width: 85;
+        }
+        & > .replication_thread_applier {
+            max-width: 60;
+        }
+    }
+}
+
+.replicas, .group_replication {
+    height: auto;
+    margin-bottom: 1;
+
+    & > Container {
+        height: auto;
+        layout: grid;
+        grid-size: 2;
+        grid-gutter: 1 0;
+    }
+    & > Container > ScrollableContainer  {
+        background: #0f1525;
+        border: tall #1b233a;
+        height: auto;
+        max-height: 18;
+    }
+    & > Label {
+        width: 100%;
+        content-align: center middle;
+    }
+    & > LoadingIndicator {
+        margin-top: 0;
+    }
+}
+.group_replication > Container {
+    grid-size: 3;
+}
+
+
+TabPane {
+    padding: 0;
+}
+Tabs {
+    margin-top: 1;
+
+    &:focus {
+        & .-active {
+            background: #0a0e1b;
+        }
+        & .underline--bar {
+            color: #caddfe;
+        }
+    }
+
+}
+Tab {
+    &:focus {
+        text-style: bold;
+    }
+    &:hover {
+        text-style: bold;
+    }
+    &.-active {
+        text-style: bold;
+    }
+    &.-active:focus {
+        text-style: bold;
+    }
+}
+
+Underline > .underline--bar {
+    background: #283357;
+    color: #82a5e1;
+}
+AutoComplete {
+    width: auto;
+    height: auto;
+}
+Dropdown {
+    width: 70;
+    background: #151926;
+
+    & > .autocomplete--highlight-match {
+        background: #777500;
+    }
+
+    & > .autocomplete--selection-cursor {
+        background: #283048;
+    }
+}
+
+Input {
+    width: 40;
+    margin: 0 2;
+    margin-bottom: 1;
+    background: #111322;
+    border: tall #252e49;
+
+    &:focus {
+        background-tint: transparent;
+        background: #151729;
+        border: tall #43548b;
+    }
+
+    & > .input--placeholder {
+        color: #5e6b87;
+    }
+}
+
+.datatable--header {
+    background: transparent;
+    color: #c5c7d2;
+    text-style: bold;
+}
+
+.button_container {
+    height: auto;
+    width: 100%;
+    align-horizontal: center;
+}
+.switch_container {
+    align: center top;
+    margin: 1 0 1 0;
+    height: auto;
+
+    & > .switch_container > Label {
+        color: #bbc8e8;
+        padding-left: 1;
+        text-style: bold;
+    }
+}
+
+.stats_data {
+    width: 100%;
+    content-align: center middle;
+}
+
+Sparkline {
+    & > .sparkline--max-color {
+        color: #869fd9;
+    }
+    & > .sparkline--min-color {
+        color: #384c7a;
+    }
+}
+
+Button {
+    background: #282c42;
+    border-top: tall #54597b;
+    border-bottom: tall #171922;
+
+    &:hover {
+        background: #383e5c;
+        border-top: tall #69709a;
+        border-bottom: tall #171922;
+    }
+    &:focus {
+        background: #383e5c;
+        border-top: tall #69709a;
+        border-bottom: tall #171922;
+        text-style: bold;
+    }
+
+    &.-primary {
+        background: #192c5b;
+        border-top: tall #425894;
+        border-bottom: tall #151b2b;
+    }
+    &.-primary:hover {
+        background: #203875;
+        border-top: tall #4a62a4;
+        border-bottom: tall #151b2b;
+    }
+    &.-primary:focus {
+        background: #203875;
+        border-top: tall #4a62a4;
+        border-bottom: tall #151b2b;
+        text-style: bold;
+    }
+}
+
+Switch {
+    background: #0a0e1b;
+    border: none #364774;
+
+    &:focus {
+        background-tint: transparent;
+    }
+
+    & > .switch--slider {
+        color: #424d6f;
+        background: #192132;
+    }
+
+    &:focus > .switch--slider {
+        color: #fd8383;
+    }
+    &:hover > .switch--slider {
+        color: #fd8383;
+    }
+
+    &.-on > .switch--slider {
+        color: #5c81d7;
+    }
+    &.-on:focus > .switch--slider {
+        color: #54efae;
+    }
+    &.-on:hover > .switch--slider {
+        color: #54efae;
+    }
+}
+
+Checkbox .toggle--button {
+    color: #0f1525;
+    text-style: bold;
+    background: #343d56;
+}
+
+RadioSet {
+    background: transparent;
+    border: none;
+    width: 100%;
+    layout: horizontal;
+
+    &:focus {
+        background-tint: transparent;
+
+        & > RadioButton.-selected > .toggle--label {
+            text-style: bold;
+            color: #a5b8e7;
+        }
+
+        & > .toggle--label {
+            text-style: bold;
+        }
+    }
+}
+
+RadioButton {
+    background: transparent;
+    margin-right: 2;
+
+    & > .toggle--button {
+        color: #0f1525;
+        background: #343d56;
+    }
+}
+
+ToggleButton {
+    &:focus {
+        background-tint: transparent;
+        & > .toggle--label {
+            text-style: bold;
+            color: #a5b8e7;
+            background: transparent;
+        }
+    }
+    &:hover {
+        & > .toggle--label {
+            text-style: bold;
+            color: #a5b8e7;
+            background: transparent;
+        }
+    }
+    &.-on {
+        background: transparent;
+        & > .toggle--button {
+            text-style: bold;
+            color: #74e3b5;
+            background: #305240;
+        }
+    }
+}
+
+Toast {
+    width: auto;
+    max-width: 50%;
+    background: #20283e;
+
+    &.-information {
+        border-left: wide #788bc9;
+        border-right: wide #192036;
+    }
+    &.-warning {
+        border-left: wide #f0e357;
+        border-right: wide #192036;
+    }
+    &.-success {
+        border-left: wide #5bd088;
+        border-right: wide #192036;
+    }
+    &.-success .toast--title {
+        color: #6ae398;
+    }
+    &.-error {
+        border-left: wide #f05757;
+        border-right: wide #192036;
+    }
+    &.-error .toast--title {
+        color: #ed6363;
+    }
+}

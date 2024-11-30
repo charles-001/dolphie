@@ -1,21 +1,25 @@
-from dolphie.Widgets.topbar import TopBar
 from textual.binding import Binding
 from textual.containers import Center
 from textual.screen import Screen
 from textual.widgets import Static
 
+from dolphie.Widgets.topbar import TopBar
+
 
 class CommandScreen(Screen):
     CSS = """
-        CommandScreen Center {
-            padding: 1;
-        }
-        CommandScreen Center > Static {
-            padding-left: 1;
-            padding-right: 1;
-            background: #101626;
-            border: tall #1d253e;
-            width: auto;
+        CommandScreen {
+            & Center {
+                padding: 1;
+
+                & > Static {
+                    padding-left: 1;
+                    padding-right: 1;
+                    background: #101626;
+                    border: tall #1d253e;
+                    width: auto;
+                }
+            }
         }
     """
 

@@ -21,7 +21,7 @@ from rich.syntax import Syntax
 
 
 class NordModifiedTheme(Style):
-    nord0 = "#101626"
+    nord0 = "#0f1525"
     nord1 = "#3b4252"
     nord2 = "#434c5e"
     nord3 = "#4c566a"
@@ -102,7 +102,7 @@ def minify_query(query: str) -> str:
     return markup_escape(re.sub(r"\s+", " ", query))
 
 
-def format_bytes(bytes_value, color=True):
+def format_bytes(bytes_value, color=True, decimal=2):
     if isinstance(bytes_value, str):
         return bytes_value
 
@@ -113,10 +113,12 @@ def format_bytes(bytes_value, color=True):
         bytes_value /= 1024
         unit_index += 1
 
-    formatted_value = f"{bytes_value:.2f}"
+    # Format with specified rounding precision
+    formatted_value = f"{bytes_value:.{decimal}f}"
 
-    if formatted_value.endswith(".00"):
-        formatted_value = formatted_value[:-3]  # Remove ".00" from the end
+    # Remove unnecessary ".00" if rounding results in a whole number
+    if formatted_value.endswith(f".{'0' * decimal}"):
+        formatted_value = formatted_value[: -decimal - 1]
 
     if bytes_value == 0:
         return "0"

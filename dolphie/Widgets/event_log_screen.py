@@ -1,9 +1,5 @@
 import textwrap
 
-from dolphie.Modules.MySQL import Database
-from dolphie.Modules.Queries import MySQLQueries
-from dolphie.Widgets.spinner import SpinnerWidget
-from dolphie.Widgets.topbar import TopBar
 from textual import events, on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -11,59 +7,74 @@ from textual.containers import Container, Horizontal
 from textual.screen import Screen
 from textual.widgets import DataTable, Input, Label, Switch
 
+from dolphie.Modules.MySQL import Database
+from dolphie.Modules.Queries import MySQLQueries
+from dolphie.Widgets.spinner import SpinnerWidget
+from dolphie.Widgets.topbar import TopBar
+
 
 class EventLog(Screen):
     CSS = """
-        EventLog Horizontal {
-            height: auto;
-            align: center top;
-            background: #0a0e1b;
-            width: 100%;
-        }
-        EventLog Horizontal > Label {
-            color: #bbc8e8;
-            text-style: bold;
-            margin-right: -1;
-        }
-        EventLog DataTable {
-            background: #0a0e1b;
-            border: none;
-            overflow-x: auto;
-            max-height: 100%;
-        }
-        EventLog SpinnerWidget {
-            margin-top: 1;
-        }
-        .input_container {
-            align: left top;
-            padding-left: 1;
-        }
-        .input_container > Input {
-            border: none;
-            background: #0a0e1b;
-            margin: 0;
-            height: 1;
-        }
-        #days_container > Input {
-            width: 15;
-        }
-        #days_container > Label {
-            margin-right: 2;
-        }
-        #info {
-            padding-top: 1;
-            width: 100%;
-            text-align: center;
-            text-style: bold;
-        }
-        #search {
-            width: 90%;
-            margin-bottom: 1;
-        }
-        #help {
-            color: #8f9fc1;
-            width: 100%;
-            content-align: right middle;
+        EventLog {
+            & Horizontal {
+                height: auto;
+                align: center top;
+                background: #0a0e1b;
+                width: 100%;
+
+                & > Label {
+                    color: #bbc8e8;
+                    text-style: bold;
+                    margin-right: -1;
+                }
+            }
+            & DataTable {
+                background: #0a0e1b;
+                border: none;
+                overflow-x: auto;
+                max-height: 100%;
+
+                &:focus {
+                    background-tint: #0a0e1b;
+                }
+            }
+            & SpinnerWidget {
+                margin-top: 1;
+            }
+            & .input_container {
+                align: left top;
+                padding-left: 1;
+
+                & > Input {
+                    border: none;
+                    background: #0a0e1b;
+                    margin: 0;
+                    height: 1;
+                }
+            }
+            & #days_container {
+                & > Input {
+                    width: 15;
+                }
+                & > Label {
+                    margin-right: 2;
+                }
+            }
+            & #info {
+                padding-top: 1;
+                width: 100%;
+                text-align: center;
+                text-style: bold;
+            }
+            & #search {
+                width: 90%;
+                margin-bottom: 1;
+            }
+            & #help {
+                color: #8f9fc1;
+                width: 100%;
+                content-align: right middle;
+            }
         }
     """
 

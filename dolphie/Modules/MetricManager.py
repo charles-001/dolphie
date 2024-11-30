@@ -261,8 +261,8 @@ class MetricData:
 class SystemCPUMetrics:
     CPU_Percent: MetricData
     graphs: List[str]
-    tab_name: str = "system_cpu"
-    graph_tab_name = "System CPU"
+    tab_name: str = "system"
+    graph_tab_name = "System"
     metric_source: MetricSource = MetricSource.system_utilization
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
@@ -275,8 +275,8 @@ class SystemMemoryMetrics:
     Memory_Total: MetricData
     Memory_Used: MetricData
     graphs: List[str]
-    tab_name: str = "system_memory"
-    graph_tab_name = "System Memory"
+    tab_name: str = "system"
+    graph_tab_name = "System"
     metric_source: MetricSource = MetricSource.system_utilization
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
@@ -286,11 +286,25 @@ class SystemMemoryMetrics:
 
 @dataclass
 class SystemNetworkMetrics:
-    Network_Up: MetricData
     Network_Down: MetricData
+    Network_Up: MetricData
     graphs: List[str]
-    tab_name: str = "system_network"
-    graph_tab_name = "System Network"
+    tab_name: str = "system"
+    graph_tab_name = "System"
+    metric_source: MetricSource = MetricSource.system_utilization
+    connection_source: List[ConnectionSource] = field(
+        default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
+    )
+    use_with_replay: bool = True
+
+
+@dataclass
+class SystemDiskIOMetrics:
+    Disk_Read: MetricData
+    Disk_Write: MetricData
+    graphs: List[str]
+    tab_name: str = "system"
+    graph_tab_name = "System"
     metric_source: MetricSource = MetricSource.system_utilization
     connection_source: List[ConnectionSource] = field(
         default_factory=lambda: [ConnectionSource.mysql, ConnectionSource.proxysql]
@@ -588,6 +602,7 @@ class ProxySQLTotalCommandStats:
 class MetricInstances:
     system_cpu: SystemCPUMetrics
     system_memory: SystemMemoryMetrics
+    system_disk_io: SystemDiskIOMetrics
     system_network: SystemNetworkMetrics
     dml: DMLMetrics
     buffer_pool_requests: BufferPoolRequestsMetrics
@@ -646,16 +661,21 @@ class MetricManager:
                     create_switch=False,
                 ),
                 Memory_Used=MetricData(
-                    label="Used",
-                    color=MetricColor.blue,
+                    label="Memory Used",
+                    color=MetricColor.green,
                     per_second_calculation=False,
                     create_switch=False,
                 ),
             ),
+            system_disk_io=SystemDiskIOMetrics(
+                graphs=["graph_system_disk_io"],
+                Disk_Read=MetricData(label="IOPS Read", color=MetricColor.blue),
+                Disk_Write=MetricData(label="IOPS Write", color=MetricColor.yellow),
+            ),
             system_network=SystemNetworkMetrics(
                 graphs=["graph_system_network"],
-                Network_Up=MetricData(label="Up", color=MetricColor.blue),
-                Network_Down=MetricData(label="Down", color=MetricColor.green),
+                Network_Down=MetricData(label="Net Dn", color=MetricColor.blue),
+                Network_Up=MetricData(label="Net Up", color=MetricColor.gray),
             ),
             dml=DMLMetrics(
                 graphs=["graph_dml"],
@@ -681,7 +701,7 @@ class MetricManager:
             checkpoint=CheckpointMetrics(
                 graphs=["graph_checkpoint"],
                 Innodb_checkpoint_age=MetricData(
-                    label="Uncheckpointed", color=MetricColor.blue, per_second_calculation=False, create_switch=False
+                    label="Uncheckpointed", color=MetricColor.green, per_second_calculation=False, create_switch=False
                 ),
             ),
             buffer_pool_requests=BufferPoolRequestsMetrics(
@@ -748,7 +768,7 @@ class MetricManager:
             disk_io=DiskIOMetrics(
                 graphs=["graph_disk_io"],
                 io_read=MetricData(label="Read", color=MetricColor.blue),
-                io_write=MetricData(label="Write", color=MetricColor.green),
+                io_write=MetricData(label="Write", color=MetricColor.yellow),
             ),
             locks=LocksMetrics(
                 graphs=["graph_locks"],

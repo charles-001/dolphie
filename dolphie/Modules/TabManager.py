@@ -2,7 +2,7 @@ import asyncio
 import copy
 import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from time import monotonic
 from typing import Dict, List
 
@@ -61,6 +61,8 @@ class Tab:
     replicas_worker: Worker = None
     replicas_worker_timer: Timer = None
     replicas_worker_running: bool = False
+
+    available_graph_tabs: Dict[str, bool] = field(default_factory=dict)
 
     main_container: VerticalScroll = None
     metric_graph_tabs: TabbedContent = None
@@ -168,14 +170,10 @@ class Tab:
     def toggle_entities_displays(self):
         if self.dolphie.system_utilization:
             self.dashboard_section_6.display = True
-            self.metric_graph_tabs.show_tab("graph_tab_system_cpu")
-            self.metric_graph_tabs.show_tab("graph_tab_system_memory")
-            self.metric_graph_tabs.show_tab("graph_tab_system_network")
+            self.metric_graph_tabs.show_tab("graph_tab_system")
         else:
             self.dashboard_section_6.display = False
-            self.metric_graph_tabs.hide_tab("graph_tab_system_cpu")
-            self.metric_graph_tabs.hide_tab("graph_tab_system_memory")
-            self.metric_graph_tabs.hide_tab("graph_tab_system_network")
+            self.metric_graph_tabs.hide_tab("graph_tab_system")
 
         if self.dolphie.connection_source == ConnectionSource.mysql:
             if self.dolphie.replication_status and not self.dolphie.panels.replication.visible:
@@ -202,23 +200,22 @@ class Tab:
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             self.dashboard_section_5.display = False
 
-    def refresh_tab_properties(self):
+    def toggle_metric_graph_tabs_display(self):
         self.main_container.display = True
 
-        # Hide all graph tabs so we can show the ones we want
-        tabs = self.metric_graph_tabs.query(TabPane)
-        for graph_tab in tabs:
-            self.metric_graph_tabs.hide_tab(graph_tab.id)
-
-        # Show the tabs that are for the current connection source
+        # Hide/show the tabs that are available for the current connection source
         for metric_instance in self.dolphie.metric_manager.metrics.__dict__.values():
             if self.dolphie.connection_source in metric_instance.connection_source:
                 self.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
+            else:
+                self.metric_graph_tabs.hide_tab(f"graph_tab_{metric_instance.tab_name}")
 
         if self.dolphie.replay_file:
-            self.dashboard_replay_container.display = True
+            if not self.dashboard_replay_container.display:
+                self.dashboard_replay_container.display = True
         else:
-            self.dashboard_replay_container.display = False
+            if self.dashboard_replay_container.display:
+                self.dashboard_replay_container.display = False
 
     def layout_graphs(self):
         # These variables are dynamically created
@@ -240,6 +237,11 @@ class Tab:
 
         self.graph_adaptive_hash_index.styles.width = "50%"
         self.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
+
+        self.graph_system_cpu.styles.width = "50%"
+        self.graph_system_network.styles.width = "50%"
+        self.graph_system_memory.styles.width = "50%"
+        self.graph_system_disk_io.styles.width = "50%"
 
 
 class TabManager:
@@ -303,7 +305,7 @@ class TabManager:
             return
 
         await self.app.mount(
-            LoadingIndicator(id="loading_indicator", classes="connection_loading_indicator"),
+            LoadingIndicator(id="loading_indicator"),
             VerticalScroll(
                 SpinnerWidget(id="spinner", text="Processing command"),
                 Center(
@@ -326,22 +328,18 @@ class TabManager:
                 ),
                 Container(
                     Center(
-                        Static(id="dashboard_section_1"),
-                        Static(id="dashboard_section_6"),
-                        Static(id="dashboard_section_2"),
-                        Static(id="dashboard_section_3"),
-                        Static(id="dashboard_section_5"),
-                        Static(id="dashboard_section_4"),
+                        Static(id="dashboard_section_1", classes="panel_container"),
+                        Static(id="dashboard_section_6", classes="panel_container"),
+                        Static(id="dashboard_section_2", classes="panel_container"),
+                        Static(id="dashboard_section_3", classes="panel_container"),
+                        Static(id="dashboard_section_5", classes="panel_container"),
+                        Static(id="dashboard_section_4", classes="panel_container"),
                     ),
                     Sparkline([], id="panel_dashboard_queries_qps"),
                     id="panel_dashboard",
-                    classes="panel_container dashboard",
+                    classes="dashboard",
                 ),
-                Container(
-                    TabbedContent(id="metric_graph_tabs", classes="metrics_host_tabs"),
-                    id="panel_graphs",
-                    classes="panel_container",
-                ),
+                Container(TabbedContent(id="metric_graph_tabs"), id="panel_graphs"),
                 Container(
                     Static(id="replication_container_title", classes="replication_container_title"),
                     Container(
@@ -373,19 +371,19 @@ class TabManager:
                         classes="replicas",
                     ),
                     id="panel_replication",
-                    classes="panel_container replication_panel",
+                    classes="replication_panel",
                 ),
                 Container(
                     Label(id="metadata_locks_title"),
                     DataTable(id="metadata_locks_datatable", show_cursor=False, zebra_stripes=True),
                     id="panel_metadata_locks",
-                    classes="metadata_locks",
+                    classes="panel_container",
                 ),
                 Container(
                     Label(id="ddl_title"),
                     DataTable(id="ddl_datatable", show_cursor=False),
                     id="panel_ddl",
-                    classes="ddl",
+                    classes="panel_container",
                 ),
                 Container(
                     RadioSet(
@@ -399,16 +397,13 @@ class TabManager:
                     ),
                     TabbedContent(id="pfs_metrics_tabs"),
                     id="panel_pfs_metrics",
+                    classes="panel_container",
                 ),
                 Container(
                     Label(id="proxysql_hostgroup_summary_title"),
-                    DataTable(
-                        id="proxysql_hostgroup_summary_datatable",
-                        classes="proxysql_hostgroup_summary_datatable",
-                        show_cursor=False,
-                    ),
+                    DataTable(id="proxysql_hostgroup_summary_datatable", show_cursor=False),
                     id="panel_proxysql_hostgroup_summary",
-                    classes="proxysql_hostgroup_summary",
+                    classes="panel_container",
                 ),
                 Container(
                     Label(id="proxysql_mysql_query_rules_title"),
@@ -418,7 +413,7 @@ class TabManager:
                         show_cursor=False,
                     ),
                     id="panel_proxysql_mysql_query_rules",
-                    classes="proxysql_mysql_query_rules",
+                    classes="panel_container",
                 ),
                 Container(
                     Label(id="proxysql_command_stats_title"),
@@ -428,13 +423,13 @@ class TabManager:
                         show_cursor=False,
                     ),
                     id="panel_proxysql_command_stats",
-                    classes="proxysql_command_stats",
+                    classes="panel_container",
                 ),
                 Container(
                     Label(id="processlist_title"),
                     DataTable(id="processlist_data", show_cursor=False),
                     id="panel_processlist",
-                    classes="processlist",
+                    classes="panel_container",
                 ),
                 classes="tab",
                 id="main_container",
@@ -517,7 +512,7 @@ class TabManager:
         self.host_tabs.add_tab(TabWidget(intial_tab_name, id=tab_id))
 
         # Loop the metric instances and create the graph tabs
-        for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
+        for metric_instance_name, metric_instance in dolphie.metric_manager.metrics.__dict__.items():
             metric_tab_name = metric_instance.tab_name
             graph_names = metric_instance.graphs
             graph_tab_name = metric_instance.graph_tab_name
@@ -529,6 +524,7 @@ class TabManager:
                         graph_tab_name,
                         Label(id=f"stats_{metric_tab_name}", classes="stats_data"),
                         Horizontal(id=f"graph_container_{metric_tab_name}"),
+                        Horizontal(id=f"graph_container2_{metric_tab_name}"),
                         Horizontal(
                             id=f"switch_container_{metric_tab_name}",
                             classes="switch_container switch_container",
@@ -544,7 +540,13 @@ class TabManager:
             for graph_name in graph_names:
                 graph = self.app.query(f"#{graph_name}")
                 if not graph:
-                    await self.app.query_one(f"#graph_container_{metric_tab_name}", Horizontal).mount(
+                    graph_container = (
+                        "graph_container2"
+                        if graph_name in ["graph_system_network", "graph_system_disk_io"]
+                        else "graph_container"
+                    )
+
+                    await self.app.query_one(f"#{graph_container}_{metric_tab_name}", Horizontal).mount(
                         MetricManager.Graph(id=f"{graph_name}", classes="panel_data")
                     )
 
@@ -552,7 +554,7 @@ class TabManager:
                 setattr(tab, graph_name, self.app.query_one(f"#{graph_name}"))
 
             for metric, metric_data in metric_instance.__dict__.items():
-                switch = self.app.query(f"#switch_container_{metric_tab_name} #{metric}")
+                switch = self.app.query(f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}")
 
                 if not switch:
                     if (
@@ -564,12 +566,14 @@ class TabManager:
                             Label(metric_data.label)
                         )
                         await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
-                            Switch(animate=False, id=metric, name=metric_tab_name)
+                            Switch(animate=False, id=f"{metric_instance_name}-{metric}", name=metric_tab_name)
                         )
 
                         # Toggle the switch if the metric is visible (means to enable it by default)
                         if metric_data.visible:
-                            self.app.query_one(f"#switch_container_{metric_tab_name} #{metric}", Switch).toggle()
+                            self.app.query_one(
+                                f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}", Switch
+                            ).toggle()
 
         if tab.manual_tab_name:
             self.rename_tab(tab, tab.manual_tab_name)
