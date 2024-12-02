@@ -1,10 +1,11 @@
 from typing import Dict
 
+from rich.syntax import Syntax
+from textual.widgets import DataTable
+
 from dolphie.Modules.Functions import format_query, format_time
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
-from rich.syntax import Syntax
-from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -102,7 +103,10 @@ def create_panel(tab: Tab) -> DataTable:
 
     metadata_locks_datatable.sort("Age", reverse=dolphie.sort_by_time_descending)
 
-    tab.metadata_locks_title.update(f"Metadata Locks ([highlight]{metadata_locks_datatable.row_count}[/highlight])")
+    tab.metadata_locks_title.update(
+        f"{dolphie.panels.get_panel_title(dolphie.panels.metadata_locks.name)} "
+        f"([highlight]{metadata_locks_datatable.row_count}[/highlight])"
+    )
 
 
 def fetch_data(tab: Tab) -> Dict[str, str]:

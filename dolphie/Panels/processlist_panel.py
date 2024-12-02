@@ -164,7 +164,10 @@ def create_panel(tab: Tab) -> DataTable:
 
     processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 
-    title = f"Processlist ([highlight]{processlist_datatable.row_count}[/highlight]"
+    title = (
+        f"{dolphie.panels.get_panel_title(dolphie.panels.processlist.name)} "
+        f"([highlight]{processlist_datatable.row_count}[/highlight]"
+    )
     if dolphie.show_threads_with_concurrency_tickets:
         title += f"/[highlight]{dolphie.global_variables.get('innodb_thread_concurrency')}[/highlight]"
     title += ")"

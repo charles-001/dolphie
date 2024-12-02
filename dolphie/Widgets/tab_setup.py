@@ -66,6 +66,7 @@ class TabSetupModal(ModalScreen):
             }
 
             & RadioSet {
+                width: 100%;
                 padding-bottom: 1;
                 align: center middle;
             }

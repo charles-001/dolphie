@@ -1,6 +1,7 @@
+from textual.widgets import DataTable
+
 from dolphie.Modules.Functions import format_bytes, format_time
 from dolphie.Modules.TabManager import Tab
-from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -38,4 +39,6 @@ def create_panel(tab: Tab) -> DataTable:
 
         ddl_datatable.add_row(*row_values, key=ddl["processlist_id"])
 
-    tab.ddl_title.update(f"DDL ([highlight]{ddl_datatable.row_count}[/highlight])")
+    tab.ddl_title.update(
+        f"{dolphie.panels.get_panel_title(dolphie.panels.ddl.name)} ([highlight]{ddl_datatable.row_count}[/highlight])"
+    )

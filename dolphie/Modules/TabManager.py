@@ -354,11 +354,11 @@ class TabManager:
                     id="panel_dashboard",
                     classes="dashboard",
                 ),
-                Container(TabbedContent(id="metric_graph_tabs"), id="panel_graphs"),
+                Container(Label(id="metric_graphs_title"), TabbedContent(id="metric_graph_tabs"), id="panel_graphs"),
                 Container(
                     Static(id="replication_container_title", classes="replication_container_title"),
                     Container(
-                        Label("[b]Replication\n"),
+                        Label(id="replication_title"),
                         Label(id="replication_variables"),
                         Center(
                             ScrollableContainer(Static(id="replication_status"), classes="replication_status"),
@@ -401,6 +401,7 @@ class TabManager:
                     classes="panel_container",
                 ),
                 Container(
+                    Label(id="pfs_metrics_title"),
                     RadioSet(
                         *(
                             [
@@ -672,6 +673,16 @@ class TabManager:
             "#replication_thread_applier_container", ScrollableContainer
         )
         tab.replication_thread_applier = self.app.query_one("#replication_thread_applier", Static)
+
+        self.app.query_one("#metric_graphs_title", Label).update(
+            dolphie.panels.get_panel_title(dolphie.panels.graphs.name)
+        )
+        self.app.query_one("#replication_title", Label).update(
+            dolphie.panels.get_panel_title(dolphie.panels.replication.name)
+        )
+        self.app.query_one("#pfs_metrics_title", Label).update(
+            dolphie.panels.get_panel_title(dolphie.panels.pfs_metrics.name)
+        )
 
         tab.replication_container.display = False
         tab.replicas_container.display = False

@@ -10,7 +10,7 @@ class CommandManager:
                 "Commands": {
                     "1": {"human_key": "1", "description": "Toggle panel Dashboard"},
                     "2": {"human_key": "2", "description": "Toggle panel Processlist"},
-                    "3": {"human_key": "3", "description": "Toggle panel Graph Metrics"},
+                    "3": {"human_key": "3", "description": "Toggle panel Metric Graphs"},
                     "4": {"human_key": "4", "description": "Toggle panel Replication/Replicas"},
                     "5": {"human_key": "5", "description": "Toggle panel Metadata Locks"},
                     "6": {"human_key": "6", "description": "Toggle panel DDLs"},
@@ -82,9 +82,9 @@ class CommandManager:
                 "Commands": {
                     "1": {"human_key": "1", "description": "Toggle panel Dashboard"},
                     "2": {"human_key": "2", "description": "Toggle panel Processlist"},
-                    "3": {"human_key": "3", "description": "Toggle panel Graph Metrics"},
+                    "3": {"human_key": "3", "description": "Toggle panel Metric Graphs"},
                     "4": {"human_key": "4", "description": "Toggle panel Hostgroup Summary"},
-                    "5": {"human_key": "5", "description": "Toggle panel MySQL Query Rules"},
+                    "5": {"human_key": "5", "description": "Toggle panel Query Rules"},
                     "6": {"human_key": "6", "description": "Toggle panel Command Statistics"},
                     "placeholder_1": {"human_key": "", "description": ""},
                     "grave_accent": {"human_key": "`", "description": "Open tab setup"},
@@ -136,7 +136,7 @@ class CommandManager:
                 "Commands": {
                     "1": {"human_key": "1", "description": "Toggle panel Dashboard"},
                     "2": {"human_key": "2", "description": "Toggle panel Processlist"},
-                    "3": {"human_key": "3", "description": "Toggle panel Graph Metrics"},
+                    "3": {"human_key": "3", "description": "Toggle panel Metric Graphs"},
                     "4": {"human_key": "4", "description": "Toggle panel Replication/Replicas"},
                     "5": {"human_key": "5", "description": "Toggle panel Metadata Locks"},
                     "7": {"human_key": "7", "description": "Toggle panel Performance Schema Metrics"},
@@ -186,7 +186,7 @@ class CommandManager:
                 "Commands": {
                     "1": {"human_key": "1", "description": "Toggle panel Dashboard"},
                     "2": {"human_key": "2", "description": "Toggle panel Processlist"},
-                    "3": {"human_key": "3", "description": "Toggle panel Graph Metrics"},
+                    "3": {"human_key": "3", "description": "Toggle panel Metric Graphs"},
                     "4": {"human_key": "4", "description": "Toggle panel Hostgroup Summary"},
                     "placeholder_1": {"human_key": "", "description": ""},
                     "grave_accent": {"human_key": "`", "description": "Open tab setup"},

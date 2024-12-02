@@ -137,7 +137,10 @@ def create_panel(tab: Tab) -> DataTable:
 
     processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 
-    tab.processlist_title.update(f"Processlist ([highlight]{processlist_datatable.row_count}[/highlight])")
+    tab.processlist_title.update(
+        f"{dolphie.panels.get_panel_title(dolphie.panels.processlist.name)} "
+        f"([highlight]{processlist_datatable.row_count}[/highlight])"
+    )
 
 
 def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:

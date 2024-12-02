@@ -368,7 +368,7 @@ class DolphieApp(App):
                     tab.replicas_container.display = True
                     tab.replicas_loading_indicator.display = True
                     tab.replicas_title.update(
-                        f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
+                        f"[white][b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
                         " replicas...\n"
                     )
 
@@ -1165,8 +1165,6 @@ class DolphieApp(App):
             self.tab_manager.active_tab.processlist_datatable.clear()
             self.toggle_panel(dolphie.panels.processlist.name)
 
-            tab.processlist_title.update("Processlist ([highlight]0[/highlight])")
-
         elif key == "3":
             self.toggle_panel(dolphie.panels.graphs.name)
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
@@ -1200,8 +1198,8 @@ class DolphieApp(App):
                         tab.replicas_loading_indicator.display = True
 
                         tab.replicas_title.update(
-                            f"[b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
-                            " replicas...\n"
+                            f"[white][b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}"
+                            "[/highlight] replicas...\n"
                         )
 
                     for container in dolphie.app.query(".replica_container"):
@@ -1231,7 +1229,6 @@ class DolphieApp(App):
 
             self.toggle_panel(dolphie.panels.metadata_locks.name)
             self.tab_manager.active_tab.metadata_locks_datatable.clear()
-            tab.metadata_locks_title.update("Metadata Locks ([highlight]0[/highlight])")
 
         elif key == "6":
             if dolphie.connection_source == ConnectionSource.proxysql:
@@ -1253,7 +1250,6 @@ class DolphieApp(App):
 
                 self.toggle_panel(dolphie.panels.ddl.name)
                 self.tab_manager.active_tab.ddl_datatable.clear()
-                tab.ddl_title.update("DDL ([highlight]0[/highlight])")
 
         elif key == "7":
             if dolphie.is_mysql_version_at_least("5.7") and dolphie.performance_schema_enabled:

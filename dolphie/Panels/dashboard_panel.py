@@ -22,7 +22,12 @@ def create_panel(tab: Tab) -> Table:
     ####################
     # Host Information #
     ####################
-    table_information = Table(show_header=False, box=None, title="Host Information", title_style=table_title_style)
+    table_information = Table(
+        show_header=False,
+        box=None,
+        title=f"{dolphie.panels.get_key(dolphie.panels.dashboard.name)}Host Information",
+        title_style=table_title_style,
+    )
 
     if dolphie.replicaset:
         host_type = "InnoDB ReplicaSet"

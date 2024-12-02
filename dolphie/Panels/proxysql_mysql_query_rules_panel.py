@@ -1,6 +1,7 @@
+from textual.widgets import DataTable
+
 from dolphie.Modules.Functions import format_number
 from dolphie.Modules.TabManager import Tab
-from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -91,5 +92,6 @@ def create_panel(tab: Tab) -> DataTable:
             mysql_query_rules.clear()
 
     tab.proxysql_mysql_query_rules_title.update(
-        f"Active Query Rules ([highlight]{mysql_query_rules.row_count}[/highlight])"
+        f"{dolphie.panels.get_panel_title(dolphie.panels.proxysql_mysql_query_rules.name)} "
+        f"([highlight]{mysql_query_rules.row_count}[/highlight])"
     )

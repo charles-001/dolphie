@@ -20,7 +20,12 @@ def create_panel(tab: Tab) -> Table:
     runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
 
     table_title_style = Style(color="#bbc8e8", bold=True)
-    table = Table(show_header=False, box=None, title="Host Information", title_style=table_title_style)
+    table = Table(
+        show_header=False,
+        box=None,
+        title=f"{dolphie.panels.get_key(dolphie.panels.dashboard.name)}Host Information",
+        title_style=table_title_style,
+    )
 
     table.add_column()
     table.add_column(min_width=15)

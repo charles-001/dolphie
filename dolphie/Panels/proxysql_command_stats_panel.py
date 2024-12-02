@@ -1,6 +1,7 @@
+from textual.widgets import DataTable
+
 from dolphie.Modules.Functions import format_number
 from dolphie.Modules.TabManager import Tab
-from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -84,4 +85,7 @@ def create_panel(tab: Tab) -> DataTable:
         if command_stats.row_count:
             command_stats.clear()
 
-    tab.proxysql_command_stats_title.update(f"Command Statistics ([highlight]{command_stats.row_count}[/highlight])")
+    tab.proxysql_command_stats_title.update(
+        f"{dolphie.panels.get_panel_title(dolphie.panels.proxysql_command_stats.name)} "
+        f"([highlight]{command_stats.row_count}[/highlight])"
+    )

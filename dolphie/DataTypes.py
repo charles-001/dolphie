@@ -67,27 +67,35 @@ class ReplicaManager:
 class Panel:
     name: str
     display_name: str
+    key: str = None
     visible: bool = False
 
 
 class Panels:
     def __init__(self):
-        self.dashboard = Panel("dashboard", "Dashboard")
-        self.processlist = Panel("processlist", "Processlist")
-        self.graphs = Panel("graphs", "Graph Metrics")
-        self.replication = Panel("replication", "Replication")
-        self.metadata_locks = Panel("metadata_locks", "Metadata Locks")
-        self.ddl = Panel("ddl", "DDL")
-        self.pfs_metrics = Panel("pfs_metrics", "Performance Schema Metrics")
-        self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary", "Hostgroup Summary")
-        self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules", "MySQL Query Rules")
-        self.proxysql_command_stats = Panel("proxysql_command_stats", "Command Stats")
+        self.dashboard = Panel("dashboard", "Dashboard", "¹")
+        self.processlist = Panel("processlist", "Processlist", "²")
+        self.graphs = Panel("graphs", "Metric Graphs", "³")
+        self.replication = Panel("replication", "Replication", "⁴")
+        self.metadata_locks = Panel("metadata_locks", "Metadata Locks", "⁵")
+        self.ddl = Panel("ddl", "DDL", "⁶")
+        self.pfs_metrics = Panel("pfs_metrics", "Performance Schema Metrics", "⁷")
+        self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary", "Hostgroup Summary", "⁴")
+        self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules", "Query Rules", "⁵")
+        self.proxysql_command_stats = Panel("proxysql_command_stats", "Command Stats", "⁶")
 
     def get_panel(self, panel_name: str) -> Panel:
         return self.__dict__.get(panel_name, None)
 
     def get_all_panels(self) -> List[Panel]:
         return [panel for panel in self.__dict__.values() if isinstance(panel, Panel)]
+
+    def get_key(self, panel_name: str) -> str:
+        return f"[b highlight]{self.get_panel(panel_name).key}[/b highlight]"
+
+    def get_panel_title(self, panel_name: str) -> str:
+        panel = self.get_panel(panel_name)
+        return f"[b highlight]{panel.key}[/b highlight]{panel.display_name}"
 
     def all(self) -> List[str]:
         return [

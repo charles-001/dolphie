@@ -52,14 +52,14 @@ def create_panel(tab: Tab):
         group_replication_variables = ""
         for variable, setting in available_group_replication_variables.items():
             value = setting[0].get(variable, "N/A")
-            group_replication_variables += f"[b light_blue]{setting[1]}[/b light_blue] {value}  "
+            group_replication_variables += f"[label]{setting[1]}[/label] {value}  "
 
         title = "Group Replication"
         if dolphie.innodb_cluster:
             title = "InnoDB Cluster"
         title = (
-            f"[b]{title} "
-            f"([highlight]{dolphie.global_variables.get('group_replication_group_name', 'N/A')}[/highlight])\n"
+            f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}{title} "
+            f"([white]{dolphie.global_variables.get('group_replication_group_name', 'N/A')}[/white])"
         )
         tab.group_replication_title.update(title)
         tab.group_replication_data.update(group_replication_variables)
@@ -163,7 +163,7 @@ def create_panel(tab: Tab):
         replication_variables = ""
         for setting_variable, setting_display_name in available_replication_variables.items():
             value = dolphie.global_variables.get(setting_variable, "N/A")
-            replication_variables += f"[b light_blue]{setting_display_name}[/b light_blue] {value}  "
+            replication_variables += f"[label]{setting_display_name}[/label] {value}  "
         replication_variables = replication_variables.strip()
 
         tab.replication_variables.update(replication_variables)
@@ -182,7 +182,8 @@ def create_replica_panel(tab: Tab):
         tab.replicas_loading_indicator.display = False
 
         tab.replicas_title.update(
-            f"[b]Replicas ([highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight])\n"
+            f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}Replicas "
+            f"([highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight])"
         )
 
         existing_replica_ids = set()
