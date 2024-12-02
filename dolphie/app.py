@@ -1497,6 +1497,47 @@ class DolphieApp(App):
             else:
                 self.run_command_in_worker(key=key, dolphie=dolphie)
 
+        elif key == "M":
+
+            def command_get_input(filter_data):
+                panel = filter_data
+
+                widget = None
+                if panel == "processlist":
+                    widget = tab.processlist_datatable
+                elif panel == "graphs":
+                    widget = tab.metric_graph_tabs
+                elif panel == "metadata_locks":
+                    widget = tab.metadata_locks_datatable
+                elif panel == "ddl":
+                    widget = tab.ddl_datatable
+                elif panel == "pfs_metrics":
+                    widget = tab.pfs_metrics_tabs
+                elif panel == "proxysql_hostgroup_summary":
+                    widget = tab.proxysql_hostgroup_summary_datatable
+                elif panel == "proxysql_mysql_query_rules":
+                    widget = tab.proxysql_mysql_query_rules_datatable
+                elif panel == "proxysql_command_stats":
+                    widget = tab.proxysql_command_stats_datatable
+
+                if widget:
+                    self.screen.maximize(widget)
+
+            panel_options = [
+                (panel.display_name, panel.name)
+                for panel in tab.dolphie.panels.get_all_panels()
+                if panel.visible and panel.name not in ["dashboard"]
+            ]
+
+            self.app.push_screen(
+                CommandModal(
+                    command=HotkeyCommands.maximize_panel,
+                    maximize_panel_options=panel_options,
+                    message="Maximize a Panel",
+                ),
+                command_get_input,
+            )
+
         elif key == "p":
             if dolphie.replay_file:
                 self.query_one("#pause_button", Button).press()

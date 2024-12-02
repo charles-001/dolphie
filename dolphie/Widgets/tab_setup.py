@@ -66,12 +66,8 @@ class TabSetupModal(ModalScreen):
             }
 
             & RadioSet {
-                background: #131626;
-                border: none;
                 padding-bottom: 1;
                 align: center middle;
-                width: 100%;
-                layout: horizontal;
             }
 
             & AutoComplete {
@@ -119,73 +115,6 @@ class TabSetupModal(ModalScreen):
                 padding-left: 2;
                 padding-bottom: 1;
                 content-align: left middle;
-            }
-
-            & Select {
-                margin: 0 2;
-                margin-bottom: 1;
-                width: 100%;
-
-                & > SelectOverlay {
-                    background: #111322;
-
-                    &:focus {
-                        background-tint: transparent;
-                    }
-                }
-
-                &:focus > SelectCurrent {
-                    border: tall #43548b;
-                    background-tint: transparent;
-                    background: #151729;
-                }
-            }
-
-            & SelectCurrent {
-                background: #111322;
-                border: tall #252e49;
-
-                & Static#label {
-                    color: #606e88;
-                }
-
-                &.-has-value Static#label {
-                    color: #e9e9e9;
-                }
-            }
-
-            & Select > OptionList {
-                background: #111322;
-                border: tall #252e49;
-                width: 100%;
-                height: 15;
-                margin: 0 1 0 1;
-
-                &:focus {
-                    margin: 0;
-                    height: auto;
-                    max-height: 15;
-                    border: tall #3c476b;
-                }
-
-                & > .option-list--option-highlighted {
-                    text-style: none;
-                    background: #131626;
-                }
-                &:focus > .option-list--option-highlighted {
-                    background: #283048;
-                }
-                & > .option-list--option-hover {
-                    background: #283048;
-                }
-                & > .option-list--option-hover-highlighted {
-                    background: #283048;
-                    text-style: none;
-                }
-                &:focus > .option-list--option-hover-highlighted {
-                    background: #283048;
-                    text-style: none;
-                }
             }
 
             & #replay_file {

@@ -466,7 +466,7 @@ class TabManager:
             TabPane(
                 "Table I/O Waits Summary",
                 Label(
-                    ":bulb: Format for each metric: Wait time (Operations count)",
+                    ":bulb: [highlight]Format for each metric: Wait time (Operations count)",
                     id="pfs_metrics_format",
                 ),
                 DataTable(id="pfs_metrics_table_io_waits_datatable", show_cursor=False),
@@ -532,14 +532,12 @@ class TabManager:
             graph_names = metric_instance.graphs
             graph_tab_name = metric_instance.graph_tab_name
 
-            graph_tab = self.app.query(f"#graph_tab_{metric_tab_name}")
-            if not graph_tab:
+            if not self.app.query(f"#graph_tab_{metric_tab_name}"):
                 await self.app.query_one("#metric_graph_tabs", TabbedContent).add_pane(
                     TabPane(
                         graph_tab_name,
-                        Label(id=f"stats_{metric_tab_name}", classes="stats_data"),
-                        Horizontal(id=f"graph_container_{metric_tab_name}"),
-                        Horizontal(id=f"graph_container2_{metric_tab_name}"),
+                        Label(id=f"metric_graph_stats_{metric_tab_name}", classes="metric_graph_stats"),
+                        Horizontal(id=f"metric_graph_container_{metric_tab_name}", classes="metric_graph_container"),
                         Horizontal(
                             id=f"switch_container_{metric_tab_name}",
                             classes="switch_container switch_container",
@@ -550,16 +548,25 @@ class TabManager:
                 )
 
             # Save references to the labels
-            setattr(tab, metric_tab_name, self.app.query_one(f"#stats_{metric_tab_name}"))
+            setattr(tab, metric_tab_name, self.app.query_one(f"#metric_graph_stats_{metric_tab_name}"))
 
             for graph_name in graph_names:
-                graph = self.app.query(f"#{graph_name}")
-                if not graph:
-                    graph_container = (
-                        "graph_container2"
-                        if graph_name in ["graph_system_network", "graph_system_disk_io"]
-                        else "graph_container"
-                    )
+                graph_container = (
+                    "metric_graph_container2"
+                    if graph_name in ["graph_system_network", "graph_system_disk_io"]
+                    else "metric_graph_container"
+                )
+
+                if not self.app.query(f"#{graph_name}"):
+                    # Add graph_container2 only if it's needed
+                    if not self.app.query(f"#{graph_container}_{metric_tab_name}"):
+                        if graph_container == "metric_graph_container2":
+                            await self.app.query_one(f"#graph_tab_{metric_tab_name}", TabPane).mount(
+                                Horizontal(
+                                    id=f"{graph_container}_{metric_tab_name}", classes="metric_graph_container2"
+                                ),
+                                after=1,
+                            )
 
                     await self.app.query_one(f"#{graph_container}_{metric_tab_name}", Horizontal).mount(
                         MetricManager.Graph(id=f"{graph_name}", classes="panel_data")
@@ -569,9 +576,7 @@ class TabManager:
                 setattr(tab, graph_name, self.app.query_one(f"#{graph_name}"))
 
             for metric, metric_data in metric_instance.__dict__.items():
-                switch = self.app.query(f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}")
-
-                if not switch:
+                if not self.app.query(f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}"):
                     if (
                         isinstance(metric_data, MetricManager.MetricData)
                         and metric_data.graphable

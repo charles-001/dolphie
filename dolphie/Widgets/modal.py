@@ -4,7 +4,7 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Input, Label, Static
+from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 
 from dolphie.DataTypes import ConnectionSource, HotkeyCommands
 from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
@@ -26,21 +26,11 @@ class CommandModal(ModalScreen):
                 }
             }
 
-            & #filter_container {
+            & .command_container {
                 width: auto;
                 height: auto;
 
-                & Input {
-                    width: 60;
-                    border-title-color: #d2d2d2;
-                }
-            }
-
-            & #kill_container {
-                width: auto;
-                height: auto;
-
-                & Input {
+                & Input, Select {
                     width: 60;
                     border-title-color: #d2d2d2;
                 }
@@ -83,6 +73,7 @@ class CommandModal(ModalScreen):
         message,
         connection_source: ConnectionSource = None,
         processlist_data=None,
+        maximize_panel_options=None,
         host_cache_data=None,
         max_replay_timestamp=None,
     ):
@@ -99,11 +90,19 @@ class CommandModal(ModalScreen):
             sorted_keys = sorted(processlist_data.keys(), key=lambda x: int(x))
             self.dropdown_items = [DropdownItem(thread_id) for thread_id in sorted_keys]
 
+        self.maximize_panel_select_options = maximize_panel_options or []
+
     def compose(self) -> ComposeResult:
         with Vertical():
             with Vertical():
                 yield Label(f"[b]{self.message}[/b]")
-                with Vertical(id="filter_container"):
+
+                with Vertical(id="maximize_panel_container", classes="command_container"):
+                    yield Select(
+                        options=self.maximize_panel_select_options, id="maximize_panel_select", prompt="Select a Panel"
+                    )
+                    yield Label("[dark_gray][b]Note[/b]: Press [b highlight]ESC[/b highlight] to exit maximized panel")
+                with Vertical(id="filter_container", classes="command_container"):
                     yield AutoComplete(
                         Input(id="filter_by_username_input"), Dropdown(id="filter_by_username_dropdown_items", items=[])
                     )
@@ -119,7 +118,7 @@ class CommandModal(ModalScreen):
                     )
                     yield Input(id="filter_by_query_time_input")
                     yield Input(id="filter_by_query_text_input")
-                with Vertical(id="kill_container"):
+                with Vertical(id="kill_container", classes="command_container"):
                     yield AutoComplete(
                         Input(id="kill_by_username_input"), Dropdown(id="kill_by_username_dropdown_items", items=[])
                     )
@@ -142,10 +141,12 @@ class CommandModal(ModalScreen):
 
     def on_mount(self):
         input = self.query_one("#modal_input", Input)
+        maximize_panel_container = self.query_one("#maximize_panel_container", Vertical)
         filter_container = self.query_one("#filter_container", Vertical)
         kill_container = self.query_one("#kill_container", Vertical)
         self.query_one("#error_response", Static).display = False
 
+        maximize_panel_container.display = False
         filter_container.display = False
         kill_container.display = False
 
@@ -187,6 +188,9 @@ class CommandModal(ModalScreen):
             sleeping_queries_checkbox.toggle()
 
             input.placeholder = "Select an option from above"
+        elif self.command == HotkeyCommands.maximize_panel:
+            input.display = False
+            maximize_panel_container.display = True
         elif self.command == HotkeyCommands.rename_tab:
             input.placeholder = "Colors can be added by wrapping them in []"
             input.styles.width = 50
@@ -234,6 +238,7 @@ class CommandModal(ModalScreen):
             HotkeyCommands.rename_tab,
             HotkeyCommands.thread_kill_by_parameter,
             HotkeyCommands.thread_filter,
+            HotkeyCommands.maximize_panel,
         ]:
             self.update_error_response("Input cannot be empty")
             return
@@ -333,6 +338,13 @@ class CommandModal(ModalScreen):
                 return
 
             self.dismiss(modal_input)
+        elif self.command == HotkeyCommands.maximize_panel:
+            maximize_panel = self.query_one("#maximize_panel_select", Select).value
+            if maximize_panel == Select.BLANK:
+                self.update_error_response("Please select a panel to maximize")
+                return
+
+            self.dismiss(maximize_panel)
         else:
             self.dismiss(modal_input)
 

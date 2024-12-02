@@ -66,21 +66,22 @@ class ReplicaManager:
 @dataclass
 class Panel:
     name: str
+    display_name: str
     visible: bool = False
 
 
 class Panels:
     def __init__(self):
-        self.dashboard = Panel("dashboard")
-        self.processlist = Panel("processlist")
-        self.graphs = Panel("graphs")
-        self.replication = Panel("replication")
-        self.metadata_locks = Panel("metadata_locks")
-        self.ddl = Panel("ddl")
-        self.pfs_metrics = Panel("pfs_metrics")
-        self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary")
-        self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules")
-        self.proxysql_command_stats = Panel("proxysql_command_stats")
+        self.dashboard = Panel("dashboard", "Dashboard")
+        self.processlist = Panel("processlist", "Processlist")
+        self.graphs = Panel("graphs", "Graph Metrics")
+        self.replication = Panel("replication", "Replication")
+        self.metadata_locks = Panel("metadata_locks", "Metadata Locks")
+        self.ddl = Panel("ddl", "DDL")
+        self.pfs_metrics = Panel("pfs_metrics", "Performance Schema Metrics")
+        self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary", "Hostgroup Summary")
+        self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules", "MySQL Query Rules")
+        self.proxysql_command_stats = Panel("proxysql_command_stats", "Command Stats")
 
     def get_panel(self, panel_name: str) -> Panel:
         return self.__dict__.get(panel_name, None)
@@ -220,3 +221,4 @@ class HotkeyCommands:
     rename_tab = "rename_tab"
     refresh_interval = "refresh_interval"
     replay_seek = "replay_seek"
+    maximize_panel = "maximize_panel"
