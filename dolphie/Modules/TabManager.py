@@ -2,7 +2,6 @@ import asyncio
 import copy
 import os
 import uuid
-from dataclasses import dataclass, field
 from time import monotonic
 from typing import Dict, List
 
@@ -32,7 +31,7 @@ from textual.widgets import TabbedContent, TabPane, Tabs
 from textual.worker import Worker
 
 import dolphie.Modules.MetricManager as MetricManager
-from dolphie.DataTypes import ConnectionSource, ConnectionStatus
+from dolphie.DataTypes import ConnectionSource, ConnectionStatus, Panels
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import Config, HostGroupMember
 from dolphie.Modules.ManualException import ManualException
@@ -42,96 +41,102 @@ from dolphie.Widgets.tab_setup import TabSetupModal
 from dolphie.Widgets.topbar import TopBar
 
 
-@dataclass
 class Tab:
-    id: int
-    name: str
-    dolphie: Dolphie = None
-    manual_tab_name: str = None
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        dolphie: Dolphie = None,
+        manual_tab_name: str = None,
+        replay_manager: ReplayManager = None,
+    ):
+        self.id = id
+        self.name = name
+        self.dolphie = dolphie
+        self.manual_tab_name = manual_tab_name
+        self.replay_manager = replay_manager
 
-    replay_manager: ReplayManager = None
+        self.worker: Worker = None
+        self.worker_timer: Timer = None
+        self.worker_cancel_error: ManualException = None
+        self.worker_running: bool = False
 
-    worker: Worker = None
-    worker_timer: Timer = None
-    worker_cancel_error: ManualException = None
-    worker_running: bool = False
+        self.replay_manual_control: bool = False
 
-    replay_manual_control: bool = False
+        self.replicas_worker: Worker = None
+        self.replicas_worker_timer: Timer = None
+        self.replicas_worker_running: bool = False
 
-    replicas_worker: Worker = None
-    replicas_worker_timer: Timer = None
-    replicas_worker_running: bool = False
+    def save_references_to_components(self):
+        app = self.dolphie.app
 
-    available_graph_tabs: Dict[str, bool] = field(default_factory=dict)
+        self.main_container = app.query_one("#main_container", VerticalScroll)
+        self.metric_graph_tabs = app.query_one("#metric_graph_tabs", TabbedContent)
+        self.loading_indicator = app.query_one("#loading_indicator", LoadingIndicator)
+        self.sparkline = app.query_one("#panel_dashboard_queries_qps", Sparkline)
+        self.panel_dashboard = app.query_one("#panel_dashboard", Container)
+        self.panel_graphs = app.query_one("#panel_graphs", Container)
+        self.panel_replication = app.query_one("#panel_replication", Container)
+        self.panel_metadata_locks = app.query_one("#panel_metadata_locks", Container)
+        self.panel_processlist = app.query_one("#panel_processlist", Container)
+        self.panel_ddl = app.query_one("#panel_ddl", Container)
+        self.panel_pfs_metrics = app.query_one("#panel_pfs_metrics", Container)
+        self.panel_proxysql_hostgroup_summary = app.query_one("#panel_proxysql_hostgroup_summary", Container)
+        self.panel_proxysql_mysql_query_rules = app.query_one("#panel_proxysql_mysql_query_rules", Container)
+        self.panel_proxysql_command_stats = app.query_one("#panel_proxysql_command_stats", Container)
 
-    main_container: VerticalScroll = None
-    metric_graph_tabs: TabbedContent = None
-    loading_indicator: LoadingIndicator = None
-    sparkline: Sparkline = None
-    panel_dashboard: Container = None
-    panel_graphs: Container = None
-    panel_replication: Container = None
-    panel_metadata_locks: Container = None
-    panel_ddl: Container = None
-    panel_pfs_metrics: Container = None
-    panel_processlist: Container = None
-    panel_proxysql_hostgroup_summary: Container = None
-    panel_proxysql_mysql_query_rules: Container = None
-    panel_proxysql_command_stats: Container = None
+        self.spinner = app.query_one("#spinner", SpinnerWidget)
+        self.spinner.hide()
 
-    spinner: SpinnerWidget = None
+        self.ddl_title = app.query_one("#ddl_title", Label)
+        self.ddl_datatable = app.query_one("#ddl_datatable", DataTable)
 
-    dashboard_replay_container: Container = None
-    dashboard_replay_progressbar: ProgressBar = None
-    dashboard_replay_start_end: Static = None
-    dashboard_replay: Static = None
-    dashboard_section_1: Static = None
-    dashboard_section_2: Static = None
-    dashboard_section_3: Static = None
-    dashboard_section_4: Static = None
-    dashboard_section_5: Static = None
-    dashboard_section_6: Static = None
+        self.pfs_metrics_file_io_datatable = app.query_one("#pfs_metrics_file_io_datatable", DataTable)
+        self.pfs_metrics_table_io_waits_datatable = app.query_one("#pfs_metrics_table_io_waits_datatable", DataTable)
+        self.pfs_metrics_radio_set = app.query_one("#pfs_metrics_radio_set", RadioSet)
+        self.pfs_metrics_delta = app.query_one("#pfs_metrics_delta", RadioButton)
+        self.pfs_metrics_tabs = app.query_one("#pfs_metrics_tabs", TabbedContent)
 
-    ddl_title: Label = None
-    ddl_datatable: DataTable = None
+        self.processlist_title = app.query_one("#processlist_title", Label)
+        self.processlist_datatable = app.query_one("#processlist_data", DataTable)
+        self.metadata_locks_title = app.query_one("#metadata_locks_title", Label)
+        self.metadata_locks_datatable = app.query_one("#metadata_locks_datatable", DataTable)
+        self.proxysql_hostgroup_summary_title = app.query_one("#proxysql_hostgroup_summary_title", Static)
+        self.proxysql_hostgroup_summary_datatable = app.query_one("#proxysql_hostgroup_summary_datatable", DataTable)
+        self.proxysql_mysql_query_rules_title = app.query_one("#proxysql_mysql_query_rules_title", Static)
+        self.proxysql_mysql_query_rules_datatable = app.query_one("#proxysql_mysql_query_rules_datatable", DataTable)
+        self.proxysql_command_stats_title = app.query_one("#proxysql_command_stats_title", Static)
+        self.proxysql_command_stats_datatable = app.query_one("#proxysql_command_stats_datatable", DataTable)
 
-    pfs_metrics_file_io_datatable: DataTable = None
-    pfs_metrics_table_io_waits_datatable: DataTable = None
-    pfs_metrics_tabs: TabbedContent = None
-    pfs_metrics_radio_set: RadioSet = None
-    pfs_metrics_delta: RadioButton = None
+        self.dashboard_replay_container = app.query_one("#dashboard_replay_container", Container)
+        self.dashboard_replay_progressbar = app.query_one("#dashboard_replay_progressbar", ProgressBar)
+        self.dashboard_replay_start_end = app.query_one("#dashboard_replay_start_end", Static)
+        self.dashboard_replay = app.query_one("#dashboard_replay", Static)
+        self.dashboard_section_1 = app.query_one("#dashboard_section_1", Static)
+        self.dashboard_section_2 = app.query_one("#dashboard_section_2", Static)
+        self.dashboard_section_3 = app.query_one("#dashboard_section_3", Static)
+        self.dashboard_section_4 = app.query_one("#dashboard_section_4", Static)
+        self.dashboard_section_5 = app.query_one("#dashboard_section_5", Static)
+        self.dashboard_section_6 = app.query_one("#dashboard_section_6", Static)
 
-    metadata_locks_title: Label = None
-    metadata_locks_datatable: DataTable = None
+        self.group_replication_container = app.query_one("#group_replication_container", Container)
+        self.group_replication_grid = app.query_one("#group_replication_grid", Container)
+        self.group_replication_data = app.query_one("#group_replication_data", Static)
+        self.group_replication_title = app.query_one("#group_replication_title", Label)
 
-    processlist_title: Label = None
-    processlist_datatable: DataTable = None
+        self.replicas_grid = app.query_one("#replicas_grid", Container)
+        self.replicas_container = app.query_one("#replicas_container", Container)
+        self.replicas_title = app.query_one("#replicas_title", Label)
+        self.replicas_loading_indicator = app.query_one("#replicas_loading_indicator", LoadingIndicator)
 
-    replication_container_title: Static = None
-    replication_container: Container = None
-    replication_variables: Label = None
-    replication_status: Static = None
-    replication_thread_applier_container: ScrollableContainer = None
-    replication_thread_applier: Static = None
-
-    group_replication_container: Container = None
-    group_replication_grid: Container = None
-    group_replication_title: Label = None
-    group_replication_data: Static = None
-
-    replicas_container: Container = None
-    replicas_grid: Container = None
-    replicas_loading_indicator: LoadingIndicator = None
-    replicas_title: Label = None
-
-    proxysql_hostgroup_summary_title: Static = None
-    proxysql_hostgroup_summary_datatable: DataTable = None
-
-    proxysql_mysql_query_rules_title: Static = None
-    proxysql_mysql_query_rules_datatable: DataTable = None
-
-    proxysql_command_stats_title: Static = None
-    proxysql_command_stats_datatable: DataTable = None
+        self.replication_container_title = app.query_one("#replication_container_title", Static)
+        self.replication_container = app.query_one("#replication_container", Container)
+        self.replication_variables = app.query_one("#replication_variables", Label)
+        self.replication_status = app.query_one("#replication_status", Static)
+        self.replication_thread_applier_container = app.query_one(
+            "#replication_thread_applier_container", ScrollableContainer
+        )
+        self.replication_thread_applier = app.query_one("#replication_thread_applier", Static)
 
     def get_panel_widget(self, panel_name: str) -> Container:
         return getattr(self, f"panel_{panel_name}")
@@ -268,7 +273,6 @@ class TabManager:
         self.tabs: Dict[str, Tab] = {}
 
         self.host_tabs = self.app.query_one("#host_tabs", Tabs)
-        self.host_tabs.display = False
 
         self.loading_hostgroups: bool = False
         self.last_replay_time: int = 0
@@ -455,6 +459,73 @@ class TabManager:
         self.app.query_one("#main_container").display = False
         self.app.query_one("#loading_indicator").display = False
 
+        panels = Panels()
+        self.app.query_one("#metric_graphs_title", Label).update(panels.get_panel_title(panels.graphs.name))
+        self.app.query_one("#replication_title", Label).update(panels.get_panel_title(panels.replication.name))
+        self.app.query_one("#pfs_metrics_title", Label).update(panels.get_panel_title(panels.pfs_metrics.name))
+
+        # Loop the metric instances and create the graph tabs
+        metric_manager = MetricManager.MetricManager(None)
+        for metric_instance_name, metric_instance in metric_manager.metrics.__dict__.items():
+            metric_tab_name = metric_instance.tab_name
+            graph_names = metric_instance.graphs
+            graph_tab_name = metric_instance.graph_tab_name
+
+            if not self.app.query(f"#graph_tab_{metric_tab_name}"):
+                await self.app.query_one("#metric_graph_tabs", TabbedContent).add_pane(
+                    TabPane(
+                        graph_tab_name,
+                        Label(id=f"metric_graph_stats_{metric_tab_name}", classes="metric_graph_stats"),
+                        Horizontal(id=f"metric_graph_container_{metric_tab_name}", classes="metric_graph_container"),
+                        Horizontal(
+                            id=f"switch_container_{metric_tab_name}",
+                            classes="switch_container switch_container",
+                        ),
+                        id=f"graph_tab_{metric_tab_name}",
+                        name=metric_tab_name,
+                    )
+                )
+
+            for graph_name in graph_names:
+                graph_container = (
+                    "metric_graph_container2"
+                    if graph_name in ["graph_system_network", "graph_system_disk_io"]
+                    else "metric_graph_container"
+                )
+
+                # Add graph_container2 only if it's needed
+                if not self.app.query(f"#{graph_container}_{metric_tab_name}"):
+                    if graph_container == "metric_graph_container2":
+                        await self.app.query_one(f"#graph_tab_{metric_tab_name}", TabPane).mount(
+                            Horizontal(id=f"{graph_container}_{metric_tab_name}", classes="metric_graph_container2"),
+                            after=1,
+                        )
+
+                await self.app.query_one(f"#{graph_container}_{metric_tab_name}", Horizontal).mount(
+                    MetricManager.Graph(id=f"{graph_name}", classes="panel_data")
+                )
+
+            for metric, metric_data in metric_instance.__dict__.items():
+                if not self.app.query(f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}"):
+                    if (
+                        isinstance(metric_data, MetricManager.MetricData)
+                        and metric_data.graphable
+                        and metric_data.create_switch
+                    ):
+                        await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
+                            Label(metric_data.label)
+                        )
+                        await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
+                            Switch(animate=False, id=f"{metric_instance_name}-{metric}", name=metric_tab_name)
+                        )
+
+                        # Toggle the switch if the metric is visible (means to enable it by default)
+                        if metric_data.visible:
+                            self.app.query_one(
+                                f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}", Switch
+                            ).toggle()
+
+        # Add the PFS metrics tabs
         pfs_metrics_tabs = self.app.query_one("#pfs_metrics_tabs", TabbedContent)
         await pfs_metrics_tabs.add_pane(
             TabPane(
@@ -516,173 +587,33 @@ class TabManager:
         tab.dolphie = dolphie
 
         # If we're in daemon mode, stop here since we don't need to
-        # create all the widgets for the tab as that wastes resources
+        # do anything else with the UI
         if dolphie.daemon_mode:
             self.active_tab = tab
             self.tabs[tab_id] = tab
 
             return tab
 
+        tab.save_references_to_components()
+
         # Create the tab in the UI
         intial_tab_name = "" if hostgroup_member else tab_name
         self.host_tabs.add_tab(TabWidget(intial_tab_name, id=tab_id))
 
-        # Loop the metric instances and create the graph tabs
-        for metric_instance_name, metric_instance in dolphie.metric_manager.metrics.__dict__.items():
+        # Loop the metric instances and save references to the graphs and its labels
+        for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
             metric_tab_name = metric_instance.tab_name
             graph_names = metric_instance.graphs
-            graph_tab_name = metric_instance.graph_tab_name
 
-            if not self.app.query(f"#graph_tab_{metric_tab_name}"):
-                await self.app.query_one("#metric_graph_tabs", TabbedContent).add_pane(
-                    TabPane(
-                        graph_tab_name,
-                        Label(id=f"metric_graph_stats_{metric_tab_name}", classes="metric_graph_stats"),
-                        Horizontal(id=f"metric_graph_container_{metric_tab_name}", classes="metric_graph_container"),
-                        Horizontal(
-                            id=f"switch_container_{metric_tab_name}",
-                            classes="switch_container switch_container",
-                        ),
-                        id=f"graph_tab_{metric_tab_name}",
-                        name=metric_tab_name,
-                    )
-                )
-
-            # Save references to the labels
+            # Save references graph's labels
             setattr(tab, metric_tab_name, self.app.query_one(f"#metric_graph_stats_{metric_tab_name}"))
 
+            # Save references to the graphs
             for graph_name in graph_names:
-                graph_container = (
-                    "metric_graph_container2"
-                    if graph_name in ["graph_system_network", "graph_system_disk_io"]
-                    else "metric_graph_container"
-                )
-
-                if not self.app.query(f"#{graph_name}"):
-                    # Add graph_container2 only if it's needed
-                    if not self.app.query(f"#{graph_container}_{metric_tab_name}"):
-                        if graph_container == "metric_graph_container2":
-                            await self.app.query_one(f"#graph_tab_{metric_tab_name}", TabPane).mount(
-                                Horizontal(
-                                    id=f"{graph_container}_{metric_tab_name}", classes="metric_graph_container2"
-                                ),
-                                after=1,
-                            )
-
-                    await self.app.query_one(f"#{graph_container}_{metric_tab_name}", Horizontal).mount(
-                        MetricManager.Graph(id=f"{graph_name}", classes="panel_data")
-                    )
-
-                # Save references to the graphs
                 setattr(tab, graph_name, self.app.query_one(f"#{graph_name}"))
-
-            for metric, metric_data in metric_instance.__dict__.items():
-                if not self.app.query(f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}"):
-                    if (
-                        isinstance(metric_data, MetricManager.MetricData)
-                        and metric_data.graphable
-                        and metric_data.create_switch
-                    ):
-                        await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
-                            Label(metric_data.label)
-                        )
-                        await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
-                            Switch(animate=False, id=f"{metric_instance_name}-{metric}", name=metric_tab_name)
-                        )
-
-                        # Toggle the switch if the metric is visible (means to enable it by default)
-                        if metric_data.visible:
-                            self.app.query_one(
-                                f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}", Switch
-                            ).toggle()
 
         if tab.manual_tab_name:
             self.rename_tab(tab, tab.manual_tab_name)
-
-        # Save references to the widgets in the tab
-        tab.main_container = self.app.query_one("#main_container", VerticalScroll)
-        tab.metric_graph_tabs = self.app.query_one("#metric_graph_tabs", TabbedContent)
-        tab.loading_indicator = self.app.query_one("#loading_indicator", LoadingIndicator)
-        tab.sparkline = self.app.query_one("#panel_dashboard_queries_qps", Sparkline)
-        tab.panel_dashboard = self.app.query_one("#panel_dashboard", Container)
-        tab.panel_graphs = self.app.query_one("#panel_graphs", Container)
-        tab.panel_replication = self.app.query_one("#panel_replication", Container)
-        tab.panel_metadata_locks = self.app.query_one("#panel_metadata_locks", Container)
-        tab.panel_processlist = self.app.query_one("#panel_processlist", Container)
-        tab.panel_ddl = self.app.query_one("#panel_ddl", Container)
-        tab.panel_pfs_metrics = self.app.query_one("#panel_pfs_metrics", Container)
-        tab.panel_proxysql_hostgroup_summary = self.app.query_one("#panel_proxysql_hostgroup_summary", Container)
-        tab.panel_proxysql_mysql_query_rules = self.app.query_one("#panel_proxysql_mysql_query_rules", Container)
-        tab.panel_proxysql_command_stats = self.app.query_one("#panel_proxysql_command_stats", Container)
-
-        tab.spinner = self.app.query_one("#spinner", SpinnerWidget)
-        tab.spinner.hide()
-
-        tab.ddl_title = self.app.query_one("#ddl_title", Label)
-        tab.ddl_datatable = self.app.query_one("#ddl_datatable", DataTable)
-
-        tab.pfs_metrics_file_io_datatable = self.app.query_one("#pfs_metrics_file_io_datatable", DataTable)
-        tab.pfs_metrics_table_io_waits_datatable = self.app.query_one(
-            "#pfs_metrics_table_io_waits_datatable", DataTable
-        )
-        tab.pfs_metrics_radio_set = self.app.query_one("#pfs_metrics_radio_set", RadioSet)
-        tab.pfs_metrics_delta = self.app.query_one("#pfs_metrics_delta", RadioButton)
-        tab.pfs_metrics_tabs = self.app.query_one("#pfs_metrics_tabs", TabbedContent)
-
-        tab.processlist_title = self.app.query_one("#processlist_title", Label)
-        tab.processlist_datatable = self.app.query_one("#processlist_data", DataTable)
-        tab.metadata_locks_title = self.app.query_one("#metadata_locks_title", Label)
-        tab.metadata_locks_datatable = self.app.query_one("#metadata_locks_datatable", DataTable)
-        tab.proxysql_hostgroup_summary_title = self.app.query_one("#proxysql_hostgroup_summary_title", Static)
-        tab.proxysql_hostgroup_summary_datatable = self.app.query_one(
-            "#proxysql_hostgroup_summary_datatable", DataTable
-        )
-        tab.proxysql_mysql_query_rules_title = self.app.query_one("#proxysql_mysql_query_rules_title", Static)
-        tab.proxysql_mysql_query_rules_datatable = self.app.query_one(
-            "#proxysql_mysql_query_rules_datatable", DataTable
-        )
-        tab.proxysql_command_stats_title = self.app.query_one("#proxysql_command_stats_title", Static)
-        tab.proxysql_command_stats_datatable = self.app.query_one("#proxysql_command_stats_datatable", DataTable)
-
-        tab.dashboard_replay_container = self.app.query_one("#dashboard_replay_container", Container)
-        tab.dashboard_replay_progressbar = self.app.query_one("#dashboard_replay_progressbar", ProgressBar)
-        tab.dashboard_replay_start_end = self.app.query_one("#dashboard_replay_start_end", Static)
-        tab.dashboard_replay = self.app.query_one("#dashboard_replay", Static)
-        tab.dashboard_section_1 = self.app.query_one("#dashboard_section_1", Static)
-        tab.dashboard_section_2 = self.app.query_one("#dashboard_section_2", Static)
-        tab.dashboard_section_3 = self.app.query_one("#dashboard_section_3", Static)
-        tab.dashboard_section_4 = self.app.query_one("#dashboard_section_4", Static)
-        tab.dashboard_section_5 = self.app.query_one("#dashboard_section_5", Static)
-        tab.dashboard_section_6 = self.app.query_one("#dashboard_section_6", Static)
-
-        tab.group_replication_container = self.app.query_one("#group_replication_container", Container)
-        tab.group_replication_grid = self.app.query_one("#group_replication_grid", Container)
-        tab.group_replication_data = self.app.query_one("#group_replication_data", Static)
-        tab.group_replication_title = self.app.query_one("#group_replication_title", Label)
-
-        tab.replicas_grid = self.app.query_one("#replicas_grid", Container)
-        tab.replicas_container = self.app.query_one("#replicas_container", Container)
-        tab.replicas_title = self.app.query_one("#replicas_title", Label)
-        tab.replicas_loading_indicator = self.app.query_one("#replicas_loading_indicator", LoadingIndicator)
-
-        tab.replication_container_title = self.app.query_one("#replication_container_title", Static)
-        tab.replication_container = self.app.query_one("#replication_container", Container)
-        tab.replication_variables = self.app.query_one("#replication_variables", Label)
-        tab.replication_status = self.app.query_one("#replication_status", Static)
-        tab.replication_thread_applier_container = self.app.query_one(
-            "#replication_thread_applier_container", ScrollableContainer
-        )
-        tab.replication_thread_applier = self.app.query_one("#replication_thread_applier", Static)
-
-        self.app.query_one("#metric_graphs_title", Label).update(
-            dolphie.panels.get_panel_title(dolphie.panels.graphs.name)
-        )
-        self.app.query_one("#replication_title", Label).update(
-            dolphie.panels.get_panel_title(dolphie.panels.replication.name)
-        )
-        self.app.query_one("#pfs_metrics_title", Label).update(
-            dolphie.panels.get_panel_title(dolphie.panels.pfs_metrics.name)
-        )
 
         tab.replication_container.display = False
         tab.replicas_container.display = False
@@ -705,7 +636,6 @@ class TabManager:
         # Set the sparkline data to 0
         tab.sparkline.data = [0]
 
-        self.host_tabs.display = True
         self.tabs[tab_id] = tab
 
         if switch_tab:

@@ -953,8 +953,13 @@ class DolphieApp(App):
 
     @on(Tabs.TabActivated, "#host_tabs")
     def host_tab_changed(self, event: Tabs.TabActivated):
-        # If the previous tab is a replay file, cancel its worker and timer
         previous_tab = self.tab_manager.active_tab
+
+        # If the previous tab is the same as the current tab, return
+        if previous_tab and event.tab.id == previous_tab.id:
+            return
+
+        # If the previous tab is a replay file, cancel its worker and timer
         if previous_tab and previous_tab.dolphie.replay_file and previous_tab.worker:
             previous_tab.worker.cancel()
             previous_tab.worker_timer.stop()
@@ -980,6 +985,7 @@ class DolphieApp(App):
 
             if tab.dolphie.connection_source == ConnectionSource.mysql:
                 self.refresh_screen_mysql(tab)
+                replication_panel.create_replica_panel(tab)
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
 
@@ -989,10 +995,6 @@ class DolphieApp(App):
                 containers = self.query(".replica_container")
                 for container in containers:
                     container.display = tab.id in container.id
-
-                tab.replicas_title.update(
-                    f"[b]Replicas ([highlight]{len(tab.dolphie.replica_manager.available_replicas)}[/highlight])\n"
-                )
 
             # Set the display state for the group replication container based on whether there are members
             tab.group_replication_container.display = bool(tab.dolphie.group_replication_members)

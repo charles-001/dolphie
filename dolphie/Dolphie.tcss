@@ -193,7 +193,7 @@ TopBar {
 }
 #panel_graphs {
     & .metric_graph_container, .metric_graph_container2  {
-        height: 20;
+        height: 19;
     }
     & .metric_graph_stats {
         width: 100%;
