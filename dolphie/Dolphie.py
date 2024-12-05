@@ -122,7 +122,7 @@ class Dolphie:
         self.is_group_replication_primary: bool = False
         self.group_replication_data: Dict[str, str] = {}
         self.group_replication_members: List[Dict[str, str]] = []
-        self.group_replication_clustersets: List[Dict[str, str]] = []
+        self.innodb_cluster_clustersets: List[Dict[str, str]] = []
 
         # Main connection is used for Textual's worker thread so it can run asynchronous
         db_connection_args = {

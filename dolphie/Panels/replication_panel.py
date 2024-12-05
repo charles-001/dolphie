@@ -35,61 +35,54 @@ def create_panel(tab: Tab):
         tab.replication_container_title.display = False
 
     def create_clusterset_panel():
-        dolphie = tab.dolphie
-        clustersets = dolphie.group_replication_clustersets
+        if not dolphie.innodb_cluster_clustersets:
+            tab.clusterset_container.display = False
+            return
 
-        if clustersets:
-            tab.clusterset_container.display = True
+        tab.clusterset_container.display = True
 
-            # Update the panel title
-            tab.clusterset_title.update(
-                f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}ClusterSets "
-                f"([highlight]{len(clustersets)}[/highlight])"
-            )
+        # Update the panel title
+        tab.clusterset_title.update(
+            f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}ClusterSets "
+            f"([highlight]{len(dolphie.innodb_cluster_clustersets)}[/highlight])"
+        )
 
-            existing_clusterset_ids = set(clustersets.keys())
-            host_cluster_name = dolphie.group_replication_data.get("cluster_name")
+        existing_clusterset_names = {clusterset["ClusterSet"] for clusterset in dolphie.innodb_cluster_clustersets}
+        existing_clusterset_components = {c.id.split("_")[1]: c for c in tab.dolphie.app.query(f".clusterset_{tab.id}")}
+        host_cluster_name = dolphie.group_replication_data.get("cluster_name")
 
-            existing_clusterset_components = {
-                c.id.split("_")[1]: c for c in tab.dolphie.app.query(f".clusterset_{tab.id}")
-            }
+        for row in dolphie.innodb_cluster_clustersets:
+            clusterset_name = row["ClusterSet"]
+            clusters = row["Clusters"]
 
-            for row in clustersets:
-                clusterset_name = row["ClusterSet"]
-                clusters = row["Clusters"]
+            # Highlight the host cluster name
+            formatted_clusters = clusters.replace(host_cluster_name, f"[b highlight]{host_cluster_name}[/b highlight]")
 
-                # Highlight the host cluster name
-                formatted_clusters = clusters.replace(
-                    host_cluster_name, f"[b highlight]{host_cluster_name}[/b highlight]"
+            table = Table(box=None, show_header=False)
+            table.add_column()
+            table.add_column()
+            table.add_row("[b][light_blue]ClusterSet", f"[light_blue]{clusterset_name}")
+            table.add_row("[label]Clusters", formatted_clusters)
+
+            if clusterset_name in existing_clusterset_components:
+                existing_clusterset_components[clusterset_name].update(table)
+            else:
+                tab.clusterset_grid.mount(
+                    ScrollableContainer(
+                        Static(
+                            table,
+                            id=f"clusterset_{clusterset_name}_{tab.id}",
+                            classes=f"clusterset_{tab.id}",
+                        ),
+                        id=f"clusterset_container_{clusterset_name}_{tab.id}",
+                        classes=f"clusterset_container_{tab.id} clusterset_container",
+                    )
                 )
 
-                table = Table(box=None, show_header=False)
-                table.add_column()
-                table.add_column()
-                table.add_row("[b][light_blue]ClusterSet", f"[light_blue]{clusterset_name}")
-                table.add_row("[label]Clusters", formatted_clusters)
-
-                if clusterset_name in existing_clusterset_components:
-                    existing_clusterset_components[clusterset_name].update(table)
-                else:
-                    tab.clusterset_grid.mount(
-                        ScrollableContainer(
-                            Static(
-                                table,
-                                id=f"clusterset_{clusterset_name}_{tab.id}",
-                                classes=f"clusterset_{tab.id}",
-                            ),
-                            id=f"clusterset_container_{clusterset_name}_{tab.id}",
-                            classes=f"clusterset_container_{tab.id} clusterset_container",
-                        )
-                    )
-
-            # Remove ClusterSets that no longer exist
-            for clusterset_name, container in existing_clusterset_components.items():
-                if clusterset_name not in existing_clusterset_ids:
-                    container.parent.remove()
-        else:
-            tab.clusterset_container.display = False
+        # Remove ClusterSets that no longer exist
+        for clusterset_name, container in existing_clusterset_components.items():
+            if clusterset_name not in existing_clusterset_names:
+                container.parent.remove()
 
     def create_group_replication_panel():
         if not (dolphie.group_replication or dolphie.innodb_cluster):

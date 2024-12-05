@@ -567,7 +567,7 @@ class DolphieApp(App):
 
         if dolphie.innodb_cluster or dolphie.innodb_cluster_read_replica:
             dolphie.main_db_connection.execute(MySQLQueries.get_clustersets)
-            dolphie.group_replication_clustersets = dolphie.main_db_connection.fetchall()
+            dolphie.innodb_cluster_clustersets = dolphie.main_db_connection.fetchall()
 
         if dolphie.performance_schema_enabled:
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)

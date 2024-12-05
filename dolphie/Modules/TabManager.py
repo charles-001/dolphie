@@ -252,7 +252,7 @@ class Tab:
             ".member_container", self.group_replication_container, self.dolphie.group_replication_members
         )
         toggle_container_display(
-            ".clusterset_container", self.clusterset_container, self.dolphie.group_replication_clustersets
+            ".clusterset_container", self.clusterset_container, self.dolphie.innodb_cluster_clustersets
         )
 
     def remove_replication_panel_components(self):
