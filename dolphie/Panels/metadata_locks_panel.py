@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List, Union
 
 from rich.syntax import Syntax
 from textual.widgets import DataTable
@@ -109,7 +109,7 @@ def create_panel(tab: Tab) -> DataTable:
     )
 
 
-def fetch_data(tab: Tab) -> Dict[str, str]:
+def fetch_data(tab: Tab) -> List[Dict[str, Union[int, str]]]:
     dolphie = tab.dolphie
 
     ########################

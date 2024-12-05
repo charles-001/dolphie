@@ -54,7 +54,10 @@ def create_panel(tab: Tab):
                 c.id.split("_")[1]: c for c in tab.dolphie.app.query(f".clusterset_{tab.id}")
             }
 
-            for clusterset_name, clusters in clustersets.items():
+            for row in clustersets:
+                clusterset_name = row["ClusterSet"]
+                clusters = row["Clusters"]
+
                 # Highlight the host cluster name
                 formatted_clusters = clusters.replace(
                     host_cluster_name, f"[b highlight]{host_cluster_name}[/b highlight]"
@@ -226,11 +229,11 @@ def create_panel(tab: Tab):
     create_clusterset_panel()
 
 
+# This function isn't in create_panel() because it's called as part of the replica worker instead of the main worker
 def create_replica_panel(tab: Tab):
     dolphie = tab.dolphie
 
-    replicas = dolphie.replica_manager.replicas
-    if not replicas:
+    if not dolphie.replica_manager.replicas:
         tab.replicas_container.display = False
         return
 

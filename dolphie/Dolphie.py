@@ -3,7 +3,7 @@ import os
 import socket
 import time
 from datetime import datetime
-from typing import Dict, Union
+from typing import Dict, List, Union
 
 import psutil
 from loguru import logger
@@ -78,41 +78,28 @@ class Dolphie:
         self.worker_processing_time: float = 0
         self.polling_latency: float = 0
         self.connection_status: DataTypes.ConnectionStatus = None
+
+        self.global_variables: Dict[str, Union[int, str]] = {}
+        self.global_status: Dict[str, Union[int, str]] = {}
+        self.binlog_status: Dict[str, Union[int, str]] = {}
+        self.replication_status: Dict[str, Union[int, str]] = {}
+        self.replication_applier_status: List[Dict[str, Union[int, str]]] = []
+        self.innodb_metrics: Dict[str, Union[int, str]] = {}
+        self.metadata_locks: List[Dict[str, Union[int, str]]] = []
+        self.ddl: List[Dict[str, Union[int, str]]] = []
+        self.disk_io_metrics: Dict[str, Union[int, str]] = {}
+        self.system_utilization: Dict[str, Union[int, str]] = {}
+        self.host_cache: Dict[str, str] = {}
+        self.proxysql_hostgroup_summary: List[Dict[str, str]] = []
+        self.proxysql_mysql_query_rules: List[Dict[str, str]] = []
+        self.proxysql_per_second_data: Dict[str, Union[int, str]] = {}
+        self.proxysql_command_stats: List[Dict[str, Union[int, str]]] = []
         self.processlist_threads: Dict[int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]] = (
             {}
         )
         self.processlist_threads_snapshot: Dict[
             int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]
         ] = {}
-        self.lock_transactions: dict = {}
-        self.metadata_locks: dict = {}
-        self.ddl: list = []
-        self.pause_refresh: bool = False
-        self.innodb_metrics: dict = {}
-        self.disk_io_metrics: dict = {}
-        self.system_utilization: dict = {}
-        self.global_variables: dict = {}
-        self.innodb_trx_lock_metrics: dict = {}
-        self.file_io_data: PerformanceSchemaMetrics = None
-        self.table_io_waits_data: PerformanceSchemaMetrics = None
-
-        if self.record_for_replay or self.panels.pfs_metrics.visible:
-            self.pfs_metrics_last_reset_time: datetime = datetime.now()
-        else:
-            # This will be set when user presses key to bring up panel
-            self.pfs_metrics_last_reset_time: datetime = None
-
-        self.global_status: dict = {}
-        self.binlog_status: dict = {}
-        self.replication_status: dict = {}
-        self.replication_applier_status: dict = {}
-        self.active_redo_logs: int = None
-        self.host_with_port: str = f"{self.host}:{self.port}"
-        self.host_cache: dict = {}
-        self.proxysql_hostgroup_summary: dict = {}
-        self.proxysql_mysql_query_rules: dict = {}
-        self.proxysql_per_second_data: dict = {}
-        self.proxysql_command_stats: dict = {}
 
         # Filters that can be applied
         self.user_filter = None
@@ -133,9 +120,9 @@ class Dolphie:
 
         # These are for group replication in replication panel
         self.is_group_replication_primary: bool = False
-        self.group_replication_members: dict = {}
-        self.group_replication_data: dict = {}
-        self.group_replication_clustersets: dict = {}
+        self.group_replication_data: Dict[str, str] = {}
+        self.group_replication_members: List[Dict[str, str]] = []
+        self.group_replication_clustersets: List[Dict[str, str]] = []
 
         # Main connection is used for Textual's worker thread so it can run asynchronous
         db_connection_args = {
@@ -153,14 +140,26 @@ class Dolphie:
         # Secondary connection is for ad-hoc commands that are not a part of the worker thread
         self.secondary_db_connection = Database(**db_connection_args, save_connection_id=False)
 
+        self.host_with_port: str = f"{self.host}:{self.port}"
         self.performance_schema_enabled: bool = False
         self.metadata_locks_enabled: bool = False
         self.use_performance_schema_for_processlist: bool = False
         self.server_uuid: str = None
         self.host_version: str = None
         self.host_distro: str = None
+        self.pause_refresh: bool = False
+        self.active_redo_logs: int = None
 
         self.host_cache_from_file = load_host_cache_file(self.host_cache_file)
+
+        self.file_io_data: PerformanceSchemaMetrics = None
+        self.table_io_waits_data: PerformanceSchemaMetrics = None
+
+        if self.record_for_replay or self.panels.pfs_metrics.visible:
+            self.pfs_metrics_last_reset_time: datetime = datetime.now()
+        else:
+            # This will be set when user presses key to bring up panel
+            self.pfs_metrics_last_reset_time: datetime = None
 
         self.update_switches_after_reset()
 

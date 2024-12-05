@@ -582,7 +582,7 @@ class MySQLQueries:
     get_clustersets: str = """
         SELECT
             cs.domain_name AS ClusterSet,
-            GROUP_CONCAT(c.cluster_name ORDER BY c.cluster_name SEPARATOR ', ') AS Cluster
+            GROUP_CONCAT(c.cluster_name ORDER BY c.cluster_name SEPARATOR ', ') AS Clusters
         FROM
             mysql_innodb_cluster_metadata.clustersets cs JOIN
             mysql_innodb_cluster_metadata.clusters c USING ( clusterset_id )
