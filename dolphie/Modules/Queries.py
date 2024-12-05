@@ -556,6 +556,7 @@ class MySQLQueries:
     """
     determine_cluster_type_8: str = """
         SELECT
+            cluster_name,
             cluster_type
         FROM
             mysql_innodb_cluster_metadata.clusters
@@ -565,6 +566,7 @@ class MySQLQueries:
     """
     determine_cluster_type_81: str = """
         SELECT
+            cluster_name,
             instance_type,
             cluster_type
         FROM
@@ -575,7 +577,17 @@ class MySQLQueries:
             mysql_server_uuid = @@server_uuid
         ORDER BY
             view_id DESC
-            LIMIT 1;
+            LIMIT 1
+    """
+    get_clustersets: str = """
+        SELECT
+            cs.domain_name AS ClusterSet,
+            GROUP_CONCAT(c.cluster_name ORDER BY c.cluster_name SEPARATOR ', ') AS Cluster
+        FROM
+            mysql_innodb_cluster_metadata.clustersets cs JOIN
+            mysql_innodb_cluster_metadata.clusters c USING ( clusterset_id )
+        GROUP BY
+            cs.domain_name
     """
     get_binlog_transaction_compression_percentage: str = """
         SELECT

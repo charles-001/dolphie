@@ -121,7 +121,7 @@ TopBar {
     color: #8f9fc1;
 }
 
-#metric_graphs_title, #replication_title, #replicas_title, #group_replication_title {
+#metric_graphs_title, #replication_title, #replicas_title, #group_replication_title, #clusterset_title {
     color: #bbc8e8;
     text-style: bold;
     width: 100%;

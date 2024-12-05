@@ -34,70 +34,121 @@ def create_panel(tab: Tab):
     else:
         tab.replication_container_title.display = False
 
-    def create_group_replication_panel():
-        if not dolphie.group_replication and not dolphie.innodb_cluster:
-            tab.group_replication_container.display = False
-            return None
+    def create_clusterset_panel():
+        dolphie = tab.dolphie
+        clustersets = dolphie.group_replication_clustersets
 
-        tab.group_replication_container.display = True
+        if clustersets:
+            tab.clusterset_container.display = True
 
-        available_group_replication_variables = {
-            "group_replication_view_change_uuid": [dolphie.global_variables, "View UUID"],
-            "group_replication_communication_stack": [dolphie.global_variables, "Communication Stack"],
-            "group_replication_consistency": [dolphie.global_variables, "Global Consistency"],
-            "group_replication_paxos_single_leader": [dolphie.global_variables, "Paxos Single Leader"],
-            "write_concurrency": [dolphie.group_replication_data, "Write Concurrency"],
-        }
+            # Update the panel title
+            tab.clusterset_title.update(
+                f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}ClusterSets "
+                f"([highlight]{len(clustersets)}[/highlight])"
+            )
 
-        group_replication_variables = ""
-        for variable, setting in available_group_replication_variables.items():
-            value = setting[0].get(variable, "N/A")
-            group_replication_variables += f"[label]{setting[1]}[/label] {value}  "
+            existing_clusterset_ids = set(clustersets.keys())
+            host_cluster_name = dolphie.group_replication_data.get("cluster_name")
 
-        title = "Group Replication"
-        if dolphie.innodb_cluster:
-            title = "InnoDB Cluster"
-        title = (
-            f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}{title} "
-            f"([white]{dolphie.global_variables.get('group_replication_group_name', 'N/A')}[/white])"
-        )
-        tab.group_replication_title.update(title)
-        tab.group_replication_data.update(group_replication_variables)
+            existing_clusterset_components = {
+                c.id.split("_")[1]: c for c in tab.dolphie.app.query(f".clusterset_{tab.id}")
+            }
 
-        group_replication_member_tables = create_group_replication_member_table(tab)
-        sorted_replication_members = sorted(group_replication_member_tables.items(), key=lambda x: x[1]["host"])
-        existing_member_ids = set()
+            for clusterset_name, clusters in clustersets.items():
+                # Highlight the host cluster name
+                formatted_clusters = clusters.replace(
+                    host_cluster_name, f"[b highlight]{host_cluster_name}[/b highlight]"
+                )
 
-        if sorted_replication_members:
-            for member in sorted_replication_members:
-                member_id = member[0]
-                member_table = member[1].get("table")
-                if not member_table:
-                    continue
+                table = Table(box=None, show_header=False)
+                table.add_column()
+                table.add_column()
+                table.add_row("[b][light_blue]ClusterSet", f"[light_blue]{clusterset_name}")
+                table.add_row("[label]Clusters", formatted_clusters)
 
-                existing_member = tab.dolphie.app.query(f"#member_{member_id}_{tab.id}")
-                existing_member_ids.add(member_id)
-
-                if existing_member:
-                    existing_member[0].update(member_table)
+                if clusterset_name in existing_clusterset_components:
+                    existing_clusterset_components[clusterset_name].update(table)
                 else:
-                    tab.group_replication_grid.mount(
+                    tab.clusterset_grid.mount(
                         ScrollableContainer(
                             Static(
-                                member_table,
-                                id=f"member_{member_id}_{tab.id}",
-                                classes=f"member_{tab.id}",
+                                table,
+                                id=f"clusterset_{clusterset_name}_{tab.id}",
+                                classes=f"clusterset_{tab.id}",
                             ),
-                            id=f"member_container_{member_id}_{tab.id}",
-                            classes=f"member_container_{tab.id} member_container",
+                            id=f"clusterset_container_{clusterset_name}_{tab.id}",
+                            classes=f"clusterset_container_{tab.id} clusterset_container",
                         )
                     )
 
-            # Unmount members that are no longer in sorted_replication_members
-            for existing_member in tab.dolphie.app.query(f".member_{tab.id}"):
-                member_id = existing_member.id.split("_")[1]
-                if member_id not in existing_member_ids:
-                    tab.dolphie.app.query_one(f"#{existing_member.parent.id}").remove()
+            # Remove ClusterSets that no longer exist
+            for clusterset_name, container in existing_clusterset_components.items():
+                if clusterset_name not in existing_clusterset_ids:
+                    container.parent.remove()
+        else:
+            tab.clusterset_container.display = False
+
+    def create_group_replication_panel():
+        if not (dolphie.group_replication or dolphie.innodb_cluster):
+            tab.group_replication_container.display = False
+            return
+
+        tab.group_replication_container.display = True
+
+        # Prepare group replication variables
+        available_variables = {
+            "group_replication_view_change_uuid": ("View UUID", dolphie.global_variables),
+            "group_replication_communication_stack": ("Communication Stack", dolphie.global_variables),
+            "group_replication_consistency": ("Global Consistency", dolphie.global_variables),
+            "group_replication_paxos_single_leader": ("Paxos Single Leader", dolphie.global_variables),
+            "write_concurrency": ("Write Concurrency", dolphie.group_replication_data),
+        }
+
+        group_replication_variables = "  ".join(
+            f"[label]{label}[/label] {source.get(var, 'N/A')}" for var, (label, source) in available_variables.items()
+        )
+
+        # Update the panel title
+        title_prefix = dolphie.panels.get_key(dolphie.panels.replication.name)
+        cluster_title = "InnoDB Cluster" if dolphie.innodb_cluster else "Group Replication"
+        group_name = dolphie.global_variables.get("group_replication_group_name", "N/A")
+        tab.group_replication_title.update(f"[b]{title_prefix}{cluster_title} ([white]{group_name}[/white])")
+        tab.group_replication_data.update(group_replication_variables)
+
+        # Generate and sort member tables
+        member_tables = create_group_replication_member_table(tab)
+        sorted_members = sorted(member_tables.items(), key=lambda x: x[1]["host"])
+        existing_member_ids = {member_id for member_id, _ in sorted_members}
+
+        # Query existing member components
+        existing_member_components = {
+            member.id.split("_")[1]: member for member in tab.dolphie.app.query(f".member_{tab.id}")
+        }
+
+        for member_id, member_info in sorted_members:
+            member_table = member_info.get("table")
+            if not member_table:
+                continue
+
+            if member_id in existing_member_components:
+                existing_member_components[member_id].update(member_table)
+            else:
+                tab.group_replication_grid.mount(
+                    ScrollableContainer(
+                        Static(
+                            member_table,
+                            id=f"member_{member_id}_{tab.id}",
+                            classes=f"member_{tab.id}",
+                        ),
+                        id=f"member_container_{member_id}_{tab.id}",
+                        classes=f"member_container_{tab.id} member_container",
+                    )
+                )
+
+        # Remove members that no longer exist
+        for member_id, container in existing_member_components.items():
+            if member_id not in existing_member_ids:
+                container.parent.remove()
 
     def create_replication_panel():
         if not dolphie.replication_status:
@@ -172,53 +223,57 @@ def create_panel(tab: Tab):
 
     create_replication_panel()
     create_group_replication_panel()
+    create_clusterset_panel()
 
 
 def create_replica_panel(tab: Tab):
     dolphie = tab.dolphie
 
-    if dolphie.replica_manager.replicas:
-        tab.replicas_container.display = True
-        tab.replicas_loading_indicator.display = False
-
-        tab.replicas_title.update(
-            f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}Replicas "
-            f"([highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight])"
-        )
-
-        existing_replica_ids = set()
-
-        sorted_replica_connections = dolphie.replica_manager.get_sorted_replicas()
-        if sorted_replica_connections:
-            for replica in sorted_replica_connections:
-                if not replica.table:
-                    continue
-
-                existing_replica = tab.dolphie.app.query(f"#replica_{replica.thread_id}_{tab.id}")
-                existing_replica_ids.add(replica.thread_id)
-
-                if existing_replica:
-                    existing_replica[0].update(replica.table)
-                else:
-                    tab.replicas_grid.mount(
-                        ScrollableContainer(
-                            Static(
-                                replica.table,
-                                id=f"replica_{replica.thread_id}_{tab.id}",
-                                classes=f"replica_{tab.id}",
-                            ),
-                            id=f"replica_container_{replica.thread_id}_{tab.id}",
-                            classes=f"replica_container_{tab.id} replica_container",
-                        )
-                    )
-
-            # Unmount replicas that are no longer in sorted_replica_connections
-            for existing_replica in tab.dolphie.app.query(f".replica_{tab.id}"):
-                replica_id = int(existing_replica.id.split("_")[1])
-                if replica_id not in existing_replica_ids:
-                    tab.dolphie.app.query_one(f"#{existing_replica.parent.id}").remove()
-    else:
+    replicas = dolphie.replica_manager.replicas
+    if not replicas:
         tab.replicas_container.display = False
+        return
+
+    tab.replicas_container.display = True
+    tab.replicas_loading_indicator.display = False
+
+    # Update replicas title
+    num_replicas = len(dolphie.replica_manager.available_replicas)
+    title_prefix = dolphie.panels.get_key(dolphie.panels.replication.name)
+    tab.replicas_title.update(f"[b]{title_prefix}Replicas ([highlight]{num_replicas}[/highlight])")
+
+    # Get sorted replica connections and initialize existing replica IDs
+    sorted_replicas = dolphie.replica_manager.get_sorted_replicas()
+    existing_replica_ids = {replica.thread_id for replica in sorted_replicas if replica.table}
+
+    # Query existing replica components
+    existing_replica_components = {
+        int(replica.id.split("_")[1]): replica for replica in tab.dolphie.app.query(f".replica_{tab.id}")
+    }
+
+    for replica in sorted_replicas:
+        if not replica.table:
+            continue
+
+        if replica.thread_id in existing_replica_components:
+            existing_replica_components[replica.thread_id].update(replica.table)
+        else:
+            tab.replicas_grid.mount(
+                ScrollableContainer(
+                    Static(
+                        replica.table,
+                        id=f"replica_{replica.thread_id}_{tab.id}",
+                        classes=f"replica_{tab.id}",
+                    ),
+                    id=f"replica_container_{replica.thread_id}_{tab.id}",
+                    classes=f"replica_container_{tab.id} replica_container",
+                )
+            )
+
+    # Remove replicas that no longer exist
+    for replica_id, replica_container in existing_replica_components.items():
+        if replica_id not in existing_replica_ids:
+            replica_container.parent.remove()
 
 
 def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica = None) -> Table:

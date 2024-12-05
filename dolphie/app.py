@@ -201,7 +201,6 @@ class DolphieApp(App):
         # Get our worker thread
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
-        tab.worker_running = True
 
         dolphie = tab.dolphie
 
@@ -217,7 +216,6 @@ class DolphieApp(App):
         replay_event_data = tab.replay_manager.get_next_refresh_interval()
         # If there's no more events, stop here and cancel the worker
         if not replay_event_data:
-            tab.worker_running = False
             tab.worker.cancel()
 
             return
@@ -284,8 +282,6 @@ class DolphieApp(App):
                         metric.values = metric_values
                         metric.last_value = metric_values[-1]
 
-        tab.worker_running = False
-
     @work(thread=True, group="main")
     async def run_worker_main(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
@@ -295,7 +291,6 @@ class DolphieApp(App):
         # Get our worker thread
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
-        tab.worker_running = True
 
         dolphie = tab.dolphie
         try:
@@ -345,8 +340,6 @@ class DolphieApp(App):
 
             await self.tab_manager.disconnect_tab(tab)
 
-        tab.worker_running = False
-
     @work(thread=True, group="replicas")
     def run_worker_replicas(self, tab_id: int):
         tab = self.tab_manager.get_tab(tab_id)
@@ -372,9 +365,7 @@ class DolphieApp(App):
                         " replicas...\n"
                     )
 
-                tab.replicas_worker_running = True
                 replication_panel.fetch_replicas(tab)
-                tab.replicas_worker_running = False
             else:
                 tab.replicas_container.display = False
         else:
@@ -389,8 +380,6 @@ class DolphieApp(App):
         dolphie = tab.dolphie
 
         if event.worker.group == "main":
-            tab.worker_running = False
-
             if event.state == WorkerState.SUCCESS:
                 self.monitor_read_only_change(tab)
 
@@ -447,8 +436,6 @@ class DolphieApp(App):
                         self.tab_manager.setup_host_tab(tab)
                         self.bell()
         elif event.worker.group == "replicas":
-            tab.replicas_worker_running = False
-
             if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right
                 if len(self.screen_stack) > 1 or dolphie.pause_refresh or tab.id != self.tab_manager.active_tab.id:
@@ -464,8 +451,6 @@ class DolphieApp(App):
                     dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
                 )
         elif event.worker.group == "replay":
-            tab.worker_running = False
-
             if event.state == WorkerState.SUCCESS:
                 if tab.id == self.tab_manager.active_tab.id:
                     if len(self.screen_stack) > 1 or (dolphie.pause_refresh and not tab.replay_manual_control):
@@ -579,6 +564,10 @@ class DolphieApp(App):
 
         if dolphie.panels.processlist.visible or dolphie.record_for_replay:
             dolphie.processlist_threads = processlist_panel.fetch_data(tab)
+
+        if dolphie.innodb_cluster or dolphie.innodb_cluster_read_replica:
+            dolphie.main_db_connection.execute(MySQLQueries.get_clustersets)
+            dolphie.group_replication_clustersets = dolphie.main_db_connection.fetchall()
 
         if dolphie.performance_schema_enabled:
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
@@ -898,7 +887,7 @@ class DolphieApp(App):
         # Wait for all workers to finish before notifying the user
         await asyncio.sleep(0.2)
         for tab in self.tab_manager.tabs.values():
-            while tab.worker_running:
+            while tab.worker.is_running:
                 await asyncio.sleep(0.1)
 
         self.tab_manager.loading_hostgroups = False
@@ -986,22 +975,9 @@ class DolphieApp(App):
             if tab.dolphie.connection_source == ConnectionSource.mysql:
                 self.refresh_screen_mysql(tab)
                 replication_panel.create_replica_panel(tab)
+                tab.toggle_replication_panel_components()
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
-
-            # Set the display state for the replica container based on whether there are replicas
-            tab.replicas_container.display = bool(tab.dolphie.replica_manager.replicas)
-            if tab.replicas_container.display:
-                containers = self.query(".replica_container")
-                for container in containers:
-                    container.display = tab.id in container.id
-
-            # Set the display state for the group replication container based on whether there are members
-            tab.group_replication_container.display = bool(tab.dolphie.group_replication_members)
-            if tab.group_replication_container.display:
-                containers = self.query(".member_container")
-                for container in containers:
-                    container.display = tab.id in container.id
 
             self.force_refresh_for_replay(need_current_data=True)
 
@@ -1061,7 +1037,7 @@ class DolphieApp(App):
         # This function lets us force a refresh of the worker thread when we're in a replay
         tab = self.tab_manager.active_tab
 
-        if tab.dolphie.replay_file and not tab.worker_running:
+        if tab.dolphie.replay_file and not tab.worker.is_running:
             tab.worker.cancel()
             tab.worker_timer.stop()
 
@@ -1193,29 +1169,17 @@ class DolphieApp(App):
 
             if dolphie.panels.replication.visible:
                 if dolphie.replica_manager.available_replicas:
-                    tab.replicas_container.display = True
-
                     # No loading animation necessary for replay mode
                     if not dolphie.replay_file:
                         tab.replicas_loading_indicator.display = True
-
                         tab.replicas_title.update(
                             f"[white][b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}"
                             "[/highlight] replicas...\n"
                         )
 
-                    for container in dolphie.app.query(".replica_container"):
-                        container.display = tab.id in container.id
-
-                if dolphie.group_replication_members:
-                    tab.group_replication_container.display = True
-                    for container in dolphie.app.query(".member_container"):
-                        container.display = tab.id in container.id
+                tab.toggle_replication_panel_components()
             else:
-                queries = [f".replica_container_{dolphie.tab_id}", f".member_container_{dolphie.tab_id}"]
-                for query in queries:
-                    for container in dolphie.app.query(query):
-                        container.remove()
+                tab.remove_replication_panel_components()
 
         elif key == "5":
             if dolphie.connection_source == ConnectionSource.proxysql:
@@ -1265,7 +1229,7 @@ class DolphieApp(App):
             self.tab_manager.setup_host_tab(tab)
 
         elif key == "space":
-            if tab.worker.state != WorkerState.RUNNING:
+            if not tab.worker.is_running:
                 tab.worker_timer.stop()
                 self.run_worker_main(tab.id)
 

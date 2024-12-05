@@ -135,6 +135,7 @@ class Dolphie:
         self.is_group_replication_primary: bool = False
         self.group_replication_members: dict = {}
         self.group_replication_data: dict = {}
+        self.group_replication_clustersets: dict = {}
 
         # Main connection is used for Textual's worker thread so it can run asynchronous
         db_connection_args = {
@@ -239,7 +240,7 @@ class Dolphie:
         if global_variables.get("wsrep_on") == "ON" or global_variables.get("wsrep_cluster_address"):
             self.galera_cluster = True
 
-        # Check to see if the host is in a InnoDB cluster
+        # Determine what type of cluster/instance this host is
         if self.group_replication_data.get("cluster_type") == "ar":
             self.replicaset = True
         elif self.group_replication_data.get("cluster_type") == "gr":
@@ -290,9 +291,7 @@ class Dolphie:
             query = MySQLQueries.determine_cluster_type_8
 
         self.main_db_connection.execute(query, ignore_error=True)
-        data = self.main_db_connection.fetchone()
-        self.group_replication_data["cluster_type"] = data.get("cluster_type")
-        self.group_replication_data["instance_type"] = data.get("instance_type")
+        self.group_replication_data = self.main_db_connection.fetchone()
 
     def add_host_to_tab_setup_file(self):
         if self.daemon_mode:

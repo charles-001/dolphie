@@ -1,8 +1,6 @@
-import asyncio
 import copy
 import os
 import uuid
-from time import monotonic
 from typing import Dict, List
 
 from textual.app import App
@@ -59,13 +57,11 @@ class Tab:
         self.worker: Worker = None
         self.worker_timer: Timer = None
         self.worker_cancel_error: ManualException = None
-        self.worker_running: bool = False
 
         self.replay_manual_control: bool = False
 
         self.replicas_worker: Worker = None
         self.replicas_worker_timer: Timer = None
-        self.replicas_worker_running: bool = False
 
     def save_references_to_components(self):
         app = self.dolphie.app
@@ -118,6 +114,10 @@ class Tab:
         self.dashboard_section_4 = app.query_one("#dashboard_section_4", Static)
         self.dashboard_section_5 = app.query_one("#dashboard_section_5", Static)
         self.dashboard_section_6 = app.query_one("#dashboard_section_6", Static)
+
+        self.clusterset_container = app.query_one("#clusterset_container", Container)
+        self.clusterset_title = app.query_one("#clusterset_title", Label)
+        self.clusterset_grid = app.query_one("#clusterset_grid", Container)
 
         self.group_replication_container = app.query_one("#group_replication_container", Container)
         self.group_replication_grid = app.query_one("#group_replication_grid", Container)
@@ -236,6 +236,34 @@ class Tab:
                         f"#switch_container_{metric_instance.tab_name} #{metric_instance_name}-{metric}", Switch
                     )
                     switch.value = metric_data.visible
+
+    def toggle_replication_panel_components(self):
+        app = self.dolphie.app
+
+        def toggle_container_display(selector: str, container: Container, items):
+            container.display = bool(items)
+            for component in app.query(selector):
+                component.display = self.id in component.id
+
+        toggle_container_display(
+            ".replica_container", self.replicas_container, self.dolphie.replica_manager.available_replicas
+        )
+        toggle_container_display(
+            ".member_container", self.group_replication_container, self.dolphie.group_replication_members
+        )
+        toggle_container_display(
+            ".clusterset_container", self.clusterset_container, self.dolphie.group_replication_clustersets
+        )
+
+    def remove_replication_panel_components(self):
+        components = [
+            f".replica_container_{self.id}",
+            f".member_container_{self.id}",
+            f".clusterset_container_{self.id}",
+        ]
+        for component in components:
+            for container in self.dolphie.app.query(component):
+                container.remove()
 
     def layout_graphs(self):
         # These variables are dynamically created
@@ -374,6 +402,12 @@ class TabManager:
                         ),
                         id="replication_container",
                         classes="replication",
+                    ),
+                    Container(
+                        Label(id="clusterset_title"),
+                        Container(id="clusterset_grid"),
+                        id="clusterset_container",
+                        classes="group_replication",
                     ),
                     Container(
                         Label(id="group_replication_title"),
@@ -707,16 +741,15 @@ class TabManager:
         return all_tabs
 
     async def disconnect_tab(self, tab: Tab, update_topbar: bool = True):
+        if tab.worker:
+            tab.worker.cancel()
+        if tab.replicas_worker:
+            tab.replicas_worker.cancel()
+
         if tab.worker_timer:
             tab.worker_timer.stop()
         if tab.replicas_worker_timer:
             tab.replicas_worker_timer.stop()
-
-        if tab.worker:
-            tab.worker.cancel()
-
-        if tab.replicas_worker:
-            tab.replicas_worker.cancel()
 
         tab.dolphie.main_db_connection.close()
         tab.dolphie.secondary_db_connection.close()
@@ -729,11 +762,7 @@ class TabManager:
 
         tab.sparkline.data = [0]
 
-        # Remove all the replica and member containers
-        queries = [f".replica_container_{tab.id}", f".member_container_{tab.id}"]
-        for query in queries:
-            for container in tab.dolphie.app.query(query):
-                await container.remove()
+        tab.remove_replication_panel_components()
 
         if update_topbar:
             self.update_connection_status(tab=tab, connection_status=ConnectionStatus.disconnected)
@@ -742,7 +771,7 @@ class TabManager:
         dolphie = tab.dolphie
 
         async def command_get_input(data):
-            # Set tab_setup to false since it's only used when Dolphie first loads
+            # Set tab_setup to False since it's only used when Dolphie first loads
             if self.config.tab_setup:
                 self.config.tab_setup = False
 
@@ -753,51 +782,45 @@ class TabManager:
             if hostgroup:
                 dolphie.app.connect_as_hostgroup(hostgroup)
             else:
+                # Create a new tab since it's easier to manage the worker threads this way
+                new_tab = await self.create_tab(tab_name=tab.name)
+                new_tab.manual_tab_name = tab.manual_tab_name
+                new_dolphie = new_tab.dolphie
+
                 host_port = data["host"].split(":")
-                dolphie.host = host_port[0]
-                dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
-                dolphie.credential_profile = data.get("credential_profile")
-                dolphie.user = data.get("username")
-                dolphie.password = data.get("password")
-                dolphie.socket = data.get("socket_file")
-                dolphie.ssl = data.get("ssl")
-                dolphie.record_for_replay = data.get("record_for_replay")
-                dolphie.replay_file = data.get("replay_file")
+                new_dolphie.host = host_port[0]
+                new_dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
+                new_dolphie.credential_profile = data.get("credential_profile")
+                new_dolphie.user = data.get("username")
+                new_dolphie.password = data.get("password")
+                new_dolphie.socket = data.get("socket_file")
+                new_dolphie.ssl = data.get("ssl")
+                new_dolphie.record_for_replay = data.get("record_for_replay")
+                new_dolphie.replay_file = data.get("replay_file")
 
-                await self.disconnect_tab(tab)
+                # Init the new variables above
+                new_dolphie.reset_runtime_variables()
 
-                tab.loading_indicator.display = True
+                # Remove the old tab and disconnect it
+                await self.remove_tab(tab)
+                await self.disconnect_tab(tab, update_topbar=False)
+                self.tabs.pop(tab.id, None)
 
-                # This is to prevent an edge case I experienced.
-                # Continue on with process after 5 seconds if it gets stuck in the loop
-                start_time = monotonic()
+                new_tab.loading_indicator.display = True
 
-                while True:
-                    if (not tab.worker_running and not tab.replicas_worker_running) or (monotonic() - start_time > 5):
-                        tab.worker_running = False
-                        tab.replicas_worker_running = False
-                        tab.worker_cancel_error = ""
+                new_tab.dashboard_replay_container.display = False
+                if new_dolphie.replay_file:
+                    new_tab.replay_manager = ReplayManager(new_dolphie)
+                    if not new_tab.replay_manager.verify_replay_file():
+                        new_tab.loading_indicator.display = False
+                        self.setup_host_tab(new_tab)
+                        return
 
-                        tab.dashboard_replay_container.display = False
-
-                        dolphie.reset_runtime_variables()
-
-                        if dolphie.replay_file:
-                            tab.replay_manager = ReplayManager(dolphie)
-                            if not tab.replay_manager.verify_replay_file():
-                                tab.loading_indicator.display = False
-                                self.setup_host_tab(tab)
-                                return
-
-                            self.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
-                            dolphie.app.run_worker_replay(tab.id)
-                        else:
-                            dolphie.app.run_worker_main(tab.id)
-                            dolphie.app.run_worker_replicas(tab.id)
-
-                        break
-
-                    await asyncio.sleep(0.25)
+                    self.update_connection_status(tab=new_tab, connection_status=ConnectionStatus.connected)
+                    new_dolphie.app.run_worker_replay(new_tab.id)
+                else:
+                    new_dolphie.app.run_worker_main(new_tab.id)
+                    new_dolphie.app.run_worker_replicas(new_tab.id)
 
         # If we're here because of a worker cancel error or manually disconnected,
         # we want to pre-populate the host/port
