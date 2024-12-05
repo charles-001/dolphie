@@ -101,6 +101,12 @@ class Dolphie:
             int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]
         ] = {}
 
+        # These are for group replication in replication panel
+        self.is_group_replication_primary: bool = False
+        self.group_replication_data: Dict[str, str] = {}
+        self.group_replication_members: List[Dict[str, str]] = []
+        self.innodb_cluster_clustersets: List[Dict[str, str]] = []
+
         # Filters that can be applied
         self.user_filter = None
         self.db_filter = None
@@ -118,12 +124,6 @@ class Dolphie:
         self.innodb_cluster_read_replica: bool = False
         self.replicaset: bool = False
 
-        # These are for group replication in replication panel
-        self.is_group_replication_primary: bool = False
-        self.group_replication_data: Dict[str, str] = {}
-        self.group_replication_members: List[Dict[str, str]] = []
-        self.innodb_cluster_clustersets: List[Dict[str, str]] = []
-
         # Main connection is used for Textual's worker thread so it can run asynchronous
         db_connection_args = {
             "app": self.app,
@@ -140,6 +140,7 @@ class Dolphie:
         # Secondary connection is for ad-hoc commands that are not a part of the worker thread
         self.secondary_db_connection = Database(**db_connection_args, save_connection_id=False)
 
+        # Misc variables
         self.host_with_port: str = f"{self.host}:{self.port}"
         self.performance_schema_enabled: bool = False
         self.metadata_locks_enabled: bool = False
