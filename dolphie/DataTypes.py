@@ -28,7 +28,10 @@ class ConnectionStatus:
 class Replica:
     thread_id: int
     host: str
+    port: int = None
+    host_distro: str = None
     connection: str = None
+    connection_source_alt: ConnectionSource = None
     table: Table = None
     replication_status: Dict[str, Union[str, int]] = field(default_factory=dict)
     mysql_version: str = None
@@ -36,12 +39,12 @@ class Replica:
 
 class ReplicaManager:
     def __init__(self):
-        self.available_replicas: list = []
+        self.available_replicas: List[Dict[str, str]] = []
         self.replicas: Dict[int, Replica] = {}
         self.ports: Dict[str, int] = {}
 
-    def add(self, thread_id: int, host: str) -> Replica:
-        self.replicas[thread_id] = Replica(thread_id=thread_id, host=host)
+    def add(self, thread_id: int, host: str, port: int) -> Replica:
+        self.replicas[thread_id] = Replica(thread_id=thread_id, host=host, port=port)
 
         return self.replicas[thread_id]
 

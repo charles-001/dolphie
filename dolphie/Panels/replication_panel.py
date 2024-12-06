@@ -315,7 +315,6 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         sql_thread_running = (
             "[green]ON[/green]" if data.get("Replica_SQL_Running").lower() == "yes" else "[red]OFF[/red]"
         )
-
     else:
         uuid_key = "Master_UUID"
         primary_uuid = data.get(uuid_key)
@@ -363,13 +362,16 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         table.add_column(overflow="fold")
 
     if replica:
-        table.add_row("[b][light_blue]Host", "[light_blue]%s" % replica.host)
-        table.add_row("[label]Version", "%s" % replica.mysql_version)
+        table.add_row("[b][light_blue]Host", f"[light_blue]{replica.host}")
+        table.add_row("[label]Version", f"{replica.host_distro} {replica.mysql_version}")
     else:
-        table.add_row("[label]Primary", "%s" % primary_host)
+        table.add_row("[label]Primary", primary_host)
 
     if not dashboard_table:
-        table.add_row("[label]User", "%s" % primary_user)
+        if replica:
+            table.add_row("[label]User", f"{primary_user} [label]Thread ID[/label] {replica.thread_id}")
+        else:
+            table.add_row("[label]User", primary_user)
 
     table.add_row(
         "[label]Thread",
@@ -612,58 +614,54 @@ def create_group_replication_member_table(tab: Tab):
     return group_replica_tables
 
 
-def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
+def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
     dolphie = tab.dolphie
+    connection = replica.connection if replica else dolphie.main_db_connection
+    version_to_check = replica.mysql_version if replica else None
+    connection_source_alt = replica.connection_source_alt if replica else dolphie.connection_source_alt
 
-    connection = dolphie.main_db_connection if not replica else replica.connection
-
-    # Determine which query to use based on MySQL version and connection source
+    # Determine replication status query
+    use_show_replica_status = (
+        dolphie.is_mysql_version_at_least("8.0.22", use_version=version_to_check)
+        and connection_source_alt != ConnectionSource.mariadb
+    )
     replication_status_query = (
-        MySQLQueries.show_replica_status
-        if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb
-        else MySQLQueries.show_slave_status
+        MySQLQueries.show_replica_status if use_show_replica_status else MySQLQueries.show_slave_status
     )
 
-    # Determine which replication lag source and query to use
-    if dolphie.heartbeat_table:
-        replica_lag_source = "HB"
-        replica_lag_query = MySQLQueries.heartbeat_replica_lag
-    else:
-        replica_lag_source = None
-        replica_lag_query = replication_status_query
+    # Determine lag source and query
+    replica_lag_source = "HB" if dolphie.heartbeat_table else None
+    replica_lag_query = MySQLQueries.heartbeat_replica_lag if replica_lag_source else replication_status_query
 
+    # Fetch replication status
     connection.execute(replication_status_query)
-    replica_lag_data = connection.fetchone()
-    replication_status = replica_lag_data
+    replication_status = connection.fetchone() or {}
 
-    # Use an alternative method to detect replication lag if available
-    if replication_status and replica_lag_source:
+    # Fetch replica lag using alternative method if applicable
+    if replica_lag_source:
         connection.execute(replica_lag_query)
         replica_lag_data = connection.fetchone()
+    else:
+        replica_lag_data = replication_status
 
-    # Determine which key to use for fetching the seconds behind
-    seconds_behind_key = (
-        "Seconds_Behind_Source"
-        if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb
-        else "Seconds_Behind_Master"
-    )
-
-    seconds_behind = replica_lag_data.get(seconds_behind_key)
+    # Determine lag key and calculate replica lag
+    lag_key = "Seconds_Behind_Source" if use_show_replica_status else "Seconds_Behind_Master"
+    seconds_behind = replica_lag_data.get(lag_key)
     replica_lag = int(seconds_behind) if seconds_behind is not None else 0
 
     if replication_status:
-        # Update the replication lag with the alternative method if available
+        # Update replication status with lag and speed
+        previous_lag = (
+            replica.replication_status.get("Seconds_Behind", 0)
+            if replica
+            else dolphie.replication_status.get("Seconds_Behind", 0)
+        )
         replication_status["Seconds_Behind"] = replica_lag
-
-        previous_sbm = 0
-        if replica:
-            previous_sbm = replica.replication_status.get("Seconds_Behind", 0)
-        else:
-            previous_sbm = dolphie.replication_status.get("Seconds_Behind", 0)
-
-        replication_status["Replica_Speed"] = 0
-        if previous_sbm and replica_lag < previous_sbm:
-            replication_status["Replica_Speed"] = round((previous_sbm - replica_lag) / dolphie.polling_latency)
+        replication_status["Replica_Speed"] = (
+            round((previous_lag - replica_lag) / dolphie.polling_latency)
+            if previous_lag and replica_lag < previous_lag
+            else 0
+        )
 
     return replication_status
 
@@ -676,85 +674,99 @@ def fetch_replicas(tab: Tab):
         # Remove replica connections that no longer exist
         unique_ids = {row["id"] for row in dolphie.replica_manager.available_replicas}
         to_remove = set(dolphie.replica_manager.replicas.keys()) - unique_ids
-        for thread_id in to_remove:
-            dolphie.replica_manager.remove(thread_id)
+
+        if dolphie.connection_source_alt == ConnectionSource.mariadb:
+            dolphie.replica_manager.disconnect_all()
+        else:
+            for thread_id in to_remove:
+                dolphie.replica_manager.remove(thread_id)
 
     for row in dolphie.replica_manager.available_replicas:
         replica_error = None
-
         thread_id = row["id"]
-
         host = dolphie.get_hostname(row["host"].split(":")[0])
 
-        # MariaDB has no way of knowing what port a replica is using, so we have to manage it ourselves
+        replica = dolphie.replica_manager.get(thread_id)
+
+        # MariaDB has no way of mapping a replica in processlist (AFAIK) to a specific port from SHOW SLAVE HOSTS
+        # So we have to loop through available ports and manage it ourselves. Downside is thread_id isn't 100%
+        # guaranteed to be matched to the correct port, but it's the best we can do
         if dolphie.connection_source_alt == ConnectionSource.mariadb:
-            # Loop through available ports
-            for port_data in dolphie.replica_manager.ports.values():
-                port = port_data.get("port", 3306)
+            if not replica:
+                assigned_port = None
+                # Loop through available ports
+                for port_data in dolphie.replica_manager.ports.values():
+                    port = port_data.get("port", 3306)
 
-                # If the port is not in use, check to see if we can connect to it
-                if not port_data.get("in_use"):
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(2)
+                    # If the port is not in use, check to see if we can connect to it
+                    if not port_data.get("in_use"):
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(2)
 
-                    try:
-                        # Try to connect to the host and port
-                        sock.connect((host, port))
-                        port_data["in_use"] = True
-                        break
-                    except (socket.timeout, socket.error, ConnectionRefusedError):
-                        continue  # Continue to the next available port
-                    finally:
-                        sock.close()
-                else:
-                    break
+                        try:
+                            # Try to connect to the host and port
+                            sock.connect((host, port))
+                            port_data["in_use"] = True
+                            assigned_port = port
+                            break
+                        except (socket.timeout, socket.error, ConnectionRefusedError):
+                            continue  # Continue to the next available port
+                        finally:
+                            sock.close()
+
+                if not assigned_port:
+                    replica_error = "No available port found for replica"
+            else:
+                assigned_port = replica.port
         else:
-            port = dolphie.replica_manager.ports.get(row["replica_uuid"], {}).get("port", 3306)
+            # Default handling when not using MariaDB, based on the replica UUID
+            assigned_port = dolphie.replica_manager.ports.get(row["replica_uuid"], {}).get("port", 3306)
 
         # This lets us connect to replicas on the same host as the primary if we're connecting remotely
         if host == "localhost" or host == "127.0.0.1":
             host = dolphie.host
 
-        host_and_port = "%s:%s" % (host, port)
-
-        replica = dolphie.replica_manager.get(thread_id)
+        if assigned_port:
+            host_and_port = f"{host}:{assigned_port}"
+        else:
+            host_and_port = host
 
         if dolphie.replay_file:
             if not replica:
-                replica = dolphie.replica_manager.add(thread_id=thread_id, host=host)
+                replica = dolphie.replica_manager.add(thread_id=thread_id, host=host, port=assigned_port)
 
             table = Table(box=None, show_header=False)
             table.add_column()
             table.add_column(overflow="fold")
 
-            table.add_row("[b][light_blue]Host", "[light_blue]%s" % host)
-            table.add_row("[label]User", row["user"])
+            table.add_row("[b][light_blue]Host", f"[light_blue]{host}")
             table.add_row("[label]Thread ID", str(thread_id))
+            table.add_row("[label]User", row["user"])
 
             replica.table = table
         else:
             # If we don't have a replica connection, we create one
             if not replica:
                 try:
-                    replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port)
-                    replica.connection = Database(
-                        app=dolphie.app,
-                        host=host,
-                        user=dolphie.user,
-                        password=dolphie.password,
-                        port=port,
-                        socket=None,
-                        ssl=dolphie.ssl,
-                        save_connection_id=False,
-                    )
+                    replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port, port=assigned_port)
 
-                    # Save the MySQL version for the replica
-                    version_split = replica.connection.fetch_value_from_field("SELECT @@version").split(".")
-                    replica.mysql_version = "%s.%s.%s" % (
-                        version_split[0],
-                        version_split[1],
-                        version_split[2].split("-")[0],
-                    )
+                    if assigned_port:
+                        replica.connection = Database(
+                            app=dolphie.app,
+                            host=host,
+                            user=dolphie.user,
+                            password=dolphie.password,
+                            port=assigned_port,
+                            socket=None,
+                            ssl=dolphie.ssl,
+                            save_connection_id=False,
+                        )
+                        global_variables = replica.connection.fetch_status_and_variables("variables")
+
+                        replica.mysql_version = dolphie.parse_server_version(global_variables.get("version"))
+                        replica.host_distro, replica.connection_source_alt = (
+                            dolphie.determine_distro_and_connection_source(global_variables)
+                        )
                 except ManualException as e:
                     replica_error = e.reason
 
@@ -772,8 +784,9 @@ def fetch_replicas(tab: Tab):
                 table.add_column()
                 table.add_column(overflow="fold")
 
-                table.add_row("[b][light_blue]Host", "[light_blue]%s:%s" % (host, port))
+                table.add_row("[b][light_blue]Host", f"[light_blue]{host_and_port}")
+                table.add_row("[label]Thread ID", str(thread_id))
                 table.add_row("[label]User", row["user"])
-                table.add_row("[label]Error", "[red]%s[/red]" % replica_error)
+                table.add_row("[label]Error", f"[red]{replica_error}[/red]")
 
                 replica.table = table

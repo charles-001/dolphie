@@ -215,7 +215,7 @@ class MySQLQueries:
     """
     mariadb_find_replicas: str = """
         SELECT
-            t.THREAD_ID AS id,
+            t.PROCESSLIST_ID AS id,
             t.PROCESSLIST_USER AS user,
             t.PROCESSLIST_HOST AS host
         FROM
@@ -225,7 +225,7 @@ class MySQLQueries:
     """
     ps_find_replicas: str = """
         SELECT
-            t.THREAD_ID AS id,
+            t.PROCESSLIST_ID AS id,
             t.PROCESSLIST_USER AS user,
             t.PROCESSLIST_HOST AS host,
             CONVERT (
@@ -243,7 +243,7 @@ class MySQLQueries:
             Id   AS id,
             User AS user,
             Host AS host,
-            '' AS replica_uuid
+            ''   AS replica_uuid
         FROM
             information_schema.PROCESSLIST
         WHERE
