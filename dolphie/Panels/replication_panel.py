@@ -691,7 +691,7 @@ def fetch_replicas(tab: Tab):
         # MariaDB has no way of mapping a replica in processlist (AFAIK) to a specific port from SHOW SLAVE HOSTS
         # So we have to loop through available ports and manage it ourselves. Downside is thread_id isn't 100%
         # guaranteed to be matched to the correct port, but it's the best we can do
-        if dolphie.connection_source_alt == ConnectionSource.mariadb:
+        if dolphie.connection_source_alt == ConnectionSource.mariadb and not dolphie.replay_file:
             if not replica:
                 assigned_port = None
                 # Loop through available ports
@@ -720,16 +720,12 @@ def fetch_replicas(tab: Tab):
                 assigned_port = replica.port
         else:
             # Default handling when not using MariaDB, based on the replica UUID
-            assigned_port = dolphie.replica_manager.ports.get(row["replica_uuid"], {}).get("port", 3306)
+            assigned_port = dolphie.replica_manager.ports.get(row.get("replica_uuid"), {}).get("port", 3306)
 
         # This lets us connect to replicas on the same host as the primary if we're connecting remotely
         if host == "localhost" or host == "127.0.0.1":
             host = dolphie.host
-
-        if assigned_port:
-            host_and_port = f"{host}:{assigned_port}"
-        else:
-            host_and_port = host
+        host_and_port = f"{host}:{assigned_port}" if assigned_port else host
 
         if dolphie.replay_file:
             if not replica:
@@ -739,7 +735,7 @@ def fetch_replicas(tab: Tab):
             table.add_column()
             table.add_column(overflow="fold")
 
-            table.add_row("[b][light_blue]Host", f"[light_blue]{host}")
+            table.add_row("[b][light_blue]Host", f"[light_blue]{host_and_port}")
             table.add_row("[label]Thread ID", str(thread_id))
             table.add_row("[label]User", row["user"])
 

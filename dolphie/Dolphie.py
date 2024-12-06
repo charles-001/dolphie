@@ -205,7 +205,7 @@ class Dolphie:
         else:
             self.host_with_port = f"{global_variables.get('hostname')}:{self.port}"
 
-        # Server UUID configuration
+        # Server UUID configuration (mainly for replication & errant transactions)
         self.server_uuid = global_variables.get("server_uuid")
         if self.connection_source_alt == ConnectionSource.mariadb and self.is_mysql_version_at_least("10.0"):
             self.server_uuid = global_variables.get("server_id")
@@ -236,8 +236,6 @@ class Dolphie:
     def determine_distro_and_connection_source(
         self, global_variables: Dict[str, Union[int, str]]
     ) -> Tuple[str, ConnectionSource]:
-        version_comment = global_variables.get("version_comment", "").casefold()
-
         distro_mappings = [
             ("percona xtradb cluster", "Percona XtraDB Cluster", ConnectionSource.mysql),
             ("percona server", "Percona Server", ConnectionSource.mysql),
@@ -247,7 +245,7 @@ class Dolphie:
 
         # Check version_comment for matches
         for keyword, distro, conn_source in distro_mappings:
-            if keyword in version_comment:
+            if keyword in global_variables.get("version_comment", "").casefold():
                 return distro, conn_source
 
         # Handle cases not based on version_comment
