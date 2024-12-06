@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Union
 
+import pymysql
 from rich.table import Table
 
 from dolphie.Modules.Functions import format_query, format_time
@@ -30,7 +31,7 @@ class Replica:
     host: str
     port: int = None
     host_distro: str = None
-    connection: str = None
+    connection: pymysql.Connection = None
     connection_source_alt: ConnectionSource = None
     table: Table = None
     replication_status: Dict[str, Union[str, int]] = field(default_factory=dict)
@@ -41,7 +42,7 @@ class ReplicaManager:
     def __init__(self):
         self.available_replicas: List[Dict[str, str]] = []
         self.replicas: Dict[int, Replica] = {}
-        self.ports: Dict[str, int] = {}
+        self.ports: Dict[str, Dict[str, Union[str, bool]]] = {}
 
     def add(self, thread_id: int, host: str, port: int) -> Replica:
         self.replicas[thread_id] = Replica(thread_id=thread_id, host=host, port=port)

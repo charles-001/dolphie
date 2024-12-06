@@ -723,8 +723,7 @@ def fetch_replicas(tab: Tab):
             assigned_port = dolphie.replica_manager.ports.get(row.get("replica_uuid"), {}).get("port", 3306)
 
         # This lets us connect to replicas on the same host as the primary if we're connecting remotely
-        if host == "localhost" or host == "127.0.0.1":
-            host = dolphie.host
+        host = dolphie.host if host in ["localhost", "127.0.0.1"] else host
         host_and_port = f"{host}:{assigned_port}" if assigned_port else host
 
         if dolphie.replay_file:
