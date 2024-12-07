@@ -27,6 +27,7 @@ class ConnectionStatus:
 
 @dataclass
 class Replica:
+    row_key: str
     thread_id: int
     host: str
     port: int = None
@@ -44,16 +45,16 @@ class ReplicaManager:
         self.replicas: Dict[int, Replica] = {}
         self.ports: Dict[str, Dict[str, Union[str, bool]]] = {}
 
-    def add(self, thread_id: int, host: str, port: int) -> Replica:
-        self.replicas[thread_id] = Replica(thread_id=thread_id, host=host, port=port)
+    def add(self, row_key: str, thread_id: int, host: str, port: int) -> Replica:
+        self.replicas[row_key] = Replica(row_key=row_key, thread_id=thread_id, host=host, port=port)
 
-        return self.replicas[thread_id]
+        return self.replicas[row_key]
 
-    def remove(self, thread_id: int):
-        del self.replicas[thread_id]
+    def remove(self, row_key: str):
+        del self.replicas[row_key]
 
-    def get(self, thread_id: int) -> Replica:
-        return self.replicas.get(thread_id)
+    def get(self, row_key: str) -> Replica:
+        return self.replicas.get(row_key)
 
     def disconnect_all(self):
         if self.replicas:

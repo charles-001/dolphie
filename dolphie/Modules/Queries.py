@@ -204,8 +204,8 @@ class MySQLQueries:
         FROM
             `performance_schema`.`file_summary_by_event_name`
         WHERE
-            `performance_schema`.`file_summary_by_event_name`.`EVENT_NAME` LIKE 'wait/io/file/%' AND
-            `performance_schema`.`file_summary_by_event_name`.`COUNT_STAR` > 0
+            `file_summary_by_event_name`.`EVENT_NAME` LIKE 'wait/io/file/%' AND
+            `file_summary_by_event_name`.`COUNT_STAR` > 0
     """
     heartbeat_replica_lag: str = """
         SELECT
@@ -215,13 +215,12 @@ class MySQLQueries:
     """
     mariadb_find_replicas: str = """
         SELECT
-            t.PROCESSLIST_ID AS id,
-            t.PROCESSLIST_USER AS user,
-            t.PROCESSLIST_HOST AS host
+            PROCESSLIST_USER AS user,
+            PROCESSLIST_HOST AS host
         FROM
-            `performance_schema`.threads AS t
+            `performance_schema`.threads
         WHERE
-            t.PROCESSLIST_COMMAND LIKE 'Binlog Dump%'
+            PROCESSLIST_COMMAND LIKE 'Binlog Dump%'
     """
     ps_find_replicas: str = """
         SELECT
