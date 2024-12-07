@@ -30,7 +30,10 @@ def create_panel(tab: Tab):
     ):
         tab.replication_container_title.display = True
         tab.replication_container_title.update(
-            Align.center("[b][light_blue]Replication/Replicas panel has no data to display\n")
+            Align.center(
+                f"[b highlight]{dolphie.panels.get_key(dolphie.panels.replication.name)}[/b highlight]"
+                "[b][yellow]Replication/Replicas panel has no data to display\n"
+            )
         )
     else:
         tab.replication_container_title.display = False
@@ -693,13 +696,13 @@ def fetch_replicas(tab: Tab):
         thread_id = row.get("id")
         host = dolphie.get_hostname(row["host"].split(":")[0])
 
-        row_key = create_replica_row_key(row.get("host"), row.get("port"))
-        replica = dolphie.replica_manager.get(row_key)
+        row_port = row.get("port")
+        row_key = create_replica_row_key(row.get("host"), row_port)
 
         # MariaDB has no way of mapping a replica in processlist (AFAIK) to a specific port from SHOW SLAVE HOSTS
         # So we have to loop through available ports and manage it ourselves.
         if dolphie.connection_source_alt == ConnectionSource.mariadb and not dolphie.replay_file:
-            if not replica:
+            if not row_port:
                 assigned_port = None
                 # Loop through available ports
                 for port_data in dolphie.replica_manager.ports.values():
@@ -726,7 +729,7 @@ def fetch_replicas(tab: Tab):
                 if not assigned_port:
                     replica_error = "No available port found for replica"
             else:
-                assigned_port = replica.port
+                assigned_port = row_port
         else:
             # Default handling when not using MariaDB, based on the replica UUID
             assigned_port = dolphie.replica_manager.ports.get(row.get("replica_uuid"), {}).get("port", 3306)
@@ -738,6 +741,7 @@ def fetch_replicas(tab: Tab):
         host = dolphie.host if host in ["localhost", "127.0.0.1"] else host
         host_and_port = f"{host}:{assigned_port}" if assigned_port else host
 
+        replica = dolphie.replica_manager.get(row_key)
         if not replica:
             replica = dolphie.replica_manager.add(
                 row_key=row_key, thread_id=thread_id, host=host_and_port, port=assigned_port
@@ -754,25 +758,24 @@ def fetch_replicas(tab: Tab):
             replica.table = table
         else:
             # If we don't have a replica connection, we create one
-            if not replica.connection:
+            if not replica.connection and assigned_port:
                 try:
-                    if assigned_port:
-                        replica.connection = Database(
-                            app=dolphie.app,
-                            host=host,
-                            user=dolphie.user,
-                            password=dolphie.password,
-                            port=assigned_port,
-                            socket=None,
-                            ssl=dolphie.ssl,
-                            save_connection_id=False,
-                        )
-                        global_variables = replica.connection.fetch_status_and_variables("variables")
+                    replica.connection = Database(
+                        app=dolphie.app,
+                        host=host,
+                        user=dolphie.user,
+                        password=dolphie.password,
+                        port=assigned_port,
+                        socket=None,
+                        ssl=dolphie.ssl,
+                        save_connection_id=False,
+                    )
+                    global_variables = replica.connection.fetch_status_and_variables("variables")
 
-                        replica.mysql_version = dolphie.parse_server_version(global_variables.get("version"))
-                        replica.host_distro, replica.connection_source_alt = (
-                            dolphie.determine_distro_and_connection_source(global_variables)
-                        )
+                    replica.mysql_version = dolphie.parse_server_version(global_variables.get("version"))
+                    replica.host_distro, replica.connection_source_alt = dolphie.determine_distro_and_connection_source(
+                        global_variables
+                    )
                 except ManualException as e:
                     replica_error = e.reason
 
