@@ -9,8 +9,8 @@ from textual.widgets import DataTable, Input, Label, Switch
 
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
-from dolphie.Widgets.spinner import SpinnerWidget
-from dolphie.Widgets.topbar import TopBar
+from dolphie.Widgets.SpinnerWidget import SpinnerWidget
+from dolphie.Widgets.TopBar import TopBar
 
 
 class EventLog(Screen):

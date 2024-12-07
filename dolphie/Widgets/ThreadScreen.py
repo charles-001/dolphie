@@ -15,7 +15,7 @@ from textual.widgets import (
 from textual.widgets.text_area import TextAreaTheme
 
 from dolphie.Modules.Functions import format_number
-from dolphie.Widgets.topbar import TopBar
+from dolphie.Widgets.TopBar import TopBar
 
 
 class ThreadScreen(Screen):

@@ -6,7 +6,7 @@ from rich.table import Table
 from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.MetricManager import MetricData
 from dolphie.Modules.TabManager import Tab
-from dolphie.Panels.dashboard_panel import create_system_utilization_table
+from dolphie.Panels.Dashboard import create_system_utilization_table
 
 
 def create_panel(tab: Tab) -> Table:

@@ -6,7 +6,7 @@ from textual.screen import Screen
 from textual.widgets import Label, Rule, Static, TextArea
 from textual.widgets.text_area import TextAreaTheme
 
-from dolphie.Widgets.topbar import TopBar
+from dolphie.Widgets.TopBar import TopBar
 
 
 class ProxySQLThreadScreen(Screen):

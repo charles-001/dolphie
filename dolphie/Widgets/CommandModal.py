@@ -7,7 +7,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Select, Static
 
 from dolphie.DataTypes import ConnectionSource, HotkeyCommands
-from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
+from dolphie.Widgets.AutoComplete import AutoComplete, Dropdown, DropdownItem
 
 
 class CommandModal(ModalScreen):

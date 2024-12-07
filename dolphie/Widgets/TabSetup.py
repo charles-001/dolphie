@@ -19,7 +19,7 @@ from textual.widgets import (
 
 from dolphie.Modules.ArgumentParser import CredentialProfile
 from dolphie.Modules.ManualException import ManualException
-from dolphie.Widgets.autocomplete import AutoComplete, Dropdown, DropdownItem
+from dolphie.Widgets.AutoComplete import AutoComplete, Dropdown, DropdownItem
 
 
 class TabSetupModal(ModalScreen):

@@ -54,25 +54,23 @@ from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Modules.TabManager import Tab, TabManager
-from dolphie.Panels import (
-    dashboard_panel,
-    ddl_panel,
-    metadata_locks_panel,
-    performance_schema_metrics_panel,
-    processlist_panel,
-    proxysql_command_stats_panel,
-    proxysql_dashboard_panel,
-    proxysql_hostgroup_summary_panel,
-    proxysql_mysql_query_rules_panel,
-    proxysql_processlist_panel,
-    replication_panel,
-)
-from dolphie.Widgets.command_screen import CommandScreen
-from dolphie.Widgets.event_log_screen import EventLog
-from dolphie.Widgets.modal import CommandModal
-from dolphie.Widgets.proxysql_thread_screen import ProxySQLThreadScreen
-from dolphie.Widgets.thread_screen import ThreadScreen
-from dolphie.Widgets.topbar import TopBar
+from dolphie.Panels import DDL as DDLPanel
+from dolphie.Panels import Dashboard as DashboardPanel
+from dolphie.Panels import MetadataLocks as MetadataLocksPanel
+from dolphie.Panels import PerformanceSchemaMetrics as PerformanceSchemaMetricsPanel
+from dolphie.Panels import Processlist as ProcesslistPanel
+from dolphie.Panels import ProxySQLCommandStats as ProxySQLCommandStatsPanel
+from dolphie.Panels import ProxySQLDashboard as ProxySQLDashboardPanel
+from dolphie.Panels import ProxySQLHostgroupSummary as ProxySQLHostgroupSummaryPanel
+from dolphie.Panels import ProxySQLProcesslist as ProxySQLProcesslistPanel
+from dolphie.Panels import ProxySQLQueryRules as ProxySQLQueryRulesPanel
+from dolphie.Panels import Replication as ReplicationPanel
+from dolphie.Widgets.CommandModal import CommandModal
+from dolphie.Widgets.CommandScreen import CommandScreen
+from dolphie.Widgets.EventLogScreen import EventLog
+from dolphie.Widgets.ProxySQLThreadScreen import ProxySQLThreadScreen
+from dolphie.Widgets.ThreadScreen import ThreadScreen
+from dolphie.Widgets.TopBar import TopBar
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -361,7 +359,7 @@ class DolphieApp(App):
                         " replicas...\n"
                     )
 
-                replication_panel.fetch_replicas(tab)
+                ReplicationPanel.fetch_replicas(tab)
             else:
                 tab.replicas_container.display = False
         else:
@@ -441,7 +439,7 @@ class DolphieApp(App):
                     return
 
                 if dolphie.panels.replication.visible and dolphie.replica_manager.available_replicas:
-                    replication_panel.create_replica_panel(tab)
+                    ReplicationPanel.create_replica_panel(tab)
 
                 tab.replicas_worker_timer = self.set_timer(
                     dolphie.refresh_interval, partial(self.run_worker_replicas, tab.id)
@@ -466,7 +464,7 @@ class DolphieApp(App):
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
-                    replication_panel.create_replica_panel(tab)
+                    ReplicationPanel.create_replica_panel(tab)
                 elif dolphie.connection_source == ConnectionSource.proxysql:
                     self.refresh_screen_proxysql(tab)
 
@@ -500,7 +498,7 @@ class DolphieApp(App):
             dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status["Innodb_os_log_written"]
 
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
-        dolphie.replication_status = replication_panel.fetch_replication_data(tab)
+        dolphie.replication_status = ReplicationPanel.fetch_replication_data(tab)
 
         # Manage our replicas
         if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
@@ -568,7 +566,7 @@ class DolphieApp(App):
                 dolphie.binlog_status["Diff_Position"] = dolphie.binlog_status["Position"] - previous_position
 
         if dolphie.panels.processlist.visible or dolphie.record_for_replay:
-            dolphie.processlist_threads = processlist_panel.fetch_data(tab)
+            dolphie.processlist_threads = ProcesslistPanel.fetch_data(tab)
 
         if dolphie.innodb_cluster or dolphie.innodb_cluster_read_replica:
             dolphie.main_db_connection.execute(MySQLQueries.get_clustersets)
@@ -612,7 +610,7 @@ class DolphieApp(App):
                 if dolphie.metadata_locks_enabled and (
                     dolphie.panels.metadata_locks.visible or dolphie.record_for_replay
                 ):
-                    dolphie.metadata_locks = metadata_locks_panel.fetch_data(tab)
+                    dolphie.metadata_locks = MetadataLocksPanel.fetch_data(tab)
 
                 if dolphie.panels.ddl.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.ddls)
@@ -724,7 +722,7 @@ class DolphieApp(App):
                         row[f"{column_key}_per_sec"] = round(value_per_sec)
 
         if dolphie.panels.processlist.visible or dolphie.record_for_replay:
-            dolphie.processlist_threads = proxysql_processlist_panel.fetch_data(tab)
+            dolphie.processlist_threads = ProxySQLProcesslistPanel.fetch_data(tab)
 
         if dolphie.panels.proxysql_mysql_query_rules.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.query_rules_summary)
@@ -979,7 +977,7 @@ class DolphieApp(App):
 
             if tab.dolphie.connection_source == ConnectionSource.mysql:
                 self.refresh_screen_mysql(tab)
-                replication_panel.create_replica_panel(tab)
+                ReplicationPanel.create_replica_panel(tab)
                 tab.toggle_replication_panel_components()
             elif tab.dolphie.connection_source == ConnectionSource.proxysql:
                 self.refresh_screen_proxysql(tab)
@@ -1054,25 +1052,23 @@ class DolphieApp(App):
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         panel_mapping = {
-            tab.dolphie.panels.replication.name: {ConnectionSource.mysql: replication_panel},
+            tab.dolphie.panels.replication.name: {ConnectionSource.mysql: ReplicationPanel},
             tab.dolphie.panels.dashboard.name: {
-                ConnectionSource.mysql: dashboard_panel,
-                ConnectionSource.proxysql: proxysql_dashboard_panel,
+                ConnectionSource.mysql: DashboardPanel,
+                ConnectionSource.proxysql: ProxySQLDashboardPanel,
             },
             tab.dolphie.panels.processlist.name: {
-                ConnectionSource.mysql: processlist_panel,
-                ConnectionSource.proxysql: proxysql_processlist_panel,
+                ConnectionSource.mysql: ProcesslistPanel,
+                ConnectionSource.proxysql: ProxySQLProcesslistPanel,
             },
-            tab.dolphie.panels.metadata_locks.name: {ConnectionSource.mysql: metadata_locks_panel},
-            tab.dolphie.panels.ddl.name: {ConnectionSource.mysql: ddl_panel},
-            tab.dolphie.panels.pfs_metrics.name: {ConnectionSource.mysql: performance_schema_metrics_panel},
+            tab.dolphie.panels.metadata_locks.name: {ConnectionSource.mysql: MetadataLocksPanel},
+            tab.dolphie.panels.ddl.name: {ConnectionSource.mysql: DDLPanel},
+            tab.dolphie.panels.pfs_metrics.name: {ConnectionSource.mysql: PerformanceSchemaMetricsPanel},
             tab.dolphie.panels.proxysql_hostgroup_summary.name: {
-                ConnectionSource.proxysql: proxysql_hostgroup_summary_panel
+                ConnectionSource.proxysql: ProxySQLHostgroupSummaryPanel
             },
-            tab.dolphie.panels.proxysql_mysql_query_rules.name: {
-                ConnectionSource.proxysql: proxysql_mysql_query_rules_panel
-            },
-            tab.dolphie.panels.proxysql_command_stats.name: {ConnectionSource.proxysql: proxysql_command_stats_panel},
+            tab.dolphie.panels.proxysql_mysql_query_rules.name: {ConnectionSource.proxysql: ProxySQLQueryRulesPanel},
+            tab.dolphie.panels.proxysql_command_stats.name: {ConnectionSource.proxysql: ProxySQLCommandStatsPanel},
         }
 
         for panel_map_name, panel_map_connection_sources in panel_mapping.items():
@@ -1088,7 +1084,7 @@ class DolphieApp(App):
             if panel_name == tab.dolphie.panels.replication.name and toggled and tab.dolphie.replication_status:
                 # When replication panel status is changed, we need to refresh the dashboard panel as well since
                 # it adds/removes it from there
-                dashboard_panel.create_panel(tab)
+                DashboardPanel.create_panel(tab)
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):

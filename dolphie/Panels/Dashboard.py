@@ -7,7 +7,7 @@ from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.MetricManager import MetricData
 from dolphie.Modules.MySQL import ConnectionSource
 from dolphie.Modules.TabManager import Tab
-from dolphie.Panels import replication_panel
+from dolphie.Panels import Replication as ReplicationPanel
 
 
 def create_panel(tab: Tab) -> Table:
@@ -200,7 +200,7 @@ def create_panel(tab: Tab) -> Table:
     ###############
     if dolphie.replication_status and not dolphie.panels.replication.visible:
         tab.dashboard_section_5.display = True
-        tab.dashboard_section_5.update(replication_panel.create_replication_table(tab, dashboard_table=True))
+        tab.dashboard_section_5.update(ReplicationPanel.create_replication_table(tab, dashboard_table=True))
     else:
         tab.dashboard_section_5.display = False
     ###############
