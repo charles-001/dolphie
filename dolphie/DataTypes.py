@@ -43,7 +43,7 @@ class Replica:
 class ReplicaManager:
     def __init__(self):
         self.available_replicas: List[Dict[str, str]] = []
-        self.replicas: Dict[int, Replica] = {}
+        self.replicas: Dict[str, Replica] = {}
         self.ports: Dict[str, Dict[str, Union[str, bool]]] = {}
 
     # This is mainly for MariaDB since it doesn't have a way to map a replica in processlist to a specific port

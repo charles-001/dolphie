@@ -238,6 +238,7 @@ class DolphieApp(App):
             dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("version"))
             dolphie.binlog_status = replay_event_data.binlog_status
             dolphie.innodb_metrics = replay_event_data.innodb_metrics
+            dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
             dolphie.processlist_threads = replay_event_data.processlist
             dolphie.replication_status = replay_event_data.replication_status
             dolphie.metadata_locks = replay_event_data.metadata_locks
@@ -1159,12 +1160,8 @@ class DolphieApp(App):
 
                 return
 
-            # If we're in replay mode and there's no replication status, replicas or group replication, stop here
-            if dolphie.replay_file and (
-                not dolphie.replication_status
-                and not dolphie.replica_manager.replicas
-                and not dolphie.group_replication_members
-            ):
+            # If we're in replay mode and there's no replication status, or group replication, stop here
+            if dolphie.replay_file and (not dolphie.replication_status and not dolphie.group_replication_members):
                 self.notify("This replay file has no replication data")
                 return
 
