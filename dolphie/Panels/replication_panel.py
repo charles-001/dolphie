@@ -682,11 +682,11 @@ def fetch_replicas(tab: Tab):
     # If replicas don't match available_replicas, we need need to sync
     if len(dolphie.replica_manager.replicas) != len(dolphie.replica_manager.available_replicas):
         # Remove replica connections that no longer exist
-        unique_ids = {
+        unique_row_keys = {
             create_replica_row_key(row.get("host"), row.get("port"))
             for row in dolphie.replica_manager.available_replicas
         }
-        to_remove = set(dolphie.replica_manager.replicas.keys()) - unique_ids
+        to_remove = set(dolphie.replica_manager.replicas.keys()) - unique_row_keys
 
         for row_key in to_remove:
             dolphie.replica_manager.remove(row_key)
