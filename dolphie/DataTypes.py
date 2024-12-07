@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, List, Union
 
@@ -45,18 +46,25 @@ class ReplicaManager:
         self.replicas: Dict[int, Replica] = {}
         self.ports: Dict[str, Dict[str, Union[str, bool]]] = {}
 
-    def add(self, row_key: str, thread_id: int, host: str, port: int) -> Replica:
+    # This is mainly for MariaDB since it doesn't have a way to map a replica in processlist to a specific port
+    # Instead of using the thread_id as key, we use the host and port to create a unique row key
+    # for the replica sections
+    def create_replica_row_key(self, host: str, port: int) -> str:
+        input_string = f"{host}:{port}"
+        return hashlib.sha256(input_string.encode()).hexdigest()
+
+    def add_replica(self, row_key: str, thread_id: int, host: str, port: int) -> Replica:
         self.replicas[row_key] = Replica(row_key=row_key, thread_id=thread_id, host=host, port=port)
 
         return self.replicas[row_key]
 
-    def remove(self, row_key: str):
+    def remove_replica(self, row_key: str):
         del self.replicas[row_key]
 
-    def get(self, row_key: str) -> Replica:
+    def get_replica(self, row_key: str) -> Replica:
         return self.replicas.get(row_key)
 
-    def disconnect_all(self):
+    def remove_all_replicas(self):
         if self.replicas:
             for replica in self.replicas.values():
                 if replica.connection:

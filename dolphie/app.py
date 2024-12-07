@@ -253,7 +253,7 @@ class DolphieApp(App):
                 "innodb_metrics": dolphie.innodb_metrics,
                 "replication_status": dolphie.replication_status,
             }
-
+            self.notify(str(dolphie.replica_manager.available_replicas))
             replication_panel.fetch_replicas(tab)
 
             if not dolphie.server_uuid:
@@ -367,8 +367,8 @@ class DolphieApp(App):
             else:
                 tab.replicas_container.display = False
         else:
-            # If we're not displaying the replication panel, close all replica connections
-            dolphie.replica_manager.disconnect_all()
+            # If we're not displaying the replication panel, remove all replica connections
+            dolphie.replica_manager.remove_all_replicas()
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
         tab = self.tab_manager.get_tab(event.worker.name)
@@ -504,6 +504,7 @@ class DolphieApp(App):
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
         dolphie.replication_status = replication_panel.fetch_replication_data(tab)
 
+        # Manage our replicas
         if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
             if dolphie.connection_source_alt == ConnectionSource.mariadb:
                 find_replicas_query = MySQLQueries.mariadb_find_replicas
@@ -514,35 +515,43 @@ class DolphieApp(App):
 
         dolphie.main_db_connection.execute(find_replicas_query)
         available_replicas = dolphie.main_db_connection.fetchall()
-
-        if dolphie.daemon_mode:
-            dolphie.replica_manager.available_replicas = available_replicas
-        else:
+        if not dolphie.daemon_mode:
             # We update the replica ports used if the number of replicas have changed
             if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
-                dolphie.replica_manager.ports = {}
-
-                if (
-                    dolphie.is_mysql_version_at_least("8.0.22")
+                query = (
+                    MySQLQueries.show_replicas
+                    if dolphie.is_mysql_version_at_least("8.0.22")
                     and dolphie.connection_source_alt != ConnectionSource.mariadb
-                ):
-                    dolphie.main_db_connection.execute(MySQLQueries.show_replicas)
-                else:
-                    dolphie.main_db_connection.execute(MySQLQueries.show_slave_hosts)
+                    else MySQLQueries.show_slave_hosts
+                )
+                dolphie.main_db_connection.execute(query)
+                ports_replica_data = dolphie.main_db_connection.fetchall()
 
-                replica_data = dolphie.main_db_connection.fetchall()
-                for row in replica_data:
+                # Reset the ports dictionary and start fresh
+                dolphie.replica_manager.ports = {}
+                for row in ports_replica_data:
                     if dolphie.connection_source_alt == ConnectionSource.mariadb:
                         key = "Server_id"
                     else:
-                        if dolphie.is_mysql_version_at_least("8.0.22"):
-                            key = "Replica_UUID"
-                        else:
-                            key = "Slave_UUID"
+                        key = "Replica_UUID" if dolphie.is_mysql_version_at_least("8.0.22") else "Slave_UUID"
 
                     dolphie.replica_manager.ports[row.get(key)] = {"port": row.get("Port"), "in_use": False}
 
+                # Update the port value for each replica from an existing replica so our row_key can be properly used
+                # to manage replica_manager.replicas
+                # MariaDB cannot correlate thread_id to a port so it will just have to reconnect
+                # each time number of replicas change
+                if dolphie.connection_source_alt != ConnectionSource.mariadb:
+                    existing_replicas_map = {
+                        replica["id"]: replica for replica in dolphie.replica_manager.available_replicas
+                    }
+                    for replica in available_replicas:
+                        if replica["id"] in existing_replicas_map:
+                            replica["port"] = existing_replicas_map[replica["id"]].get("port")
+
                 dolphie.replica_manager.available_replicas = available_replicas
+        else:
+            dolphie.replica_manager.available_replicas = available_replicas
 
         if dolphie.panels.dashboard.visible or dolphie.record_for_replay:
             if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:

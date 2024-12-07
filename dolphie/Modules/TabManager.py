@@ -754,7 +754,7 @@ class TabManager:
         tab.dolphie.main_db_connection.close()
         tab.dolphie.secondary_db_connection.close()
 
-        tab.dolphie.replica_manager.disconnect_all()
+        tab.dolphie.replica_manager.remove_all_replicas()
 
         if self.active_tab.id == tab.id:
             tab.main_container.display = False

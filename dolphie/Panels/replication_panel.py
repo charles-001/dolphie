@@ -1,4 +1,3 @@
-import hashlib
 import re
 import socket
 
@@ -667,15 +666,6 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
     return replication_status
 
 
-# This is mainly for MariaDB since it doesn't have a way to map a replica in processlist to a specific port
-# Instead of using the thread_id as key, we use the host and port to create a unique row key for the replica sections
-def create_replica_row_key(host: str, port: int) -> str:
-    # Concatenate the host and port into a single string
-    input_string = f"{host}:{port}"
-
-    return hashlib.sha256(input_string.encode()).hexdigest()
-
-
 def fetch_replicas(tab: Tab):
     dolphie = tab.dolphie
 
@@ -683,21 +673,20 @@ def fetch_replicas(tab: Tab):
     if len(dolphie.replica_manager.replicas) != len(dolphie.replica_manager.available_replicas):
         # Remove replica connections that no longer exist
         unique_row_keys = {
-            create_replica_row_key(row.get("host"), row.get("port"))
+            dolphie.replica_manager.create_replica_row_key(row.get("host"), row.get("port"))
             for row in dolphie.replica_manager.available_replicas
         }
         to_remove = set(dolphie.replica_manager.replicas.keys()) - unique_row_keys
-
         for row_key in to_remove:
-            dolphie.replica_manager.remove(row_key)
+            dolphie.replica_manager.remove_replica(row_key)
 
     for row in dolphie.replica_manager.available_replicas:
         replica_error = None
-        thread_id = row.get("id")
         host = dolphie.get_hostname(row["host"].split(":")[0])
 
+        row_thread_id = row.get("id")
         row_port = row.get("port")
-        row_key = create_replica_row_key(row.get("host"), row_port)
+        row_key = dolphie.replica_manager.create_replica_row_key(row.get("host"), row_port)
 
         # MariaDB has no way of mapping a replica in processlist (AFAIK) to a specific port from SHOW SLAVE HOSTS
         # So we have to loop through available ports and manage it ourselves.
@@ -708,7 +697,7 @@ def fetch_replicas(tab: Tab):
                 for port_data in dolphie.replica_manager.ports.values():
                     port = port_data.get("port", 3306)
 
-                    # If the port is not in use, check to see if we can connect to it
+                    # If the port is not in use, try to connect to with it
                     if not port_data.get("in_use"):
                         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                         sock.settimeout(2)
@@ -717,7 +706,6 @@ def fetch_replicas(tab: Tab):
                             # Try to connect to the host and port
                             sock.connect((host, port))
                             port_data["in_use"] = True  # If we can connect, mark the port as in use to not use it again
-                            row["port"] = port  # Update the row with the port so we can use it later
                             assigned_port = port
 
                             break
@@ -731,20 +719,26 @@ def fetch_replicas(tab: Tab):
             else:
                 assigned_port = row_port
         else:
-            # Default handling when not using MariaDB, based on the replica UUID
-            assigned_port = dolphie.replica_manager.ports.get(row.get("replica_uuid"), {}).get("port", 3306)
+            if dolphie.connection_source_alt == ConnectionSource.mariadb and dolphie.replay_file:
+                assigned_port = row_port
+            else:
+                # Default handling when not using MariaDB, based on the replica UUID
+                assigned_port = dolphie.replica_manager.ports.get(row.get("replica_uuid"), {}).get("port", 3306)
+
+        # Update the port of available_replicas so it can be used for the row_key
+        row["port"] = assigned_port
 
         # Create a unique row key for the replica since we now have the assigned port for it
-        row_key = f"{create_replica_row_key(row.get('host'), assigned_port)}"
+        row_key = f"{dolphie.replica_manager.create_replica_row_key(row.get('host'), assigned_port)}"
 
         # This lets us connect to replicas on the same host as the primary if we're connecting remotely
         host = dolphie.host if host in ["localhost", "127.0.0.1"] else host
         host_and_port = f"{host}:{assigned_port}" if assigned_port else host
 
-        replica = dolphie.replica_manager.get(row_key)
+        replica = dolphie.replica_manager.get_replica(row_key)
         if not replica:
-            replica = dolphie.replica_manager.add(
-                row_key=row_key, thread_id=thread_id, host=host_and_port, port=assigned_port
+            replica = dolphie.replica_manager.add_replica(
+                row_key=row_key, thread_id=row_thread_id, host=host_and_port, port=assigned_port
             )
 
         if dolphie.replay_file:
@@ -795,6 +789,6 @@ def fetch_replicas(tab: Tab):
 
                 table.add_row("[b][light_blue]Host", f"[light_blue]{host_and_port}")
                 table.add_row("[label]User", row["user"])
-                table.add_row("[label]Error", f"[red]{replica_error}[/red]")
+                table.add_row("[label]Error", f"[red]{replica_error}")
 
                 replica.table = table
