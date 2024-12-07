@@ -238,7 +238,6 @@ class DolphieApp(App):
             dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("version"))
             dolphie.binlog_status = replay_event_data.binlog_status
             dolphie.innodb_metrics = replay_event_data.innodb_metrics
-            dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
             dolphie.processlist_threads = replay_event_data.processlist
             dolphie.replication_status = replay_event_data.replication_status
             dolphie.metadata_locks = replay_event_data.metadata_locks
@@ -253,8 +252,6 @@ class DolphieApp(App):
                 "innodb_metrics": dolphie.innodb_metrics,
                 "replication_status": dolphie.replication_status,
             }
-            self.notify(str(dolphie.replica_manager.available_replicas))
-            replication_panel.fetch_replicas(tab)
 
             if not dolphie.server_uuid:
                 dolphie.configure_mysql_variables()

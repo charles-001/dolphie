@@ -28,7 +28,6 @@ class MySQLReplayData:
     global_variables: dict
     binlog_status: dict
     innodb_metrics: dict
-    replica_manager: dict
     replication_status: dict
     processlist: dict
     metric_manager: dict
@@ -560,9 +559,6 @@ class ReplayManager:
             if self.dolphie.replication_status:
                 data_dict.update({"replication_status": self.dolphie.replication_status})
 
-            if self.dolphie.replica_manager.available_replicas:
-                data_dict.update({"replica_manager": self.dolphie.replica_manager.available_replicas})
-
             if self.dolphie.group_replication or self.dolphie.innodb_cluster:
                 data_dict.update(
                     {
@@ -681,7 +677,6 @@ class ReplayManager:
                 **common_params,
                 binlog_status=data.get("binlog_status", {}),
                 innodb_metrics=data.get("innodb_metrics", {}),
-                replica_manager=data.get("replica_manager", {}),
                 replication_status=data.get("replication_status", {}),
                 metadata_locks=data.get("metadata_locks", {}),
                 processlist=processlist,
