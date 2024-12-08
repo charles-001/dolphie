@@ -552,7 +552,7 @@ def create_group_replication_member_table(tab: Tab):
     dolphie = tab.dolphie
 
     if not dolphie.group_replication_members:
-        return None
+        return
 
     group_replica_tables = {}
     for row in dolphie.group_replication_members:

@@ -267,7 +267,7 @@ class Tab:
 
     def layout_graphs(self):
         # These variables are dynamically created
-        if self.dolphie.is_mysql_version_at_least("8.0.30"):
+        if self.dolphie.global_status.get("Active_redo_log_count"):
             if self.dolphie.replay_file:
                 self.graph_redo_log_data_written.styles.width = "88%"
                 self.graph_redo_log_bar.styles.width = "12%"
