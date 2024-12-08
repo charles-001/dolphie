@@ -110,8 +110,11 @@ def create_panel(tab: Tab):
         # Update the panel title
         title_prefix = dolphie.panels.get_key(dolphie.panels.replication.name)
         cluster_title = "InnoDB Cluster" if dolphie.innodb_cluster else "Group Replication"
-        group_name = dolphie.global_variables.get("group_replication_group_name", "N/A")
-        tab.group_replication_title.update(f"[b]{title_prefix}{cluster_title} ([white]{group_name}[/white])")
+        cluster_name = dolphie.group_replication_data.get("cluster_name")
+        final_cluster_name = (
+            cluster_name if cluster_name else dolphie.global_variables.get("group_replication_group_name", "N/A")
+        )
+        tab.group_replication_title.update(f"[b]{title_prefix}{cluster_title} ([white]{final_cluster_name}[/white])")
         tab.group_replication_data.update(group_replication_variables)
 
         # Generate and sort member tables
