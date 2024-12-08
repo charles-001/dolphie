@@ -35,7 +35,7 @@ from dolphie.Modules.ArgumentParser import Config, HostGroupMember
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Widgets.SpinnerWidget import SpinnerWidget
-from dolphie.Widgets.TabSetup import TabSetupModal
+from dolphie.Widgets.TabSetupModal import TabSetupModal
 from dolphie.Widgets.TopBar import TopBar
 
 
