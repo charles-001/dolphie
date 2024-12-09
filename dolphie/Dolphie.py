@@ -141,7 +141,7 @@ class Dolphie:
         self.secondary_db_connection = Database(**db_connection_args, save_connection_id=False)
 
         # Misc variables
-        self.host_distro: str = ConnectionSource.mysql
+        self.host_distro: str = "MySQL"
         self.host_with_port: str = f"{self.host}:{self.port}"
         self.performance_schema_enabled: bool = False
         self.use_performance_schema_for_processlist: bool = False
@@ -236,28 +236,42 @@ class Dolphie:
     def determine_distro_and_connection_source(
         self, global_variables: Dict[str, Union[int, str]]
     ) -> Tuple[str, ConnectionSource]:
-        distro_mappings = [
-            ("percona xtradb cluster", "Percona XtraDB Cluster", ConnectionSource.mysql),
-            ("percona server", "Percona Server", ConnectionSource.mysql),
-            ("mariadb cluster", "MariaDB Cluster", ConnectionSource.mariadb),
-            ("mariadb", "MariaDB", ConnectionSource.mariadb),
-        ]
+        version_comment = global_variables.get("version_comment", "").casefold()
+        basedir = global_variables.get("basedir", "").casefold()
+        aad_auth_only = global_variables.get("aad_auth_only")
+        contains_aria = any("aria" in str(value).casefold() for value in global_variables.values())
 
-        # Check version_comment for matches
-        for keyword, distro, conn_source in distro_mappings:
-            if keyword in global_variables.get("version_comment", "").casefold():
+        # Map version_comment keywords to distributions and sources
+        distro_mappings = {
+            "percona xtradb cluster": ("Percona XtraDB Cluster", ConnectionSource.mysql),
+            "percona server": ("Percona Server", ConnectionSource.mysql),
+            "mariadb cluster": ("MariaDB Cluster", ConnectionSource.mariadb),
+            "mariadb": ("MariaDB", ConnectionSource.mariadb),
+        }
+
+        # Check for known distributions using version_comment
+        for keyword, (distro, conn_source) in distro_mappings.items():
+            if keyword in version_comment:
                 return distro, conn_source
 
-        # Handle cases not based on version_comment
+        # Identify MariaDB
+        if contains_aria:
+            if "rds" in basedir:
+                return "Amazon RDS (MariaDB)", ConnectionSource.aws_rds
+            if aad_auth_only:
+                return "Azure MariaDB", ConnectionSource.azure_mysql
+
+            return "MariaDB", ConnectionSource.mariadb
+
+        # If if gets to here, it's MySQL
         if global_variables.get("aurora_version"):
             return "Amazon Aurora", ConnectionSource.aws_rds
-        if "rdsdb" in global_variables.get("basedir", ""):
-            return "Amazon RDS", ConnectionSource.aws_rds
-        if global_variables.get("aad_auth_only"):
+        if "rdsdb" in basedir:
+            return "Amazon RDS (MySQL)", ConnectionSource.aws_rds
+        if aad_auth_only:
             return "Azure MySQL", ConnectionSource.azure_mysql
 
-        # Default to MySQL
-        return self.host_distro, ConnectionSource.mysql
+        return "MySQL", ConnectionSource.mysql
 
     def collect_system_utilization(self):
         if not self.enable_system_utilization:
