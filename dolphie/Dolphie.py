@@ -239,7 +239,7 @@ class Dolphie:
         version_comment = global_variables.get("version_comment", "").casefold()
         basedir = global_variables.get("basedir", "").casefold()
         aad_auth_only = global_variables.get("aad_auth_only")
-        contains_aria = any("aria" in str(value).casefold() for value in global_variables.values())
+        aria_in_global_variables = any("aria" in str(value).casefold() for value in global_variables.values())
 
         # Map version_comment keywords to distributions and sources
         distro_mappings = {
@@ -255,7 +255,7 @@ class Dolphie:
                 return distro, conn_source
 
         # Identify MariaDB
-        if contains_aria:
+        if aria_in_global_variables:
             if "rds" in basedir:
                 return "Amazon RDS (MariaDB)", ConnectionSource.aws_rds
             if aad_auth_only:
