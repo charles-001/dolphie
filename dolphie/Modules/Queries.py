@@ -204,8 +204,8 @@ class MySQLQueries:
         FROM
             `performance_schema`.`file_summary_by_event_name`
         WHERE
-            `performance_schema`.`file_summary_by_event_name`.`EVENT_NAME` LIKE 'wait/io/file/%' AND
-            `performance_schema`.`file_summary_by_event_name`.`COUNT_STAR` > 0
+            `file_summary_by_event_name`.`EVENT_NAME` LIKE 'wait/io/file/%' AND
+            `file_summary_by_event_name`.`COUNT_STAR` > 0
     """
     heartbeat_replica_lag: str = """
         SELECT
@@ -215,17 +215,16 @@ class MySQLQueries:
     """
     mariadb_find_replicas: str = """
         SELECT
-            t.THREAD_ID AS id,
-            t.PROCESSLIST_USER AS user,
-            t.PROCESSLIST_HOST AS host
+            PROCESSLIST_USER AS user,
+            PROCESSLIST_HOST AS host
         FROM
-            `performance_schema`.threads AS t
+            `performance_schema`.threads
         WHERE
-            t.PROCESSLIST_COMMAND LIKE 'Binlog Dump%'
+            PROCESSLIST_COMMAND LIKE 'Binlog Dump%'
     """
     ps_find_replicas: str = """
         SELECT
-            t.THREAD_ID AS id,
+            t.PROCESSLIST_ID AS id,
             t.PROCESSLIST_USER AS user,
             t.PROCESSLIST_HOST AS host,
             CONVERT (
@@ -243,7 +242,7 @@ class MySQLQueries:
             Id   AS id,
             User AS user,
             Host AS host,
-            '' AS replica_uuid
+            ''   AS replica_uuid
         FROM
             information_schema.PROCESSLIST
         WHERE
@@ -556,6 +555,7 @@ class MySQLQueries:
     """
     determine_cluster_type_8: str = """
         SELECT
+            cluster_name,
             cluster_type
         FROM
             mysql_innodb_cluster_metadata.clusters
@@ -565,6 +565,7 @@ class MySQLQueries:
     """
     determine_cluster_type_81: str = """
         SELECT
+            cluster_name,
             instance_type,
             cluster_type
         FROM
@@ -575,7 +576,17 @@ class MySQLQueries:
             mysql_server_uuid = @@server_uuid
         ORDER BY
             view_id DESC
-            LIMIT 1;
+            LIMIT 1
+    """
+    get_clustersets: str = """
+        SELECT
+            cs.domain_name AS ClusterSet,
+            GROUP_CONCAT(c.cluster_name ORDER BY c.cluster_name SEPARATOR ', ') AS Clusters
+        FROM
+            mysql_innodb_cluster_metadata.clustersets cs JOIN
+            mysql_innodb_cluster_metadata.clusters c USING ( clusterset_id )
+        GROUP BY
+            cs.domain_name
     """
     get_binlog_transaction_compression_percentage: str = """
         SELECT

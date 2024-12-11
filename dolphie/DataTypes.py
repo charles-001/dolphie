@@ -1,6 +1,8 @@
+import hashlib
 from dataclasses import dataclass, field
 from typing import Dict, List, Union
 
+import pymysql
 from rich.table import Table
 
 from dolphie.Modules.Functions import format_query, format_time
@@ -26,9 +28,13 @@ class ConnectionStatus:
 
 @dataclass
 class Replica:
+    row_key: str
     thread_id: int
     host: str
-    connection: str = None
+    port: int = None
+    host_distro: str = None
+    connection: pymysql.Connection = None
+    connection_source_alt: ConnectionSource = None
     table: Table = None
     replication_status: Dict[str, Union[str, int]] = field(default_factory=dict)
     mysql_version: str = None
@@ -36,22 +42,29 @@ class Replica:
 
 class ReplicaManager:
     def __init__(self):
-        self.available_replicas: list = []
-        self.replicas: Dict[int, Replica] = {}
-        self.ports: Dict[str, int] = {}
+        self.available_replicas: List[Dict[str, str]] = []
+        self.replicas: Dict[str, Replica] = {}
+        self.ports: Dict[str, Dict[str, Union[str, bool]]] = {}
 
-    def add(self, thread_id: int, host: str) -> Replica:
-        self.replicas[thread_id] = Replica(thread_id=thread_id, host=host)
+    # This is mainly for MariaDB since it doesn't have a way to map a replica in processlist to a specific port
+    # Instead of using the thread_id as key, we use the host and port to create a unique row key
+    # for the replica sections
+    def create_replica_row_key(self, host: str, port: int) -> str:
+        input_string = f"{host}:{port}"
+        return hashlib.sha256(input_string.encode()).hexdigest()
 
-        return self.replicas[thread_id]
+    def add_replica(self, row_key: str, thread_id: int, host: str, port: int) -> Replica:
+        self.replicas[row_key] = Replica(row_key=row_key, thread_id=thread_id, host=host, port=port)
 
-    def remove(self, thread_id: int):
-        del self.replicas[thread_id]
+        return self.replicas[row_key]
 
-    def get(self, thread_id: int) -> Replica:
-        return self.replicas.get(thread_id)
+    def remove_replica(self, row_key: str):
+        del self.replicas[row_key]
 
-    def disconnect_all(self):
+    def get_replica(self, row_key: str) -> Replica:
+        return self.replicas.get(row_key)
+
+    def remove_all_replicas(self):
         if self.replicas:
             for replica in self.replicas.values():
                 if replica.connection:

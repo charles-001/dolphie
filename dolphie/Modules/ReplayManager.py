@@ -642,7 +642,7 @@ class ReplayManager:
             self.max_replay_id = row[3]
             self.total_replay_rows = row[4]
         else:
-            return None
+            return
 
         # Get the next row
         row = self._execute_query(
@@ -654,10 +654,15 @@ class ReplayManager:
             self.current_replay_id = row[0]
             self.current_replay_timestamp = row[1]
         else:
-            return None
+            return
 
         # Decompress and parse the JSON data
-        data = orjson.loads(self._decompress_data(row[2]))
+        try:
+            data = orjson.loads(self._decompress_data(row[2]))
+        except Exception as e:
+            self.dolphie.app.notify(str(e), title="Error parsing replay data", severity="error")
+
+            return
 
         processlist = {}
         common_params = {

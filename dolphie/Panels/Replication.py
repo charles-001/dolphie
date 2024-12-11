@@ -29,75 +29,128 @@ def create_panel(tab: Tab):
     ):
         tab.replication_container_title.display = True
         tab.replication_container_title.update(
-            Align.center("[b][light_blue]Replication/Replicas panel has no data to display\n")
+            Align.center(
+                f"[b highlight]{dolphie.panels.get_key(dolphie.panels.replication.name)}[/b highlight]"
+                "[b][yellow]Replication/Replicas panel has no data to display\n"
+            )
         )
     else:
         tab.replication_container_title.display = False
 
+    def create_clusterset_panel():
+        if not dolphie.innodb_cluster_clustersets:
+            tab.clusterset_container.display = False
+            return
+
+        tab.clusterset_container.display = True
+
+        # Update the panel title
+        tab.clusterset_title.update(
+            f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}ClusterSets "
+            f"([highlight]{len(dolphie.innodb_cluster_clustersets)}[/highlight])"
+        )
+
+        existing_clusterset_names = {clusterset["ClusterSet"] for clusterset in dolphie.innodb_cluster_clustersets}
+        existing_clusterset_components = {c.id.split("_")[1]: c for c in tab.dolphie.app.query(f".clusterset_{tab.id}")}
+        host_cluster_name = dolphie.group_replication_data.get("cluster_name")
+
+        for row in dolphie.innodb_cluster_clustersets:
+            clusterset_name = row["ClusterSet"]
+            clusters = row["Clusters"]
+
+            # Highlight the host cluster name
+            formatted_clusters = clusters.replace(host_cluster_name, f"[b highlight]{host_cluster_name}[/b highlight]")
+
+            table = Table(box=None, show_header=False)
+            table.add_column()
+            table.add_column()
+            table.add_row("[b][light_blue]ClusterSet", f"[light_blue]{clusterset_name}")
+            table.add_row("[label]Clusters", formatted_clusters)
+
+            if clusterset_name in existing_clusterset_components:
+                existing_clusterset_components[clusterset_name].update(table)
+            else:
+                tab.clusterset_grid.mount(
+                    ScrollableContainer(
+                        Static(
+                            table,
+                            id=f"clusterset_{clusterset_name}_{tab.id}",
+                            classes=f"clusterset_{tab.id}",
+                        ),
+                        id=f"clusterset_container_{clusterset_name}_{tab.id}",
+                        classes=f"clusterset_container_{tab.id} clusterset_container",
+                    )
+                )
+
+        # Remove ClusterSets that no longer exist
+        for clusterset_name, container in existing_clusterset_components.items():
+            if clusterset_name not in existing_clusterset_names:
+                container.parent.remove()
+
     def create_group_replication_panel():
-        if not dolphie.group_replication and not dolphie.innodb_cluster:
+        if not (dolphie.group_replication or dolphie.innodb_cluster):
             tab.group_replication_container.display = False
-            return None
+            return
 
         tab.group_replication_container.display = True
 
-        available_group_replication_variables = {
-            "group_replication_view_change_uuid": [dolphie.global_variables, "View UUID"],
-            "group_replication_communication_stack": [dolphie.global_variables, "Communication Stack"],
-            "group_replication_consistency": [dolphie.global_variables, "Global Consistency"],
-            "group_replication_paxos_single_leader": [dolphie.global_variables, "Paxos Single Leader"],
-            "write_concurrency": [dolphie.group_replication_data, "Write Concurrency"],
+        # Prepare group replication variables
+        available_variables = {
+            "group_replication_view_change_uuid": ("View UUID", dolphie.global_variables),
+            "group_replication_communication_stack": ("Communication Stack", dolphie.global_variables),
+            "group_replication_consistency": ("Global Consistency", dolphie.global_variables),
+            "group_replication_paxos_single_leader": ("Paxos Single Leader", dolphie.global_variables),
+            "write_concurrency": ("Write Concurrency", dolphie.group_replication_data),
         }
 
-        group_replication_variables = ""
-        for variable, setting in available_group_replication_variables.items():
-            value = setting[0].get(variable, "N/A")
-            group_replication_variables += f"[label]{setting[1]}[/label] {value}  "
-
-        title = "Group Replication"
-        if dolphie.innodb_cluster:
-            title = "InnoDB Cluster"
-        title = (
-            f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}{title} "
-            f"([white]{dolphie.global_variables.get('group_replication_group_name', 'N/A')}[/white])"
+        group_replication_variables = "  ".join(
+            f"[label]{label}[/label] {source.get(var, 'N/A')}" for var, (label, source) in available_variables.items()
         )
-        tab.group_replication_title.update(title)
+
+        # Update the panel title
+        title_prefix = dolphie.panels.get_key(dolphie.panels.replication.name)
+        cluster_title = "InnoDB Cluster" if dolphie.innodb_cluster else "Group Replication"
+        cluster_name = dolphie.group_replication_data.get("cluster_name")
+        final_cluster_name = (
+            cluster_name if cluster_name else dolphie.global_variables.get("group_replication_group_name", "N/A")
+        )
+        tab.group_replication_title.update(f"[b]{title_prefix}{cluster_title} ([white]{final_cluster_name}[/white])")
         tab.group_replication_data.update(group_replication_variables)
 
-        group_replication_member_tables = create_group_replication_member_table(tab)
-        sorted_replication_members = sorted(group_replication_member_tables.items(), key=lambda x: x[1]["host"])
-        existing_member_ids = set()
+        # Generate and sort member tables
+        member_tables = create_group_replication_member_table(tab)
+        sorted_members = sorted(member_tables.items(), key=lambda x: x[1]["host"])
+        existing_member_ids = {member_id for member_id, _ in sorted_members}
 
-        if sorted_replication_members:
-            for member in sorted_replication_members:
-                member_id = member[0]
-                member_table = member[1].get("table")
-                if not member_table:
-                    continue
+        # Query existing member components
+        existing_member_components = {
+            member.id.split("_")[1]: member for member in tab.dolphie.app.query(f".member_{tab.id}")
+        }
 
-                existing_member = tab.dolphie.app.query(f"#member_{member_id}_{tab.id}")
-                existing_member_ids.add(member_id)
+        for member_id, member_info in sorted_members:
+            member_table = member_info.get("table")
+            if not member_table:
+                continue
 
-                if existing_member:
-                    existing_member[0].update(member_table)
-                else:
-                    tab.group_replication_grid.mount(
-                        ScrollableContainer(
-                            Static(
-                                member_table,
-                                id=f"member_{member_id}_{tab.id}",
-                                classes=f"member_{tab.id}",
-                            ),
-                            id=f"member_container_{member_id}_{tab.id}",
-                            classes=f"member_container_{tab.id} member_container",
-                        )
+            if member_id in existing_member_components:
+                existing_member_components[member_id].update(member_table)
+            else:
+                tab.group_replication_grid.mount(
+                    ScrollableContainer(
+                        Static(
+                            member_table,
+                            id=f"member_{member_id}_{tab.id}",
+                            classes=f"member_{tab.id}",
+                        ),
+                        id=f"member_container_{member_id}_{tab.id}",
+                        classes=f"member_container_{tab.id} member_container",
                     )
+                )
 
-            # Unmount members that are no longer in sorted_replication_members
-            for existing_member in tab.dolphie.app.query(f".member_{tab.id}"):
-                member_id = existing_member.id.split("_")[1]
-                if member_id not in existing_member_ids:
-                    tab.dolphie.app.query_one(f"#{existing_member.parent.id}").remove()
+        # Remove members that no longer exist
+        for member_id, container in existing_member_components.items():
+            if member_id not in existing_member_ids:
+                container.parent.remove()
 
     def create_replication_panel():
         if not dolphie.replication_status:
@@ -172,53 +225,57 @@ def create_panel(tab: Tab):
 
     create_replication_panel()
     create_group_replication_panel()
+    create_clusterset_panel()
 
 
+# This function isn't in create_panel() because it's called as part of the replica worker instead of the main worker
 def create_replica_panel(tab: Tab):
     dolphie = tab.dolphie
 
-    if dolphie.replica_manager.replicas:
-        tab.replicas_container.display = True
-        tab.replicas_loading_indicator.display = False
-
-        tab.replicas_title.update(
-            f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}Replicas "
-            f"([highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight])"
-        )
-
-        existing_replica_ids = set()
-
-        sorted_replica_connections = dolphie.replica_manager.get_sorted_replicas()
-        if sorted_replica_connections:
-            for replica in sorted_replica_connections:
-                if not replica.table:
-                    continue
-
-                existing_replica = tab.dolphie.app.query(f"#replica_{replica.thread_id}_{tab.id}")
-                existing_replica_ids.add(replica.thread_id)
-
-                if existing_replica:
-                    existing_replica[0].update(replica.table)
-                else:
-                    tab.replicas_grid.mount(
-                        ScrollableContainer(
-                            Static(
-                                replica.table,
-                                id=f"replica_{replica.thread_id}_{tab.id}",
-                                classes=f"replica_{tab.id}",
-                            ),
-                            id=f"replica_container_{replica.thread_id}_{tab.id}",
-                            classes=f"replica_container_{tab.id} replica_container",
-                        )
-                    )
-
-            # Unmount replicas that are no longer in sorted_replica_connections
-            for existing_replica in tab.dolphie.app.query(f".replica_{tab.id}"):
-                replica_id = int(existing_replica.id.split("_")[1])
-                if replica_id not in existing_replica_ids:
-                    tab.dolphie.app.query_one(f"#{existing_replica.parent.id}").remove()
-    else:
+    if not dolphie.replica_manager.replicas:
         tab.replicas_container.display = False
+        return
+
+    tab.replicas_container.display = True
+    tab.replicas_loading_indicator.display = False
+
+    # Update replicas title
+    num_replicas = len(dolphie.replica_manager.available_replicas)
+    title_prefix = dolphie.panels.get_key(dolphie.panels.replication.name)
+    tab.replicas_title.update(f"[b]{title_prefix}Replicas ([highlight]{num_replicas}[/highlight])")
+
+    # Get sorted replica connections and initialize existing replica IDs
+    sorted_replicas = dolphie.replica_manager.get_sorted_replicas()
+    existing_replica_ids = {replica.row_key for replica in sorted_replicas if replica.table}
+
+    # Query existing replica components
+    existing_replica_components = {
+        replica.id.split("_")[1]: replica for replica in tab.dolphie.app.query(f".replica_{tab.id}")
+    }
+
+    for replica in sorted_replicas:
+        if not replica.table:
+            continue
+
+        if replica.row_key in existing_replica_components:
+            existing_replica_components[replica.row_key].update(replica.table)
+        else:
+            tab.replicas_grid.mount(
+                ScrollableContainer(
+                    Static(
+                        replica.table,
+                        id=f"replica_{replica.row_key}_{tab.id}",
+                        classes=f"replica_{tab.id}",
+                    ),
+                    id=f"replica_container_{replica.row_key}_{tab.id}",
+                    classes=f"replica_container_{tab.id} replica_container",
+                )
+            )
+
+    # Remove replicas that no longer exist
+    for replica_id, replica_container in existing_replica_components.items():
+        if replica_id not in existing_replica_ids:
+            replica_container.parent.remove()
 
 
 def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica = None) -> Table:
@@ -264,7 +321,6 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         sql_thread_running = (
             "[green]ON[/green]" if data.get("Replica_SQL_Running").lower() == "yes" else "[red]OFF[/red]"
         )
-
     else:
         uuid_key = "Master_UUID"
         primary_uuid = data.get(uuid_key)
@@ -312,13 +368,13 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         table.add_column(overflow="fold")
 
     if replica:
-        table.add_row("[b][light_blue]Host", "[light_blue]%s" % replica.host)
-        table.add_row("[label]Version", "%s" % replica.mysql_version)
+        table.add_row("[b][light_blue]Host", f"[light_blue]{replica.host}")
+        table.add_row("[label]Version", f"{replica.host_distro} {replica.mysql_version}")
     else:
-        table.add_row("[label]Primary", "%s" % primary_host)
+        table.add_row("[label]Primary", primary_host)
 
     if not dashboard_table:
-        table.add_row("[label]User", "%s" % primary_user)
+        table.add_row("[label]User", primary_user)
 
     table.add_row(
         "[label]Thread",
@@ -499,7 +555,7 @@ def create_group_replication_member_table(tab: Tab):
     dolphie = tab.dolphie
 
     if not dolphie.group_replication_members:
-        return None
+        return
 
     group_replica_tables = {}
     for row in dolphie.group_replication_members:
@@ -561,58 +617,54 @@ def create_group_replication_member_table(tab: Tab):
     return group_replica_tables
 
 
-def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
+def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
     dolphie = tab.dolphie
+    connection = replica.connection if replica else dolphie.main_db_connection
+    version_to_check = replica.mysql_version if replica else None
+    connection_source_alt = replica.connection_source_alt if replica else dolphie.connection_source_alt
 
-    connection = dolphie.main_db_connection if not replica else replica.connection
-
-    # Determine which query to use based on MySQL version and connection source
+    # Determine replication status query
+    use_show_replica_status = (
+        dolphie.is_mysql_version_at_least("8.0.22", use_version=version_to_check)
+        and connection_source_alt != ConnectionSource.mariadb
+    )
     replication_status_query = (
-        MySQLQueries.show_replica_status
-        if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb
-        else MySQLQueries.show_slave_status
+        MySQLQueries.show_replica_status if use_show_replica_status else MySQLQueries.show_slave_status
     )
 
-    # Determine which replication lag source and query to use
-    if dolphie.heartbeat_table:
-        replica_lag_source = "HB"
-        replica_lag_query = MySQLQueries.heartbeat_replica_lag
-    else:
-        replica_lag_source = None
-        replica_lag_query = replication_status_query
+    # Determine lag source and query
+    replica_lag_source = "HB" if dolphie.heartbeat_table else None
+    replica_lag_query = MySQLQueries.heartbeat_replica_lag if replica_lag_source else replication_status_query
 
+    # Fetch replication status
     connection.execute(replication_status_query)
-    replica_lag_data = connection.fetchone()
-    replication_status = replica_lag_data
+    replication_status = connection.fetchone() or {}
 
-    # Use an alternative method to detect replication lag if available
-    if replication_status and replica_lag_source:
+    # Fetch replica lag using alternative method if applicable
+    if replica_lag_source:
         connection.execute(replica_lag_query)
         replica_lag_data = connection.fetchone()
+    else:
+        replica_lag_data = replication_status
 
-    # Determine which key to use for fetching the seconds behind
-    seconds_behind_key = (
-        "Seconds_Behind_Source"
-        if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb
-        else "Seconds_Behind_Master"
-    )
-
-    seconds_behind = replica_lag_data.get(seconds_behind_key)
+    # Determine lag key and calculate replica lag
+    lag_key = "Seconds_Behind_Source" if use_show_replica_status else "Seconds_Behind_Master"
+    seconds_behind = replica_lag_data.get(lag_key)
     replica_lag = int(seconds_behind) if seconds_behind is not None else 0
 
     if replication_status:
-        # Update the replication lag with the alternative method if available
+        # Update replication status with lag and speed
+        previous_lag = (
+            replica.replication_status.get("Seconds_Behind", 0)
+            if replica
+            else dolphie.replication_status.get("Seconds_Behind", 0)
+        )
         replication_status["Seconds_Behind"] = replica_lag
-
-        previous_sbm = 0
-        if replica:
-            previous_sbm = replica.replication_status.get("Seconds_Behind", 0)
-        else:
-            previous_sbm = dolphie.replication_status.get("Seconds_Behind", 0)
-
-        replication_status["Replica_Speed"] = 0
-        if previous_sbm and replica_lag < previous_sbm:
-            replication_status["Replica_Speed"] = round((previous_sbm - replica_lag) / dolphie.polling_latency)
+        replication_status["Replica_Speed"] = (
+            round((previous_lag - replica_lag) / dolphie.polling_latency)
+            if previous_lag and replica_lag < previous_lag
+            else 0
+        )
 
     return replication_status
 
@@ -620,109 +672,107 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> tuple:
 def fetch_replicas(tab: Tab):
     dolphie = tab.dolphie
 
-    # If replicas don't match available_replicas, we need need to sync
+    # If replicas don't match available_replicas, remove replica connections that no longer exist
     if len(dolphie.replica_manager.replicas) != len(dolphie.replica_manager.available_replicas):
-        # Remove replica connections that no longer exist
-        unique_ids = {row["id"] for row in dolphie.replica_manager.available_replicas}
-        to_remove = set(dolphie.replica_manager.replicas.keys()) - unique_ids
-        for thread_id in to_remove:
-            dolphie.replica_manager.remove(thread_id)
+        unique_row_keys = {
+            dolphie.replica_manager.create_replica_row_key(row.get("host"), row.get("port"))
+            for row in dolphie.replica_manager.available_replicas
+        }
+        to_remove = set(dolphie.replica_manager.replicas.keys()) - unique_row_keys
+        for row_key in to_remove:
+            dolphie.replica_manager.remove_replica(row_key)
 
     for row in dolphie.replica_manager.available_replicas:
         replica_error = None
-
-        thread_id = row["id"]
-
         host = dolphie.get_hostname(row["host"].split(":")[0])
 
-        # MariaDB has no way of knowing what port a replica is using, so we have to manage it ourselves
+        # MariaDB has no way of mapping a replica in processlist (AFAIK) to a specific port from SHOW SLAVE HOSTS
+        # So we have to loop through available ports and manage it ourselves.
         if dolphie.connection_source_alt == ConnectionSource.mariadb:
-            # Loop through available ports
-            for port_data in dolphie.replica_manager.ports.values():
-                port = port_data.get("port", 3306)
+            row_port = row.get("port")
+            if not row_port:
+                assigned_port = None
+                # Loop through available ports
+                for port_data in dolphie.replica_manager.ports.values():
+                    port = port_data.get("port", 3306)
 
-                # If the port is not in use, check to see if we can connect to it
-                if not port_data.get("in_use"):
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(2)
+                    # If the port is not in use, try to connect to with it
+                    if not port_data.get("in_use"):
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(2)
 
-                    try:
-                        # Try to connect to the host and port
-                        sock.connect((host, port))
-                        port_data["in_use"] = True
-                        break
-                    except (socket.timeout, socket.error, ConnectionRefusedError):
-                        continue  # Continue to the next available port
-                    finally:
-                        sock.close()
-                else:
-                    break
+                        try:
+                            # Try to connect to the host and port
+                            sock.connect((host, port))
+                            port_data["in_use"] = True  # If we can connect, mark the port as in use to not use it again
+                            assigned_port = port
+
+                            break
+                        except (socket.timeout, socket.error, ConnectionRefusedError):
+                            continue  # Continue to the next available port
+                        finally:
+                            sock.close()
+
+                if not assigned_port:
+                    replica_error = "No available port found for MariaDB replica"
+            else:
+                assigned_port = row_port
         else:
-            port = dolphie.replica_manager.ports.get(row["replica_uuid"], {}).get("port", 3306)
+            # We can correlate the replica in the processlist to a specific port from SHOW SLAVE HOSTS with MySQL
+            assigned_port = dolphie.replica_manager.ports.get(row.get("replica_uuid"), {}).get("port", 3306)
 
-        # This lets us connect to replicas on the same host as the primary if we're connecting remotely
-        if host == "localhost" or host == "127.0.0.1":
-            host = dolphie.host
+        # Update the port of available_replicas so it can be used for the row_key
+        row["port"] = assigned_port
 
-        host_and_port = "%s:%s" % (host, port)
+        # Create a unique row key for the replica since we now have the assigned port for it
+        row_key = f"{dolphie.replica_manager.create_replica_row_key(row.get('host'), assigned_port)}"
 
-        replica = dolphie.replica_manager.get(thread_id)
+        host_and_port = f"{host}:{assigned_port}" if assigned_port else host
 
-        if dolphie.replay_file:
-            if not replica:
-                replica = dolphie.replica_manager.add(thread_id=thread_id, host=host)
+        replica = dolphie.replica_manager.get_replica(row_key)
+        if not replica:
+            replica = dolphie.replica_manager.add_replica(
+                row_key=row_key, thread_id=row.get("id"), host=host_and_port, port=assigned_port
+            )
 
+        # If we don't have a replica connection, we create one
+        if not replica.connection and assigned_port:
+            try:
+                replica.connection = Database(
+                    app=dolphie.app,
+                    host=host,
+                    user=dolphie.user,
+                    password=dolphie.password,
+                    port=assigned_port,
+                    socket=None,
+                    ssl=dolphie.ssl,
+                    save_connection_id=False,
+                )
+                global_variables = replica.connection.fetch_status_and_variables("variables")
+
+                replica.mysql_version = dolphie.parse_server_version(global_variables.get("version"))
+                replica.host_distro, replica.connection_source_alt = dolphie.determine_distro_and_connection_source(
+                    global_variables
+                )
+            except ManualException as e:
+                replica_error = e.reason
+
+        # If we have a replica connection, we fetch its replication status
+        if replica.connection:
+            try:
+                replica.replication_status = fetch_replication_data(tab, replica)
+                if replica.replication_status:
+                    replica.table = create_replication_table(tab, replica=replica)
+            except ManualException as e:
+                replica_error = e.reason
+
+        if replica_error:
             table = Table(box=None, show_header=False)
             table.add_column()
             table.add_column(overflow="fold")
 
-            table.add_row("[b][light_blue]Host", "[light_blue]%s" % host)
+            table.add_row("[b][light_blue]Host", f"[light_blue]{host_and_port}")
             table.add_row("[label]User", row["user"])
-            table.add_row("[label]Thread ID", str(thread_id))
+            table.add_row("[label]Error", f"[red]{replica_error}")
 
             replica.table = table
-        else:
-            # If we don't have a replica connection, we create one
-            if not replica:
-                try:
-                    replica = dolphie.replica_manager.add(thread_id=thread_id, host=host_and_port)
-                    replica.connection = Database(
-                        app=dolphie.app,
-                        host=host,
-                        user=dolphie.user,
-                        password=dolphie.password,
-                        port=port,
-                        socket=None,
-                        ssl=dolphie.ssl,
-                        save_connection_id=False,
-                    )
-
-                    # Save the MySQL version for the replica
-                    version_split = replica.connection.fetch_value_from_field("SELECT @@version").split(".")
-                    replica.mysql_version = "%s.%s.%s" % (
-                        version_split[0],
-                        version_split[1],
-                        version_split[2].split("-")[0],
-                    )
-                except ManualException as e:
-                    replica_error = e.reason
-
-            # If we have a replica connection, we fetch its replication status
-            if replica.connection:
-                try:
-                    replica.replication_status = fetch_replication_data(tab, replica)
-                    if replica.replication_status:
-                        replica.table = create_replication_table(tab, replica=replica)
-                except ManualException as e:
-                    replica_error = e.reason
-
-            if replica_error:
-                table = Table(box=None, show_header=False)
-                table.add_column()
-                table.add_column(overflow="fold")
-
-                table.add_row("[b][light_blue]Host", "[light_blue]%s:%s" % (host, port))
-                table.add_row("[label]User", row["user"])
-                table.add_row("[label]Error", "[red]%s[/red]" % replica_error)
-
-                replica.table = table

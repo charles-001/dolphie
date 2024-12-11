@@ -3,7 +3,7 @@ import os
 import socket
 import time
 from datetime import datetime
-from typing import Dict, Union
+from typing import Dict, List, Tuple, Union
 
 import psutil
 from loguru import logger
@@ -78,41 +78,34 @@ class Dolphie:
         self.worker_processing_time: float = 0
         self.polling_latency: float = 0
         self.connection_status: DataTypes.ConnectionStatus = None
+
+        self.global_variables: Dict[str, Union[int, str]] = {}
+        self.global_status: Dict[str, Union[int, str]] = {}
+        self.binlog_status: Dict[str, Union[int, str]] = {}
+        self.replication_status: Dict[str, Union[int, str]] = {}
+        self.replication_applier_status: List[Dict[str, Union[int, str]]] = []
+        self.innodb_metrics: Dict[str, Union[int, str]] = {}
+        self.metadata_locks: List[Dict[str, Union[int, str]]] = []
+        self.ddl: List[Dict[str, Union[int, str]]] = []
+        self.disk_io_metrics: Dict[str, Union[int, str]] = {}
+        self.system_utilization: Dict[str, Union[int, str]] = {}
+        self.host_cache: Dict[str, str] = {}
+        self.proxysql_hostgroup_summary: List[Dict[str, str]] = []
+        self.proxysql_mysql_query_rules: List[Dict[str, str]] = []
+        self.proxysql_per_second_data: Dict[str, Union[int, str]] = {}
+        self.proxysql_command_stats: List[Dict[str, Union[int, str]]] = []
         self.processlist_threads: Dict[int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]] = (
             {}
         )
         self.processlist_threads_snapshot: Dict[
             int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]
         ] = {}
-        self.lock_transactions: dict = {}
-        self.metadata_locks: dict = {}
-        self.ddl: list = []
-        self.pause_refresh: bool = False
-        self.innodb_metrics: dict = {}
-        self.disk_io_metrics: dict = {}
-        self.system_utilization: dict = {}
-        self.global_variables: dict = {}
-        self.innodb_trx_lock_metrics: dict = {}
-        self.file_io_data: PerformanceSchemaMetrics = None
-        self.table_io_waits_data: PerformanceSchemaMetrics = None
 
-        if self.record_for_replay or self.panels.pfs_metrics.visible:
-            self.pfs_metrics_last_reset_time: datetime = datetime.now()
-        else:
-            # This will be set when user presses key to bring up panel
-            self.pfs_metrics_last_reset_time: datetime = None
-
-        self.global_status: dict = {}
-        self.binlog_status: dict = {}
-        self.replication_status: dict = {}
-        self.replication_applier_status: dict = {}
-        self.active_redo_logs: int = None
-        self.host_with_port: str = f"{self.host}:{self.port}"
-        self.host_cache: dict = {}
-        self.proxysql_hostgroup_summary: dict = {}
-        self.proxysql_mysql_query_rules: dict = {}
-        self.proxysql_per_second_data: dict = {}
-        self.proxysql_command_stats: dict = {}
+        # These are for group replication in replication panel
+        self.is_group_replication_primary: bool = False
+        self.group_replication_data: Dict[str, str] = {}
+        self.group_replication_members: List[Dict[str, str]] = []
+        self.innodb_cluster_clustersets: List[Dict[str, str]] = []
 
         # Filters that can be applied
         self.user_filter = None
@@ -123,18 +116,13 @@ class Dolphie:
         self.query_filter = None
 
         # Types of hosts
-        self.connection_source: ConnectionSource = ConnectionSource.mysql
-        self.connection_source_alt: ConnectionSource = ConnectionSource.mysql  # rds, azure, etc
+        self.connection_source: ConnectionSource = ConnectionSource.mysql  # mysql, proxysql
+        self.connection_source_alt: ConnectionSource = ConnectionSource.mysql  # mariadb, rds, azure, etc
         self.galera_cluster: bool = False
         self.group_replication: bool = False
         self.innodb_cluster: bool = False
         self.innodb_cluster_read_replica: bool = False
         self.replicaset: bool = False
-
-        # These are for group replication in replication panel
-        self.is_group_replication_primary: bool = False
-        self.group_replication_members: dict = {}
-        self.group_replication_data: dict = {}
 
         # Main connection is used for Textual's worker thread so it can run asynchronous
         db_connection_args = {
@@ -152,14 +140,27 @@ class Dolphie:
         # Secondary connection is for ad-hoc commands that are not a part of the worker thread
         self.secondary_db_connection = Database(**db_connection_args, save_connection_id=False)
 
+        # Misc variables
+        self.host_distro: str = "MySQL"
+        self.host_with_port: str = f"{self.host}:{self.port}"
         self.performance_schema_enabled: bool = False
-        self.metadata_locks_enabled: bool = False
         self.use_performance_schema_for_processlist: bool = False
         self.server_uuid: str = None
         self.host_version: str = None
-        self.host_distro: str = None
+        self.pause_refresh: bool = False
+        self.active_redo_logs: int = None
+        self.metadata_locks_enabled: bool = False
 
         self.host_cache_from_file = load_host_cache_file(self.host_cache_file)
+
+        self.file_io_data: PerformanceSchemaMetrics = None
+        self.table_io_waits_data: PerformanceSchemaMetrics = None
+
+        if self.record_for_replay or self.panels.pfs_metrics.visible:
+            self.pfs_metrics_last_reset_time: datetime = datetime.now()
+        else:
+            # This will be set when user presses key to bring up panel
+            self.pfs_metrics_last_reset_time: datetime = None
 
         self.update_switches_after_reset()
 
@@ -183,7 +184,7 @@ class Dolphie:
         self.connection_source = self.main_db_connection.source
         self.connection_source_alt = self.connection_source
         if self.connection_source == ConnectionSource.proxysql:
-            self.host_distro = "ProxySQL"
+            self.host_distro = ConnectionSource.proxysql
             self.host_with_port = f"{self.host}:{self.port}"
 
         self.metric_manager.connection_source = self.connection_source
@@ -194,30 +195,7 @@ class Dolphie:
     def configure_mysql_variables(self):
         global_variables = self.global_variables
 
-        version_comment = global_variables.get("version_comment").lower()
-
-        # Get proper host version and fork
-        if "percona xtradb cluster" in version_comment:
-            self.host_distro = "Percona XtraDB Cluster"
-        elif "percona server" in version_comment:
-            self.host_distro = "Percona Server"
-        elif "mariadb cluster" in version_comment:
-            self.host_distro = "MariaDB Cluster"
-            self.connection_source_alt = ConnectionSource.mariadb
-        elif "mariadb" in version_comment:
-            self.host_distro = "MariaDB"
-            self.connection_source_alt = ConnectionSource.mariadb
-        elif global_variables.get("aurora_version"):
-            self.host_distro = "Amazon Aurora"
-            self.connection_source_alt = ConnectionSource.aws_rds
-        elif "rdsdb" in global_variables.get("basedir"):
-            self.host_distro = "Amazon RDS"
-            self.connection_source_alt = ConnectionSource.aws_rds
-        elif global_variables.get("aad_auth_only"):
-            self.host_distro = "Azure MySQL"
-            self.connection_source_alt = ConnectionSource.azure_mysql
-        else:
-            self.host_distro = "MySQL"
+        self.host_distro, self.connection_source_alt = self.determine_distro_and_connection_source(global_variables)
 
         # For RDS and Azure, we will use the host specified to connect with since hostname isn't related to the endpoint
         if self.connection_source_alt == ConnectionSource.aws_rds:
@@ -227,31 +205,73 @@ class Dolphie:
         else:
             self.host_with_port = f"{global_variables.get('hostname')}:{self.port}"
 
+        # Server UUID configuration (mainly for replication & errant transactions)
         self.server_uuid = global_variables.get("server_uuid")
         if self.connection_source_alt == ConnectionSource.mariadb and self.is_mysql_version_at_least("10.0"):
             self.server_uuid = global_variables.get("server_id")
 
-        if global_variables.get("performance_schema") == "ON":
-            self.performance_schema_enabled = True
-            self.use_performance_schema_for_processlist = True
+        # Performance schema
+        self.performance_schema_enabled = global_variables.get("performance_schema") == "ON"
+        self.use_performance_schema_for_processlist = self.performance_schema_enabled
 
-        # Check to see if the host is in a Galera cluster
-        if global_variables.get("wsrep_on") == "ON" or global_variables.get("wsrep_cluster_address"):
-            self.galera_cluster = True
+        # Galera cluster check
+        self.galera_cluster = global_variables.get("wsrep_on") == "ON" or bool(
+            global_variables.get("wsrep_cluster_address")
+        )
 
-        # Check to see if the host is in a InnoDB cluster
-        if self.group_replication_data.get("cluster_type") == "ar":
+        # Cluster type detection
+        cluster_type = self.group_replication_data.get("cluster_type")
+        if cluster_type == "ar":
             self.replicaset = True
-        elif self.group_replication_data.get("cluster_type") == "gr":
+        elif cluster_type == "gr":
             self.innodb_cluster = True
-
             if self.group_replication_data.get("instance_type") == "read-replica":
-                self.innodb_cluster = False  # It doesn't work like an actual member in a cluster so set it to False
+                self.innodb_cluster = False  # Not a part of the cluster if it's a read replica
                 self.innodb_cluster_read_replica = True
 
-        # Check to see if this is a Group Replication host
+        # Group replication host check
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
+
+    def determine_distro_and_connection_source(
+        self, global_variables: Dict[str, Union[int, str]]
+    ) -> Tuple[str, ConnectionSource]:
+        version_comment = global_variables.get("version_comment", "").casefold()
+        basedir = global_variables.get("basedir", "").casefold()
+        aad_auth_only = global_variables.get("aad_auth_only")
+        aria_in_global_variables = any("aria" in str(value).casefold() for value in global_variables.values())
+
+        # Map version_comment keywords to distributions and sources
+        distro_mappings = {
+            "percona xtradb cluster": ("Percona XtraDB Cluster", ConnectionSource.mysql),
+            "percona server": ("Percona Server", ConnectionSource.mysql),
+            "mariadb cluster": ("MariaDB Cluster", ConnectionSource.mariadb),
+            "mariadb": ("MariaDB", ConnectionSource.mariadb),
+        }
+
+        # Check for known distributions using version_comment
+        for keyword, (distro, conn_source) in distro_mappings.items():
+            if keyword in version_comment:
+                return distro, conn_source
+
+        # Identify MariaDB
+        if aria_in_global_variables:
+            if "rds" in basedir:
+                return "Amazon RDS (MariaDB)", ConnectionSource.aws_rds
+            if aad_auth_only:
+                return "Azure MariaDB", ConnectionSource.azure_mysql
+
+            return "MariaDB", ConnectionSource.mariadb
+
+        # If if gets to here, it's MySQL
+        if global_variables.get("aurora_version"):
+            return "Amazon Aurora", ConnectionSource.aws_rds
+        if "rdsdb" in basedir:
+            return "Amazon RDS (MySQL)", ConnectionSource.aws_rds
+        if aad_auth_only:
+            return "Azure MySQL", ConnectionSource.azure_mysql
+
+        return "MySQL", ConnectionSource.mysql
 
     def collect_system_utilization(self):
         if not self.enable_system_utilization:
@@ -290,9 +310,7 @@ class Dolphie:
             query = MySQLQueries.determine_cluster_type_8
 
         self.main_db_connection.execute(query, ignore_error=True)
-        data = self.main_db_connection.fetchone()
-        self.group_replication_data["cluster_type"] = data.get("cluster_type")
-        self.group_replication_data["instance_type"] = data.get("instance_type")
+        self.group_replication_data = self.main_db_connection.fetchone()
 
     def add_host_to_tab_setup_file(self):
         if self.daemon_mode:
@@ -321,13 +339,14 @@ class Dolphie:
 
         return parsed_source >= parsed_target
 
-    def set_host_version(self, version: str):
-        version_split = version.split(".")
-        self.host_version = "%s.%s.%s" % (
-            version_split[0],
-            version_split[1],
-            version_split[2].split("-")[0],
-        )
+    def parse_server_version(self, version: str) -> str:
+        if not version:
+            return "N/A"
+
+        major, minor, patch = version.split(".", 2)
+        patch = patch.split("-", 1)[0]
+
+        return f"{major}.{minor}.{patch}"
 
     def get_hostname(self, host):
         if host in self.host_cache:

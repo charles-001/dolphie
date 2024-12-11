@@ -3,7 +3,7 @@ from textual.containers import Center
 from textual.screen import Screen
 from textual.widgets import Static
 
-from dolphie.Widgets.topbar import TopBar
+from dolphie.Widgets.TopBar import TopBar
 
 
 class CommandScreen(Screen):
