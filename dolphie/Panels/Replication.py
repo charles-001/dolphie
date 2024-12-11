@@ -114,7 +114,9 @@ def create_panel(tab: Tab):
         final_cluster_name = (
             cluster_name if cluster_name else dolphie.global_variables.get("group_replication_group_name", "N/A")
         )
-        tab.group_replication_title.update(f"[b]{title_prefix}{cluster_title} ([white]{final_cluster_name}[/white])")
+        tab.group_replication_title.update(
+            f"[b]{title_prefix}{cluster_title} ([highlight]{final_cluster_name}[/highlight])"
+        )
         tab.group_replication_data.update(group_replication_variables)
 
         # Generate and sort member tables
