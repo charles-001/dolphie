@@ -753,7 +753,7 @@ def fetch_replicas(tab: Tab):
                 global_variables = replica.connection.fetch_status_and_variables("variables")
 
                 replica.mysql_version = dolphie.parse_server_version(global_variables.get("version"))
-                replica.host_distro, replica.connection_source_alt = dolphie.determine_distro_and_connection_source(
+                replica.host_distro, replica.connection_source_alt = dolphie.determine_distro_and_connection_source_alt(
                     global_variables
                 )
             except ManualException as e:

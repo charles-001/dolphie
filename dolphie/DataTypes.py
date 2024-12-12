@@ -13,8 +13,6 @@ class ConnectionSource:
     mysql = "MySQL"
     proxysql = "ProxySQL"
     mariadb = "MariaDB"
-    aws_rds = "AWS RDS"
-    azure_mysql = "Azure MySQL"
 
 
 @dataclass

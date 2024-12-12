@@ -108,16 +108,16 @@ class Dolphie:
         self.innodb_cluster_clustersets: List[Dict[str, str]] = []
 
         # Filters that can be applied
-        self.user_filter = None
-        self.db_filter = None
-        self.host_filter = None
-        self.hostgroup_filter = None
-        self.query_time_filter = None
-        self.query_filter = None
+        self.user_filter: str = None
+        self.db_filter: str = None
+        self.host_filter: str = None
+        self.query_filter: str = None
+        self.hostgroup_filter: int = None
+        self.query_time_filter: int = None
 
         # Types of hosts
         self.connection_source: ConnectionSource = ConnectionSource.mysql  # mysql, proxysql
-        self.connection_source_alt: ConnectionSource = ConnectionSource.mysql  # mariadb, rds, azure, etc
+        self.connection_source_alt: ConnectionSource = ConnectionSource.mysql  # mariadb
         self.galera_cluster: bool = False
         self.group_replication: bool = False
         self.innodb_cluster: bool = False
@@ -195,12 +195,12 @@ class Dolphie:
     def configure_mysql_variables(self):
         global_variables = self.global_variables
 
-        self.host_distro, self.connection_source_alt = self.determine_distro_and_connection_source(global_variables)
+        self.host_distro, self.connection_source_alt = self.determine_distro_and_connection_source_alt(global_variables)
 
         # For RDS and Azure, we will use the host specified to connect with since hostname isn't related to the endpoint
-        if self.connection_source_alt == ConnectionSource.aws_rds:
+        if ".rds.amazonaws.com" in self.host:
             self.host_with_port = f"{self.host.split('.rds.amazonaws.com')[0]}:{self.port}"
-        elif self.connection_source_alt == ConnectionSource.azure_mysql:
+        elif ".mysql.database.azure.com" in self.host:
             self.host_with_port = f"{self.host.split('.mysql.database.azure.com')[0]}:{self.port}"
         else:
             self.host_with_port = f"{global_variables.get('hostname')}:{self.port}"
@@ -233,45 +233,56 @@ class Dolphie:
         if not self.innodb_cluster and global_variables.get("group_replication_group_name"):
             self.group_replication = True
 
-    def determine_distro_and_connection_source(
+    def determine_distro_and_connection_source_alt(
         self, global_variables: Dict[str, Union[int, str]]
     ) -> Tuple[str, ConnectionSource]:
         version_comment = global_variables.get("version_comment", "").casefold()
         basedir = global_variables.get("basedir", "").casefold()
         aad_auth_only = global_variables.get("aad_auth_only")
+
+        # Identify MariaDB and its variants
         aria_in_global_variables = any("aria" in str(value).casefold() for value in global_variables.values())
-
-        # Map version_comment keywords to distributions and sources
-        distro_mappings = {
-            "percona xtradb cluster": ("Percona XtraDB Cluster", ConnectionSource.mysql),
-            "percona server": ("Percona Server", ConnectionSource.mysql),
-            "mariadb cluster": ("MariaDB Cluster", ConnectionSource.mariadb),
-            "mariadb": ("MariaDB", ConnectionSource.mariadb),
-        }
-
-        # Check for known distributions using version_comment
-        for keyword, (distro, conn_source) in distro_mappings.items():
-            if keyword in version_comment:
-                return distro, conn_source
-
-        # Identify MariaDB
         if aria_in_global_variables:
-            if "rds" in basedir:
-                return "Amazon RDS (MariaDB)", ConnectionSource.aws_rds
+            if "rdsdb" in basedir:
+                return "Amazon RDS (MariaDB)", ConnectionSource.mariadb
             if aad_auth_only:
-                return "Azure MariaDB", ConnectionSource.azure_mysql
+                return "Azure MariaDB", ConnectionSource.mariadb
+            if "cluster" in version_comment:
+                return "MariaDB Galera Cluster", ConnectionSource.mariadb
 
             return "MariaDB", ConnectionSource.mariadb
 
-        # If if gets to here, it's MySQL
+        # Map version_comment keywords to distributions
+        distro_mappings_to_version_comment = {
+            "percona xtradb cluster": ("Percona Galera Cluster", ConnectionSource.mysql),
+            "percona server": ("Percona Server", ConnectionSource.mysql),
+        }
+        for keyword, (distro, conn_source) in distro_mappings_to_version_comment.items():
+            if keyword in version_comment:
+                return distro, conn_source
+
+        # Identify MySQL and its variants
         if global_variables.get("aurora_version"):
-            return "Amazon Aurora", ConnectionSource.aws_rds
+            return "Amazon Aurora", ConnectionSource.mysql
         if "rdsdb" in basedir:
-            return "Amazon RDS (MySQL)", ConnectionSource.aws_rds
+            return "Amazon RDS (MySQL)", ConnectionSource.mysql
         if aad_auth_only:
-            return "Azure MySQL", ConnectionSource.azure_mysql
+            return "Azure MySQL", ConnectionSource.mysql
 
         return "MySQL", ConnectionSource.mysql
+
+    def build_kill_query(self, thread_id: int) -> str:
+        basedir = self.global_variables.get("basedir", "").casefold()
+        aad_auth_only = self.global_variables.get("aad_auth_only")
+
+        if "rdsdb" in basedir or self.global_variables.get("aurora_version"):
+            return f"CALL mysql.rds_kill({thread_id})"
+        elif aad_auth_only:
+            return f"CALL mysql.az_kill({thread_id})"
+        elif self.connection_source == ConnectionSource.proxysql:
+            return f"KILL CONNECTION {thread_id}"
+        else:
+            return f"KILL {thread_id}"
 
     def collect_system_utilization(self):
         if not self.enable_system_utilization:

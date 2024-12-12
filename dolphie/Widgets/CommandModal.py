@@ -313,15 +313,21 @@ class CommandModal(ModalScreen):
                 ]
             )
 
-        elif self.command in [HotkeyCommands.thread_kill_by_id, HotkeyCommands.show_thread]:
-            value = next((thread_id for thread_id in self.processlist_data.keys() if modal_input == thread_id), None)
+        elif self.command in {HotkeyCommands.thread_kill_by_id, HotkeyCommands.show_thread}:
+            if self.command == HotkeyCommands.show_thread:
+                if modal_input not in self.processlist_data:
+                    self.update_error_response(f"Thread ID [bold red]{modal_input}[/bold red] does not exist")
+                    return
 
-            if not value:
-                self.update_error_response(f"Thread ID [bold red]{modal_input}[/bold red] does not exist")
-            else:
-                self.dismiss(modal_input)
+            if not modal_input.isdigit():
+                self.update_error_response("Thread ID must be a number")
+                return
+
+            self.dismiss(modal_input)
+
         elif self.command == HotkeyCommands.refresh_interval:
             try:
+                # Convert input to float and check if it's a number at same time
                 modal_input = float(modal_input)
             except ValueError:
                 self.update_error_response("Input must be a number")

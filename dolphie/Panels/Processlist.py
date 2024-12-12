@@ -93,7 +93,7 @@ def create_panel(tab: Tab) -> DataTable:
                 found = True
             elif dolphie.host_filter and dolphie.host_filter not in thread.host:
                 found = True
-            elif dolphie.query_time_filter and int(dolphie.query_time_filter) >= thread.time:
+            elif dolphie.query_time_filter and dolphie.query_time_filter >= thread.time:
                 found = True
             elif dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
                 found = True

@@ -1284,12 +1284,12 @@ class DolphieApp(App):
             self.force_refresh_for_replay(need_current_data=True)
 
         elif key == "c":
-            dolphie.user_filter = ""
-            dolphie.db_filter = ""
-            dolphie.host_filter = ""
-            dolphie.hostgroup_filter = ""
-            dolphie.query_time_filter = ""
-            dolphie.query_filter = ""
+            dolphie.user_filter = None
+            dolphie.db_filter = None
+            dolphie.host_filter = None
+            dolphie.hostgroup_filter = None
+            dolphie.query_time_filter = None
+            dolphie.query_filter = None
 
             self.force_refresh_for_replay(need_current_data=True)
 
@@ -1379,6 +1379,9 @@ class DolphieApp(App):
                 # Apply filters and notify the user for each valid input
                 for filter_name, filter_value in filters.items():
                     if filter_value:
+                        if filter_name in ["Minimum Query Time", "Hostgroup"]:
+                            filter_value = int(filter_value)
+
                         setattr(dolphie, filters_mapping[filter_name], filter_value)
                         self.notify(
                             f"[b]{filter_name}[/b]: [b highlight]{filter_value}[/b highlight]",
@@ -1876,14 +1879,8 @@ class DolphieApp(App):
             elif key == "k":
                 thread_id = additional_data
                 try:
-                    if dolphie.connection_source_alt == ConnectionSource.aws_rds:
-                        dolphie.secondary_db_connection.execute("CALL mysql.rds_kill(%s)" % thread_id)
-                    elif dolphie.connection_source_alt == ConnectionSource.azure_mysql:
-                        dolphie.secondary_db_connection.execute("CALL mysql.az_kill(%s)" % thread_id)
-                    elif dolphie.connection_source == ConnectionSource.proxysql:
-                        dolphie.secondary_db_connection.execute("KILL CONNECTION %s" % thread_id)
-                    else:
-                        dolphie.secondary_db_connection.execute("KILL %s" % thread_id)
+                    query = dolphie.build_kill_query(thread_id)
+                    dolphie.secondary_db_connection.execute(query)
 
                     self.notify("Killed Thread ID [b highlight]%s[/b highlight]" % thread_id, severity="success")
                 except ManualException as e:
@@ -1922,16 +1919,9 @@ class DolphieApp(App):
                             and (not kill_by_age_range or age_range_lower_limit <= thread.time <= age_range_upper_limit)
                             and (not kill_by_query_text or kill_by_query_text in thread.formatted_query.code)
                         ):
-                            if dolphie.connection_source_alt == ConnectionSource.aws_rds:
-                                query = "CALL mysql.rds_kill(%s)"
-                            elif dolphie.connection_source_alt == ConnectionSource.azure_mysql:
-                                query = "CALL mysql.az_kill(%s)"
-                            elif dolphie.connection_source == ConnectionSource.proxysql:
-                                query = "KILL CONNECTION %s"
-                            else:
-                                query = "KILL %s"
+                            query = dolphie.build_kill_query(thread_id)
+                            dolphie.secondary_db_connection.execute(query)
 
-                            dolphie.secondary_db_connection.execute(query % thread_id)
                             threads_killed += 1
                     except ManualException as e:
                         self.notify(e.reason, title=f"Error Killing Thread ID {thread_id}", severity="error")
@@ -2044,6 +2034,7 @@ class DolphieApp(App):
                 thread_data: ProcesslistThread = dolphie.processlist_threads_snapshot.get(thread_id)
                 if not thread_data:
                     self.notify(f"Thread ID [highlight]{thread_id}[/highlight] was not found", severity="error")
+                    tab.spinner.hide()
                     return
 
                 thread_table.add_row("[label]Thread ID", thread_id)
