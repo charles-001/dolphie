@@ -241,7 +241,7 @@ class Dolphie:
         aad_auth_only = global_variables.get("aad_auth_only")
 
         # Identify MariaDB and its variants
-        aria_in_global_variables = any("aria" in str(value).casefold() for value in global_variables.values())
+        aria_in_global_variables = any(variable.startswith("aria_") for variable in global_variables.keys())
         if aria_in_global_variables:
             if "rdsdb" in basedir:
                 return "Amazon RDS (MariaDB)", ConnectionSource.mariadb
