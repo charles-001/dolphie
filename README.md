@@ -8,7 +8,7 @@
   <img src="https://github.com/charles-001/dolphie/assets/13244625/9b1aadc8-cabb-4256-92f9-fe4d04451b83" width="30">
 </p>
 
-<img width="1857" alt="Screenshot 2024-11-18 at 5 43 12 PM" src="https://github.com/user-attachments/assets/7a797e46-3c24-4e21-a0c6-da7cb7b23147">
+![Untitled](https://github.com/user-attachments/assets/b23426ad-060e-4a3a-bb10-66cf0ac95bd0)
 <p></p>
 <video src='https://github.com/user-attachments/assets/0818485e-f290-4ac4-95d4-8fdc25bb1124'></video>
 <p></p>
