@@ -191,9 +191,9 @@ class Database:
             )
             return None
 
-        # Prefix all queries with dolphie so they can be identified in the processlist from other people
+        # Prefix all queries with Dolphie so they can be easily identified in the processlist from other people
         if self.source != ConnectionSource.proxysql:
-            query = "/* dolphie */ " + query
+            query = "/* Dolphie */ " + query
 
         for attempt_number in range(self.max_reconnect_attempts):
             self.is_running_query = True

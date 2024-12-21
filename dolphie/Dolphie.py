@@ -239,6 +239,7 @@ class Dolphie:
         version_comment = global_variables.get("version_comment", "").casefold()
         basedir = global_variables.get("basedir", "").casefold()
         aad_auth_only = global_variables.get("aad_auth_only")
+        aurora_version = global_variables.get("aurora_version")
 
         # Identify MariaDB and its variants
         aria_in_global_variables = any(variable.startswith("aria_") for variable in global_variables.keys())
@@ -262,7 +263,7 @@ class Dolphie:
                 return distro, conn_source
 
         # Identify MySQL and its variants
-        if global_variables.get("aurora_version"):
+        if aurora_version:
             return "Amazon Aurora", ConnectionSource.mysql
         if "rdsdb" in basedir:
             return "Amazon RDS (MySQL)", ConnectionSource.mysql
@@ -274,15 +275,16 @@ class Dolphie:
     def build_kill_query(self, thread_id: int) -> str:
         basedir = self.global_variables.get("basedir", "").casefold()
         aad_auth_only = self.global_variables.get("aad_auth_only")
+        aurora_version = self.global_variables.get("aurora_version")
 
-        if "rdsdb" in basedir or self.global_variables.get("aurora_version"):
+        if "rdsdb" in basedir or aurora_version:
             return f"CALL mysql.rds_kill({thread_id})"
-        elif aad_auth_only:
+        if aad_auth_only:
             return f"CALL mysql.az_kill({thread_id})"
-        elif self.connection_source == ConnectionSource.proxysql:
+        if self.connection_source == ConnectionSource.proxysql:
             return f"KILL CONNECTION {thread_id}"
-        else:
-            return f"KILL {thread_id}"
+
+        return f"KILL {thread_id}"
 
     def collect_system_utilization(self):
         if not self.enable_system_utilization:

@@ -253,15 +253,16 @@ Dropdown {
     max-height: 12;
     max-width: 1fr;
     scrollbar-size-vertical: 1;
+    border-left: wide #384673;
 }
 
 Dropdown .autocomplete--highlight-match {
-    color: $accent-lighten-2;
     text-style: bold;
 }
 
 Dropdown .autocomplete--selection-cursor {
     background: $boost;
+    text-style: bold;
 }
     """
 
@@ -325,11 +326,11 @@ Dropdown .autocomplete--selection-cursor {
             callback=self._input_value_changed,
         )
 
-        self.watch(
-            self.input_widget,
-            attribute_name="cursor_position",
-            callback=self._input_cursor_position_changed,
-        )
+        # self.watch(
+        #     self.input_widget,
+        #     attribute_name="cursor_position",
+        #     callback=self._input_cursor_position_changed,
+        # )
 
         # TODO: Having to use scroll_target here because scroll_y doesn't fire.
         #  Will also probably need separate callbacks for x and y.
@@ -427,7 +428,7 @@ Dropdown .autocomplete--selection-cursor {
         x, y, width, height = self.input_widget.content_region
         line_below_cursor = y + 1 + scroll_target_adjust_y
 
-        cursor_screen_position = x + (input_cursor_position - self.input_widget.view_position)
+        cursor_screen_position = self.app.cursor_position.x
         self.styles.margin = (
             line_below_cursor,
             right,

@@ -568,7 +568,7 @@ class DolphieApp(App):
         if dolphie.panels.processlist.visible or dolphie.record_for_replay:
             dolphie.processlist_threads = ProcesslistPanel.fetch_data(tab)
 
-        if dolphie.innodb_cluster or dolphie.innodb_cluster_read_replica:
+        if dolphie.panels.replication.visible and (dolphie.innodb_cluster or dolphie.innodb_cluster_read_replica):
             dolphie.main_db_connection.execute(MySQLQueries.get_clustersets)
             dolphie.innodb_cluster_clustersets = dolphie.main_db_connection.fetchall()
 
@@ -1422,22 +1422,8 @@ class DolphieApp(App):
 
             self.app.push_screen(
                 CommandModal(
-                    command=HotkeyCommands.thread_kill_by_id,
-                    message="Kill Thread",
-                    processlist_data=dolphie.processlist_threads_snapshot,
-                ),
-                command_get_input,
-            )
-
-        elif key == "K":
-
-            def command_get_input(data):
-                self.run_command_in_worker(key=key, dolphie=dolphie, additional_data=data)
-
-            self.app.push_screen(
-                CommandModal(
                     command=HotkeyCommands.thread_kill_by_parameter,
-                    message="Kill threads by parameter(s)",
+                    message="Kill thread(s)",
                     processlist_data=dolphie.processlist_threads_snapshot,
                 ),
                 command_get_input,
@@ -1876,20 +1862,11 @@ class DolphieApp(App):
                 )
 
                 self.call_from_thread(show_command_screen)
+
             elif key == "k":
-                thread_id = additional_data
-                try:
-                    query = dolphie.build_kill_query(thread_id)
-                    dolphie.secondary_db_connection.execute(query)
-
-                    self.notify("Killed Thread ID [b highlight]%s[/b highlight]" % thread_id, severity="success")
-                except ManualException as e:
-                    self.notify(e.reason, title="Error killing Thread ID", severity="error")
-
-            elif key == "K":
-
                 # Unpack the data from the modal
                 (
+                    kill_by_id,
                     kill_by_username,
                     kill_by_host,
                     kill_by_age_range,
@@ -1899,37 +1876,49 @@ class DolphieApp(App):
                     include_sleeping_queries,
                 ) = additional_data
 
-                threads_killed = 0
-                commands_to_kill = ["Query", "Execute"]
-
-                if include_sleeping_queries:
-                    commands_to_kill.append("Sleep")
-
-                # Make a copy of the threads snapshot to avoid modification during iteration
-                threads = dolphie.processlist_threads_snapshot.copy()
-
-                for thread_id, thread in threads.items():
-                    thread: ProcesslistThread
+                if kill_by_id:
                     try:
-                        # Check if the thread matches all conditions
-                        if (
-                            thread.command in commands_to_kill
-                            and (not kill_by_username or kill_by_username == thread.user)
-                            and (not kill_by_host or kill_by_host == thread.host)
-                            and (not kill_by_age_range or age_range_lower_limit <= thread.time <= age_range_upper_limit)
-                            and (not kill_by_query_text or kill_by_query_text in thread.formatted_query.code)
-                        ):
-                            query = dolphie.build_kill_query(thread_id)
-                            dolphie.secondary_db_connection.execute(query)
+                        query = dolphie.build_kill_query(kill_by_id)
+                        dolphie.secondary_db_connection.execute(query)
 
-                            threads_killed += 1
+                        self.notify(f"Killed Thread ID [b highlight]{kill_by_id}[/b highlight]", severity="success")
                     except ManualException as e:
-                        self.notify(e.reason, title=f"Error Killing Thread ID {thread_id}", severity="error")
-
-                if threads_killed:
-                    self.notify(f"Killed [highlight]{threads_killed}[/highlight] thread(s)")
+                        self.notify(e.reason, title="Error killing Thread ID", severity="error")
                 else:
-                    self.notify("No threads were killed")
+                    threads_killed = 0
+                    commands_to_kill = ["Query", "Execute"]
+
+                    if include_sleeping_queries:
+                        commands_to_kill.append("Sleep")
+
+                    # Make a copy of the threads snapshot to avoid modification during next refresh polling
+                    threads = dolphie.processlist_threads_snapshot.copy()
+
+                    for thread_id, thread in threads.items():
+                        thread: ProcesslistThread
+                        try:
+                            # Check if the thread matches all conditions
+                            if (
+                                thread.command in commands_to_kill
+                                and (not kill_by_username or kill_by_username == thread.user)
+                                and (not kill_by_host or kill_by_host == thread.host)
+                                and (
+                                    not kill_by_age_range
+                                    or age_range_lower_limit <= thread.time <= age_range_upper_limit
+                                )
+                                and (not kill_by_query_text or kill_by_query_text in thread.formatted_query.code)
+                            ):
+                                query = dolphie.build_kill_query(thread_id)
+                                dolphie.secondary_db_connection.execute(query)
+
+                                threads_killed += 1
+                        except ManualException as e:
+                            self.notify(e.reason, title=f"Error Killing Thread ID {thread_id}", severity="error")
+
+                    if threads_killed:
+                        self.notify(f"Killed [highlight]{threads_killed}[/highlight] thread(s)")
+                    else:
+                        self.notify("No threads were killed")
 
             elif key == "l":
                 deadlock = ""

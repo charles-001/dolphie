@@ -75,10 +75,13 @@ CommandList {
         padding: 0;
     }
     & > .option-list--option-highlighted {
-        background: #171d2d;
+        color: #b7c7ee;
+        background: #171e2f;
+        text-style: bold;
     }
     & > .option-list--option-hover {
-        background: #171d2d;
+        color: #b7c7ee;
+        background: #171e2f;
         text-style: bold;
     }
 }
@@ -361,11 +364,12 @@ Dropdown {
     background: #151926;
 
     & > .autocomplete--highlight-match {
-        background: #777500;
+        background: #384673;
     }
 
     & > .autocomplete--selection-cursor {
         background: #283048;
+        color: #b7c7ee;
     }
 }
 

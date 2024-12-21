@@ -1,10 +1,11 @@
 import re
 
+from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, Input, Label, Select, Static
+from textual.widgets import Button, Checkbox, Input, Label, Rule, Select, Static
 
 from dolphie.DataTypes import ConnectionSource, HotkeyCommands
 from dolphie.Widgets.AutoComplete import AutoComplete, Dropdown, DropdownItem
@@ -40,6 +41,11 @@ class CommandModal(ModalScreen):
                 width: 100%;
                 content-align: center middle;
                 padding-bottom: 1;
+            }
+
+            & Rule {
+                width: 100%;
+                margin-bottom: 1;
             }
 
             & #error_response {
@@ -119,6 +125,8 @@ class CommandModal(ModalScreen):
                     yield Input(id="filter_by_query_time_input")
                     yield Input(id="filter_by_query_text_input")
                 with Vertical(id="kill_container", classes="command_container"):
+                    yield AutoComplete(Input(id="kill_by_id_input"), Dropdown(id="kill_by_id_dropdown_items", items=[]))
+                    yield Rule(line_style="heavy")
                     yield AutoComplete(
                         Input(id="kill_by_username_input"), Dropdown(id="kill_by_username_dropdown_items", items=[])
                     )
@@ -128,7 +136,10 @@ class CommandModal(ModalScreen):
                     yield Input(id="kill_by_age_range_input", placeholder="Example: 5-8")
                     yield Input(id="kill_by_query_text_input")
                     yield Checkbox("Include sleeping queries", id="sleeping_queries")
-                    yield Label("[dark_gray][b]Note[/b]: This feature uses threads visible in the processlist")
+                    yield Label(
+                        "[dark_gray][b]Note:[/b] Only threads visible and executing (or sleeping)\n"
+                        "in the Processlist panel can be killed in this section"
+                    )
                 yield AutoComplete(
                     Input(id="modal_input"),
                     Dropdown(id="dropdown_items", items=self.dropdown_items),
@@ -161,8 +172,12 @@ class CommandModal(ModalScreen):
             self.query_one("#filter_by_host_dropdown_items", Dropdown).items = self.create_dropdown_items("host")
             self.query_one("#filter_by_db_input", Input).border_title = "Database"
             self.query_one("#filter_by_db_dropdown_items", Dropdown).items = self.create_dropdown_items("db")
-            self.query_one("#filter_by_query_time_input", Input).border_title = "Minimum Query Time (seconds)"
-            self.query_one("#filter_by_query_text_input", Input).border_title = "Partial Query Text"
+            self.query_one("#filter_by_query_time_input", Input).border_title = (
+                "Minimum Query Time [dark_gray](seconds)"
+            )
+            self.query_one("#filter_by_query_text_input", Input).border_title = (
+                "Partial Query Text [dark_gray](case-sensitive)"
+            )
 
             if self.connection_source != ConnectionSource.proxysql:
                 self.query_one("#filter_by_hostgroup_input", Input).display = False
@@ -176,13 +191,17 @@ class CommandModal(ModalScreen):
             input.display = False
             kill_container.display = True
 
-            self.query_one("#kill_by_username_input", Input).focus()
+            self.query_one("#kill_by_id_input", Input).focus()
+            self.query_one("#kill_by_id_dropdown_items", Dropdown).items = self.dropdown_items
+            self.query_one("#kill_by_id_input", Input).border_title = "Thread ID [dark_gray](enter submits)"
             self.query_one("#kill_by_username_input", Input).border_title = "Username"
             self.query_one("#kill_by_username_dropdown_items", Dropdown).items = self.create_dropdown_items("user")
             self.query_one("#kill_by_host_input", Input).border_title = "Host/IP"
             self.query_one("#kill_by_host_dropdown_items", Dropdown).items = self.create_dropdown_items("host")
-            self.query_one("#kill_by_age_range_input", Input).border_title = "Age Range (seconds)"
-            self.query_one("#kill_by_query_text_input", Input).border_title = "Partial Query Text"
+            self.query_one("#kill_by_age_range_input", Input).border_title = "Age Range [dark_gray](seconds)"
+            self.query_one("#kill_by_query_text_input", Input).border_title = (
+                "Partial Query Text [dark_gray](case-sensitive)"
+            )
 
             sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
             sleeping_queries_checkbox.toggle()
@@ -198,7 +217,7 @@ class CommandModal(ModalScreen):
         elif self.command == HotkeyCommands.variable_search:
             input.placeholder = "Input 'all' to show everything"
             input.focus()
-        elif self.command in [HotkeyCommands.show_thread, HotkeyCommands.thread_kill_by_id]:
+        elif self.command in [HotkeyCommands.show_thread]:
             input.placeholder = "Input a Thread ID"
             input.focus()
         elif self.command == HotkeyCommands.refresh_interval:
@@ -275,6 +294,7 @@ class CommandModal(ModalScreen):
             self.dismiss(list(filters.values()))
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
             # Get input values
+            kill_by_id = self.query_one("#kill_by_id_input", Input).value
             kill_by_username = self.query_one("#kill_by_username_input", Input).value
             kill_by_host = self.query_one("#kill_by_host_input", Input).value
             kill_by_age_range = self.query_one("#kill_by_age_range_input", Input).value
@@ -282,6 +302,10 @@ class CommandModal(ModalScreen):
             checkbox_sleeping_queries = self.query_one("#sleeping_queries", Checkbox).value
 
             age_range_lower_limit, age_range_upper_limit = None, None
+
+            if kill_by_id and not kill_by_id.isdigit():
+                self.update_error_response("Thread ID must be a number")
+                return
 
             # Process and validate age range input
             if kill_by_age_range:
@@ -296,13 +320,14 @@ class CommandModal(ModalScreen):
                     return
 
             # Ensure at least one parameter is provided
-            if not any([kill_by_username, kill_by_host, kill_by_age_range, kill_by_query_text]):
-                self.update_error_response("At least one parameter must be provided")
+            if not any([kill_by_id, kill_by_username, kill_by_host, kill_by_age_range, kill_by_query_text]):
+                self.update_error_response("At least Thread ID or one parameter must be provided")
                 return
 
             # Dismiss with the filter values
             self.dismiss(
                 [
+                    kill_by_id,
                     kill_by_username,
                     kill_by_host,
                     kill_by_age_range,
@@ -313,11 +338,10 @@ class CommandModal(ModalScreen):
                 ]
             )
 
-        elif self.command in {HotkeyCommands.thread_kill_by_id, HotkeyCommands.show_thread}:
-            if self.command == HotkeyCommands.show_thread:
-                if modal_input not in self.processlist_data:
-                    self.update_error_response(f"Thread ID [bold red]{modal_input}[/bold red] does not exist")
-                    return
+        elif self.command in {HotkeyCommands.show_thread}:
+            if modal_input not in self.processlist_data:
+                self.update_error_response(f"Thread ID [bold red]{modal_input}[/bold red] does not exist")
+                return
 
             if not modal_input.isdigit():
                 self.update_error_response("Thread ID must be a number")
@@ -359,6 +383,11 @@ class CommandModal(ModalScreen):
         error_response.display = True
         error_response.update(message)
 
-    def on_input_submitted(self):
+    @on(Input.Submitted, "Input")
+    def on_input_submitted(self, event: Input.Submitted):
         if self.command not in [HotkeyCommands.thread_filter, HotkeyCommands.thread_kill_by_parameter]:
             self.query_one("#submit", Button).press()
+
+    @on(Input.Submitted, "#kill_by_id_input")
+    def on_kill_by_id_input_submitted(self, event: Input.Submitted):
+        self.query_one("#submit", Button).press()
