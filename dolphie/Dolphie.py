@@ -237,49 +237,48 @@ class Dolphie:
         self, global_variables: Dict[str, Union[int, str]]
     ) -> Tuple[str, ConnectionSource]:
         version_comment = global_variables.get("version_comment", "").casefold()
-        basedir = global_variables.get("basedir", "").casefold()
-        aad_auth_only = global_variables.get("aad_auth_only")
-        aurora_version = global_variables.get("aurora_version")
 
-        # Identify MariaDB and its variants
-        aria_in_global_variables = any(variable.startswith("aria_") for variable in global_variables.keys())
-        if aria_in_global_variables:
-            if "rdsdb" in basedir:
+        is_mariadb = any(variable.startswith("aria_") for variable in global_variables)
+        is_rds = "rdsdb" in self.global_variables.get("basedir", "").casefold()
+        is_aurora = self.global_variables.get("aurora_version")
+        is_azure = self.global_variables.get("aad_auth_only")
+        is_galera_cluster = "cluster" in version_comment
+        is_percona = "percona" in version_comment
+
+        # MariaDB
+        if is_mariadb:
+            if is_rds:
                 return "Amazon RDS (MariaDB)", ConnectionSource.mariadb
-            if aad_auth_only:
+            if is_azure:
                 return "Azure MariaDB", ConnectionSource.mariadb
-            if "cluster" in version_comment:
+            if is_galera_cluster:
                 return "MariaDB Galera Cluster", ConnectionSource.mariadb
-
             return "MariaDB", ConnectionSource.mariadb
 
-        # Map version_comment keywords to distributions
-        distro_mappings_to_version_comment = {
-            "percona xtradb cluster": ("Percona Galera Cluster", ConnectionSource.mysql),
-            "percona server": ("Percona Server", ConnectionSource.mysql),
-        }
-        for keyword, (distro, conn_source) in distro_mappings_to_version_comment.items():
-            if keyword in version_comment:
-                return distro, conn_source
+        # Percona
+        if is_percona:
+            if is_galera_cluster:
+                return "Percona Galera Cluster", ConnectionSource.mysql
+            return "Percona Server", ConnectionSource.mysql
 
-        # Identify MySQL and its variants
-        if aurora_version:
+        # Standard MySQL
+        if is_aurora:
             return "Amazon Aurora", ConnectionSource.mysql
-        if "rdsdb" in basedir:
+        if is_rds:
             return "Amazon RDS (MySQL)", ConnectionSource.mysql
-        if aad_auth_only:
+        if is_azure:
             return "Azure MySQL", ConnectionSource.mysql
 
         return "MySQL", ConnectionSource.mysql
 
     def build_kill_query(self, thread_id: int) -> str:
-        basedir = self.global_variables.get("basedir", "").casefold()
-        aad_auth_only = self.global_variables.get("aad_auth_only")
-        aurora_version = self.global_variables.get("aurora_version")
+        is_rds = "rdsdb" in self.global_variables.get("basedir", "").casefold()
+        is_aurora = self.global_variables.get("aurora_version")
+        is_azure = self.global_variables.get("aad_auth_only")
 
-        if "rdsdb" in basedir or aurora_version:
+        if is_rds or is_aurora:
             return f"CALL mysql.rds_kill({thread_id})"
-        if aad_auth_only:
+        if is_azure:
             return f"CALL mysql.az_kill({thread_id})"
         if self.connection_source == ConnectionSource.proxysql:
             return f"KILL CONNECTION {thread_id}"
