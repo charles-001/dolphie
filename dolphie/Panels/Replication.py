@@ -4,6 +4,7 @@ import socket
 from rich.align import Align
 from rich.style import Style
 from rich.table import Table
+from textual._node_list import DuplicateIds
 from textual.containers import ScrollableContainer
 from textual.widgets import Static
 
@@ -70,17 +71,20 @@ def create_panel(tab: Tab):
             if clusterset_name in existing_clusterset_components:
                 existing_clusterset_components[clusterset_name].update(table)
             else:
-                tab.clusterset_grid.mount(
-                    ScrollableContainer(
-                        Static(
-                            table,
-                            id=f"clusterset_{clusterset_name}_{tab.id}",
-                            classes=f"clusterset_{tab.id}",
-                        ),
-                        id=f"clusterset_container_{clusterset_name}_{tab.id}",
-                        classes=f"clusterset_container_{tab.id} clusterset_container",
+                try:
+                    tab.clusterset_grid.mount(
+                        ScrollableContainer(
+                            Static(
+                                table,
+                                id=f"clusterset_{clusterset_name}_{tab.id}",
+                                classes=f"clusterset_{tab.id}",
+                            ),
+                            id=f"clusterset_container_{clusterset_name}_{tab.id}",
+                            classes=f"clusterset_container_{tab.id} clusterset_container",
+                        )
                     )
-                )
+                except DuplicateIds:
+                    tab.dolphie.app.notify(f"Failed to mount clusterset [highlight]{clusterset_name}", severity="error")
 
         # Remove ClusterSets that no longer exist
         for clusterset_name, container in existing_clusterset_components.items():
@@ -137,17 +141,20 @@ def create_panel(tab: Tab):
             if member_id in existing_member_components:
                 existing_member_components[member_id].update(member_table)
             else:
-                tab.group_replication_grid.mount(
-                    ScrollableContainer(
-                        Static(
-                            member_table,
-                            id=f"member_{member_id}_{tab.id}",
-                            classes=f"member_{tab.id}",
-                        ),
-                        id=f"member_container_{member_id}_{tab.id}",
-                        classes=f"member_container_{tab.id} member_container",
+                try:
+                    tab.group_replication_grid.mount(
+                        ScrollableContainer(
+                            Static(
+                                member_table,
+                                id=f"member_{member_id}_{tab.id}",
+                                classes=f"member_{tab.id}",
+                            ),
+                            id=f"member_container_{member_id}_{tab.id}",
+                            classes=f"member_container_{tab.id} member_container",
+                        )
                     )
-                )
+                except DuplicateIds:
+                    tab.dolphie.app.notify(f"Failed to mount member [highlight]{member_info['host']}", severity="error")
 
         # Remove members that no longer exist
         for member_id, container in existing_member_components.items():
@@ -262,17 +269,22 @@ def create_replica_panel(tab: Tab):
         if replica.row_key in existing_replica_components:
             existing_replica_components[replica.row_key].update(replica.table)
         else:
-            tab.replicas_grid.mount(
-                ScrollableContainer(
-                    Static(
-                        replica.table,
-                        id=f"replica_{replica.row_key}_{tab.id}",
-                        classes=f"replica_{tab.id}",
-                    ),
-                    id=f"replica_container_{replica.row_key}_{tab.id}",
-                    classes=f"replica_container_{tab.id} replica_container",
+            try:
+                tab.replicas_grid.mount(
+                    ScrollableContainer(
+                        Static(
+                            replica.table,
+                            id=f"replica_{replica.row_key}_{tab.id}",
+                            classes=f"replica_{tab.id}",
+                        ),
+                        id=f"replica_container_{replica.row_key}_{tab.id}",
+                        classes=f"replica_container_{tab.id} replica_container",
+                    )
                 )
-            )
+            except DuplicateIds:
+                tab.dolphie.app.notify(
+                    f"Failed to mount replica [highlight]{replica.host}:{replica.port}", severity="error"
+                )
 
     # Remove replicas that no longer exist
     for replica_id, replica_container in existing_replica_components.items():

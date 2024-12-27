@@ -195,6 +195,11 @@ class Dolphie:
     def configure_mysql_variables(self):
         global_variables = self.global_variables
 
+        # Galera cluster check
+        self.galera_cluster = global_variables.get("wsrep_on") == "ON" or bool(
+            global_variables.get("wsrep_cluster_address")
+        )
+
         self.host_distro, self.connection_source_alt = self.determine_distro_and_connection_source_alt(global_variables)
 
         # For RDS and Azure, we will use the host specified to connect with since hostname isn't related to the endpoint
@@ -214,11 +219,6 @@ class Dolphie:
         self.performance_schema_enabled = global_variables.get("performance_schema") == "ON"
         self.use_performance_schema_for_processlist = self.performance_schema_enabled
 
-        # Galera cluster check
-        self.galera_cluster = global_variables.get("wsrep_on") == "ON" or bool(
-            global_variables.get("wsrep_cluster_address")
-        )
-
         # Cluster type detection
         cluster_type = self.group_replication_data.get("cluster_type")
         if cluster_type == "ar":
@@ -236,14 +236,12 @@ class Dolphie:
     def determine_distro_and_connection_source_alt(
         self, global_variables: Dict[str, Union[int, str]]
     ) -> Tuple[str, ConnectionSource]:
-        version_comment = global_variables.get("version_comment", "").casefold()
-
+        is_percona = "percona" in global_variables.get("version_comment", "").casefold()
         is_mariadb = any(variable.startswith("aria_") for variable in global_variables)
         is_rds = "rdsdb" in self.global_variables.get("basedir", "").casefold()
         is_aurora = self.global_variables.get("aurora_version")
         is_azure = self.global_variables.get("aad_auth_only")
-        is_galera_cluster = "cluster" in version_comment
-        is_percona = "percona" in version_comment
+        is_galera_cluster = self.galera_cluster
 
         # MariaDB
         if is_mariadb:
