@@ -52,9 +52,10 @@ def create_panel(tab: Tab) -> Table:
     table_information.add_column()
     table_information.add_column(min_width=25, max_width=35)
     table_information.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
-    table_information.add_row(
-        "[label]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
-    )
+    if global_variables.get("version_compile_os") and global_variables.get("version_compile_machine"):
+        table_information.add_row(
+            "[label]", "%s (%s)" % (global_variables["version_compile_os"], global_variables["version_compile_machine"])
+        )
     table_information.add_row("[label]Type", host_type)
     table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
     table_information.add_row("[label]Replicas", "%s" % replicas)
@@ -152,9 +153,9 @@ def create_panel(tab: Tab) -> Table:
     table_primary = Table(show_header=False, box=None, title="Binary Log", title_style=table_title_style)
 
     if global_variables.get("log_bin") == "OFF" or not binlog_status.get("File"):
-        table_primary.add_column(justify="center")
-        table_primary.add_row("\n\n\n[b][label]Disabled")
+        tab.dashboard_section_3.display = False
     else:
+        tab.dashboard_section_3.display = True
         table_primary.add_column()
         table_primary.add_column(max_width=40)
 
@@ -193,7 +194,7 @@ def create_panel(tab: Tab) -> Table:
             table_primary.add_row("[label]GTID", global_variables.get("gtid_mode", "N/A"))
             table_primary.add_row("[label]Compression", global_variables.get("binlog_transaction_compression", "N/A"))
 
-    tab.dashboard_section_3.update(table_primary)
+        tab.dashboard_section_3.update(table_primary)
 
     ###############
     # Replication #

@@ -208,7 +208,8 @@ class Dolphie:
         elif ".mysql.database.azure.com" in self.host:
             self.host_with_port = f"{self.host.split('.mysql.database.azure.com')[0]}:{self.port}"
         else:
-            self.host_with_port = f"{global_variables.get('hostname')}:{self.port}"
+            mysql_hostname = global_variables.get("hostname")
+            self.host_with_port = f"{mysql_hostname}:{self.port}" if mysql_hostname else f"{self.host}:{self.port}"
 
         # Server UUID configuration (mainly for replication & errant transactions)
         self.server_uuid = global_variables.get("server_uuid")
