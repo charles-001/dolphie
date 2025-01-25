@@ -359,6 +359,26 @@ class MySQLQueries:
         WHERE
             COUNT_STAR > 0
     """
+    table_statements_summary_by_digest: str = """
+        SELECT
+            `performance_schema`.`events_statements_summary_by_digest`.`digest`,
+            `performance_schema`.`events_statements_summary_by_digest`.`digest_text`,
+            `performance_schema`.`events_statements_summary_by_digest`.`query_sample_text`,
+            `performance_schema`.`events_statements_summary_by_digest`.`schema_name`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_no_good_index_used`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_no_index_used`,
+            `performance_schema`.`events_statements_summary_by_digest`.`count_star`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_errors`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_warnings`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_timer_wait`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_lock_time`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_cpu_time`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_rows_sent`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_rows_examined`,
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_rows_affected`
+        FROM     `performance_schema`.`events_statements_summary_by_digest`
+        ORDER BY `performance_schema`.`events_statements_summary_by_digest`.`sum_timer_wait` DESC
+    """
     metadata_locks: str = """
         SELECT
             OBJECT_INSTANCE_BEGIN AS id,

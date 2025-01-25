@@ -15,6 +15,7 @@ class CommandManager:
                     "5": {"human_key": "5", "description": "Toggle panel Metadata Locks"},
                     "6": {"human_key": "6", "description": "Toggle panel DDLs"},
                     "7": {"human_key": "7", "description": "Toggle panel Performance Schema Metrics"},
+                    "8": {"human_key": "7", "description": "Toggle panel Statements Summary Metrics"},
                     "placeholder_1": {"human_key": "", "description": ""},
                     "grave_accent": {"human_key": "`", "description": "Open tab setup"},
                     "plus": {"human_key": "+", "description": "Create a new tab"},
@@ -25,6 +26,7 @@ class CommandManager:
                     "ctrl+d": {"human_key": "ctrl+d", "description": "Switch to the next tab"},
                     "placeholder_2": {"human_key": "", "description": ""},
                     "a": {"human_key": "a", "description": "Toggle additional processlist columns"},
+                    "A": {"human_key": "A", "description": "Toggle statements summary query digest text/sample text"},
                     "C": {
                         "human_key": "C",
                         "description": "Toggle display of threads with concurrency tickets in Processlist panel",
@@ -138,6 +140,7 @@ class CommandManager:
                     "4": {"human_key": "4", "description": "Toggle panel Replication/Replicas"},
                     "5": {"human_key": "5", "description": "Toggle panel Metadata Locks"},
                     "7": {"human_key": "7", "description": "Toggle panel Performance Schema Metrics"},
+                    "8": {"human_key": "7", "description": "Toggle panel Statements Summary Metrics"},
                     "placeholder_1": {"human_key": "", "description": ""},
                     "grave_accent": {"human_key": "`", "description": "Open tab setup"},
                     "plus": {"human_key": "+", "description": "Create a new tab"},
@@ -147,6 +150,7 @@ class CommandManager:
                     "ctrl+d": {"human_key": "ctrl+d", "description": "Switch to the next tab"},
                     "placeholder_2": {"human_key": "", "description": ""},
                     "a": {"human_key": "a", "description": "Toggle additional processlist columns"},
+                    "A": {"human_key": "A", "description": "Toggle statements summary query digest text/sample text"},
                     "C": {
                         "human_key": "C",
                         "description": "Toggle display of concurrency threads with tickets in Processlist panel",

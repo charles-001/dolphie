@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional
 
 import pymysql
 from rich.table import Table
@@ -91,6 +91,7 @@ class Panels:
         self.metadata_locks = Panel("metadata_locks", "Metadata Locks", "⁵")
         self.ddl = Panel("ddl", "DDL", "⁶")
         self.pfs_metrics = Panel("pfs_metrics", "Performance Schema Metrics", "⁷")
+        self.statements_summary = Panel("statements_summary", "Statements Summary", "⁸")
         self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary", "Hostgroup Summary", "⁴")
         self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules", "Query Rules", "⁵")
         self.proxysql_command_stats = Panel("proxysql_command_stats", "Command Stats", "⁶")
@@ -240,3 +241,31 @@ class HotkeyCommands:
     refresh_interval = "refresh_interval"
     replay_seek = "replay_seek"
     maximize_panel = "maximize_panel"
+
+
+@dataclass
+class StatementsSummaryMetricsColumn:
+    name: str
+    field: str
+    width: Optional[int]
+    format_number: bool
+    visible: bool
+
+
+@dataclass
+class StatementsSummaryMetricsRow:
+    digest: str
+    digest_text: str
+    query_sample_text: str
+    schema_name: str
+    sum_no_good_index_used: int
+    sum_no_index_used: int
+    count_star: int
+    sum_errors: int
+    sum_warnings: int
+    sum_timer_wait: float
+    sum_lock_time: float
+    sum_cpu_time: float
+    sum_rows_sent: int
+    sum_rows_examined: int
+    sum_rows_affected: int

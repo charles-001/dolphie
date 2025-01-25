@@ -53,6 +53,7 @@ from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
 from dolphie.Modules.ReplayManager import ReplayManager
+from dolphie.Modules.StatementsSummaryMetrics import StatementsSummaryMetrics
 from dolphie.Modules.TabManager import Tab, TabManager
 from dolphie.Panels import DDL as DDLPanel
 from dolphie.Panels import Dashboard as DashboardPanel
@@ -65,6 +66,8 @@ from dolphie.Panels import ProxySQLHostgroupSummary as ProxySQLHostgroupSummaryP
 from dolphie.Panels import ProxySQLProcesslist as ProxySQLProcesslistPanel
 from dolphie.Panels import ProxySQLQueryRules as ProxySQLQueryRulesPanel
 from dolphie.Panels import Replication as ReplicationPanel
+from dolphie.Panels import StatementsSummaryMetrics as StatementsSummaryPanel
+from dolphie.Panels.StatementsSummaryMetrics import toggle_query_digest_text_or_sample
 from dolphie.Widgets.CommandModal import CommandModal
 from dolphie.Widgets.CommandScreen import CommandScreen
 from dolphie.Widgets.EventLogScreen import EventLog
@@ -244,6 +247,8 @@ class DolphieApp(App):
             dolphie.group_replication_data = replay_event_data.group_replication_data
             dolphie.file_io_data = replay_event_data.file_io_data
             dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
+            dolphie.statements_summary_data = StatementsSummaryMetrics([])
+            dolphie.statements_summary_data.data_to_display = replay_event_data.statements_summary_data
 
             dolphie.pfs_metrics_last_reset_time = dolphie.global_status.get("pfs_metrics_last_reset_time", 0)
 
@@ -320,6 +325,7 @@ class DolphieApp(App):
                 metadata_lock_metrics=dolphie.metadata_locks,
                 replication_status=dolphie.replication_status,
                 proxysql_command_stats=dolphie.proxysql_command_stats,
+                statements_summary_metrics=dolphie.statements_summary_metrics,
             )
 
             # We initalize this here so we have the host version from process_{mysql,proxysql}_data
@@ -637,6 +643,17 @@ class DolphieApp(App):
                         dolphie.table_io_waits_data = PerformanceSchemaMetrics(table_io_waits_data)
                     else:
                         dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
+
+                if dolphie.panels.statements_summary.visible or dolphie.record_for_replay:
+                    dolphie.main_db_connection.execute(MySQLQueries.table_statements_summary_by_digest)
+                    query_data = dolphie.main_db_connection.fetchall()
+                    if not dolphie.statements_summary_data:
+                        dolphie.statements_summary_data = StatementsSummaryMetrics(query_data)
+                    else:
+                        dolphie.statements_summary_data.update(query_data)
+
+                dolphie.main_db_connection.execute(MySQLQueries.table_statements_summary_by_digest)
+                dolphie.statements_summary_metrics = dolphie.main_db_connection.fetchall()
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -1064,6 +1081,7 @@ class DolphieApp(App):
             tab.dolphie.panels.metadata_locks.name: {ConnectionSource.mysql: MetadataLocksPanel},
             tab.dolphie.panels.ddl.name: {ConnectionSource.mysql: DDLPanel},
             tab.dolphie.panels.pfs_metrics.name: {ConnectionSource.mysql: PerformanceSchemaMetricsPanel},
+            tab.dolphie.panels.statements_summary.name: {ConnectionSource.mysql: StatementsSummaryPanel},
             tab.dolphie.panels.proxysql_hostgroup_summary.name: {
                 ConnectionSource.proxysql: ProxySQLHostgroupSummaryPanel
             },
@@ -1085,6 +1103,10 @@ class DolphieApp(App):
                 # When replication panel status is changed, we need to refresh the dashboard panel as well since
                 # it adds/removes it from there
                 DashboardPanel.create_panel(tab)
+
+            if panel_name == tab.dolphie.panels.statements_summary.name and tab.dolphie.toggle_statements_summary_query_digest_text_sample:
+                StatementsSummaryPanel.toggle_query_digest_text_or_sample(tab)
+                tab.dolphie.toggle_statements_summary_query_digest_text_sample = False
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):
@@ -1222,6 +1244,10 @@ class DolphieApp(App):
             else:
                 self.notify("Performance Schema Metrics panel requires MySQL 5.7+ with Performance Schema enabled")
 
+        elif key == "8":
+            if dolphie.is_mysql_version_at_least("5.7"):
+                self.toggle_panel(dolphie.panels.statements_summary.name)
+
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)
 
@@ -1282,6 +1308,9 @@ class DolphieApp(App):
                 self.notify("Processlist will now show additional columns")
 
             self.force_refresh_for_replay(need_current_data=True)
+
+        elif key == "A":
+            dolphie.toggle_statements_summary_query_digest_text_sample = True
 
         elif key == "c":
             dolphie.user_filter = None

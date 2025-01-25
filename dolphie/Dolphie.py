@@ -17,6 +17,7 @@ from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
+from dolphie.Modules.StatementsSummaryMetrics import StatementsSummaryMetrics
 from dolphie.Modules.Queries import MySQLQueries
 
 
@@ -42,6 +43,7 @@ class Dolphie:
         self.show_trxs_only = config.show_trxs_only
         self.show_threads_with_concurrency_tickets = False
         self.show_additional_query_columns = config.show_additional_query_columns
+        self.toggle_statements_summary_query_digest_text_sample = False
         self.heartbeat_table = config.heartbeat_table
         self.tab_setup_available_hosts = config.tab_setup_available_hosts
         self.startup_panels = config.startup_panels
@@ -88,6 +90,7 @@ class Dolphie:
         self.metadata_locks: List[Dict[str, Union[int, str]]] = []
         self.ddl: List[Dict[str, Union[int, str]]] = []
         self.disk_io_metrics: Dict[str, Union[int, str]] = {}
+        self.statements_summary_metrics: Dict[str, Union[int, str]] = {}
         self.system_utilization: Dict[str, Union[int, str]] = {}
         self.host_cache: Dict[str, str] = {}
         self.proxysql_hostgroup_summary: List[Dict[str, str]] = []
@@ -155,6 +158,7 @@ class Dolphie:
 
         self.file_io_data: PerformanceSchemaMetrics = None
         self.table_io_waits_data: PerformanceSchemaMetrics = None
+        self.statements_summary_data: StatementsSummaryMetrics = None
 
         if self.record_for_replay or self.panels.pfs_metrics.visible:
             self.pfs_metrics_last_reset_time: datetime = datetime.now()

@@ -857,6 +857,7 @@ class MetricManager:
         disk_io_metrics: Dict[str, int] = {},
         metadata_lock_metrics: Dict[str, int] = {},
         replication_status: Dict[str, Union[int, str]] = {},
+        statements_summary_metrics: Dict[str, int] = {},
     ):
         self.worker_start_time = worker_start_time
         self.polling_latency = polling_latency
@@ -867,6 +868,7 @@ class MetricManager:
         self.disk_io_metrics = disk_io_metrics
         self.metadata_lock_metrics = metadata_lock_metrics
         self.replication_status = replication_status
+        self.statements_summary_metrics = statements_summary_metrics
         self.proxysql_total_command_stats = {}
         self.proxysql_select_command_stats = {}
 
