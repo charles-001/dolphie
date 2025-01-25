@@ -34,17 +34,18 @@ def create_panel(tab: Tab):
             column_width = column_data.width
             tab.statements_summary_datatable.add_column(column_name, key=column_name, width=column_width)
 
-    for digest, row in tab.dolphie.statements_summary_data.data_to_display.items():
-        row_id = digest
-        if not row_id in tab.statements_summary_datatable.rows:
-            row_values = []
-            for c in visible_columns:
-                row_values.append(getattr(row, c.field))
+    if tab.dolphie.statements_summary_data is not None:
+        for digest, row in tab.dolphie.statements_summary_data.data_to_display.items():
+            row_id = digest
+            if not row_id in tab.statements_summary_datatable.rows:
+                row_values = []
+                for c in visible_columns:
+                    row_values.append(getattr(row, c.field))
 
-            tab.statements_summary_datatable.add_row(*row_values, key=row_id)
-        else:
-            for c in visible_columns:
-                tab.statements_summary_datatable.update_cell(row_id,c.name, getattr(row, c.field))
+                tab.statements_summary_datatable.add_row(*row_values, key=row_id)
+            else:
+                for c in visible_columns:
+                    tab.statements_summary_datatable.update_cell(row_id,c.name, getattr(row, c.field))
 
 
     title = (
