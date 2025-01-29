@@ -1,4 +1,5 @@
 from dolphie.DataTypes import StatementsSummaryMetricsColumn
+from dolphie.Modules.Functions import format_query
 from dolphie.Modules.TabManager import Tab
 
 COLUMNS = [
@@ -36,16 +37,18 @@ def create_panel(tab: Tab):
 
     if tab.dolphie.statements_summary_data is not None:
         for digest, row in tab.dolphie.statements_summary_data.data_to_display.items():
-            row_id = digest
-            if not row_id in tab.statements_summary_datatable.rows:
+            if not digest in tab.statements_summary_datatable.rows:
                 row_values = []
                 for c in visible_columns:
-                    row_values.append(getattr(row, c.field))
+                    value = format_query(getattr(row, c.field)) if c.field in {"digest_text", "query_sample_text"} else getattr(row, c.field)
+                    row_values.append(value)
 
-                tab.statements_summary_datatable.add_row(*row_values, key=row_id)
+                tab.statements_summary_datatable.add_row(*row_values, key=digest)
             else:
                 for c in visible_columns:
-                    tab.statements_summary_datatable.update_cell(row_id,c.name, getattr(row, c.field))
+                    update_width = True if c.field in {"digest_text", "query_sample_text"} else False
+                    value = format_query(getattr(row, c.field)) if c.field in {"digest_text", "query_sample_text"} else getattr(row, c.field)
+                    tab.statements_summary_datatable.update_cell(digest, c.name, value, update_width=update_width)
 
 
     title = (
