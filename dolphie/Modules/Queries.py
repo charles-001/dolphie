@@ -376,8 +376,10 @@ class MySQLQueries:
             `performance_schema`.`events_statements_summary_by_digest`.`sum_rows_sent`,
             `performance_schema`.`events_statements_summary_by_digest`.`sum_rows_examined`,
             `performance_schema`.`events_statements_summary_by_digest`.`sum_rows_affected`
-        FROM     `performance_schema`.`events_statements_summary_by_digest`
-        ORDER BY `performance_schema`.`events_statements_summary_by_digest`.`sum_timer_wait` DESC
+        FROM
+            `performance_schema`.`events_statements_summary_by_digest`
+        ORDER BY
+            `performance_schema`.`events_statements_summary_by_digest`.`sum_timer_wait` DESC
     """
     metadata_locks: str = """
         SELECT

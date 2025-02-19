@@ -652,9 +652,6 @@ class DolphieApp(App):
                     else:
                         dolphie.statements_summary_data.update(query_data)
 
-                dolphie.main_db_connection.execute(MySQLQueries.table_statements_summary_by_digest)
-                dolphie.statements_summary_metrics = dolphie.main_db_connection.fetchall()
-
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
 
@@ -1104,7 +1101,10 @@ class DolphieApp(App):
                 # it adds/removes it from there
                 DashboardPanel.create_panel(tab)
 
-            if panel_name == tab.dolphie.panels.statements_summary.name and tab.dolphie.toggle_statements_summary_query_digest_text_sample:
+            if (
+                panel_name == tab.dolphie.panels.statements_summary.name
+                and tab.dolphie.toggle_statements_summary_query_digest_text_sample
+            ):
                 StatementsSummaryPanel.toggle_query_digest_text_or_sample(tab)
                 tab.dolphie.toggle_statements_summary_query_digest_text_sample = False
 
