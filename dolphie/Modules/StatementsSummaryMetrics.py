@@ -45,7 +45,7 @@ class StatementsSummaryMetrics:
                 self._raw_statements_summary_data[digest] = Row(
                     row["digest"],
                     row["digest_text"],
-                    row["query_sample_text"],
+                    query_sample_text,
                     row["schema_name"],
                     0,
                     0,
