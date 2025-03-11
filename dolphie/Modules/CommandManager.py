@@ -59,7 +59,7 @@ class CommandManager:
                         "human_key": "Z",
                         "description": (
                             "Display table sizes and fragmentation for all databases - "
-                            "[yellow]Heed caution if you have a lot of tables![/yellow]"
+                            "[#f6ff8f]Heed caution if you have a lot of tables![/#f6ff8f]"
                         ),
                     },
                     "placeholder_4": {"human_key": "", "description": ""},
