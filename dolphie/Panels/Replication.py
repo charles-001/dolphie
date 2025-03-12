@@ -4,6 +4,7 @@ import socket
 from rich.align import Align
 from rich.style import Style
 from rich.table import Table
+from rich.text import Text
 from textual._node_list import DuplicateIds
 from textual.containers import ScrollableContainer
 from textual.widgets import Static
@@ -31,8 +32,10 @@ def create_panel(tab: Tab):
         tab.replication_container_title.display = True
         tab.replication_container_title.update(
             Align.center(
-                f"[b highlight]{dolphie.panels.get_key(dolphie.panels.replication.name)}[/b highlight]"
-                "[b][yellow]Replication/Replicas panel has no data to display\n"
+                Text.from_markup(
+                    f"[b highlight]{dolphie.panels.get_key(dolphie.panels.replication.name)}[/b highlight]"
+                    "[b][yellow]Replication/Replicas panel has no data to display\n"
+                )
             )
         )
     else:
@@ -47,8 +50,10 @@ def create_panel(tab: Tab):
 
         # Update the panel title
         tab.clusterset_title.update(
-            f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}ClusterSets "
-            f"([highlight]{len(dolphie.innodb_cluster_clustersets)}[/highlight])"
+            Text.from_markup(
+                f"[b]{dolphie.panels.get_key(dolphie.panels.replication.name)}ClusterSets "
+                f"([highlight]{len(dolphie.innodb_cluster_clustersets)}[/highlight])"
+            )
         )
 
         existing_clusterset_names = {clusterset["ClusterSet"] for clusterset in dolphie.innodb_cluster_clustersets}
@@ -119,9 +124,9 @@ def create_panel(tab: Tab):
             cluster_name if cluster_name else dolphie.global_variables.get("group_replication_group_name", "N/A")
         )
         tab.group_replication_title.update(
-            f"[b]{title_prefix}{cluster_title} ([highlight]{final_cluster_name}[/highlight])"
+            Text.from_markup(f"[b]{title_prefix}{cluster_title} ([highlight]{final_cluster_name}[/highlight])")
         )
-        tab.group_replication_data.update(group_replication_variables)
+        tab.group_replication_data.update(Text.from_markup(group_replication_variables))
 
         # Generate and sort member tables
         member_tables = create_group_replication_member_table(tab)
@@ -228,7 +233,7 @@ def create_panel(tab: Tab):
             replication_variables += f"[label]{setting_display_name}[/label] {value}  "
         replication_variables = replication_variables.strip()
 
-        tab.replication_variables.update(replication_variables)
+        tab.replication_variables.update(Text.from_markup(replication_variables))
 
         tab.replication_status.update(create_replication_table(tab))
 
@@ -251,7 +256,7 @@ def create_replica_panel(tab: Tab):
     # Update replicas title
     num_replicas = len(dolphie.replica_manager.available_replicas)
     title_prefix = dolphie.panels.get_key(dolphie.panels.replication.name)
-    tab.replicas_title.update(f"[b]{title_prefix}Replicas ([highlight]{num_replicas}[/highlight])")
+    tab.replicas_title.update(Text.from_markup(f"[b]{title_prefix}Replicas ([highlight]{num_replicas}[/highlight])"))
 
     # Get sorted replica connections and initialize existing replica IDs
     sorted_replicas = dolphie.replica_manager.get_sorted_replicas()

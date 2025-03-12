@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple, Union
 import psutil
 from loguru import logger
 from packaging.version import parse as parse_version
+from rich.text import Text
 from textual.app import App
 from textual.widgets import Switch
 
@@ -463,7 +464,7 @@ class Dolphie:
                                 formatted_replay_name = f"[label]{host_name}{port}[/label]"
                                 formatted_replay_name += f": [b light_blue]{file.name}[/b light_blue]"
 
-                                replay_files.append((file.path, formatted_replay_name))
+                                replay_files.append((file.path, Text.from_markup(formatted_replay_name)))
         except OSError as e:
             self.app.notify(str(e), title="Error getting replay files", severity="error")
 

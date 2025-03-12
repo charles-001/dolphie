@@ -23,12 +23,14 @@ from rich.align import Align
 from rich.console import Group
 from rich.style import Style
 from rich.table import Table
+from rich.text import Text
 from rich.theme import Theme as RichTheme
 from rich.traceback import Traceback
 from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
+from textual.theme import Theme as TextualTheme
 from textual.widgets import Button, RadioSet, Switch, TabbedContent, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
@@ -108,9 +110,7 @@ class CommandPaletteCommands(Provider):
         return {
             key: {
                 # Center the human_key based on the max length and pad spaces after it
-                "display": (
-                    f"[b highlight]{data['human_key'].center(max_key_length)}[/b highlight]  {data['description']}"
-                ),
+                "display": f"[b #91abec]{data['human_key'].center(max_key_length)}[/b #91abec]  {data['description']}",
                 "text": f"{data['human_key']} {data['description']}",
                 "command": partial(self.async_command, key),
                 "human_key": data["human_key"],
@@ -121,7 +121,7 @@ class CommandPaletteCommands(Provider):
     async def discover(self):
         for data in self.get_command_hits().values():
             yield DiscoveryHit(
-                display=data["display"],
+                display=Text.from_markup(data["display"]),
                 text=data["text"],
                 command=data["command"],
             )
@@ -361,8 +361,10 @@ class DolphieApp(App):
                     tab.replicas_container.display = True
                     tab.replicas_loading_indicator.display = True
                     tab.replicas_title.update(
-                        f"[white][b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}[/highlight]"
-                        " replicas...\n"
+                        Text.from_markup(
+                            f"[white][b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}"
+                            "[/highlight] replicas...\n"
+                        )
                     )
 
                 ReplicationPanel.fetch_replicas(tab)
@@ -1192,8 +1194,10 @@ class DolphieApp(App):
                     if not dolphie.replay_file:
                         tab.replicas_loading_indicator.display = True
                         tab.replicas_title.update(
-                            f"[white][b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}"
-                            "[/highlight] replicas...\n"
+                            Text.from_markup(
+                                f"[white][b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}"
+                                "[/highlight] replicas...\n"
+                            )
                         )
 
                 tab.toggle_replication_panel_components()

@@ -3,6 +3,7 @@ import os
 import uuid
 from typing import Dict, List
 
+from rich.text import Text
 from textual.app import App
 from textual.containers import (
     Center,
@@ -157,12 +158,14 @@ class Tab:
 
         # Update the dashboard title with the timestamp of the replay event
         self.dashboard_replay.update(
-            f"[b]Replay[/b] ([dark_gray]{os.path.basename(self.dolphie.replay_file)}[/dark_gray])"
+            Text.from_markup(f"[b]Replay[/b] ([dark_gray]{os.path.basename(self.dolphie.replay_file)}[/dark_gray])")
         )
         self.dashboard_replay_start_end.update(
-            f"{min_timestamp} [b highlight]<-[/b highlight] "
-            f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]->[/b highlight] "
-            f"{max_timestamp}"
+            Text.from_markup(
+                f"{min_timestamp} [b highlight]<-[/b highlight] "
+                f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]->[/b highlight] "
+                f"{max_timestamp}"
+            )
         )
 
         # Update the progress bar with the current replay progress
@@ -503,10 +506,18 @@ class TabManager:
         self.app.query_one("#loading_indicator").display = False
 
         panels = Panels()
-        self.app.query_one("#metric_graphs_title", Label).update(panels.get_panel_title(panels.graphs.name))
-        self.app.query_one("#replication_title", Label).update(panels.get_panel_title(panels.replication.name))
-        self.app.query_one("#pfs_metrics_title", Label).update(panels.get_panel_title(panels.pfs_metrics.name))
-        self.app.query_one("#statements_summary_title", Label).update(panels.get_panel_title(panels.statements_summary.name))
+        self.app.query_one("#metric_graphs_title", Label).update(
+            Text.from_markup(panels.get_panel_title(panels.graphs.name))
+        )
+        self.app.query_one("#replication_title", Label).update(
+            Text.from_markup(panels.get_panel_title(panels.replication.name))
+        )
+        self.app.query_one("#pfs_metrics_title", Label).update(
+            Text.from_markup(panels.get_panel_title(panels.pfs_metrics.name))
+        )
+        self.app.query_one("#statements_summary_title", Label).update(
+            Text.from_markup(panels.get_panel_title(panels.statements_summary.name))
+        )
 
         # Loop the metric instances and create the graph tabs
         metric_manager = MetricManager.MetricManager(None)
@@ -715,7 +726,7 @@ class TabManager:
             tab.name = new_name
 
             if tab.dolphie.replay_file:
-                new_name = f"[b recording][Replay][/b recording] {new_name}"
+                new_name = f"[b recording](Replay)[/b recording] {new_name}"
 
             self.host_tabs.query(TabWidget).filter("#" + tab.id)[0].label = new_name
 

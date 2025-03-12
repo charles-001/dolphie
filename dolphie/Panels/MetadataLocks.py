@@ -1,6 +1,7 @@
 from typing import Dict, List, Union
 
 from rich.syntax import Syntax
+from rich.text import Text
 from textual.widgets import DataTable
 
 from dolphie.Modules.Functions import format_query, format_time
@@ -104,8 +105,10 @@ def create_panel(tab: Tab) -> DataTable:
     metadata_locks_datatable.sort("Age", reverse=dolphie.sort_by_time_descending)
 
     tab.metadata_locks_title.update(
-        f"{dolphie.panels.get_panel_title(dolphie.panels.metadata_locks.name)} "
-        f"([highlight]{metadata_locks_datatable.row_count}[/highlight])"
+        Text.from_markup(
+            f"{dolphie.panels.get_panel_title(dolphie.panels.metadata_locks.name)} "
+            f"([highlight]{metadata_locks_datatable.row_count}[/highlight])"
+        )
     )
 
 
