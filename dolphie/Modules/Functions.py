@@ -140,6 +140,25 @@ def format_time(time: int, picoseconds=False):
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 
+def format_picoseconds(ps: int) -> str:
+    units = [
+        ("d", 24 * 60 * 60 * 1_000_000_000_000),  # days
+        ("h", 60 * 60 * 1_000_000_000_000),  # hours
+        ("m", 60 * 1_000_000_000_000),  # minutes
+        ("s", 1_000_000_000_000),  # seconds
+        ("ms", 1_000_000_000),  # milliseconds
+        ("µs", 1_000_000),  # microseconds
+        ("ns", 1_000),  # nanoseconds
+        ("ps", 1),  # picoseconds
+    ]
+
+    for unit, factor in units:
+        if ps >= factor:
+            value = ps / factor
+            return f"{value:.2f} {unit}"
+    return "0 ps"
+
+
 def load_host_cache_file(host_cache_file: str):
     host_cache = {}
     if os.path.exists(host_cache_file):

@@ -1,12 +1,12 @@
 from rich.syntax import Syntax
 
 from dolphie.DataTypes import StatementsSummaryMetricsColumn
-from dolphie.Modules.Functions import format_number, format_query
+from dolphie.Modules.Functions import format_number, format_picoseconds, format_query
 from dolphie.Modules.TabManager import Tab
 
 COLUMNS = [
     StatementsSummaryMetricsColumn("Queries", "count_star", 7, True, True),
-    StatementsSummaryMetricsColumn("Latency", "sum_timer_wait", 8, False, True),
+    StatementsSummaryMetricsColumn("Latency", "sum_timer_wait", 10, False, True),
     StatementsSummaryMetricsColumn("Lock time", "sum_lock_time", 9, False, True),
     StatementsSummaryMetricsColumn("CPU time", "sum_cpu_time", 8, False, True),
     StatementsSummaryMetricsColumn("Rows examined", "sum_rows_examined", 13, True, True),
@@ -20,6 +20,7 @@ COLUMNS = [
     StatementsSummaryMetricsColumn("Digest", "digest", 64, True, False),
     StatementsSummaryMetricsColumn("Digest text", "digest_text", None, False, True),
     StatementsSummaryMetricsColumn("Sample query", "query_sample_text", None, False, False),
+    StatementsSummaryMetricsColumn("latency_total", "sum_timer_wait", 0, False, True),
 ]
 COLUMNS_BY_FIELD = {x.field: x for x in COLUMNS}
 
@@ -43,6 +44,8 @@ def create_panel(tab: Tab):
             for column_id, (c) in enumerate(visible_columns):
                 if c.field in {"digest_text", "query_sample_text"}:
                     digest_value = format_query(getattr(row, c.field))
+                elif c.name in ("Latency", "Lock time", "CPU time"):
+                    digest_value = format_picoseconds(getattr(row, c.field))
                 elif c.format_number:
                     digest_value = format_number(getattr(row, c.field))
                 else:
@@ -89,9 +92,7 @@ def create_panel(tab: Tab):
     )
     tab.statements_summary_title.update(title)
 
-    tab.statements_summary_datatable.sort(
-        COLUMNS_BY_FIELD["sum_timer_wait"].name, reverse=tab.dolphie.sort_by_time_descending
-    )
+    tab.statements_summary_datatable.sort("latency_total", reverse=tab.dolphie.sort_by_time_descending)
 
 
 def toggle_query_digest_text_or_sample(tab: Tab):
