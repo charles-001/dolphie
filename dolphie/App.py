@@ -737,7 +737,7 @@ class DolphieApp(App):
     def refresh_screen_proxysql(self, tab: Tab):
         dolphie = tab.dolphie
 
-        if tab.loading_indicator.display or dolphie.replay_file:
+        if tab.loading_indicator.display:
             tab.loading_indicator.display = False
 
         # Loop each panel and refresh it
@@ -767,9 +767,8 @@ class DolphieApp(App):
     def refresh_screen_mysql(self, tab: Tab):
         dolphie = tab.dolphie
 
-        if tab.loading_indicator.display or dolphie.replay_file:
+        if tab.loading_indicator.display:
             tab.loading_indicator.display = False
-            tab.refresh_replay_dashboard_section()
 
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
@@ -787,6 +786,8 @@ class DolphieApp(App):
 
         # Refresh the graph(s) for the selected tab
         self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
+
+        tab.refresh_replay_dashboard_section()
 
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
