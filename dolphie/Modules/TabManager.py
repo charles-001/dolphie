@@ -170,6 +170,7 @@ class Tab:
             current_position = 0
         else:
             current_position = self.replay_manager.current_replay_id - self.replay_manager.min_replay_id + 1
+
         self.dashboard_replay_progressbar.update(
             progress=current_position,
             total=self.replay_manager.total_replay_rows,
@@ -178,10 +179,12 @@ class Tab:
     def toggle_entities_displays(self):
         if self.dolphie.system_utilization:
             self.dashboard_section_6.display = True
-            self.metric_graph_tabs.show_tab("graph_tab_system")
+            if not self.metric_graph_tabs.get_tab("graph_tab_system").display:
+                self.metric_graph_tabs.show_tab("graph_tab_system")
         else:
             self.dashboard_section_6.display = False
-            self.metric_graph_tabs.hide_tab("graph_tab_system")
+            if self.metric_graph_tabs.get_tab("graph_tab_system").display:
+                self.metric_graph_tabs.hide_tab("graph_tab_system")
 
         if self.dolphie.connection_source == ConnectionSource.mysql:
             if self.dolphie.replication_status and not self.dolphie.panels.replication.visible:
@@ -190,21 +193,28 @@ class Tab:
                 self.dashboard_section_5.display = False
 
             if self.dolphie.replication_status:
-                self.metric_graph_tabs.show_tab("graph_tab_replication_lag")
+                if not self.metric_graph_tabs.get_tab("graph_tab_replication_lag").display:
+                    self.metric_graph_tabs.show_tab("graph_tab_replication_lag")
             else:
-                self.metric_graph_tabs.hide_tab("graph_tab_replication_lag")
+                if self.metric_graph_tabs.get_tab("graph_tab_replication_lag").display:
+                    self.metric_graph_tabs.hide_tab("graph_tab_replication_lag")
 
             if self.dolphie.global_variables.get("innodb_adaptive_hash_index") == "OFF":
-                self.metric_graph_tabs.hide_tab("graph_tab_adaptive_hash_index")
+                if self.metric_graph_tabs.get_tab("graph_tab_adaptive_hash_index").display:
+                    self.metric_graph_tabs.hide_tab("graph_tab_adaptive_hash_index")
             else:
-                self.metric_graph_tabs.show_tab("graph_tab_adaptive_hash_index")
+                if not self.metric_graph_tabs.get_tab("graph_tab_adaptive_hash_index").display:
+                    self.metric_graph_tabs.show_tab("graph_tab_adaptive_hash_index")
 
             if (
                 self.dolphie.metadata_locks_enabled and self.dolphie.panels.metadata_locks.visible
             ) or self.dolphie.replay_file:
-                self.metric_graph_tabs.show_tab("graph_tab_locks")
+                if not self.metric_graph_tabs.get_tab("graph_tab_locks").display:
+                    self.metric_graph_tabs.show_tab("graph_tab_locks")
             else:
-                self.metric_graph_tabs.hide_tab("graph_tab_locks")
+                if self.metric_graph_tabs.get_tab("graph_tab_locks").display:
+                    self.metric_graph_tabs.hide_tab("graph_tab_locks")
+
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             self.dashboard_section_5.display = False
 
@@ -581,7 +591,7 @@ class TabManager:
             TabPane(
                 "Table I/O Waits Summary",
                 Label(
-                    ":bulb: [highlight]Format for each metric: Wait time (Operations count)",
+                    Text.from_markup(":bulb: [highlight]Format for each metric: Wait time (Operations count)"),
                     id="pfs_metrics_format",
                 ),
                 DataTable(id="pfs_metrics_table_io_waits_datatable", show_cursor=False),
@@ -714,8 +724,11 @@ class TabManager:
             tab.name = new_name
 
             if tab.dolphie.replay_file:
-                new_name = f"[b recording](Replay)[/b recording] {new_name}"
+                new_name = f"[b recording][Replay][/b recording] {new_name}"
 
+            # self.host_tabs.query(TabWidget).filter("#" + tab.id)[0].label = Content.from_rich_text(
+            #     new_name, console=self.app.console
+            # )
             self.host_tabs.query(TabWidget).filter("#" + tab.id)[0].label = new_name
 
     def switch_tab(self, tab_id: int, set_active: bool = True):

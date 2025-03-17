@@ -30,7 +30,6 @@ from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
-from textual.theme import Theme as TextualTheme
 from textual.widgets import Button, RadioSet, Switch, TabbedContent, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
@@ -369,6 +368,9 @@ class DolphieApp(App):
             dolphie.replica_manager.remove_all_replicas()
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
+        if event.state not in [WorkerState.SUCCESS, WorkerState.CANCELLED]:
+            return
+
         tab = self.tab_manager.get_tab(event.worker.name)
         if not tab:
             return
@@ -397,6 +399,7 @@ class DolphieApp(App):
 
                 if not tab.main_container.display:
                     tab.toggle_metric_graph_tabs_display()
+                    tab.layout_graphs()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -463,6 +466,7 @@ class DolphieApp(App):
 
                 if not tab.main_container.display:
                     tab.toggle_metric_graph_tabs_display()
+                    tab.layout_graphs()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.refresh_screen_mysql(tab)
@@ -765,7 +769,7 @@ class DolphieApp(App):
 
         if tab.loading_indicator.display or dolphie.replay_file:
             tab.loading_indicator.display = False
-            tab.layout_graphs()
+            tab.refresh_replay_dashboard_section()
 
         # Loop each panel and refresh it
         for panel in dolphie.panels.get_all_panels():
@@ -783,8 +787,6 @@ class DolphieApp(App):
 
         # Refresh the graph(s) for the selected tab
         self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
-
-        tab.refresh_replay_dashboard_section()
 
         # We take a snapshot of the processlist to be used for commands
         # since the data can change after a key is pressed
@@ -1009,7 +1011,7 @@ class DolphieApp(App):
         stat_data = {}
 
         for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
-            if metric_instance.tab_name == metric_tab_name:
+            if metric_tab_name == metric_instance.tab_name:
                 number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
                 for metric_name, metric_data in metric_instance.__dict__.items():
                     if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
