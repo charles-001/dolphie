@@ -131,6 +131,9 @@ TopBar {
     content-align: center middle;
 }
 
+#statements_summary_data {
+    margin-top: 1;
+}
 .dashboard_replay {
     height: auto;
     width: 65;

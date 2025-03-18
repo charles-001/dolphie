@@ -3,11 +3,12 @@ from typing import Any, Dict, List
 
 
 class PerformanceSchemaMetrics:
-    def __init__(self, query_data: List[Dict[str, Any]], combine_data: bool = False):
-        self.combine_data = combine_data
+    def __init__(self, query_data: List[Dict[str, Any]], metric_name: str, metric_key: str):
+        self.metric_name = metric_name
+        self.metric_key = metric_key
         self.filtered_data: Dict[str, Dict[str, Dict[str, int]]] = {}
         self.internal_data: Dict[str, Dict[str, Dict[str, Any]]] = {
-            row["NAME"]: {
+            row[self.metric_key]: {
                 "event_name": row.get("EVENT_NAME"),
                 "metrics": {
                     metric: {"total": value, "delta": 0} for metric, value in row.items() if isinstance(value, int)
@@ -31,12 +32,12 @@ class PerformanceSchemaMetrics:
 
     def update_internal_data(self, query_data: List[Dict[str, int]]):
         # Track instances and remove missing ones
-        current_instance_names = {row["NAME"] for row in query_data}
+        current_instance_names = {row[self.metric_key] for row in query_data}
         instances_to_remove = set(self.internal_data) - current_instance_names
 
         # Process current query data
         for row in query_data:
-            instance_name = row["NAME"]
+            instance_name = row[self.metric_key]
             metrics = {metric: value for metric, value in row.items() if isinstance(value, int)}
 
             # Initialize instance in internal_data if not present
@@ -80,6 +81,14 @@ class PerformanceSchemaMetrics:
                     else:
                         self.filtered_data[instance_name][metric] = {"t": total}
 
+                    if (
+                        self.metric_name == "statements_summary"
+                        and "schema_name" not in self.filtered_data[instance_name]
+                    ):
+                        self.filtered_data[instance_name]["schema_name"] = row.get("schema_name")
+                        self.filtered_data[instance_name]["digest_text"] = row.get("digest_text")
+                        self.filtered_data[instance_name]["query_sample_text"] = row.get("query_sample_text")
+
             if all_deltas_zero:
                 self.filtered_data.pop(instance_name, None)
 
@@ -87,7 +96,7 @@ class PerformanceSchemaMetrics:
         for instance_name in instances_to_remove:
             del self.internal_data[instance_name]
 
-        if self.combine_data:
+        if self.metric_name == "file_io":
             self.aggregate_and_combine_data()
 
     def aggregate_and_combine_data(self):

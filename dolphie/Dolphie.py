@@ -19,7 +19,6 @@ from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries
-from dolphie.Modules.StatementsSummaryMetrics import StatementsSummaryMetrics
 
 
 class Dolphie:
@@ -159,7 +158,7 @@ class Dolphie:
 
         self.file_io_data: PerformanceSchemaMetrics = None
         self.table_io_waits_data: PerformanceSchemaMetrics = None
-        self.statements_summary_data: StatementsSummaryMetrics = None
+        self.statements_summary_data: PerformanceSchemaMetrics = None
 
         if self.record_for_replay or self.panels.pfs_metrics.visible:
             self.pfs_metrics_last_reset_time: datetime = datetime.now()

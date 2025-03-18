@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Union
 
 import pymysql
 from rich.table import Table
@@ -241,30 +241,3 @@ class HotkeyCommands:
     refresh_interval = "refresh_interval"
     replay_seek = "replay_seek"
     maximize_panel = "maximize_panel"
-
-
-@dataclass
-class StatementsSummaryMetricsColumn:
-    name: str
-    field: str
-    width: Optional[int]
-    format_number: bool
-
-
-@dataclass
-class StatementsSummaryMetricsRow:
-    digest: str
-    digest_text: str
-    query_sample_text: str
-    schema_name: str
-    sum_no_good_index_used: int
-    sum_no_index_used: int
-    count_star: int
-    sum_errors: int
-    sum_warnings: int
-    sum_timer_wait: float
-    sum_lock_time: float
-    sum_cpu_time: float
-    sum_rows_sent: int
-    sum_rows_examined: int
-    sum_rows_affected: int

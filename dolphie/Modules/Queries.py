@@ -328,7 +328,7 @@ class MySQLQueries:
     """
     file_summary_by_instance: str = """
         SELECT
-            FILE_NAME AS NAME,
+            FILE_NAME,
             EVENT_NAME,
             SUM_TIMER_WAIT,
             COUNT_READ,
@@ -343,7 +343,7 @@ class MySQLQueries:
     """
     table_io_waits_summary_by_table: str = """
         SELECT
-            CONCAT(OBJECT_SCHEMA,'.', OBJECT_NAME) AS NAME,
+            CONCAT(OBJECT_SCHEMA,'.', OBJECT_NAME) AS OBJECT_TABLE,
             COUNT_STAR,
             SUM_TIMER_WAIT,
             COUNT_FETCH,
@@ -361,26 +361,27 @@ class MySQLQueries:
     """
     table_statements_summary_by_digest: str = """
         SELECT
-            `performance_schema`.`events_statements_summary_by_digest`.`digest`,
-            `performance_schema`.`events_statements_summary_by_digest`.`digest_text`,
-            `performance_schema`.`events_statements_summary_by_digest`.`query_sample_text`,
-            `performance_schema`.`events_statements_summary_by_digest`.`schema_name`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_no_good_index_used`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_no_index_used`,
-            `performance_schema`.`events_statements_summary_by_digest`.`count_star`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_errors`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_warnings`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_timer_wait`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_lock_time`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_cpu_time`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_rows_sent`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_rows_examined`,
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_rows_affected`
+            `digest`,
+            ANY_VALUE(`digest_text`) AS digest_text,
+            ANY_VALUE(`query_sample_text`) AS query_sample_text,
+            ANY_VALUE(`schema_name`) AS schema_name,
+            CONVERT(SUM(`sum_no_good_index_used`), UNSIGNED) AS sum_no_good_index_used,
+            CONVERT(SUM(`sum_no_index_used`), UNSIGNED) AS sum_no_index_used,
+            CONVERT(SUM(`count_star`), UNSIGNED) AS count_star,
+            CONVERT(SUM(`sum_errors`), UNSIGNED) AS sum_errors,
+            CONVERT(SUM(`sum_warnings`), UNSIGNED) AS sum_warnings,
+            CONVERT(SUM(`sum_timer_wait`), UNSIGNED) AS sum_timer_wait,
+            CONVERT(SUM(`sum_lock_time`), UNSIGNED) AS sum_lock_time,
+            CONVERT(SUM(`sum_rows_sent`), UNSIGNED) AS sum_rows_sent,
+            CONVERT(SUM(`sum_rows_examined`), UNSIGNED) AS sum_rows_examined,
+            CONVERT(SUM(`sum_rows_affected`), UNSIGNED) AS sum_rows_affected
         FROM
             `performance_schema`.`events_statements_summary_by_digest`
+        GROUP BY
+            `digest`
         ORDER BY
-            `performance_schema`.`events_statements_summary_by_digest`.`sum_timer_wait` DESC,
-            `performance_schema`.`events_statements_summary_by_digest`.`last_seen` DESC
+            SUM(`sum_timer_wait`) DESC,
+            MAX(`last_seen`) DESC;
     """
     metadata_locks: str = """
         SELECT

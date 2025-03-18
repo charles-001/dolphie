@@ -155,7 +155,7 @@ def format_picoseconds(ps: int) -> str:
     for unit, factor in units:
         if ps >= factor:
             value = ps / factor
-            return f"{value:.2f} {unit}"
+            return f"{value:.2f} [dark_gray]{unit}"
     return "0 ps"
 
 

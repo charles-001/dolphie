@@ -99,6 +99,7 @@ class Tab:
         self.processlist_datatable = app.query_one("#processlist_data", DataTable)
         self.statements_summary_title = app.query_one("#statements_summary_title", Label)
         self.statements_summary_datatable = app.query_one("#statements_summary_data", DataTable)
+        self.statements_summary_radio_set = app.query_one("#statements_summary_radio_set", RadioSet)
         self.metadata_locks_title = app.query_one("#metadata_locks_title", Label)
         self.metadata_locks_datatable = app.query_one("#metadata_locks_datatable", DataTable)
         self.proxysql_hostgroup_summary_title = app.query_one("#proxysql_hostgroup_summary_title", Static)
@@ -493,6 +494,15 @@ class TabManager:
                 ),
                 Container(
                     Label(id="statements_summary_title"),
+                    RadioSet(
+                        *(
+                            [
+                                RadioButton("Delta since panel opened", id="statements_summarys_delta", value=True),
+                                RadioButton("Total since MySQL restart", id="statements_summary_total"),
+                            ]
+                        ),
+                        id="statements_summary_radio_set",
+                    ),
                     DataTable(id="statements_summary_data", show_cursor=False),
                     id="panel_statements_summary",
                     classes="panel_container",

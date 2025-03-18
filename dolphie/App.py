@@ -54,7 +54,6 @@ from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
 from dolphie.Modules.ReplayManager import ReplayManager
-from dolphie.Modules.StatementsSummaryMetrics import StatementsSummaryMetrics
 from dolphie.Modules.TabManager import Tab, TabManager
 from dolphie.Panels import DDL as DDLPanel
 from dolphie.Panels import Dashboard as DashboardPanel
@@ -631,24 +630,28 @@ class DolphieApp(App):
                     dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
                     file_io_data = dolphie.main_db_connection.fetchall()
                     if not dolphie.file_io_data:
-                        dolphie.file_io_data = PerformanceSchemaMetrics(file_io_data, True)
+                        dolphie.file_io_data = PerformanceSchemaMetrics(file_io_data, "file_io", "FILE_NAME")
                     else:
                         dolphie.file_io_data.update_internal_data(file_io_data)
 
                     dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
                     table_io_waits_data = dolphie.main_db_connection.fetchall()
                     if not dolphie.table_io_waits_data:
-                        dolphie.table_io_waits_data = PerformanceSchemaMetrics(table_io_waits_data)
+                        dolphie.table_io_waits_data = PerformanceSchemaMetrics(
+                            table_io_waits_data, "table_io", "OBJECT_TABLE"
+                        )
                     else:
                         dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
 
                 if dolphie.panels.statements_summary.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.table_statements_summary_by_digest)
-                    query_data = dolphie.main_db_connection.fetchall()
+                    statements_summary_data = dolphie.main_db_connection.fetchall()
                     if not dolphie.statements_summary_data:
-                        dolphie.statements_summary_data = StatementsSummaryMetrics(query_data)
+                        dolphie.statements_summary_data = PerformanceSchemaMetrics(
+                            statements_summary_data, "statements_summary", "digest"
+                        )
                     else:
-                        dolphie.statements_summary_data.update(query_data)
+                        dolphie.statements_summary_data.update_internal_data(statements_summary_data)
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -1240,7 +1243,8 @@ class DolphieApp(App):
         elif key == "8":
             if dolphie.is_mysql_version_at_least("5.7"):
                 if dolphie.statements_summary_data:
-                    dolphie.statements_summary_data.reset()
+                    dolphie.statements_summary_data.internal_data = {}
+                    dolphie.statements_summary_data.filtered_data = {}
                 self.toggle_panel(dolphie.panels.statements_summary.name)
 
         elif key == "grave_accent":
@@ -1307,7 +1311,7 @@ class DolphieApp(App):
         elif key == "A":
             if dolphie.show_statements_summary_query_digest_text_sample:
                 dolphie.show_statements_summary_query_digest_text_sample = False
-                self.notify("Statements Summary will now show query digest text")
+                self.notify("Statements Summary will now show query digest")
             else:
                 dolphie.show_statements_summary_query_digest_text_sample = True
                 self.notify("Statements Summary will now show query digest sample")
