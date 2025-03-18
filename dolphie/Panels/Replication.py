@@ -179,10 +179,13 @@ def create_panel(tab: Tab):
             table_thread_applier_status.add_column("Usage", min_width=6)
             table_thread_applier_status.add_column("Apply Time")
             table_thread_applier_status.add_column("Last Applied Transaction")
+            table_thread_applier_status.add_column("Retries")
+            table_thread_applier_status.add_column("Error Time")
+            table_thread_applier_status.add_column("Error Message", overflow="fold")
 
             for row in dolphie.replication_applier_status:
                 # We use ROLLUP in the query, so the first row is the total for thread_events
-                if not row["worker_id"]:
+                if not row["thread_id"]:
                     total_thread_events = row["total_thread_events"]
                     continue
 
@@ -192,11 +195,16 @@ def create_panel(tab: Tab):
                     transaction_id = row["last_applied_transaction"].split(":")[1]
                     last_applied_transaction = f"…[dark_gray]{source_id_split}[/dark_gray]:{transaction_id}"
 
+                last_error_time = row.get("applying_transaction_last_transient_error_timestamp", "N/A")
+                last_error_time = "" if last_error_time == "0000-00-00 00:00:00.000000" else last_error_time
                 table_thread_applier_status.add_row(
-                    str(row["worker_id"]),
+                    f"[b highlight]{row['worker_id']}[/b highlight]: {row['thread_id']}",
                     str(round(100 * (row["total_thread_events"] / total_thread_events), 2)) + "%",
                     row["apply_time"],
                     last_applied_transaction,
+                    str(row.get("applying_transaction_retries_count", "N/A")),
+                    last_error_time,
+                    row.get("applying_transaction_last_transient_error_message", "N/A"),
                 )
 
             tab.replication_thread_applier.update(table_thread_applier_status)

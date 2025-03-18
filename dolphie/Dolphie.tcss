@@ -286,7 +286,7 @@ Screen.-maximized-view {
             max-width: 85;
         }
         & > .replication_thread_applier {
-            max-width: 60;
+            max-width: 105;
         }
     }
 }

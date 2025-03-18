@@ -59,7 +59,7 @@ def create_panel(tab: Tab) -> DataTable:
             elif column_key == "use_ssl":
                 column_value = "ON" if column_value == "1" else "OFF"
 
-            if column_value == "0" or column_value == 0:
+            if column_key != "hostgroup" and (column_value == "0" or column_value == 0):
                 column_value = "[dark_gray]0"
 
             if row_id in hostgroup_summary_datatable.rows:

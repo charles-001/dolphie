@@ -511,7 +511,17 @@ class MySQLQueries:
     """
     replication_applier_status: str = """
         SELECT
-            worker_id,
+            applier_status.thread_id,
+            ANY_VALUE(applier_status.worker_id) AS worker_id,
+            ANY_VALUE(
+                applier_status.applying_transaction_retries_count
+            ) AS applying_transaction_retries_count,
+            ANY_VALUE(
+                applier_status.applying_transaction_last_transient_error_timestamp
+            ) AS applying_transaction_last_transient_error_timestamp,
+            ANY_VALUE(
+                applier_status.applying_transaction_last_transient_error_message
+            ) AS applying_transaction_last_transient_error_message,
             ANY_VALUE(FORMAT_PICO_TIME(
                 (applier_status.LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP -
                 applier_status.LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP) * 1000000000000
@@ -521,15 +531,11 @@ class MySQLQueries:
         FROM
             `performance_schema`.replication_applier_status_by_worker applier_status JOIN
             `performance_schema`.events_transactions_summary_by_thread_by_event_name thread_events USING (THREAD_ID)
-        WHERE
-            applier_status.THREAD_ID IN (
-                SELECT THREAD_ID FROM `performance_schema`.replication_applier_status_by_worker
-            )
         GROUP BY
-            worker_id
+            applier_status.thread_id
         WITH ROLLUP
         ORDER BY
-            worker_id
+            applier_status.thread_id
     """
 
     # Group Replication Event Horizon and Protocol

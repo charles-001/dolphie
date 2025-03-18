@@ -238,6 +238,7 @@ class DolphieApp(App):
             dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
             dolphie.processlist_threads = replay_event_data.processlist
             dolphie.replication_status = replay_event_data.replication_status
+            dolphie.replication_applier_status = replay_event_data.replication_applier_status
             dolphie.metadata_locks = replay_event_data.metadata_locks
             dolphie.group_replication_members = replay_event_data.group_replication_members
             dolphie.group_replication_data = replay_event_data.group_replication_data
@@ -584,7 +585,7 @@ class DolphieApp(App):
 
             if (
                 dolphie.is_mysql_version_at_least("8.0")
-                and dolphie.panels.replication.visible
+                and (dolphie.panels.replication.visible or dolphie.record_for_replay)
                 and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
             ):
                 dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
