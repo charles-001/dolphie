@@ -249,7 +249,6 @@ class StatementsSummaryMetricsColumn:
     field: str
     width: Optional[int]
     format_number: bool
-    visible: bool
 
 
 @dataclass

@@ -30,7 +30,6 @@ from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
-from textual.theme import Theme as TextualTheme
 from textual.widgets import Button, RadioSet, Switch, TabbedContent, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
@@ -69,7 +68,6 @@ from dolphie.Panels import ProxySQLProcesslist as ProxySQLProcesslistPanel
 from dolphie.Panels import ProxySQLQueryRules as ProxySQLQueryRulesPanel
 from dolphie.Panels import Replication as ReplicationPanel
 from dolphie.Panels import StatementsSummaryMetrics as StatementsSummaryPanel
-from dolphie.Panels.StatementsSummaryMetrics import toggle_query_digest_text_or_sample
 from dolphie.Widgets.CommandModal import CommandModal
 from dolphie.Widgets.CommandScreen import CommandScreen
 from dolphie.Widgets.EventLogScreen import EventLog
@@ -247,8 +245,6 @@ class DolphieApp(App):
             dolphie.group_replication_data = replay_event_data.group_replication_data
             dolphie.file_io_data = replay_event_data.file_io_data
             dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
-            dolphie.statements_summary_data = StatementsSummaryMetrics([])
-            dolphie.statements_summary_data.data_to_display = replay_event_data.statements_summary_data
 
             dolphie.pfs_metrics_last_reset_time = dolphie.global_status.get("pfs_metrics_last_reset_time", 0)
 
@@ -646,7 +642,7 @@ class DolphieApp(App):
                     else:
                         dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
 
-                if dolphie.panels.statements_summary.visible or dolphie.record_for_replay:
+                if dolphie.panels.statements_summary.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.table_statements_summary_by_digest)
                     query_data = dolphie.main_db_connection.fetchall()
                     if not dolphie.statements_summary_data:
@@ -1103,13 +1099,6 @@ class DolphieApp(App):
                 # it adds/removes it from there
                 DashboardPanel.create_panel(tab)
 
-            if (
-                panel_name == tab.dolphie.panels.statements_summary.name
-                and tab.dolphie.toggle_statements_summary_query_digest_text_sample
-            ):
-                StatementsSummaryPanel.toggle_query_digest_text_or_sample(tab)
-                tab.dolphie.toggle_statements_summary_query_digest_text_sample = False
-
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):
         if len(self.screen_stack) > 1 or not self.tab_manager.active_tab:
@@ -1250,6 +1239,8 @@ class DolphieApp(App):
 
         elif key == "8":
             if dolphie.is_mysql_version_at_least("5.7"):
+                if dolphie.statements_summary_data:
+                    dolphie.statements_summary_data.reset()
                 self.toggle_panel(dolphie.panels.statements_summary.name)
 
         elif key == "grave_accent":
@@ -1314,7 +1305,12 @@ class DolphieApp(App):
             self.force_refresh_for_replay(need_current_data=True)
 
         elif key == "A":
-            dolphie.toggle_statements_summary_query_digest_text_sample = True
+            if dolphie.show_statements_summary_query_digest_text_sample:
+                dolphie.show_statements_summary_query_digest_text_sample = False
+                self.notify("Statements Summary will now show query digest text")
+            else:
+                dolphie.show_statements_summary_query_digest_text_sample = True
+                self.notify("Statements Summary will now show query digest sample")
 
         elif key == "c":
             dolphie.user_filter = None
@@ -1565,6 +1561,7 @@ class DolphieApp(App):
 
         elif key == "R":
             dolphie.metric_manager.reset()
+            dolphie.statements_summary_data.reset()
             dolphie.reset_pfs_metrics_deltas()
 
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)

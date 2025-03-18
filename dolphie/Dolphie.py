@@ -18,8 +18,8 @@ from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
-from dolphie.Modules.StatementsSummaryMetrics import StatementsSummaryMetrics
 from dolphie.Modules.Queries import MySQLQueries
+from dolphie.Modules.StatementsSummaryMetrics import StatementsSummaryMetrics
 
 
 class Dolphie:
@@ -44,7 +44,7 @@ class Dolphie:
         self.show_trxs_only = config.show_trxs_only
         self.show_threads_with_concurrency_tickets = False
         self.show_additional_query_columns = config.show_additional_query_columns
-        self.toggle_statements_summary_query_digest_text_sample = False
+        self.show_statements_summary_query_digest_text_sample = False
         self.heartbeat_table = config.heartbeat_table
         self.tab_setup_available_hosts = config.tab_setup_available_hosts
         self.startup_panels = config.startup_panels

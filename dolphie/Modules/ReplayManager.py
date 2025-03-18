@@ -3,7 +3,7 @@ import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, List, Optional, Tuple, Union, Dict
+from typing import Any, List, Optional, Tuple, Union
 
 import orjson
 import zstandard as zstd
@@ -13,13 +13,11 @@ from dolphie.DataTypes import (
     ConnectionSource,
     ProcesslistThread,
     ProxySQLProcesslistThread,
-    StatementsSummaryMetricsRow,
 )
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
-from dolphie.Modules.StatementsSummaryMetrics import StatementsSummaryMetrics
 
 
 @dataclass
@@ -39,7 +37,6 @@ class MySQLReplayData:
     table_io_waits_data: dict
     group_replication_data: dict
     group_replication_members: dict
-    statements_summary_data: Dict[str, StatementsSummaryMetricsRow]
 
 
 @dataclass
@@ -688,10 +685,6 @@ class ReplayManager:
             table_io_waits = PerformanceSchemaMetrics({})
             table_io_waits.filtered_data = data.get("table_io_waits_data", {})
 
-            replay_statements_summary_data = data.get("statements_summary_data", {})
-            replay_statements_summary_data_rows = {digest: StatementsSummaryMetricsRow(**data) for digest, data in
-                                                   replay_statements_summary_data.items()}
-
             return MySQLReplayData(
                 **common_params,
                 binlog_status=data.get("binlog_status", {}),
@@ -704,7 +697,6 @@ class ReplayManager:
                 group_replication_members=data.get("group_replication_members", {}),
                 file_io_data=file_io_data,
                 table_io_waits_data=table_io_waits,
-                statements_summary_data=replay_statements_summary_data_rows,
             )
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist
