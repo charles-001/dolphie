@@ -29,7 +29,7 @@ def create_panel(tab: Tab):
             column_width = column_data.width
             tab.statements_summary_datatable.add_column(column_name, key=column_name, width=column_width)
 
-    if tab.dolphie.statements_summary_data is not None:
+    if tab.dolphie.statements_summary_data:
         for digest, row in tab.dolphie.statements_summary_data.cumulative_diff.items():
             row_values = []
 
@@ -85,7 +85,7 @@ def create_panel(tab: Tab):
                 tab.statements_summary_datatable.add_row(*row_values, key=digest)
 
     # Clean up rows that no longer exist
-    if tab.dolphie.statements_summary_data is not None and tab.dolphie.statements_summary_data.cumulative_diff:
+    if tab.dolphie.statements_summary_data:
         current_rows = set(tab.dolphie.statements_summary_data.cumulative_diff.keys())
         existing_rows = set(tab.statements_summary_datatable.rows.keys())
 

@@ -26,7 +26,10 @@ class CommandManager:
                     "ctrl+d": {"human_key": "ctrl+d", "description": "Switch to the next tab"},
                     "placeholder_2": {"human_key": "", "description": ""},
                     "a": {"human_key": "a", "description": "Toggle additional processlist columns"},
-                    "A": {"human_key": "A", "description": "Toggle statements summary query digest text/sample text"},
+                    "A": {
+                        "human_key": "A",
+                        "description": "Toggle query digest text/sample text in Statements Summary panel",
+                    },
                     "C": {
                         "human_key": "C",
                         "description": "Toggle display of threads with concurrency tickets in Processlist panel",
@@ -150,7 +153,6 @@ class CommandManager:
                     "ctrl+d": {"human_key": "ctrl+d", "description": "Switch to the next tab"},
                     "placeholder_2": {"human_key": "", "description": ""},
                     "a": {"human_key": "a", "description": "Toggle additional processlist columns"},
-                    "A": {"human_key": "A", "description": "Toggle statements summary query digest text/sample text"},
                     "C": {
                         "human_key": "C",
                         "description": "Toggle display of concurrency threads with tickets in Processlist panel",
