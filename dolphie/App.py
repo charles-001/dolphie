@@ -1565,7 +1565,6 @@ class DolphieApp(App):
 
         elif key == "R":
             dolphie.metric_manager.reset()
-            dolphie.statements_summary_data.reset()
             dolphie.reset_pfs_metrics_deltas()
 
             self.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
