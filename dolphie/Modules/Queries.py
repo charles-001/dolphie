@@ -362,9 +362,32 @@ class MySQLQueries:
     table_statements_summary_by_digest: str = """
         SELECT
             `digest`,
-            ANY_VALUE(`digest_text`) AS digest_text,
-            ANY_VALUE(`query_sample_text`) AS query_sample_text,
-            ANY_VALUE(`schema_name`) AS schema_name,
+            `digest_text`,
+            `schema_name`,
+            CONVERT(SUM(`sum_no_good_index_used`), UNSIGNED) AS sum_no_good_index_used,
+            CONVERT(SUM(`sum_no_index_used`), UNSIGNED) AS sum_no_index_used,
+            CONVERT(SUM(`count_star`), UNSIGNED) AS count_star,
+            CONVERT(SUM(`sum_errors`), UNSIGNED) AS sum_errors,
+            CONVERT(SUM(`sum_warnings`), UNSIGNED) AS sum_warnings,
+            CONVERT(SUM(`sum_timer_wait`), UNSIGNED) AS sum_timer_wait,
+            CONVERT(SUM(`sum_lock_time`), UNSIGNED) AS sum_lock_time,
+            CONVERT(SUM(`sum_rows_sent`), UNSIGNED) AS sum_rows_sent,
+            CONVERT(SUM(`sum_rows_examined`), UNSIGNED) AS sum_rows_examined,
+            CONVERT(SUM(`sum_rows_affected`), UNSIGNED) AS sum_rows_affected
+        FROM
+            `performance_schema`.`events_statements_summary_by_digest`
+        GROUP BY
+            `digest`
+        ORDER BY
+            SUM(`sum_timer_wait`) DESC,
+            MAX(`last_seen`) DESC;
+    """
+    table_statements_summary_by_digest_80: str = """
+        SELECT
+            `digest`,
+            `digest_text`,
+            `schema_name`,
+            `query_sample_text`,
             CONVERT(SUM(`sum_no_good_index_used`), UNSIGNED) AS sum_no_good_index_used,
             CONVERT(SUM(`sum_no_index_used`), UNSIGNED) AS sum_no_index_used,
             CONVERT(SUM(`count_star`), UNSIGNED) AS count_star,
@@ -538,21 +561,16 @@ class MySQLQueries:
     replication_applier_status: str = """
         SELECT
             applier_status.thread_id,
-            ANY_VALUE(applier_status.worker_id) AS worker_id,
-            ANY_VALUE(
-                applier_status.applying_transaction_retries_count
-            ) AS applying_transaction_retries_count,
-            ANY_VALUE(
-                applier_status.applying_transaction_last_transient_error_timestamp
-            ) AS applying_transaction_last_transient_error_timestamp,
-            ANY_VALUE(
-                applier_status.applying_transaction_last_transient_error_message
-            ) AS applying_transaction_last_transient_error_message,
-            ANY_VALUE(FORMAT_PICO_TIME(
-                (applier_status.LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP -
-                applier_status.LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP) * 1000000000000
-            )) AS apply_time,
-            ANY_VALUE(applier_status.LAST_APPLIED_TRANSACTION) AS last_applied_transaction,
+            applier_status.worker_id
+            applier_status.applying_transaction_retries_count,
+            applier_status.applying_transaction_last_transient_error_timestamp,
+            applier_status.applying_transaction_last_transient_error_message,
+            CAST(
+                (UNIX_TIMESTAMP(applier_status.LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP) -
+                UNIX_TIMESTAMP(applier_status.LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP)) * 1000000000000
+                AS CHAR
+            ) AS apply_time,
+            applier_status.last_applied_transaction,
             CONVERT(SUM(thread_events.COUNT_STAR), UNSIGNED) AS total_thread_events
         FROM
             `performance_schema`.replication_applier_status_by_worker applier_status JOIN

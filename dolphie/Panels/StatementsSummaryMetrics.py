@@ -1,31 +1,47 @@
 from rich.syntax import Syntax
 
+from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.Functions import format_number, format_picoseconds, format_query
 from dolphie.Modules.TabManager import Tab
-
-COLUMNS = {
-    "Schema": {"field": "schema_name", "width": 14, "format_number": False},
-    "Queries": {"field": "count_star", "width": 7, "format_number": True},
-    "Latency": {"field": "sum_timer_wait", "width": 10, "format_number": False},
-    "95th %": {"field": "quantile_95", "width": 10, "format_number": False},
-    "99th %": {"field": "quantile_99", "width": 10, "format_number": False},
-    "Lock time": {"field": "sum_lock_time", "width": 9, "format_number": False},
-    "Rows examined": {"field": "sum_rows_examined", "width": 13, "format_number": True},
-    "Rows affected": {"field": "sum_rows_affected", "width": 13, "format_number": True},
-    "Rows sent": {"field": "sum_rows_sent", "width": 9, "format_number": True},
-    "Errors": {"field": "sum_errors", "width": 6, "format_number": True},
-    "Warnings": {"field": "sum_warnings", "width": 8, "format_number": True},
-    "Bad idx": {"field": "sum_no_good_index_used", "width": 7, "format_number": True},
-    "No idx": {"field": "sum_no_index_used", "width": 6, "format_number": True},
-    "Query": {"field": "query", "width": None, "format_number": False},
-    "latency_total": {"field": "sum_timer_wait", "width": 0, "format_number": False},
-}
 
 
 def create_panel(tab: Tab):
     dolphie = tab.dolphie
     datatable = tab.statements_summary_datatable
     query_length_max = 300
+
+    columns = [
+        {"name": "Schema", "field": "schema_name", "width": 14, "format_number": False},
+        {"name": "Queries", "field": "count_star", "width": 7, "format_number": True},
+        {"name": "Latency", "field": "sum_timer_wait", "width": 10, "format_number": False},
+    ]
+
+    if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
+        columns.extend(
+            [
+                {"name": "95th %", "field": "quantile_95", "width": 10, "format_number": False},
+                {"name": "99th %", "field": "quantile_99", "width": 10, "format_number": False},
+            ]
+        )
+
+    columns.extend(
+        [
+            {"name": "Lock time", "field": "sum_lock_time", "width": 9, "format_number": False},
+            {"name": "Rows examined", "field": "sum_rows_examined", "width": 13, "format_number": True},
+            {"name": "Rows affected", "field": "sum_rows_affected", "width": 13, "format_number": True},
+            {"name": "Rows sent", "field": "sum_rows_sent", "width": 9, "format_number": True},
+            {"name": "Errors", "field": "sum_errors", "width": 6, "format_number": True},
+            {"name": "Warnings", "field": "sum_warnings", "width": 8, "format_number": True},
+            {"name": "Bad idx", "field": "sum_no_good_index_used", "width": 7, "format_number": True},
+            {"name": "No idx", "field": "sum_no_index_used", "width": 6, "format_number": True},
+            {"name": "Query", "field": "query", "width": None, "format_number": False},
+            {"name": "latency_total", "field": "sum_timer_wait", "width": 0, "format_number": False},
+        ]
+    )
+
+    if not dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mysql:
+        columns.pop("95th %")
+        columns.pop("99th %")
 
     if not dolphie.statements_summary_data or not dolphie.statements_summary_data.filtered_data:
         datatable.display = False
@@ -40,7 +56,8 @@ def create_panel(tab: Tab):
     datatable.display = True
 
     if not tab.statements_summary_datatable.columns:
-        for column_name, column_data in COLUMNS.items():
+        for column_data in columns:
+            column_name = column_data["name"]
             column_width = column_data["width"]
             datatable.add_column(column_name, key=column_name, width=column_width)
 
@@ -49,8 +66,9 @@ def create_panel(tab: Tab):
         for digest, metrics in data.items():
             row_values = []
 
-            for column_id, (column_name, c) in enumerate(COLUMNS.items()):
-                column_value = metrics.get(c["field"], {})
+            for column_id, (column_data) in enumerate(columns):
+                column_name = column_data["name"]
+                column_value = metrics.get(column_data["field"], {})
 
                 if isinstance(column_value, dict):
                     if tab.statements_summary_radio_set.pressed_button.id == "statements_summary_total":
@@ -66,7 +84,7 @@ def create_panel(tab: Tab):
                     column_value = format_query(column_value)
                 elif column_name == "Schema":
                     column_value = column_value or "[dark_gray]N/A"
-                elif c["format_number"]:
+                elif column_data["format_number"]:
                     column_value = format_number(column_value)
                 elif column_name in ("Latency", "Lock time", "CPU time"):
                     column_value = format_picoseconds(column_value)

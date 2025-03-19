@@ -617,7 +617,7 @@ class TabManager:
             TabPane(
                 "Table I/O Waits Summary",
                 Label(
-                    Text.from_markup(":bulb: [highlight]Format for each metric: Wait time (Operations count)"),
+                    Text.from_markup(":bulb: [label]Format for each metric: Wait time (Operations count)"),
                     id="pfs_metrics_format",
                 ),
                 DataTable(id="pfs_metrics_table_io_waits_datatable", show_cursor=False),

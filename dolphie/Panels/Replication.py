@@ -10,7 +10,7 @@ from textual.containers import ScrollableContainer
 from textual.widgets import Static
 
 from dolphie.DataTypes import ConnectionSource, Replica
-from dolphie.Modules.Functions import format_number, format_time
+from dolphie.Modules.Functions import format_number, format_picoseconds, format_time
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
@@ -184,23 +184,44 @@ def create_panel(tab: Tab):
             table_thread_applier_status.add_column("Error Message", overflow="fold")
 
             for row in dolphie.replication_applier_status:
-                # We use ROLLUP in the query, so the first row is the total for thread_events
-                if not row["thread_id"]:
-                    total_thread_events = row["total_thread_events"]
+                total_thread_events = row["total_thread_events"]
+                worker_id = row.get("worker_id")
+                thread_id = row.get("thread_id")
+
+                # Handle the ROLLUP row, which contains the total for all threads
+                if not thread_id:
+                    all_workers_diff = total_thread_events - dolphie.replication_applier_status_diff.get(
+                        "all", total_thread_events
+                    )
+                    dolphie.replication_applier_status_diff["all"] = total_thread_events
                     continue
 
-                last_applied_transaction = row["last_applied_transaction"]
-                if row["last_applied_transaction"] and "-" in row["last_applied_transaction"]:
-                    source_id_split = row["last_applied_transaction"].split("-")[4].split(":")[0]
-                    transaction_id = row["last_applied_transaction"].split(":")[1]
+                # Calculate the difference in thread events for this worker
+                worker_diff = total_thread_events - dolphie.replication_applier_status_diff.get(
+                    worker_id, total_thread_events
+                )
+                dolphie.replication_applier_status_diff[worker_id] = total_thread_events
+
+                # Format the last applied transaction
+                last_applied_transaction = row.get("last_applied_transaction", "N/A")
+                if last_applied_transaction and "-" in last_applied_transaction:
+                    source_id_split = last_applied_transaction.split("-")[4].split(":")[0]
+                    transaction_id = last_applied_transaction.split(":")[1]
                     last_applied_transaction = f"…[dark_gray]{source_id_split}[/dark_gray]:{transaction_id}"
 
+                # Format the last error time
                 last_error_time = row.get("applying_transaction_last_transient_error_timestamp", "N/A")
-                last_error_time = "" if last_error_time == "0000-00-00 00:00:00.000000" else last_error_time
+                if last_error_time == "0000-00-00 00:00:00.000000":
+                    last_error_time = ""
+
+                # Calculate the usage percentage for each worker for the current poll
+                usage_percentage = round(100 * (worker_diff / all_workers_diff), 2) if all_workers_diff > 0 else 0
+
+                # Display the cumulative usage for the worker
                 table_thread_applier_status.add_row(
-                    f"[b highlight]{row['worker_id']}[/b highlight]: {row['thread_id']}",
-                    str(round(100 * (row["total_thread_events"] / total_thread_events), 2)) + "%",
-                    row["apply_time"],
+                    f"[b highlight]{worker_id}[/b highlight]: {thread_id}",
+                    f"{usage_percentage}%",
+                    format_picoseconds(float(row["apply_time"])),
                     last_applied_transaction,
                     str(row.get("applying_transaction_retries_count", "N/A")),
                     last_error_time,

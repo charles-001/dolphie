@@ -649,7 +649,14 @@ class DolphieApp(App):
                         dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
 
                 if dolphie.panels.statements_summary.visible:
-                    dolphie.main_db_connection.execute(MySQLQueries.table_statements_summary_by_digest)
+                    if (
+                        dolphie.is_mysql_version_at_least("8.0")
+                        and dolphie.connection_source_alt != ConnectionSource.mariadb
+                    ):
+                        dolphie.main_db_connection.execute(MySQLQueries.table_statements_summary_by_digest_80)
+                    else:
+                        dolphie.main_db_connection.execute(MySQLQueries.table_statements_summary_by_digest)
+
                     statements_summary_data = dolphie.main_db_connection.fetchall()
                     if not dolphie.statements_summary_data:
                         dolphie.statements_summary_data = PerformanceSchemaMetrics(
