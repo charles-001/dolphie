@@ -237,6 +237,11 @@ Screen.-maximized-view {
         text-style: bold;
         content-align: center middle;
     }
+
+    & #statements_summary_info {
+        content-align: left middle;
+        margin-left: 1;
+    }
 }
 
 .dashboard {

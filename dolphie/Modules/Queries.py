@@ -374,7 +374,9 @@ class MySQLQueries:
             CONVERT(SUM(`sum_lock_time`), UNSIGNED) AS sum_lock_time,
             CONVERT(SUM(`sum_rows_sent`), UNSIGNED) AS sum_rows_sent,
             CONVERT(SUM(`sum_rows_examined`), UNSIGNED) AS sum_rows_examined,
-            CONVERT(SUM(`sum_rows_affected`), UNSIGNED) AS sum_rows_affected
+            CONVERT(SUM(`sum_rows_affected`), UNSIGNED) AS sum_rows_affected,
+            CONVERT(SUM(`quantile_95`), UNSIGNED) AS quantile_95,
+            CONVERT(SUM(`quantile_99`), UNSIGNED) AS quantile_99
         FROM
             `performance_schema`.`events_statements_summary_by_digest`
         GROUP BY
