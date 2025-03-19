@@ -78,6 +78,7 @@ class Tab:
         self.panel_processlist = app.query_one("#panel_processlist", Container)
         self.panel_ddl = app.query_one("#panel_ddl", Container)
         self.panel_pfs_metrics = app.query_one("#panel_pfs_metrics", Container)
+        self.panel_statements_summary = app.query_one("#panel_statements_summary", Container)
         self.panel_proxysql_hostgroup_summary = app.query_one("#panel_proxysql_hostgroup_summary", Container)
         self.panel_proxysql_mysql_query_rules = app.query_one("#panel_proxysql_mysql_query_rules", Container)
         self.panel_proxysql_command_stats = app.query_one("#panel_proxysql_command_stats", Container)
@@ -96,6 +97,9 @@ class Tab:
 
         self.processlist_title = app.query_one("#processlist_title", Label)
         self.processlist_datatable = app.query_one("#processlist_data", DataTable)
+        self.statements_summary_title = app.query_one("#statements_summary_title", Label)
+        self.statements_summary_datatable = app.query_one("#statements_summary_data", DataTable)
+        self.statements_summary_radio_set = app.query_one("#statements_summary_radio_set", RadioSet)
         self.metadata_locks_title = app.query_one("#metadata_locks_title", Label)
         self.metadata_locks_datatable = app.query_one("#metadata_locks_datatable", DataTable)
         self.proxysql_hostgroup_summary_title = app.query_one("#proxysql_hostgroup_summary_title", Static)
@@ -498,6 +502,25 @@ class TabManager:
                     id="panel_processlist",
                     classes="panel_container",
                 ),
+                Container(
+                    Label(id="statements_summary_title"),
+                    Label(
+                        ":bulb: [label]Prepared statements are not included in this panel",
+                        id="statements_summary_info",
+                    ),
+                    RadioSet(
+                        *(
+                            [
+                                RadioButton("Delta since panel opened", id="statements_summarys_delta", value=True),
+                                RadioButton("Total since MySQL restart", id="statements_summary_total"),
+                            ]
+                        ),
+                        id="statements_summary_radio_set",
+                    ),
+                    DataTable(id="statements_summary_data", show_cursor=False),
+                    id="panel_statements_summary",
+                    classes="panel_container",
+                ),
                 classes="tab",
                 id="main_container",
             ),
@@ -515,6 +538,9 @@ class TabManager:
         )
         self.app.query_one("#pfs_metrics_title", Label).update(
             Text.from_markup(panels.get_panel_title(panels.pfs_metrics.name))
+        )
+        self.app.query_one("#statements_summary_title", Label).update(
+            Text.from_markup(panels.get_panel_title(panels.statements_summary.name))
         )
 
         # Loop the metric instances and create the graph tabs

@@ -99,6 +99,9 @@ def format_query(query: str, minify: bool = True) -> Syntax:
 
 
 def minify_query(query: str) -> str:
+    if not query:
+        return ""
+
     return markup_escape(re.sub(r"\s+", " ", query))
 
 
@@ -138,6 +141,25 @@ def format_time(time: int, picoseconds=False):
     minutes, seconds = divmod(remainder, 60)
 
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+
+
+def format_picoseconds(ps: int) -> str:
+    units = [
+        ("d", 24 * 60 * 60 * 1_000_000_000_000),  # days
+        ("h", 60 * 60 * 1_000_000_000_000),  # hours
+        ("m", 60 * 1_000_000_000_000),  # minutes
+        ("s", 1_000_000_000_000),  # seconds
+        ("ms", 1_000_000_000),  # milliseconds
+        ("µs", 1_000_000),  # microseconds
+        ("ns", 1_000),  # nanoseconds
+        ("ps", 1),  # picoseconds
+    ]
+
+    for unit, factor in units:
+        if ps >= factor:
+            value = ps / factor
+            return f"{value:.2f}[highlight]{unit}"
+    return "[dark_gray]0"
 
 
 def load_host_cache_file(host_cache_file: str):

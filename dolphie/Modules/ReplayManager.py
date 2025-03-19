@@ -681,9 +681,9 @@ class ReplayManager:
             for thread_data in data["processlist"]:
                 processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
 
-            file_io_data = PerformanceSchemaMetrics({})
+            file_io_data = PerformanceSchemaMetrics({}, "file_io", "FILE_NAME")
             file_io_data.filtered_data = data.get("file_io_data", {})
-            table_io_waits = PerformanceSchemaMetrics({})
+            table_io_waits = PerformanceSchemaMetrics({}, "table_io", "OBJECT_TABLE")
             table_io_waits.filtered_data = data.get("table_io_waits_data", {})
 
             return MySQLReplayData(

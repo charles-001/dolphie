@@ -66,6 +66,7 @@ from dolphie.Panels import ProxySQLHostgroupSummary as ProxySQLHostgroupSummaryP
 from dolphie.Panels import ProxySQLProcesslist as ProxySQLProcesslistPanel
 from dolphie.Panels import ProxySQLQueryRules as ProxySQLQueryRulesPanel
 from dolphie.Panels import Replication as ReplicationPanel
+from dolphie.Panels import StatementsSummaryMetrics as StatementsSummaryPanel
 from dolphie.Widgets.CommandModal import CommandModal
 from dolphie.Widgets.CommandScreen import CommandScreen
 from dolphie.Widgets.EventLogScreen import EventLog
@@ -634,16 +635,28 @@ class DolphieApp(App):
                     dolphie.main_db_connection.execute(MySQLQueries.file_summary_by_instance)
                     file_io_data = dolphie.main_db_connection.fetchall()
                     if not dolphie.file_io_data:
-                        dolphie.file_io_data = PerformanceSchemaMetrics(file_io_data, True)
+                        dolphie.file_io_data = PerformanceSchemaMetrics(file_io_data, "file_io", "FILE_NAME")
                     else:
                         dolphie.file_io_data.update_internal_data(file_io_data)
 
                     dolphie.main_db_connection.execute(MySQLQueries.table_io_waits_summary_by_table)
                     table_io_waits_data = dolphie.main_db_connection.fetchall()
                     if not dolphie.table_io_waits_data:
-                        dolphie.table_io_waits_data = PerformanceSchemaMetrics(table_io_waits_data)
+                        dolphie.table_io_waits_data = PerformanceSchemaMetrics(
+                            table_io_waits_data, "table_io", "OBJECT_TABLE"
+                        )
                     else:
                         dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
+
+                if dolphie.panels.statements_summary.visible:
+                    dolphie.main_db_connection.execute(MySQLQueries.table_statements_summary_by_digest)
+                    statements_summary_data = dolphie.main_db_connection.fetchall()
+                    if not dolphie.statements_summary_data:
+                        dolphie.statements_summary_data = PerformanceSchemaMetrics(
+                            statements_summary_data, "statements_summary", "digest"
+                        )
+                    else:
+                        dolphie.statements_summary_data.update_internal_data(statements_summary_data)
 
     def process_proxysql_data(self, tab: Tab):
         dolphie = tab.dolphie
@@ -1070,6 +1083,7 @@ class DolphieApp(App):
             tab.dolphie.panels.metadata_locks.name: {ConnectionSource.mysql: MetadataLocksPanel},
             tab.dolphie.panels.ddl.name: {ConnectionSource.mysql: DDLPanel},
             tab.dolphie.panels.pfs_metrics.name: {ConnectionSource.mysql: PerformanceSchemaMetricsPanel},
+            tab.dolphie.panels.statements_summary.name: {ConnectionSource.mysql: StatementsSummaryPanel},
             tab.dolphie.panels.proxysql_hostgroup_summary.name: {
                 ConnectionSource.proxysql: ProxySQLHostgroupSummaryPanel
             },
@@ -1230,6 +1244,13 @@ class DolphieApp(App):
             else:
                 self.notify("Performance Schema Metrics panel requires MySQL 5.7+ with Performance Schema enabled")
 
+        elif key == "8":
+            if dolphie.is_mysql_version_at_least("5.7"):
+                if dolphie.statements_summary_data:
+                    dolphie.statements_summary_data.internal_data = {}
+                    dolphie.statements_summary_data.filtered_data = {}
+                self.toggle_panel(dolphie.panels.statements_summary.name)
+
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)
 
@@ -1290,6 +1311,14 @@ class DolphieApp(App):
                 self.notify("Processlist will now show additional columns")
 
             self.force_refresh_for_replay(need_current_data=True)
+
+        elif key == "A":
+            if dolphie.show_statements_summary_query_digest_text_sample:
+                dolphie.show_statements_summary_query_digest_text_sample = False
+                self.notify("Statements Summary will now show query digest")
+            else:
+                dolphie.show_statements_summary_query_digest_text_sample = True
+                self.notify("Statements Summary will now show query digest sample")
 
         elif key == "c":
             dolphie.user_filter = None

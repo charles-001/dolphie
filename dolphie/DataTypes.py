@@ -91,6 +91,7 @@ class Panels:
         self.metadata_locks = Panel("metadata_locks", "Metadata Locks", "⁵")
         self.ddl = Panel("ddl", "DDL", "⁶")
         self.pfs_metrics = Panel("pfs_metrics", "Performance Schema Metrics", "⁷")
+        self.statements_summary = Panel("statements_summary", "Statements Summary", "⁸")
         self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary", "Hostgroup Summary", "⁴")
         self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules", "Query Rules", "⁵")
         self.proxysql_command_stats = Panel("proxysql_command_stats", "Command Stats", "⁶")

@@ -1,16 +1,25 @@
 import re
 from typing import Any, Dict, List
 
+from dolphie.Modules.Functions import minify_query
+
 
 class PerformanceSchemaMetrics:
-    def __init__(self, query_data: List[Dict[str, Any]], combine_data: bool = False):
-        self.combine_data = combine_data
+    def __init__(self, query_data: List[Dict[str, Any]], metric_name: str, metric_key: str):
+        self.metric_name = metric_name
+        self.metric_key = metric_key
+
+        # These are integer columns that should be ignored for delta calculations
+        self.ignore_int_columns = ["quantile_95", "quantile_99"]
+
         self.filtered_data: Dict[str, Dict[str, Dict[str, int]]] = {}
         self.internal_data: Dict[str, Dict[str, Dict[str, Any]]] = {
-            row["NAME"]: {
+            row[self.metric_key]: {
                 "event_name": row.get("EVENT_NAME"),
                 "metrics": {
-                    metric: {"total": value, "delta": 0} for metric, value in row.items() if isinstance(value, int)
+                    metric: {"total": value, "delta": 0}
+                    for metric, value in row.items()
+                    if isinstance(value, int) and metric not in self.ignore_int_columns
                 },
             }
             for row in query_data
@@ -31,13 +40,17 @@ class PerformanceSchemaMetrics:
 
     def update_internal_data(self, query_data: List[Dict[str, int]]):
         # Track instances and remove missing ones
-        current_instance_names = {row["NAME"] for row in query_data}
+        current_instance_names = {row[self.metric_key] for row in query_data}
         instances_to_remove = set(self.internal_data) - current_instance_names
 
         # Process current query data
         for row in query_data:
-            instance_name = row["NAME"]
-            metrics = {metric: value for metric, value in row.items() if isinstance(value, int)}
+            instance_name = row[self.metric_key]
+            metrics = {
+                metric: value
+                for metric, value in row.items()
+                if isinstance(value, int) and metric not in self.ignore_int_columns
+            }
 
             # Initialize instance in internal_data if not present
             if instance_name not in self.internal_data:
@@ -80,6 +93,18 @@ class PerformanceSchemaMetrics:
                     else:
                         self.filtered_data[instance_name][metric] = {"t": total}
 
+                    if (
+                        self.metric_name == "statements_summary"
+                        and "schema_name" not in self.filtered_data[instance_name]
+                    ):
+                        self.filtered_data[instance_name]["schema_name"] = row.get("schema_name")
+                        self.filtered_data[instance_name]["digest_text"] = minify_query(row.get("digest_text"))
+                        self.filtered_data[instance_name]["query_sample_text"] = minify_query(
+                            row.get("query_sample_text")
+                        )
+                        self.filtered_data[instance_name]["quantile_95"] = row.get("quantile_95")
+                        self.filtered_data[instance_name]["quantile_99"] = row.get("quantile_99")
+
             if all_deltas_zero:
                 self.filtered_data.pop(instance_name, None)
 
@@ -87,7 +112,7 @@ class PerformanceSchemaMetrics:
         for instance_name in instances_to_remove:
             del self.internal_data[instance_name]
 
-        if self.combine_data:
+        if self.metric_name == "file_io":
             self.aggregate_and_combine_data()
 
     def aggregate_and_combine_data(self):

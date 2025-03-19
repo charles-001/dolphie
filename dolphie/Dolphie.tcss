@@ -131,6 +131,9 @@ TopBar {
     content-align: center middle;
 }
 
+#statements_summary_data {
+    margin-top: 1;
+}
 .dashboard_replay {
     height: auto;
     width: 65;
@@ -233,6 +236,11 @@ Screen.-maximized-view {
         color: #bbc8e8;
         text-style: bold;
         content-align: center middle;
+    }
+
+    & #statements_summary_info {
+        content-align: left middle;
+        margin-left: 1;
     }
 }
 

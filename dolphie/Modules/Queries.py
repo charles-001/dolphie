@@ -328,7 +328,7 @@ class MySQLQueries:
     """
     file_summary_by_instance: str = """
         SELECT
-            FILE_NAME AS NAME,
+            FILE_NAME,
             EVENT_NAME,
             SUM_TIMER_WAIT,
             COUNT_READ,
@@ -343,7 +343,7 @@ class MySQLQueries:
     """
     table_io_waits_summary_by_table: str = """
         SELECT
-            CONCAT(OBJECT_SCHEMA,'.', OBJECT_NAME) AS NAME,
+            CONCAT(OBJECT_SCHEMA,'.', OBJECT_NAME) AS OBJECT_TABLE,
             COUNT_STAR,
             SUM_TIMER_WAIT,
             COUNT_FETCH,
@@ -358,6 +358,32 @@ class MySQLQueries:
             performance_schema.table_io_waits_summary_by_table
         WHERE
             COUNT_STAR > 0
+    """
+    table_statements_summary_by_digest: str = """
+        SELECT
+            `digest`,
+            ANY_VALUE(`digest_text`) AS digest_text,
+            ANY_VALUE(`query_sample_text`) AS query_sample_text,
+            ANY_VALUE(`schema_name`) AS schema_name,
+            CONVERT(SUM(`sum_no_good_index_used`), UNSIGNED) AS sum_no_good_index_used,
+            CONVERT(SUM(`sum_no_index_used`), UNSIGNED) AS sum_no_index_used,
+            CONVERT(SUM(`count_star`), UNSIGNED) AS count_star,
+            CONVERT(SUM(`sum_errors`), UNSIGNED) AS sum_errors,
+            CONVERT(SUM(`sum_warnings`), UNSIGNED) AS sum_warnings,
+            CONVERT(SUM(`sum_timer_wait`), UNSIGNED) AS sum_timer_wait,
+            CONVERT(SUM(`sum_lock_time`), UNSIGNED) AS sum_lock_time,
+            CONVERT(SUM(`sum_rows_sent`), UNSIGNED) AS sum_rows_sent,
+            CONVERT(SUM(`sum_rows_examined`), UNSIGNED) AS sum_rows_examined,
+            CONVERT(SUM(`sum_rows_affected`), UNSIGNED) AS sum_rows_affected,
+            CONVERT(SUM(`quantile_95`), UNSIGNED) AS quantile_95,
+            CONVERT(SUM(`quantile_99`), UNSIGNED) AS quantile_99
+        FROM
+            `performance_schema`.`events_statements_summary_by_digest`
+        GROUP BY
+            `digest`
+        ORDER BY
+            SUM(`sum_timer_wait`) DESC,
+            MAX(`last_seen`) DESC;
     """
     metadata_locks: str = """
         SELECT
