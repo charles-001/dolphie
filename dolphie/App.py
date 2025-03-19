@@ -320,7 +320,6 @@ class DolphieApp(App):
                 metadata_lock_metrics=dolphie.metadata_locks,
                 replication_status=dolphie.replication_status,
                 proxysql_command_stats=dolphie.proxysql_command_stats,
-                statements_summary_metrics=dolphie.statements_summary_metrics,
             )
 
             # We initalize this here so we have the host version from process_{mysql,proxysql}_data
