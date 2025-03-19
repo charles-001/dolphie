@@ -98,11 +98,9 @@ def create_panel(tab: Tab) -> DataTable:
                     update_width = True
                     if isinstance(thread_value, Syntax):
                         temp_thread_value = thread_value.code[:query_length_max]
-
-                        # Only show the first {query_length_max} characters of the query
-                        thread_value = format_query(thread_value.code[:query_length_max])
+                        thread_value = format_query(temp_thread_value)
                     if isinstance(datatable_value, Syntax):
-                        temp_datatable_value = datatable_value.code[:query_length_max]
+                        temp_datatable_value = datatable_value.code
 
                 # Update the datatable if values differ
                 if (
