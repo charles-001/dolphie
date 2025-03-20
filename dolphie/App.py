@@ -1277,6 +1277,8 @@ class DolphieApp(App):
                     dolphie.statements_summary_data.internal_data = {}
                     dolphie.statements_summary_data.filtered_data = {}
                 self.toggle_panel(dolphie.panels.statements_summary.name)
+            else:
+                self.notify("Statements Summary panel requires MySQL 5.7+ with Performance Schema enabled")
 
         elif key == "grave_accent":
             self.tab_manager.setup_host_tab(tab)

@@ -39,10 +39,6 @@ def create_panel(tab: Tab):
         ]
     )
 
-    if not dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt != ConnectionSource.mysql:
-        columns.pop("95th %")
-        columns.pop("99th %")
-
     if not dolphie.statements_summary_data or not dolphie.statements_summary_data.filtered_data:
         datatable.display = False
         tab.statements_summary_title.update(
@@ -54,6 +50,9 @@ def create_panel(tab: Tab):
         return
 
     datatable.display = True
+
+    if len(datatable.columns) != len(columns):
+        datatable.clear(columns=True)
 
     if not tab.statements_summary_datatable.columns:
         for column_data in columns:

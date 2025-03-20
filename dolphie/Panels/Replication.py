@@ -173,7 +173,7 @@ def create_panel(tab: Tab):
 
         tab.replication_container.display = True
 
-        if dolphie.replication_applier_status:
+        if dolphie.replication_applier_status.get("data"):
             table_thread_applier_status = Table(box=None, header_style="#c5c7d2")
             table_thread_applier_status.add_column("Worker", justify="center")
             table_thread_applier_status.add_column("Usage", min_width=6)
@@ -208,7 +208,7 @@ def create_panel(tab: Tab):
                     last_error_time = ""
 
                 # Calculate the usage percentage for each worker for the current poll
-                usage_percentage = round(100 * (worker_diff / all_workers_diff), 2) if all_workers_diff > 0 else 0
+                usage_percentage = round(100 * (worker_diff / all_workers_diff), 2) if all_workers_diff > 0 else 0.0
                 retries_count = row.get("applying_transaction_retries_count", 0)
                 retries_count = f"[dark_gray]{retries_count}" if retries_count == 0 else f"[red]{retries_count}"
 
