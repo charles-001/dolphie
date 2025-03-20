@@ -12,7 +12,7 @@ def create_panel(tab: Tab):
 
     columns = [
         {"name": "Schema", "field": "schema_name", "width": 14, "format_number": False},
-        {"name": "Queries", "field": "count_star", "width": 7, "format_number": True},
+        {"name": "Count", "field": "count_star", "width": 8, "format_number": True},
         {"name": "Latency", "field": "sum_timer_wait", "width": 10, "format_number": False},
     ]
 
