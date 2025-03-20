@@ -91,7 +91,7 @@ def create_panel(tab: Tab):
                 elif column_name in ["95th %", "99th %"]:
                     column_value = format_picoseconds(column_value)
 
-                if column_value == "0" or column_value == 0:
+                if column_name != "latency_total" and (column_value == "0" or column_value == 0):
                     column_value = "[dark_gray]0"
 
                 if digest in tab.statements_summary_datatable.rows:

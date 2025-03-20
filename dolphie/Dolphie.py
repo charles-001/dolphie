@@ -85,8 +85,7 @@ class Dolphie:
         self.global_status: Dict[str, Union[int, str]] = {}
         self.binlog_status: Dict[str, Union[int, str]] = {}
         self.replication_status: Dict[str, Union[int, str]] = {}
-        self.replication_applier_status: List[Dict[str, Union[int, str]]] = []
-        self.replication_applier_status_diff: Dict[str, Dict[str, int]] = {}
+        self.replication_applier_status: Dict[str, Union[List[Dict[str, Union[int, str]]], int]] = {}
         self.innodb_metrics: Dict[str, Union[int, str]] = {}
         self.metadata_locks: List[Dict[str, Union[int, str]]] = []
         self.ddl: List[Dict[str, Union[int, str]]] = []

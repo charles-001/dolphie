@@ -183,24 +183,17 @@ def create_panel(tab: Tab):
             table_thread_applier_status.add_column("Error Time")
             table_thread_applier_status.add_column("Error Message", overflow="fold")
 
-            for row in dolphie.replication_applier_status:
-                total_thread_events = row["total_thread_events"]
+            for row in dolphie.replication_applier_status["data"]:
                 worker_id = row.get("worker_id")
                 thread_id = row.get("thread_id")
 
                 # Handle the ROLLUP row, which contains the total for all threads
                 if not thread_id:
-                    all_workers_diff = total_thread_events - dolphie.replication_applier_status_diff.get(
-                        "all", total_thread_events
-                    )
-                    dolphie.replication_applier_status_diff["all"] = total_thread_events
+                    all_workers_diff = dolphie.replication_applier_status["diff_all"]
                     continue
 
                 # Calculate the difference in thread events for this worker
-                worker_diff = total_thread_events - dolphie.replication_applier_status_diff.get(
-                    worker_id, total_thread_events
-                )
-                dolphie.replication_applier_status_diff[worker_id] = total_thread_events
+                worker_diff = dolphie.replication_applier_status[f"diff_{thread_id}"]
 
                 # Format the last applied transaction
                 last_applied_transaction = row.get("last_applied_transaction", "N/A")

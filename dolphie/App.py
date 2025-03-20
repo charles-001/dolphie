@@ -590,7 +590,27 @@ class DolphieApp(App):
                 and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
             ):
                 dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
-                dolphie.replication_applier_status = dolphie.main_db_connection.fetchall()
+                dolphie.replication_applier_status["data"] = dolphie.main_db_connection.fetchall()
+
+                # Calculate the difference in total_thread_events for each worker + all workers
+                for row in dolphie.replication_applier_status["data"]:
+                    total_thread_events = row["total_thread_events"]
+                    thread_id = row.get("thread_id")
+
+                    # Handle the ROLLUP row, which contains the total for all threads
+                    if not thread_id:
+                        dolphie.replication_applier_status["diff_all"] = (
+                            total_thread_events
+                            - dolphie.replication_applier_status.get("previous_all", total_thread_events)
+                        )
+                        dolphie.replication_applier_status["previous_all"] = total_thread_events
+                        continue
+
+                    dolphie.replication_applier_status[f"diff_{thread_id}"] = (
+                        total_thread_events
+                        - dolphie.replication_applier_status.get(f"previous_{thread_id}", total_thread_events)
+                    )
+                    dolphie.replication_applier_status[f"previous_{thread_id}"] = total_thread_events
 
             if (
                 not dolphie.daemon_mode
