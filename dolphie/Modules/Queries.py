@@ -561,7 +561,7 @@ class MySQLQueries:
     replication_applier_status: str = """
         SELECT
             applier_status.thread_id,
-            applier_status.worker_id
+            applier_status.worker_id,
             applier_status.applying_transaction_retries_count,
             applier_status.applying_transaction_last_transient_error_timestamp,
             applier_status.applying_transaction_last_transient_error_message,

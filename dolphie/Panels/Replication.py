@@ -216,6 +216,8 @@ def create_panel(tab: Tab):
 
                 # Calculate the usage percentage for each worker for the current poll
                 usage_percentage = round(100 * (worker_diff / all_workers_diff), 2) if all_workers_diff > 0 else 0
+                retries_count = row.get("applying_transaction_retries_count", 0)
+                retries_count = f"[dark_gray]{retries_count}" if retries_count == 0 else f"[red]{retries_count}"
 
                 # Display the cumulative usage for the worker
                 table_thread_applier_status.add_row(
@@ -223,7 +225,7 @@ def create_panel(tab: Tab):
                     f"{usage_percentage}%",
                     format_picoseconds(float(row["apply_time"])),
                     last_applied_transaction,
-                    str(row.get("applying_transaction_retries_count", "N/A")),
+                    retries_count,
                     last_error_time,
                     row.get("applying_transaction_last_transient_error_message", "N/A"),
                 )
