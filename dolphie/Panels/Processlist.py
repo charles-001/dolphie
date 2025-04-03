@@ -1,7 +1,6 @@
 from typing import Dict
 
 from rich.syntax import Syntax
-from rich.text import Text
 from textual.widgets import DataTable
 
 from dolphie.DataTypes import ProcesslistThread
@@ -165,12 +164,12 @@ def create_panel(tab: Tab) -> DataTable:
 
     title = (
         f"{dolphie.panels.get_panel_title(dolphie.panels.processlist.name)} "
-        f"([highlight]{processlist_datatable.row_count}[/highlight]"
+        f"([$highlight]{processlist_datatable.row_count}[/$highlight]"
     )
     if dolphie.show_threads_with_concurrency_tickets:
-        title += f"/[highlight]{dolphie.global_variables.get('innodb_thread_concurrency')}[/highlight]"
+        title += f"/[$highlight]{dolphie.global_variables.get('innodb_thread_concurrency')}[/$highlight]"
     title += ")"
-    tab.processlist_title.update(Text.from_markup(title))
+    tab.processlist_title.update(title)
 
 
 def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:

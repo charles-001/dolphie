@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from contextlib import closing
@@ -589,7 +590,16 @@ class ReplayManager:
                 }
             )
 
-        data_dict_bytes = orjson.dumps(data_dict)
+        # For large numbers, we need to use json instead of orjson to serialize the data
+        # to avoid exceeding 64-bit integer limit
+        # https://github.com/ijl/orjson/issues/301
+        try:
+            data_dict_bytes = orjson.dumps(data_dict)
+        except TypeError as e:
+            if str(e) == "Integer exceeds 64-bit range":
+                data_dict_bytes = json.dumps(data_dict).encode()
+            else:
+                raise e
 
         # Store the first 10 samples to create a compression dictionary via training
         if not self.compression_dict:

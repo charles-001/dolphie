@@ -8,7 +8,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Rule, Select, Static
 
 from dolphie.DataTypes import ConnectionSource, HotkeyCommands
-from dolphie.Widgets.AutoComplete import AutoComplete, Dropdown, DropdownItem
+from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem
 
 
 class CommandModal(ModalScreen):
@@ -103,46 +103,58 @@ class CommandModal(ModalScreen):
             with Vertical():
                 yield Label(f"[b]{self.message}[/b]")
 
+                modal_input = Input(id="modal_input")
+                filter_by_username_input = Input(id="filter_by_username_input")
+                filter_by_host_input = Input(id="filter_by_host_input")
+                filter_by_db_input = Input(id="filter_by_db_input")
+                filter_by_hostgroup_input = Input(id="filter_by_hostgroup_input")
+                kill_by_id_input = Input(id="kill_by_id_input")
+                kill_by_username_input = Input(id="kill_by_username_input")
+                kill_by_host_input = Input(id="kill_by_host_input")
+
                 with Vertical(id="maximize_panel_container", classes="command_container"):
                     yield Select(
                         options=self.maximize_panel_select_options, id="maximize_panel_select", prompt="Select a Panel"
                     )
-                    yield Label("[dark_gray][b]Note[/b]: Press [b highlight]ESC[/b highlight] to exit maximized panel")
+                    yield Label("[b]Note[/b]: Press [b][$yellow]ESC[/b][/$yellow] to exit maximized panel")
                 with Vertical(id="filter_container", classes="command_container"):
+                    yield filter_by_username_input
+                    yield filter_by_host_input
+                    yield filter_by_db_input
+                    yield filter_by_hostgroup_input
+                    yield AutoComplete(filter_by_username_input, id="filter_by_username_dropdown_items", candidates=[])
+                    yield AutoComplete(filter_by_host_input, id="filter_by_host_dropdown_items", candidates=[])
+                    yield AutoComplete(filter_by_db_input, id="filter_by_db_dropdown_items", candidates=[])
                     yield AutoComplete(
-                        Input(id="filter_by_username_input"), Dropdown(id="filter_by_username_dropdown_items", items=[])
+                        filter_by_hostgroup_input,
+                        id="filter_by_hostgroup_dropdown_items",
+                        candidates=[],
                     )
-                    yield AutoComplete(
-                        Input(id="filter_by_host_input"), Dropdown(id="filter_by_host_dropdown_items", items=[])
-                    )
-                    yield AutoComplete(
-                        Input(id="filter_by_db_input"), Dropdown(id="filter_by_db_dropdown_items", items=[])
-                    )
-                    yield AutoComplete(
-                        Input(id="filter_by_hostgroup_input"),
-                        Dropdown(id="filter_by_hostgroup_dropdown_items", items=[]),
-                    )
+
                     yield Input(id="filter_by_query_time_input")
                     yield Input(id="filter_by_query_text_input")
                 with Vertical(id="kill_container", classes="command_container"):
-                    yield AutoComplete(Input(id="kill_by_id_input"), Dropdown(id="kill_by_id_dropdown_items", items=[]))
+                    yield kill_by_id_input
+                    yield AutoComplete(kill_by_id_input, id="kill_by_id_dropdown_items", candidates=[])
+
                     yield Rule(line_style="heavy")
-                    yield AutoComplete(
-                        Input(id="kill_by_username_input"), Dropdown(id="kill_by_username_dropdown_items", items=[])
-                    )
-                    yield AutoComplete(
-                        Input(id="kill_by_host_input"), Dropdown(id="kill_by_host_dropdown_items", items=[])
-                    )
+
+                    yield kill_by_username_input
+                    yield kill_by_host_input
+                    yield AutoComplete(kill_by_username_input, id="kill_by_username_dropdown_items", candidates=[])
+                    yield AutoComplete(kill_by_host_input, id="kill_by_host_dropdown_items", candidates=[])
+
                     yield Input(id="kill_by_age_range_input", placeholder="Example: 5-8")
                     yield Input(id="kill_by_query_text_input")
                     yield Checkbox("Include sleeping queries", id="sleeping_queries")
                     yield Label(
-                        "[dark_gray][b]Note:[/b] Only threads visible and executing (or sleeping)\n"
+                        "[$dark_gray][b]Note:[/b] Only threads visible and executing (or sleeping)\n"
                         "in the Processlist panel can be killed in this section"
                     )
+
+                yield modal_input
                 yield AutoComplete(
-                    Input(id="modal_input"),
-                    Dropdown(id="dropdown_items", items=self.dropdown_items),
+                    modal_input, id="dropdown_items", candidates=self.dropdown_items, prevent_default_enter=False
                 )
 
                 yield Static(id="error_response")
@@ -167,16 +179,20 @@ class CommandModal(ModalScreen):
 
             self.query_one("#filter_by_username_input", Input).focus()
             self.query_one("#filter_by_username_input", Input).border_title = "Username"
-            self.query_one("#filter_by_username_dropdown_items", Dropdown).items = self.create_dropdown_items("user")
+            self.query_one("#filter_by_username_dropdown_items", AutoComplete).candidates = self.create_dropdown_items(
+                "user"
+            )
             self.query_one("#filter_by_host_input", Input).border_title = "Host/IP"
-            self.query_one("#filter_by_host_dropdown_items", Dropdown).items = self.create_dropdown_items("host")
+            self.query_one("#filter_by_host_dropdown_items", AutoComplete).candidates = self.create_dropdown_items(
+                "host"
+            )
             self.query_one("#filter_by_db_input", Input).border_title = "Database"
-            self.query_one("#filter_by_db_dropdown_items", Dropdown).items = self.create_dropdown_items("db")
+            self.query_one("#filter_by_db_dropdown_items", AutoComplete).candidates = self.create_dropdown_items("db")
             self.query_one("#filter_by_query_time_input", Input).border_title = (
-                "Minimum Query Time [dark_gray](seconds)"
+                "Minimum Query Time [$dark_gray](seconds)"
             )
             self.query_one("#filter_by_query_text_input", Input).border_title = (
-                "Partial Query Text [dark_gray](case-sensitive)"
+                "Partial Query Text [$dark_gray](case-sensitive)"
             )
 
             if self.connection_source != ConnectionSource.proxysql:
@@ -184,23 +200,25 @@ class CommandModal(ModalScreen):
             else:
                 self.query_one("#filter_by_host_input", Input).border_title = "Backend Host/IP"
                 self.query_one("#filter_by_hostgroup_input", Input).border_title = "Hostgroup"
-                self.query_one("#filter_by_hostgroup_dropdown_items", Dropdown).items = self.create_dropdown_items(
-                    "hostgroup"
+                self.query_one("#filter_by_hostgroup_dropdown_items", AutoComplete).candidates = (
+                    self.create_dropdown_items("hostgroup")
                 )
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
             input.display = False
             kill_container.display = True
 
             self.query_one("#kill_by_id_input", Input).focus()
-            self.query_one("#kill_by_id_dropdown_items", Dropdown).items = self.dropdown_items
-            self.query_one("#kill_by_id_input", Input).border_title = "Thread ID [dark_gray](enter submits)"
+            self.query_one("#kill_by_id_dropdown_items", AutoComplete).candidates = self.dropdown_items
+            self.query_one("#kill_by_id_input", Input).border_title = "Thread ID [$dark_gray](enter submits)"
             self.query_one("#kill_by_username_input", Input).border_title = "Username"
-            self.query_one("#kill_by_username_dropdown_items", Dropdown).items = self.create_dropdown_items("user")
+            self.query_one("#kill_by_username_dropdown_items", AutoComplete).candidates = self.create_dropdown_items(
+                "user"
+            )
             self.query_one("#kill_by_host_input", Input).border_title = "Host/IP"
-            self.query_one("#kill_by_host_dropdown_items", Dropdown).items = self.create_dropdown_items("host")
-            self.query_one("#kill_by_age_range_input", Input).border_title = "Age Range [dark_gray](seconds)"
+            self.query_one("#kill_by_host_dropdown_items", AutoComplete).candidates = self.create_dropdown_items("host")
+            self.query_one("#kill_by_age_range_input", Input).border_title = "Age Range [$dark_gray](seconds)"
             self.query_one("#kill_by_query_text_input", Input).border_title = (
-                "Partial Query Text [dark_gray](case-sensitive)"
+                "Partial Query Text [$dark_gray](case-sensitive)"
             )
 
             sleeping_queries_checkbox = self.query_one("#sleeping_queries", Checkbox)
@@ -276,7 +294,7 @@ class CommandModal(ModalScreen):
             # Use IP address instead of hostname since that's what is used in the processlist
             if filters["host"]:
                 filters["host"] = next(
-                    (ip for ip, addr in self.host_cache_data.items() if filters["host"] == addr), filters["host"]
+                    (ip for ip, addr in self.host_cache_data.candidates() if filters["host"] == addr), filters["host"]
                 )
 
             # Validate numeric fields

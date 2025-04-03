@@ -1,6 +1,7 @@
 import os
 from datetime import datetime
 
+from rich.text import Text
 from textual.widgets import DataTable
 
 from dolphie.Modules.Functions import format_bytes, format_number, format_time
@@ -21,7 +22,9 @@ def create_panel(tab: Tab):
             if dolphie.pfs_metrics_last_reset_time
             else 0
         )
-    tab.pfs_metrics_delta.label = f"Delta since last reset ([light_blue]{format_time(time)}[/light_blue])"
+    tab.pfs_metrics_delta.label = Text.from_markup(
+        f"Delta since last reset ([light_blue]{format_time(time)}[/light_blue])"
+    )
 
 
 def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
@@ -30,8 +33,8 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
 
     if not dolphie.table_io_waits_data or not dolphie.table_io_waits_data.filtered_data:
         datatable.display = False
-        tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
-            "Table I/O Waits ([highlight]0[/highlight])"
+        tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = Text.from_markup(
+            ("Table I/O Waits ([highlight]0[/highlight])")
         )
         return
 
@@ -127,7 +130,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
     datatable.sort("wait_time_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
+    tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = Text.from_markup(
         f"Table I/O Waits ([highlight]{datatable.row_count}[/highlight])"
     )
 
@@ -138,7 +141,9 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
 
     if not dolphie.file_io_data or not dolphie.file_io_data.filtered_data:
         datatable.display = False
-        tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = "File I/O ([highlight]0[/highlight])"
+        tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = Text.from_markup(
+            "File I/O ([highlight]0[/highlight])"
+        )
         return
 
     datatable.display = True
@@ -234,6 +239,6 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
     datatable.sort("wait_time_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = (
+    tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = Text.from_markup(
         f"File I/O ([highlight]{datatable.row_count}[/highlight])"
     )

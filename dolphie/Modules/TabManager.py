@@ -12,6 +12,7 @@ from textual.containers import (
     ScrollableContainer,
     VerticalScroll,
 )
+from textual.content import Content
 from textual.timer import Timer
 from textual.widgets import (
     Button,
@@ -98,7 +99,7 @@ class Tab:
         self.processlist_title = app.query_one("#processlist_title", Label)
         self.processlist_datatable = app.query_one("#processlist_data", DataTable)
         self.statements_summary_title = app.query_one("#statements_summary_title", Label)
-        self.statements_summary_datatable = app.query_one("#statements_summary_data", DataTable)
+        self.statements_summary_datatable = app.query_one("#statements_summary_datatable", DataTable)
         self.statements_summary_radio_set = app.query_one("#statements_summary_radio_set", RadioSet)
         self.metadata_locks_title = app.query_one("#metadata_locks_title", Label)
         self.metadata_locks_datatable = app.query_one("#metadata_locks_datatable", DataTable)
@@ -155,18 +156,18 @@ class Tab:
         current_timestamp = self.replay_manager.current_replay_timestamp
 
         # Highlight if the max timestamp matches the current timestamp
-        max_timestamp = f"[b][green]{max_timestamp}[/b][green]" if max_timestamp == current_timestamp else max_timestamp
+        max_timestamp = (
+            f"[b][$green]{max_timestamp}[/b][$green]" if max_timestamp == current_timestamp else max_timestamp
+        )
 
         # Update the dashboard title with the timestamp of the replay event
         self.dashboard_replay.update(
-            Text.from_markup(f"[b]Replay[/b] ([dark_gray]{os.path.basename(self.dolphie.replay_file)}[/dark_gray])")
+            f"[b]Replay[/b] ([$dark_gray]{os.path.basename(self.dolphie.replay_file)}[/$dark_gray])"
         )
         self.dashboard_replay_start_end.update(
-            Text.from_markup(
-                f"{min_timestamp} [b highlight]<-[/b highlight] "
-                f"[b light_blue]{current_timestamp}[/b light_blue] [b highlight]->[/b highlight] "
-                f"{max_timestamp}"
-            )
+            f"{min_timestamp} [$b_highlight]<-[/$b_highlight] "
+            f"[$b_light_blue]{current_timestamp}[/$b_light_blue] [$b_highlight]->[/$b_highlight] "
+            f"{max_timestamp}"
         )
 
         # Update the progress bar with the current replay progress
@@ -505,7 +506,7 @@ class TabManager:
                 Container(
                     Label(id="statements_summary_title"),
                     Label(
-                        ":bulb: [label]Prepared statements are not included in this panel",
+                        Text.from_markup(":bulb: [label]Prepared statements are not included in this panel"),
                         id="statements_summary_info",
                     ),
                     RadioSet(
@@ -517,7 +518,7 @@ class TabManager:
                         ),
                         id="statements_summary_radio_set",
                     ),
-                    DataTable(id="statements_summary_data", show_cursor=False),
+                    DataTable(id="statements_summary_datatable", show_cursor=False),
                     id="panel_statements_summary",
                     classes="panel_container",
                 ),
@@ -530,17 +531,11 @@ class TabManager:
         self.app.query_one("#loading_indicator").display = False
 
         panels = Panels()
-        self.app.query_one("#metric_graphs_title", Label).update(
-            Text.from_markup(panels.get_panel_title(panels.graphs.name))
-        )
-        self.app.query_one("#replication_title", Label).update(
-            Text.from_markup(panels.get_panel_title(panels.replication.name))
-        )
-        self.app.query_one("#pfs_metrics_title", Label).update(
-            Text.from_markup(panels.get_panel_title(panels.pfs_metrics.name))
-        )
+        self.app.query_one("#metric_graphs_title", Label).update(panels.get_panel_title(panels.graphs.name))
+        self.app.query_one("#replication_title", Label).update(panels.get_panel_title(panels.replication.name))
+        self.app.query_one("#pfs_metrics_title", Label).update(panels.get_panel_title(panels.pfs_metrics.name))
         self.app.query_one("#statements_summary_title", Label).update(
-            Text.from_markup(panels.get_panel_title(panels.statements_summary.name))
+            panels.get_panel_title(panels.statements_summary.name)
         )
 
         # Loop the metric instances and create the graph tabs
@@ -752,10 +747,9 @@ class TabManager:
             if tab.dolphie.replay_file:
                 new_name = f"[b recording][Replay][/b recording] {new_name}"
 
-            # self.host_tabs.query(TabWidget).filter("#" + tab.id)[0].label = Content.from_rich_text(
-            #     new_name, console=self.app.console
-            # )
-            self.host_tabs.query(TabWidget).filter("#" + tab.id)[0].label = new_name
+            self.host_tabs.query(TabWidget).filter("#" + tab.id)[0].label = Content.from_rich_text(
+                new_name, console=self.app.console
+            )
 
     def switch_tab(self, tab_id: int, set_active: bool = True):
         tab = self.get_tab(tab_id)
