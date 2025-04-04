@@ -31,8 +31,8 @@ def create_panel(tab: Tab):
         tab.replication_container_title.display = True
         tab.replication_container_title.update(
             Align.center(
-                f"[$b_highlight]{dolphie.panels.get_key(dolphie.panels.replication.name)}[/$b_highlight]"
-                "[b][$yellow]Replication/Replicas panel has no data to display\n"
+                f"[b highlight]{dolphie.panels.get_key(dolphie.panels.replication.name)}[/b highlight]"
+                "[b][yellow]Replication/Replicas panel has no data to display\n"
             )
         )
 
