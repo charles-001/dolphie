@@ -1228,23 +1228,23 @@ class DolphieApp(App):
         elif key == "4":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_hostgroup_summary.name)
-                dolphie.proxysql_per_second_data = {}
+                dolphie.proxysql_per_second_data.clear()
                 self.tab_manager.active_tab.proxysql_hostgroup_summary_datatable.clear()
-
                 return
 
-            # If we're in replay mode and there's no replication status, or group replication, stop here
             if dolphie.replay_file and (not dolphie.replication_status and not dolphie.group_replication_members):
                 self.notify("This replay file has no replication data")
                 return
 
-            if (
-                not dolphie.replica_manager.available_replicas
-                and not dolphie.replication_status
-                and not dolphie.galera_cluster
-                and not dolphie.group_replication
-                and not dolphie.innodb_cluster
-                and not dolphie.innodb_cluster_read_replica
+            if not any(
+                [
+                    dolphie.replica_manager.available_replicas,
+                    dolphie.replication_status,
+                    dolphie.galera_cluster,
+                    dolphie.group_replication,
+                    dolphie.innodb_cluster,
+                    dolphie.innodb_cluster_read_replica,
+                ]
             ):
                 self.notify("Replication panel has no data to display")
                 return
