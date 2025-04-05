@@ -358,7 +358,7 @@ class CommandModal(ModalScreen):
 
         elif self.command in {HotkeyCommands.show_thread}:
             if modal_input not in self.processlist_data:
-                self.update_error_response(f"Thread ID [bold red]{modal_input}[/bold red] does not exist")
+                self.update_error_response(f"Thread ID [b]{modal_input}[/b] does not exist")
                 return
 
             if not modal_input.isdigit():
