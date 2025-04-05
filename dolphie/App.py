@@ -1238,6 +1238,17 @@ class DolphieApp(App):
                 self.notify("This replay file has no replication data")
                 return
 
+            if (
+                not dolphie.replica_manager.available_replicas
+                and not dolphie.replication_status
+                and not dolphie.galera_cluster
+                and not dolphie.group_replication
+                and not dolphie.innodb_cluster
+                and not dolphie.innodb_cluster_read_replica
+            ):
+                self.notify("Replication panel has no data to display")
+                return
+
             self.toggle_panel(dolphie.panels.replication.name)
             tab.toggle_entities_displays()
 

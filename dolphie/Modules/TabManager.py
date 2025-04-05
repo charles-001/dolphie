@@ -135,7 +135,6 @@ class Tab:
         self.replicas_title = app.query_one("#replicas_title", Label)
         self.replicas_loading_indicator = app.query_one("#replicas_loading_indicator", LoadingIndicator)
 
-        self.replication_container_title = app.query_one("#replication_container_title", Static)
         self.replication_container = app.query_one("#replication_container", Container)
         self.replication_variables = app.query_one("#replication_variables", Label)
         self.replication_status = app.query_one("#replication_status", Static)
@@ -406,7 +405,6 @@ class TabManager:
                 ),
                 Container(Label(id="metric_graphs_title"), TabbedContent(id="metric_graph_tabs"), id="panel_graphs"),
                 Container(
-                    Static(id="replication_container_title", classes="replication_container_title"),
                     Container(
                         Label(id="replication_title"),
                         Label(id="replication_variables"),

@@ -1,7 +1,6 @@
 import re
 import socket
 
-from rich.align import Align
 from rich.style import Style
 from rich.table import Table
 from textual._node_list import DuplicateIds
@@ -18,26 +17,6 @@ from dolphie.Modules.TabManager import Tab
 
 def create_panel(tab: Tab):
     dolphie = tab.dolphie
-
-    if (
-        dolphie.panels.replication.visible
-        and not dolphie.replica_manager.available_replicas
-        and not dolphie.replication_status
-        and not dolphie.galera_cluster
-        and not dolphie.group_replication
-        and not dolphie.innodb_cluster
-        and not dolphie.innodb_cluster_read_replica
-    ):
-        tab.replication_container_title.display = True
-        tab.replication_container_title.update(
-            Align.center(
-                f"[b highlight]{dolphie.panels.get_key(dolphie.panels.replication.name)}[/b highlight]"
-                "[b][yellow]Replication/Replicas panel has no data to display\n"
-            )
-        )
-
-    else:
-        tab.replication_container_title.display = False
 
     def create_clusterset_panel():
         if not dolphie.innodb_cluster_clustersets:
