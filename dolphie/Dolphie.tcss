@@ -640,21 +640,22 @@ Select > OptionList {
     }
 
     & > .option-list--option-highlighted {
-        text-style: none;
+        text-style: bold;
         background: #131626;
     }
     &:focus > .option-list--option-highlighted {
+        text-style: bold;
         background: #283048;
     }
     & > .option-list--option-hover {
-        background: #283048;
+        background: #21283c;
     }
     & > .option-list--option-hover-highlighted {
-        background: #283048;
+        background: #21283c;
         text-style: none;
     }
     &:focus > .option-list--option-hover-highlighted {
-        background: #283048;
+        background: #21283c;
         text-style: none;
     }
 }
