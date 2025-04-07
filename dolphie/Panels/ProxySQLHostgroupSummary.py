@@ -1,4 +1,3 @@
-from rich.text import Text
 from textual.widgets import DataTable
 
 from dolphie.Modules.Functions import format_bytes, format_number
@@ -93,8 +92,6 @@ def create_panel(tab: Tab) -> DataTable:
     hostgroup_summary_datatable.sort("hostgroup")
 
     tab.proxysql_hostgroup_summary_title.update(
-        Text.from_markup(
-            f"{dolphie.panels.get_panel_title(dolphie.panels.proxysql_hostgroup_summary.name)} "
-            f"([highlight]{hostgroup_summary_datatable.row_count}[/highlight])"
-        )
+        f"{dolphie.panels.get_panel_title(dolphie.panels.proxysql_hostgroup_summary.name)} "
+        f"([$highlight]{hostgroup_summary_datatable.row_count}[/$highlight])"
     )

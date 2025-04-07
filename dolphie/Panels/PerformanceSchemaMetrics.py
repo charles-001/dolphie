@@ -21,7 +21,7 @@ def create_panel(tab: Tab):
             if dolphie.pfs_metrics_last_reset_time
             else 0
         )
-    tab.pfs_metrics_delta.label = f"Delta since last reset ([light_blue]{format_time(time)}[/light_blue])"
+    tab.pfs_metrics_delta.label = f"Delta since last reset ([$light_blue]{format_time(time)}[/$light_blue])"
 
 
 def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
@@ -31,8 +31,9 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
     if not dolphie.table_io_waits_data or not dolphie.table_io_waits_data.filtered_data:
         datatable.display = False
         tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
-            "Table I/O Waits ([highlight]0[/highlight])"
+            "Table I/O Waits ([$highlight]0[/$highlight])"
         )
+
         return
 
     datatable.display = True
@@ -128,7 +129,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
 
     # Update the title to reflect the number of active rows
     tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
-        f"Table I/O Waits ([highlight]{datatable.row_count}[/highlight])"
+        f"Table I/O Waits ([$highlight]{datatable.row_count}[/$highlight])"
     )
 
 
@@ -138,7 +139,8 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
 
     if not dolphie.file_io_data or not dolphie.file_io_data.filtered_data:
         datatable.display = False
-        tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = "File I/O ([highlight]0[/highlight])"
+        tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = "File I/O ([$highlight]0[/$highlight])"
+
         return
 
     datatable.display = True
@@ -235,5 +237,5 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
 
     # Update the title to reflect the number of active rows
     tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = (
-        f"File I/O ([highlight]{datatable.row_count}[/highlight])"
+        f"File I/O ([$highlight]{datatable.row_count}[/$highlight])"
     )

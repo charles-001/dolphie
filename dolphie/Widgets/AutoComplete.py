@@ -1,513 +1,668 @@
 # Source: https://github.com/darrenburns/textual-autocomplete
-# Implemented into Dolphie to provide mouse support via https://github.com/darrenburns/textual-autocomplete/pull/20
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, ClassVar, Iterable, Mapping, cast
+from operator import itemgetter
+from re import IGNORECASE, escape, finditer, search
+from typing import Callable, ClassVar, Iterable, NamedTuple, Sequence, cast
 
-from rich.console import Console, ConsoleOptions, RenderableType, RenderResult
-from rich.style import Style
-from rich.table import Table
-from rich.text import Text, TextType
-from textual import events
+from rich.text import Text
+from textual import events, on
 from textual.app import ComposeResult
-from textual.geometry import Region, Size
-from textual.message import Message
+from textual.binding import Binding
+from textual.cache import LRUCache
+from textual.content import Content
+from textual.css.query import NoMatches
+from textual.geometry import Offset, Region, Spacing
+from textual.style import Style
 from textual.widget import Widget
-from textual.widgets import Input
+from textual.widgets import Input, OptionList
+from textual.widgets.option_list import Option
 
 
-class DropdownRender:
+@dataclass
+class TargetState:
+    text: str
+    """The content in the target widget."""
+
+    cursor_position: int
+    """The cursor position in the target widget."""
+
+
+class DropdownItem(Option):
     def __init__(
         self,
-        filter: str,
-        matches: list[DropdownItem],
-        selected_index: int,
-        component_styles: Mapping[str, Style],
+        main: str | Content,
+        prefix: str | Content | None = None,
+        id: str | None = None,
+        disabled: bool = False,
     ) -> None:
-        self.filter = filter
-        self.matches = matches
-        self.selection_cursor_index = selected_index
-        self.component_styles = component_styles
+        """A single option appearing in the autocompletion dropdown. Each option has up to 3 columns.
+        Note that this is not a widget, it's simply a data structure for describing dropdown items.
 
-    def __rich_console__(self, console: Console, options: ConsoleOptions) -> RenderResult:
-        get_style = self.component_styles.get
-        table = Table.grid(expand=True)
+        Args:
+            left: The prefix will often contain an icon/symbol, the main (middle)
+                column contains the text that represents this option.
+            main: The main text representing this option - this will be highlighted by default.
+                In an IDE, the `main` (middle) column might contain the name of a function or method.
+        """
+        self.main = Content(main) if isinstance(main, str) else main
+        self.prefix = Content(prefix) if isinstance(prefix, str) else prefix
+        left = self.prefix
+        prompt = self.main
+        if left:
+            prompt = Content.assemble(left, self.main)
 
-        if self.matches:
-            if self.matches[0].left_meta:
-                table.add_column("left_meta", justify="left", style=get_style("left-column"))
-            if self.matches[0].main:
-                table.add_column("main", style=get_style("main-column"))
-            if self.matches[0].right_meta:
-                table.add_column("right_meta", justify="right", style=get_style("right-column"))
+        super().__init__(prompt, id, disabled)
 
-        add_row = table.add_row
-        for index, match in enumerate(self.matches):
-            main_text = cast(Text, match.main)
-            if self.filter != "":
-                highlight_style = self.component_styles["highlight-match"]
-                if match.highlight_ranges is not None:
-                    # If the user has supplied their own ranges to highlight
-                    for start, end in match.highlight_ranges:
-                        main_text.stylize(highlight_style, start, end)
-                else:
-                    # Otherwise, by default, we highlight case-insensitive substrings
-                    main_text.highlight_words(
-                        [self.filter],
-                        highlight_style,
-                        case_sensitive=False,
-                    )
-
-            # If the cursor is on this row, highlight it
-            additional_row_style = Style.null()
-            if index == self.selection_cursor_index:
-                additional_row_style = self.component_styles["selection-cursor"]
-
-            row_items = []
-            if match.left_meta:
-                row_items.append(match.left_meta)
-            if match.main:
-                row_items.append(match.main)
-            if match.right_meta:
-                row_items.append(match.right_meta)
-
-            add_row(
-                *row_items,
-                style=additional_row_style,
-            )
-
-        yield table
+    @property
+    def value(self) -> str:
+        return self.main.plain
 
 
-@dataclass
-class DropdownItem:
-    """A single option appearing in the autocompletion dropdown. Each option has up to 3 columns.
-    Note that this is not a widget, it's simply a data structure for describing dropdown items.
-
-    Args:
-        left: The left column will often contain an icon/symbol, the main (middle)
-            column contains the text that represents this option.
-        main: The main text representing this option - this will be highlighted by default.
-            In an IDE, the `main` (middle) column might contain the name of a function or method.
-        right: The text appearing in the right column of the dropdown.
-            The right column often contains some metadata relating to this option.
-        highlight_ranges: Custom ranges to highlight. By default, the value is None,
-            meaning textual-autocomplete will highlight substrings in the dropdown.
-            That is, if the value you've typed into the Input is a substring of the candidates
-            `main` attribute, then that substring will be highlighted. If you supply your own
-            implementation of `items` which uses a more complex process to decide what to
-            display in the dropdown, then you can customise the highlighting of the returned
-            candidates by supplying index ranges to highlight.
-
+class DropdownItemHit(DropdownItem):
+    """A dropdown item which matches the current search string - in other words
+    AutoComplete.match has returned a score greater than 0 for this item.
     """
 
-    main: TextType = ""
-    left_meta: TextType = ""
-    right_meta: TextType = ""
-    highlight_ranges: Iterable[tuple[int, int]] | None = None
 
-    def __post_init__(self):
-        if isinstance(self.left_meta, str):
-            self.left_meta = Text(self.left_meta)
-        if isinstance(self.main, str):
-            self.main = Text(self.main)
-        if isinstance(self.right_meta, str):
-            self.right_meta = Text(self.right_meta)
-
-
-@dataclass
-class InputState:
-    value: str
-    cursor_position: int
-
-
-CompletionStrategy = "Literal['append', 'replace', 'insert'] | Callable[[str, InputState], InputState]"
+class AutoCompleteList(OptionList):
+    pass
 
 
 class AutoComplete(Widget):
+    BINDINGS = [
+        Binding("escape", "hide", "Hide dropdown", show=False),
+    ]
+
     DEFAULT_CSS = """\
-AutoComplete {
-    align-horizontal: center;
-}
-    """
+    AutoComplete {
+        height: auto;
+        width: auto;
+        max-height: 12;
+        display: none;
+        background: $surface;
+        overlay: screen;
 
-    def __init__(
-        self,
-        input: Input,
-        dropdown: Dropdown,
-        tab_moves_focus: bool = False,
-        completion_strategy: CompletionStrategy = "replace",
-        *,
-        id: str | None = None,
-        classes: str | None = None,
-    ):
-        """Coordinates between a Textual Input and a Dropdown widget,
-        ensuring the Dropdown is fed with data from the Input and displayed
-        in the correct location at the appropriate times.
+        & AutoCompleteList {
+            width: auto;
+            height: auto;
+            border: none;
+            padding: 0;
+            margin: 0;
+            scrollbar-size-vertical: 1;
+            text-wrap: nowrap;
+            color: $foreground;
+            background: transparent;
+        }
 
-        Args:
-            input: The input widget that you want to power the dropdown.
-            dropdown: The dropdown widget. This will be populated by AutoComplete.
-            tab_moves_focus: Set to True to also shift focus after completing using the Tab key.
-            completion_strategy: When a value is selected from the dropdown,
-                how does it get inserted into the Input? The default "append",
-                appends the selected string to the end of the current value in the
-                input. "replace" will replace the value in the input with the chosen
-                dropdown item. "insert" will insert the value without deleting any of
-                the text currently in the input. You can also pass a callback function
-                for more advanced completion. When a user selects a value in the
-                dropdown, the library will call this function and pass in the selected
-                value and the current InputState. Return a new InputState object from
-                this function, and textual-autocomplete will update the Input accordingly.
+        & .autocomplete--highlight-match {
+            text-style: bold;
+        }
 
-        """
-        super().__init__(id=id, classes=classes)
-        self.input = input
-        self.dropdown = dropdown
-        self.dropdown.input_widget = self.input
-        self.tab_moves_focus = tab_moves_focus
-        self.completion_strategy = completion_strategy
-
-    def compose(self) -> ComposeResult:
-        yield self.input
-
-    def on_mount(self) -> None:
-        self.screen.mount(self.dropdown)
-
-    def on_descendant_blur(self) -> None:
-        self.dropdown.display = False
-
-    def on_key(self, event: events.Key) -> None:
-        if not self.dropdown.display:
-            # only respond and stop the event if the dropdown is open
-            return
-
-        key = event.key
-        if key == "down":
-            self.dropdown.cursor_down()
-            event.stop()
-        elif key == "up":
-            self.dropdown.cursor_up()
-            event.stop()
-        elif key == "escape":
-            self.dropdown.close()
-            event.stop()
-        elif key == "tab":
-            # Only interfere if there's a dropdown visible,
-            # otherwise, we want things to behave like a normal input.
-            if self.dropdown.display:
-                self._select_item()
-                if not self.tab_moves_focus:
-                    event.stop()  # Prevent focus change
-
-    def on_input_submitted(self) -> None:
-        self._select_item()
-
-    def _select_item(self):
-        selected = self.dropdown.selected_item
-        completion_strategy = self.completion_strategy
-        if self.dropdown.display and selected is not None:
-            selected_value = selected.main.plain
-            if completion_strategy == "replace":
-                self.input.value = ""
-                self.input.insert_text_at_cursor(selected_value)
-            elif completion_strategy == "insert":
-                self.input.insert_text_at_cursor(selected_value)
-            elif completion_strategy == "append":
-                old_value = self.input.value
-                new_value = old_value + selected_value
-                self.input.value = new_value
-                self.input.action_end()
-            else:
-                new_state = completion_strategy(
-                    selected_value,
-                    InputState(
-                        value=self.input.value,
-                        cursor_position=self.input.cursor_position,
-                    ),
-                )
-                self.input.value = new_state.value
-                self.input.cursor_position = new_state.cursor_position
-
-            self.dropdown.display = False
-            self.post_message(self.Selected(item=self.dropdown.selected_item))
-
-    class Selected(Message):
-        def __init__(self, item: DropdownItem):
-            super().__init__()
-            self.item = item
-
-
-class Dropdown(Widget):
-    DEFAULT_CSS = """\
-Dropdown {
-    layer: textual-autocomplete;
-    /* to prevent parent `align` confusing things, we dock to remove from flow */
-    dock: top;
-    display: none;
-    overflow: hidden auto;
-    background: $panel-lighten-1;
-    height: auto;
-    max-height: 12;
-    max-width: 1fr;
-    scrollbar-size-vertical: 1;
-    border-left: wide #384673;
-}
-
-Dropdown .autocomplete--highlight-match {
-    text-style: bold;
-}
-
-Dropdown .autocomplete--selection-cursor {
-    background: $boost;
-    text-style: bold;
-}
+    }
     """
 
     COMPONENT_CLASSES: ClassVar[set[str]] = {
-        "autocomplete--selection-cursor",
         "autocomplete--highlight-match",
-        "autocomplete--left-column",
-        "autocomplete--main-column",
-        "autocomplete--right-column",
     }
 
     def __init__(
         self,
-        items: list[DropdownItem] | Callable[[InputState], list[DropdownItem]],
-        # edge: Whether the dropdown should appear above or below.
-        # edge: str = "bottom",  # Literal["top", "bottom"]
-        # tracking: Whether the dropdown should follow the cursor or remain static.
-        # tracking: str = "follow_cursor",  # Literal["follow_cursor", "static"]
+        target: Input | str,
+        candidates: Sequence[DropdownItem | str] | Callable[[TargetState], list[DropdownItem]] | None = None,
+        *,
+        prevent_default_enter: bool = True,
+        prevent_default_tab: bool = True,
+        name: str | None = None,
         id: str | None = None,
         classes: str | None = None,
-    ):
-        """Construct an Autocomplete. Autocomplete only works if your Screen has a dedicated layer
-        called `textual-autocomplete`.
+        disabled: bool = False,
+    ) -> None:
+        """An autocomplete widget.
 
         Args:
-            items: A list of dropdown items, or a function to call to retrieve the list
-                of dropdown items for the current input value and cursor position.
-                Function takes the current InputState as an argument, and returns a list of
-                `DropdownItem` which will be displayed in the dropdown list.
-            id: The ID of the widget, allowing you to directly refer to it using CSS and queries.
-            classes: The classes of this widget, a space separated string.
+            target: An Input instance or a selector string used to query an Input instance.
+                If a selector is used, remember that widgets are not available until the widget has been mounted (don't
+                use the selector in `compose` - use it in `on_mount` instead).
+            candidates: The candidates to match on, or a function which returns the candidates to match on.
+                If set to None, the candidates will be fetched by directly calling the `get_candidates` method,
+                which is what you'll probably want to do if you're subclassing AutoComplete and supplying your
+                own custom `get_candidates` method.
+            prevent_default_enter: Prevent the default enter behavior. If True, when you select a dropdown option using
+                the enter key, the default behavior (e.g. submitting an Input) will be prevented.
+            prevent_default_tab: Prevent the default tab behavior. If True, when you select a dropdown option using
+                the tab key, the default behavior (e.g. moving focus to the next widget) will be prevented.
         """
-        super().__init__(
-            id=id,
-            classes=classes,
-        )
-        # self._edge = edge
-        # self._tracking = tracking
-        self.items = items
-        self.input_widget: Input
+        super().__init__(name=name, id=id, classes=classes, disabled=disabled)
+        self._target = target
+
+        # Users can supply strings as a convenience for the simplest cases,
+        # so let's convert them to DropdownItems.
+        self.candidates: list[DropdownItem] | Callable[[TargetState], list[DropdownItem]] | None
+        """The candidates to match on, or a function which returns the candidates to match on."""
+        if isinstance(candidates, Sequence):
+            self.candidates = [
+                candidate if isinstance(candidate, DropdownItem) else DropdownItem(main=candidate)
+                for candidate in candidates
+            ]
+        else:
+            self.candidates = candidates
+
+        self.prevent_default_enter = prevent_default_enter
+        """Prevent the default enter behavior. If True, when you select a dropdown option using
+        the enter key, the default behavior (e.g. submitting an Input) will be prevented.
+        """
+
+        self.prevent_default_tab = prevent_default_tab
+        """Prevent the default tab behavior. If True, when you select a dropdown option using
+        the tab key, the default behavior (e.g. moving focus to the next widget) will be prevented.
+        """
+
+        self._target_state = TargetState("", 0)
+        """Cached state of the target Input."""
+
+        self._fuzzy_search = FuzzySearch()
+        """The default implementation used by AutoComplete.match."""
 
     def compose(self) -> ComposeResult:
-        self.child = DropdownChild(self.input_widget)
-        yield self.child
+        option_list = AutoCompleteList()
+        option_list.can_focus = False
+        yield option_list
 
-    def on_mount(self, event: events.Mount) -> None:
-        screen_layers = list(self.screen.styles.layers)
-        if "textual-autocomplete" not in screen_layers:
-            screen_layers.append("textual-autocomplete")
+    def on_mount(self) -> None:
+        # Subscribe to the target widget's reactive attributes.
+        self.target.message_signal.subscribe(self, self._listen_to_messages)  # type: ignore
+        self._subscribe_to_target()
+        self._handle_target_update()
+        self.set_interval(0.2, lambda: self.call_after_refresh(self._align_to_target))
 
-        # TODO: Ignoring type below because Textual is typed incorrectly here.
-        #  Style property setter for layers has incorrect type.
-        self.screen.styles.layers = tuple(screen_layers)  # type: ignore
+    def _listen_to_messages(self, event: events.Event) -> None:
+        """Listen to some events of the target widget."""
 
-        # TODO: Error cases - Handle case where reference to input widget no
-        #  longer exists, for example
-
-        self.watch(
-            self.input_widget,
-            attribute_name="value",
-            callback=self._input_value_changed,
-        )
-
-        # self.watch(
-        #     self.input_widget,
-        #     attribute_name="cursor_position",
-        #     callback=self._input_cursor_position_changed,
-        # )
-
-        # TODO: Having to use scroll_target here because scroll_y doesn't fire.
-        #  Will also probably need separate callbacks for x and y.
-        self.watch(
-            self.screen,
-            attribute_name="scroll_target_y",
-            callback=self.handle_screen_scroll,
-        )
-
-        if self.input_widget is not None:
-            self.sync_state(self.input_widget.value, self.input_widget.cursor_position)
-
-    def cursor_up(self) -> None:
-        if not self.display:
-            self.display = True
-        else:
-            self.child.selected_index -= 1
-
-    def cursor_down(self) -> None:
-        if not self.display:
-            self.display = True
-        else:
-            self.child.selected_index += 1
-
-    def cursor_home(self) -> None:
-        self.child.selected_index = 0
-
-    def close(self) -> None:
-        if self.display:
-            self.display = False
-
-    def on_mouse_move(self, event: events.MouseMove) -> None:
-        self.child.selected_index = event.y
-
-    async def on_click(self, event: events.Click) -> None:
-        await self.input_widget.action_submit()
-
-    @property
-    def selected_item(self) -> DropdownItem | None:
-        return self.child.selected_item
-
-    def _input_cursor_position_changed(self, cursor_position: int) -> None:
-        if self.input_widget is not None:
-            self.sync_state(self.input_widget.value, cursor_position)
-
-    def _input_value_changed(self, value: str) -> None:
-        if self.input_widget is not None:
-            self.sync_state(value, self.input_widget.cursor_position)
-
-    def sync_state(self, value: str, input_cursor_position: int) -> None:
-        if callable(self.items):
-            input_state = InputState(value=value, cursor_position=input_cursor_position)
-            matches = self.items(input_state)
-        else:
-            matches = []
-            for item in self.items:
-                # Casting to Text, since we convert to Text object in
-                # the __post_init__ of DropdownItem.
-                text = cast(Text, item.main)
-                if value.lower() in text.plain.lower():
-                    matches.append(
-                        DropdownItem(
-                            left_meta=cast(Text, item.left_meta).copy(),
-                            main=cast(Text, item.main).copy(),
-                            right_meta=cast(Text, item.right_meta).copy(),
-                        )
-                    )
-
-            matches = sorted(
-                matches,
-                key=lambda match: not cast(Text, match.main).plain.lower().startswith(value.lower()),
-            )
-
-        self.child.matches = matches
-        self.display = len(matches) > 0 and value != "" and self.input_widget.has_focus
-        self.cursor_home()
-        self.reposition(input_cursor_position)
-        self.child.refresh()
-
-    def handle_screen_scroll(self, old: float, new: float) -> None:
-        self.reposition(scroll_target_adjust_y=int(old) - int(new))
-
-    def reposition(
-        self,
-        input_cursor_position: int | None = None,
-        scroll_target_adjust_y: int = 0,
-    ) -> None:
-        if self.input_widget is None:
+        try:
+            option_list = self.option_list
+        except NoMatches:
+            # This can happen if the event is an Unmount event
+            # during application shutdown.
             return
 
-        if input_cursor_position is None:
-            input_cursor_position = self.input_widget.cursor_position
+        if isinstance(event, events.Key) and option_list.option_count:
+            displayed = self.display
+            highlighted = option_list.highlighted or 0
+            if event.key == "down":
+                # Check if there's only one item and it matches the search string
+                if option_list.option_count == 1:
+                    search_string = self.get_search_string(self._get_target_state())
+                    first_option = option_list.get_option_at_index(0).prompt
+                    text_from_option = first_option.plain if isinstance(first_option, Text) else first_option
+                    if text_from_option == search_string:
+                        # Don't prevent default behavior in this case
+                        return
 
-        top, right, bottom, left = self.styles.margin
-        x, y, width, height = self.input_widget.content_region
-        line_below_cursor = y + 1 + scroll_target_adjust_y
+                # If you press `down` while in an Input and the autocomplete is currently
+                # hidden, then we should show the dropdown.
+                event.prevent_default()
+                event.stop()
+                if displayed:
+                    highlighted = (highlighted + 1) % option_list.option_count
+                else:
+                    self.display = True
+                    highlighted = 0
 
-        cursor_screen_position = self.app.cursor_position.x
-        self.styles.margin = (
-            line_below_cursor,
-            right,
-            bottom,
-            cursor_screen_position,
+                option_list.highlighted = highlighted
+
+            elif event.key == "up":
+                if displayed:
+                    event.prevent_default()
+                    event.stop()
+                    highlighted = (highlighted - 1) % option_list.option_count
+                    option_list.highlighted = highlighted
+            elif event.key == "enter":
+                if self.prevent_default_enter and displayed:
+                    event.prevent_default()
+                    event.stop()
+                self._complete(option_index=highlighted)
+            elif event.key == "tab":
+                if self.prevent_default_tab and displayed:
+                    event.prevent_default()
+                    event.stop()
+                self._complete(option_index=highlighted)
+            elif event.key == "escape":
+                if displayed:
+                    event.prevent_default()
+                    event.stop()
+                self.action_hide()
+
+        if isinstance(event, Input.Changed):
+            # We suppress Changed events from the target widget, so that we don't
+            # handle change events as a result of performing a completion.
+            self._handle_target_update()
+
+    def action_hide(self) -> None:
+        self.styles.display = "none"
+
+    def action_show(self) -> None:
+        self.styles.display = "block"
+
+    def _complete(self, option_index: int) -> None:
+        """Do the completion (i.e. insert the selected item into the target input).
+
+        This is when the user highlights an option in the dropdown and presses tab or enter.
+        """
+        if not self.display or self.option_list.option_count == 0:
+            return
+
+        option_list = self.option_list
+        highlighted = option_index
+        option = cast(DropdownItem, option_list.get_option_at_index(highlighted))
+        highlighted_value = option.value
+        with self.prevent(Input.Changed):
+            self.apply_completion(highlighted_value, self._get_target_state())
+        self.post_completion()
+
+    def post_completion(self) -> None:
+        """This method is called after a completion is applied. By default, it simply hides the dropdown."""
+        self.action_hide()
+
+    def apply_completion(self, value: str, state: TargetState) -> None:
+        """Apply the completion to the target widget.
+
+        This method updates the state of the target widget to the reflect
+        the value the user has chosen from the dropdown list.
+        """
+        target = self.target
+        target.value = ""
+        target.insert_text_at_cursor(value)
+
+        # We need to rebuild here because we've prevented the Changed events
+        # from being sent to the target widget, meaning AutoComplete won't spot
+        # intercept that message, and would not trigger a rebuild like it normally
+        # does when a Changed event is received.
+        new_target_state = self._get_target_state()
+        self._rebuild_options(new_target_state, self.get_search_string(new_target_state))
+
+    @property
+    def target(self) -> Input:
+        """The resolved target widget."""
+        if isinstance(self._target, Input):
+            return self._target
+        else:
+            target = self.screen.query_one(self._target)
+            assert isinstance(target, Input)
+            return target
+
+    def _subscribe_to_target(self) -> None:
+        """Attempt to subscribe to the target widget, if it's available."""
+        target = self.target
+        self.watch(target, "has_focus", self._handle_focus_change)
+        self.watch(target, "selection", self._align_and_rebuild)
+
+    def _align_and_rebuild(self) -> None:
+        self._align_to_target()
+        self._target_state = self._get_target_state()
+        search_string = self.get_search_string(self._target_state)
+        self._rebuild_options(self._target_state, search_string)
+
+    def _align_to_target(self) -> None:
+        """Align the dropdown to the position of the cursor within
+        the target widget, and constrain it to be within the screen."""
+        try:
+            x, y = self.target.cursor_screen_offset
+            dropdown = self.option_list
+            width, height = dropdown.outer_size
+
+            # Constrain the dropdown within the screen.
+            x, y, _width, _height = Region(x - 1, y + 1, width, height).constrain(
+                "inside",
+                "none",
+                Spacing.all(0),
+                self.screen.scrollable_content_region,
+            )
+            self.absolute_offset = Offset(x, y)
+            self.refresh(layout=True)
+        except NoMatches:
+            return
+
+    def _get_target_state(self) -> TargetState:
+        """Get the state of the target widget."""
+        target = self.target
+        return TargetState(
+            text=target.value,
+            cursor_position=target.cursor_position,
         )
 
+    def _handle_focus_change(self, has_focus: bool) -> None:
+        """Called when the focus of the target widget changes."""
+        if not has_focus:
+            self.action_hide()
+        else:
+            target_state = self._get_target_state()
+            search_string = self.get_search_string(target_state)
+            self._rebuild_options(target_state, search_string)
 
-class DropdownChild(Widget):
-    """An autocompletion dropdown widget. This widget gets linked to an Input widget, and is automatically
-    updated based on the state of that Input."""
+    def _handle_target_update(self) -> None:
+        """Called when the state (text or cursor position) of the target is updated.
 
-    DEFAULT_CSS = """\
-DropdownChild {
-    height: auto;
-}
-    """
+        Here we align the dropdown to the target, determine if it should be visible,
+        and rebuild the options in it.
+        """
+        self._target_state = self._get_target_state()
+        search_string = self.get_search_string(self._target_state)
 
-    # TODO: Support awaitable and add debounce.
-    def __init__(self, linked_input: Input):
-        """Construct an Autocomplete. Autocomplete only works if your Screen has a dedicated layer
-        called `textual-autocomplete`.
+        # Determine visibility after the user makes a change in the
+        # target widget (e.g. typing in a character in the Input).
+        self._rebuild_options(self._target_state, search_string)
+        self._align_to_target()
+
+        if self.should_show_dropdown(search_string):
+            self.action_show()
+        else:
+            self.action_hide()
+
+    def should_show_dropdown(self, search_string: str) -> bool:
+        """
+        Determine whether to show or hide the dropdown based on the current state.
+
+        This method can be overridden to customize the visibility behavior.
 
         Args:
-            linked_input: A reference to the Input Widget to add autocomplete to, or a selector/query string
-                identifying the Input Widget that should power this autocomplete.
+            search_string: The current search string.
+
+        Returns:
+            bool: True if the dropdown should be shown, False otherwise.
         """
-        super().__init__()
-        self.matches: list[DropdownItem] = []
-        self.linked_input = linked_input
-        self._selected_index: int = 0
+        option_list = self.option_list
+        option_count = option_list.option_count
 
-    @property
-    def parent(self) -> Dropdown:
-        assert isinstance(self._parent, Dropdown)
-        return self._parent
+        if len(search_string) == 0 or option_count == 0:
+            return False
+        elif option_count == 1:
+            first_option = option_list.get_option_at_index(0).prompt
+            text_from_option = first_option.plain if isinstance(first_option, Text) else first_option
+            return text_from_option != search_string
+        else:
+            return True
 
-    def render(self) -> RenderableType:
-        assert self.linked_input is not None, "input_widget set in on_mount"
-        parent_component = self.parent.get_component_rich_style
-        component_styles = {
-            "selection-cursor": parent_component("autocomplete--selection-cursor"),
-            "highlight-match": parent_component("autocomplete--highlight-match"),
-            "left-column": parent_component("autocomplete--left-column"),
-            "main-column": parent_component("autocomplete--main-column"),
-            "right-column": parent_component("autocomplete--right-column"),
-        }
-        return DropdownRender(
-            filter=self.linked_input.value,
-            matches=self.matches,
-            selected_index=self.selected_index,
-            component_styles=component_styles,
+    def _rebuild_options(self, target_state: TargetState, search_string: str) -> None:
+        """Rebuild the options in the dropdown.
+
+        Args:
+            target_state: The state of the target widget.
+        """
+        option_list = self.option_list
+        option_list.clear_options()
+        if self.target.has_focus:
+            matches = self._compute_matches(target_state, search_string)
+            if matches:
+                option_list.add_options(matches)
+                option_list.highlighted = 0
+
+    def get_search_string(self, target_state: TargetState) -> str:
+        """This value will be passed to the match function.
+
+        This could be, for example, the text in the target widget, or a substring of that text.
+
+        Returns:
+            The search string that will be used to filter the dropdown options.
+        """
+        return target_state.text[: target_state.cursor_position]
+
+    def _compute_matches(self, target_state: TargetState, search_string: str) -> list[DropdownItem]:
+        """Compute the matches based on the target state.
+
+        Args:
+            target_state: The state of the target widget.
+
+        Returns:
+            The matches to display in the dropdown.
+        """
+
+        # If items is a callable, then it's a factory function that returns the candidates.
+        # Otherwise, it's a list of candidates.
+        candidates = self.get_candidates(target_state)
+        matches = self.get_matches(target_state, candidates, search_string)
+        return matches
+
+    def get_candidates(self, target_state: TargetState) -> list[DropdownItem]:
+        """Get the candidates to match against."""
+        candidates = self.candidates
+        if isinstance(candidates, Sequence):
+            return list(candidates)
+        elif candidates is None:
+            raise NotImplementedError(
+                "You must implement get_candidates in your AutoComplete subclass, because candidates is None"
+            )
+        else:
+            # candidates is a callable
+            return candidates(target_state)
+
+    def get_matches(
+        self,
+        target_state: TargetState,
+        candidates: list[DropdownItem],
+        search_string: str,
+    ) -> list[DropdownItem]:
+        """Given the state of the target widget, return the DropdownItems
+        which match the query string and should be appear in the dropdown.
+
+        Args:
+            target_state: The state of the target widget.
+            candidates: The candidates to match against.
+            search_string: The search string to match against.
+
+        Returns:
+            The matches to display in the dropdown.
+        """
+        if not search_string:
+            return candidates
+
+        matches_and_scores: list[tuple[DropdownItem, float]] = []
+        append_score = matches_and_scores.append
+        match = self.match
+
+        for candidate in candidates:
+            candidate_string = candidate.value
+            score, offsets = match(search_string, candidate_string)
+            if score > 0:
+                highlighted = self.apply_highlights(candidate.main, offsets)
+                highlighted_item = DropdownItemHit(
+                    main=highlighted,
+                    prefix=candidate.prefix,
+                    id=candidate.id,
+                    disabled=candidate.disabled,
+                )
+                append_score((highlighted_item, score))
+
+        matches_and_scores.sort(key=itemgetter(1), reverse=True)
+        matches = [match for match, _ in matches_and_scores]
+        return matches
+
+    def match(self, query: str, candidate: str) -> tuple[float, tuple[int, ...]]:
+        """Match a query (search string) against a candidate (dropdown item value).
+
+        Returns a tuple of (score, offsets) where score is a float between 0 and 1,
+        used for sorting the matches, and offsets is a tuple of integers representing
+        the indices of the characters in the candidate string that match the query.
+
+        So, if the query is "hello" and the candidate is "hello world",
+        and the offsets will be (0,1,2,3,4). The score can be anything you want -
+        and the highest score will be at the top of the list by default.
+
+        The offsets will be highlighted in the dropdown list.
+
+        A score of 0 means no match, and such candidates will not be shown in the dropdown.
+
+        Args:
+            query: The search string.
+            candidate: The candidate string (dropdown item value).
+
+        Returns:
+            A tuple of (score, offsets).
+        """
+        return self._fuzzy_search.match(query, candidate)
+
+    def apply_highlights(self, candidate: Content, offsets: tuple[int, ...]) -> Content:
+        """Highlight the candidate with the fuzzy match offsets.
+
+        Args:
+            candidate: The candidate which matched the query. Note that this may already have its
+                own styling applied.
+            offsets: The offsets to highlight.
+        Returns:
+            A [rich.text.Text][`Text`] object with highlighted matches.
+        """
+        # TODO - let's have styles which account for the cursor too
+        match_style = Style.from_rich_style(
+            self.get_component_rich_style("autocomplete--highlight-match", partial=True)
         )
 
-    def get_content_height(self, container: Size, viewport: Size, width: int) -> int:
-        return len(self.matches)
+        plain = candidate.plain
+        for offset in offsets:
+            if not plain[offset].isspace():
+                candidate = candidate.stylize(match_style, offset, offset + 1)
+
+        return candidate
 
     @property
-    def selected_item(self) -> DropdownItem | None:
-        selected_index = self._selected_index
-        if not self.matches or not 0 <= selected_index < len(self.matches):
-            return None
-        return self.matches[selected_index]
+    def option_list(self) -> AutoCompleteList:
+        return self.query_one(AutoCompleteList)
 
-    @property
-    def selected_index(self) -> int:
-        return self._selected_index
+    @on(OptionList.OptionSelected, "AutoCompleteList")
+    def _apply_completion(self, event: OptionList.OptionSelected) -> None:
+        # Handles click events on dropdown items.
+        self._complete(event.option_index)
 
-    @selected_index.setter
-    def selected_index(self, value: int) -> None:
-        self._selected_index = value % max(len(self.matches), 1)
-        # It's easier to just ask our parent to scroll here rather
-        # than having to make sure we do it in the parent each time we
-        # update the index. We always appear under the same parent anyway.
-        region = Region(
-            x=self.virtual_region.x,
-            y=self.virtual_region.y + self._selected_index,
-            height=1,
-            width=1,
+
+class _Search(NamedTuple):
+    """Internal structure to keep track of a recursive search."""
+
+    candidate_offset: int = 0
+    query_offset: int = 0
+    offsets: tuple[int, ...] = ()
+
+    def branch(self, offset: int) -> tuple[_Search, _Search]:
+        """Branch this search when an offset is found.
+
+        Args:
+            offset: Offset of a matching letter in the query.
+
+        Returns:
+            A pair of search objects.
+        """
+        _, query_offset, offsets = self
+        return (
+            _Search(offset + 1, query_offset + 1, offsets + (offset,)),
+            _Search(offset + 1, query_offset, offsets),
         )
-        self.parent.scroll_to_region(region=region, animate=False)
-        self.refresh(layout=True)
+
+    @property
+    def groups(self) -> int:
+        """Number of groups in offsets."""
+        groups = 1
+        last_offset, *offsets = self.offsets
+        for offset in offsets:
+            if offset != last_offset + 1:
+                groups += 1
+            last_offset = offset
+        return groups
+
+
+class FuzzySearch:
+    """Performs a fuzzy search.
+
+    Unlike a regex solution, this will finds all possible matches.
+    """
+
+    cache: LRUCache[tuple[str, str, bool], tuple[float, tuple[int, ...]]] = LRUCache(1024 * 4)
+
+    def __init__(self, case_sensitive: bool = False) -> None:
+        """Initialize fuzzy search.
+
+        Args:
+            case_sensitive: Is the match case sensitive?
+        """
+
+        self.case_sensitive = case_sensitive
+
+    def match(self, query: str, candidate: str) -> tuple[float, tuple[int, ...]]:
+        """Match against a query.
+
+        Args:
+            query: The fuzzy query.
+            candidate: A candidate to check,.
+
+        Returns:
+            A pair of (score, tuple of offsets). `(0, ())` for no result.
+        """
+        query_regex = ".*?".join(f"({escape(character)})" for character in query)
+        if not search(query_regex, candidate, flags=0 if self.case_sensitive else IGNORECASE):
+            # Bail out early if there is no possibility of a match
+            return (0.0, ())
+
+        cache_key = (query, candidate, self.case_sensitive)
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        result = max(self._match(query, candidate), key=itemgetter(0), default=(0.0, ()))
+        self.cache[cache_key] = result
+        return result
+
+    def _match(self, query: str, candidate: str) -> Iterable[tuple[float, tuple[int, ...]]]:
+        """Generator to do the matching.
+
+        Args:
+            query: Query to match.
+            candidate: Candidate to check against.
+
+        Yields:
+            Pairs of score and tuple of offsets.
+        """
+        if not self.case_sensitive:
+            query = query.lower()
+            candidate = candidate.lower()
+
+        # We need this to give a bonus to first letters.
+        first_letters = {match.start() for match in finditer(r"\w+", candidate)}
+
+        def score(search: _Search) -> float:
+            """Sore a search.
+
+            Args:
+                search: Search object.
+
+            Returns:
+                Score.
+
+            """
+            # This is a heuristic, and can be tweaked for better results
+            # Boost first letter matches
+            offset_count = len(search.offsets)
+            score: float = offset_count + len(first_letters.intersection(search.offsets))
+            # Boost to favor less groups
+            normalized_groups = (offset_count - (search.groups - 1)) / offset_count
+            score *= 1 + (normalized_groups * normalized_groups)
+            return score
+
+        stack: list[_Search] = [_Search()]
+        push = stack.append
+        pop = stack.pop
+        query_size = len(query)
+        find = candidate.find
+        # Limit the number of loops out of an abundance of caution.
+        # This should be hard to reach without contrived data.
+        remaining_loops = 10_000
+        while stack and (remaining_loops := remaining_loops - 1):
+            search = pop()
+            offset = find(query[search.query_offset], search.candidate_offset)
+            if offset != -1:
+                if not set(candidate[search.candidate_offset :]).issuperset(query[search.query_offset :]):
+                    # Early out if there is not change of a match
+                    continue
+                advance_branch, branch = search.branch(offset)
+                if advance_branch.query_offset == query_size:
+                    yield score(advance_branch), advance_branch.offsets
+                    push(branch)
+                else:
+                    push(branch)
+                    push(advance_branch)

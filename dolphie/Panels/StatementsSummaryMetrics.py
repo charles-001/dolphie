@@ -44,9 +44,10 @@ def create_panel(tab: Tab):
         tab.statements_summary_title.update(
             (
                 f"{tab.dolphie.panels.get_panel_title(tab.dolphie.panels.statements_summary.name)} "
-                f"([highlight]0[/highlight])"
+                f"([$highlight]0[/$highlight])"
             )
         )
+
         return
 
     datatable.display = True
@@ -135,7 +136,7 @@ def create_panel(tab: Tab):
 
     title = (
         f"{tab.dolphie.panels.get_panel_title(tab.dolphie.panels.statements_summary.name)} "
-        f"([highlight]{tab.statements_summary_datatable.row_count}[/highlight])"
+        f"([$highlight]{tab.statements_summary_datatable.row_count}[/$highlight])"
     )
     tab.statements_summary_title.update(title)
 

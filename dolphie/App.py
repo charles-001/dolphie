@@ -23,13 +23,13 @@ from rich.align import Align
 from rich.console import Group
 from rich.style import Style
 from rich.table import Table
-from rich.text import Text
 from rich.theme import Theme as RichTheme
 from rich.traceback import Traceback
 from sqlparse import format as sqlformat
 from textual import events, on, work
 from textual.app import App
 from textual.command import DiscoveryHit, Hit, Provider
+from textual.theme import Theme as TextualTheme
 from textual.widgets import Button, RadioSet, Switch, TabbedContent, Tabs
 from textual.worker import Worker, WorkerState, get_current_worker
 
@@ -107,7 +107,9 @@ class CommandPaletteCommands(Provider):
         return {
             key: {
                 # Center the human_key based on the max length and pad spaces after it
-                "display": f"[b #91abec]{data['human_key'].center(max_key_length)}[/b #91abec]  {data['description']}",
+                "display": (
+                    f"[$b_highlight]{data['human_key'].center(max_key_length)}[/$b_highlight]  {data['description']}"
+                ),
                 "text": f"{data['human_key']} {data['description']}",
                 "command": partial(self.async_command, key),
                 "human_key": data["human_key"],
@@ -118,7 +120,7 @@ class CommandPaletteCommands(Provider):
     async def discover(self):
         for data in self.get_command_hits().values():
             yield DiscoveryHit(
-                display=Text.from_markup(data["display"]),
+                display=data["display"],
                 text=data["text"],
                 command=data["command"],
             )
@@ -174,7 +176,6 @@ class DolphieApp(App):
                 "light_blue": "#bbc8e8",
                 "b white": "b #e9e9e9",
                 "b highlight": "b #91abec",
-                "bold red": "b #fd8383",
                 "b light_blue": "b #bbc8e8",
                 "recording": "#ff5e5e",
                 "b recording": "b #ff5e5e",
@@ -184,6 +185,34 @@ class DolphieApp(App):
         )
         self.console.push_theme(theme)
         self.console.set_window_title(self.TITLE)
+
+        theme = TextualTheme(
+            name="custom",
+            primary="white",
+            variables={
+                "white": "#e9e9e9",
+                "green": "#54efae",
+                "yellow": "#f6ff8f",
+                "dark_yellow": "#e6d733",
+                "red": "#fd8383",
+                "purple": "#b565f3",
+                "dark_gray": "#969aad",
+                "b_dark_gray": "b #969aad",
+                "highlight": "#91abec",
+                "label": "#c5c7d2",
+                "b_label": "b #c5c7d2",
+                "light_blue": "#bbc8e8",
+                "b_white": "b #e9e9e9",
+                "b_highlight": "b #91abec",
+                "b_light_blue": "b #bbc8e8",
+                "recording": "#ff5e5e",
+                "b_recording": "b #ff5e5e",
+                "panel_border": "#6171a6",
+                "table_border": "#333f62",
+            },
+        )
+        self.register_theme(theme)
+        self.theme = "custom"
 
         if config.daemon_mode:
             logger.info(
@@ -356,10 +385,8 @@ class DolphieApp(App):
                     tab.replicas_container.display = True
                     tab.replicas_loading_indicator.display = True
                     tab.replicas_title.update(
-                        Text.from_markup(
-                            f"[white][b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}"
-                            "[/highlight] replicas...\n"
-                        )
+                        f"[$white][b]Loading [$highlight]{len(dolphie.replica_manager.available_replicas)}"
+                        "[/$highlight] replicas...\n"
                     )
 
                 ReplicationPanel.fetch_replicas(tab)
@@ -586,6 +613,7 @@ class DolphieApp(App):
 
             if (
                 dolphie.is_mysql_version_at_least("8.0")
+                and dolphie.replication_status
                 and (dolphie.panels.replication.visible or dolphie.record_for_replay)
                 and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
             ):
@@ -1063,7 +1091,7 @@ class DolphieApp(App):
                             stat_data[metric_data.label] = number_format_func(metric_data.values[-1])
 
         formatted_stat_data = "  ".join(
-            f"[b light_blue]{label}[/b light_blue] {value}" for label, value in stat_data.items()
+            f"[$b_light_blue]{label}[/$b_light_blue] {value}" for label, value in stat_data.items()
         )
         getattr(self.tab_manager.active_tab, metric_tab_name).update(formatted_stat_data)
 
@@ -1198,14 +1226,25 @@ class DolphieApp(App):
         elif key == "4":
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.toggle_panel(dolphie.panels.proxysql_hostgroup_summary.name)
-                dolphie.proxysql_per_second_data = {}
+                dolphie.proxysql_per_second_data.clear()
                 self.tab_manager.active_tab.proxysql_hostgroup_summary_datatable.clear()
-
                 return
 
-            # If we're in replay mode and there's no replication status, or group replication, stop here
             if dolphie.replay_file and (not dolphie.replication_status and not dolphie.group_replication_members):
                 self.notify("This replay file has no replication data")
+                return
+
+            if not any(
+                [
+                    dolphie.replica_manager.available_replicas,
+                    dolphie.replication_status,
+                    dolphie.galera_cluster,
+                    dolphie.group_replication,
+                    dolphie.innodb_cluster,
+                    dolphie.innodb_cluster_read_replica,
+                ]
+            ):
+                self.notify("Replication panel has no data to display")
                 return
 
             self.toggle_panel(dolphie.panels.replication.name)
@@ -1217,10 +1256,8 @@ class DolphieApp(App):
                     if not dolphie.replay_file:
                         tab.replicas_loading_indicator.display = True
                         tab.replicas_title.update(
-                            Text.from_markup(
-                                f"[white][b]Loading [highlight]{len(dolphie.replica_manager.available_replicas)}"
-                                "[/highlight] replicas...\n"
-                            )
+                            f"[$white][b]Loading [$highlight]{len(dolphie.replica_manager.available_replicas)}"
+                            "[/$highlight] replicas...\n"
                         )
 
                 tab.toggle_replication_panel_components()
@@ -1527,6 +1564,8 @@ class DolphieApp(App):
                     widget = tab.ddl_datatable
                 elif panel == "pfs_metrics":
                     widget = tab.pfs_metrics_tabs
+                elif panel == "statements_summary":
+                    widget = tab.statements_summary_datatable
                 elif panel == "proxysql_hostgroup_summary":
                     widget = tab.proxysql_hostgroup_summary_datatable
                 elif panel == "proxysql_mysql_query_rules":
@@ -2128,8 +2167,8 @@ class DolphieApp(App):
                             # Error 1054 means unknown column which would result in a truncated query
                             # Error 1064 means bad syntax which would result in a truncated query
                             tip = (
-                                ":bulb: [b][yellow]Tip![/b][/yellow] If the query is truncated, consider increasing "
-                                "[dark_yellow]performance_schema_max_digest_length[/dark_yellow]/"
+                                ":bulb: [b][yellow]Tip![/b][/yellow] If the query is truncated, consider "
+                                "increasing [dark_yellow]performance_schema_max_digest_length[/dark_yellow]/"
                                 "[dark_yellow]max_digest_length[/dark_yellow] as a preventive measure. "
                                 "If adjusting those settings isn't an option, then use command "
                                 "[dark_yellow]P[/dark_yellow]. "

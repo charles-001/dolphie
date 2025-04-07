@@ -131,8 +131,8 @@ TopBar {
     content-align: center middle;
 }
 
-#statements_summary_data {
-    margin-top: 1;
+#statements_summary_radio_set {
+    margin-bottom: 1;
 }
 .dashboard_replay {
     height: auto;
@@ -265,7 +265,6 @@ Screen.-maximized-view {
 
 .replication {
     height: auto;
-    width: auto;
     margin-bottom: 1;
 
     & > Label {
@@ -274,8 +273,8 @@ Screen.-maximized-view {
     }
 
     & > Center {
+        height: auto;
         layout: horizontal;
-        width: auto;
         content-align: center middle;
 
         & > ScrollableContainer {
@@ -284,10 +283,6 @@ Screen.-maximized-view {
             border: tall #1b233a;
             height: auto;
             max-height: 18;
-
-            & > Static {
-                width: auto;
-            }
         }
 
         & > .replication_status {
@@ -363,21 +358,29 @@ Underline > .underline--bar {
     background: #283357;
     color: #82a5e1;
 }
-AutoComplete {
-    width: auto;
-    height: auto;
-}
-Dropdown {
-    width: 70;
-    background: #151926;
 
-    & > .autocomplete--highlight-match {
-        background: #384673;
+AutoComplete {
+    AutoCompleteList {
+        background: #151926;
+        border-left: wide #384673;
+
+        & > .option-list--option-hover {
+            background: #283048;
+            color: #b7c7ee;
+            text-style: bold;
+        }
     }
 
-    & > .autocomplete--selection-cursor {
+    & .autocomplete--highlight-match {
+        color: #c7d734;
+        background: #384673;
+        text-style: bold;
+    }
+
+    & .option-list--option-highlighted {
         background: #283048;
         color: #b7c7ee;
+        text-style: bold;
     }
 }
 
@@ -637,21 +640,22 @@ Select > OptionList {
     }
 
     & > .option-list--option-highlighted {
-        text-style: none;
+        text-style: bold;
         background: #131626;
     }
     &:focus > .option-list--option-highlighted {
+        text-style: bold;
         background: #283048;
     }
     & > .option-list--option-hover {
-        background: #283048;
+        background: #21283c;
     }
     & > .option-list--option-hover-highlighted {
-        background: #283048;
+        background: #21283c;
         text-style: none;
     }
     &:focus > .option-list--option-hover-highlighted {
-        background: #283048;
+        background: #21283c;
         text-style: none;
     }
 }

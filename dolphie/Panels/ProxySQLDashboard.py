@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 
 from rich.style import Style
 from rich.table import Table
-from rich.text import Text
 
 from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.MetricManager import MetricData
@@ -24,7 +23,7 @@ def create_panel(tab: Tab) -> Table:
     table = Table(
         show_header=False,
         box=None,
-        title=Text.from_markup(f"{dolphie.panels.get_key(dolphie.panels.dashboard.name)}Host Information"),
+        title=f"{dolphie.panels.get_key(dolphie.panels.dashboard.name)}Host Information",
         title_style=table_title_style,
     )
 

@@ -1,4 +1,3 @@
-from rich.text import Text
 from textual.widgets import DataTable
 
 from dolphie.Modules.Functions import format_number
@@ -93,8 +92,6 @@ def create_panel(tab: Tab) -> DataTable:
             mysql_query_rules.clear()
 
     tab.proxysql_mysql_query_rules_title.update(
-        Text.from_markup(
-            f"{dolphie.panels.get_panel_title(dolphie.panels.proxysql_mysql_query_rules.name)} "
-            f"([highlight]{mysql_query_rules.row_count}[/highlight])"
-        )
+        f"{dolphie.panels.get_panel_title(dolphie.panels.proxysql_mysql_query_rules.name)} "
+        f"([$highlight]{mysql_query_rules.row_count}[/$highlight])"
     )

@@ -103,11 +103,12 @@ class Panels:
         return [panel for panel in self.__dict__.values() if isinstance(panel, Panel)]
 
     def get_key(self, panel_name: str) -> str:
+        # This uses Rich's syntax for highlighting, not Textual's Content system
         return f"[b highlight]{self.get_panel(panel_name).key}[/b highlight]"
 
     def get_panel_title(self, panel_name: str) -> str:
         panel = self.get_panel(panel_name)
-        return f"[b highlight]{panel.key}[/b highlight]{panel.display_name}"
+        return f"[$b_highlight]{panel.key}[/$b_highlight]{panel.display_name}"
 
     def all(self) -> List[str]:
         return [

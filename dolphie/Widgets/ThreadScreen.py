@@ -1,4 +1,5 @@
 from rich.style import Style
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Center, Container, ScrollableContainer
@@ -152,7 +153,7 @@ class ThreadScreen(Screen):
         if self.formatted_query:
             if self.explain_failure:
                 self.query_one("#explain_tabbed_content").display = False
-                self.query_one("#explain_failure").update(self.explain_failure)
+                self.query_one("#explain_failure").update(Text.from_markup(self.explain_failure))
             elif self.explain_data:
                 self.query_one("#explain_failure").display = False
 

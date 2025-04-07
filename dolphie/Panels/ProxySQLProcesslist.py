@@ -1,7 +1,6 @@
 from typing import Dict
 
 from rich.syntax import Syntax
-from rich.text import Text
 from textual.widgets import DataTable
 
 from dolphie.DataTypes import ProcesslistThread, ProxySQLProcesslistThread
@@ -137,10 +136,8 @@ def create_panel(tab: Tab) -> DataTable:
     processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 
     tab.processlist_title.update(
-        Text.from_markup(
-            f"{dolphie.panels.get_panel_title(dolphie.panels.processlist.name)} "
-            f"([highlight]{processlist_datatable.row_count}[/highlight])"
-        )
+        f"{dolphie.panels.get_panel_title(dolphie.panels.processlist.name)} "
+        f"([$highlight]{processlist_datatable.row_count}[/$highlight])"
     )
 
 

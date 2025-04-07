@@ -566,12 +566,12 @@ class MySQLQueries:
             applier_status.applying_transaction_last_transient_error_timestamp,
             applier_status.applying_transaction_last_transient_error_message,
             CAST(
-                (UNIX_TIMESTAMP(applier_status.LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP) -
-                UNIX_TIMESTAMP(applier_status.LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP)) * 1000000000000
+                (applier_status.LAST_APPLIED_TRANSACTION_END_APPLY_TIMESTAMP -
+                applier_status.LAST_APPLIED_TRANSACTION_START_APPLY_TIMESTAMP) * 1000000000000
                 AS CHAR
             ) AS apply_time,
             applier_status.last_applied_transaction,
-            CONVERT(SUM(thread_events.COUNT_STAR), UNSIGNED) AS total_thread_events
+            CONVERT(COALESCE(SUM(thread_events.COUNT_STAR), 0), UNSIGNED) AS total_thread_events
         FROM
             `performance_schema`.replication_applier_status_by_worker applier_status JOIN
             `performance_schema`.events_transactions_summary_by_thread_by_event_name thread_events USING (THREAD_ID)

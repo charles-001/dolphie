@@ -19,7 +19,7 @@ from textual.widgets import (
 
 from dolphie.Modules.ArgumentParser import CredentialProfile
 from dolphie.Modules.ManualException import ManualException
-from dolphie.Widgets.AutoComplete import AutoComplete, Dropdown, DropdownItem
+from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem
 
 
 class TabSetupModal(ModalScreen):
@@ -69,11 +69,6 @@ class TabSetupModal(ModalScreen):
                 width: 100%;
                 padding-bottom: 1;
                 align: center middle;
-            }
-
-            & AutoComplete {
-                width: 100%;
-                height: auto;
             }
 
             & #password {
@@ -239,10 +234,9 @@ class TabSetupModal(ModalScreen):
                     prompt="Select a credential profile (optional)",
                 )
 
-                yield AutoComplete(
-                    Input(value=self.host, id="host", placeholder="Host:Port"),
-                    Dropdown(id="dropdown_items", items=self.options_available_hosts),
-                )
+                host = Input(value=self.host, id="host", placeholder="Host:Port")
+                yield host
+                yield AutoComplete(host, id="dropdown_items", candidates=self.options_available_hosts)
 
                 yield Input(id="username", value=self.username)
 
