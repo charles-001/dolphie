@@ -169,8 +169,8 @@ class CommandManager:
                     "p": {"human_key": "p", "description": "Toggle pause of replay"},
                     "S": {"human_key": "S", "description": "Seek to a specific time in the replay"},
                     "left_square_bracket": {
-                        "human_key": "[",
-                        "description": "Seek to previous refresh interval in the replay",
+                        "human_key": "\\[",
+                        "description": " Seek to previous refresh interval in the replay",
                     },
                     "right_square_bracket": {
                         "human_key": "]",
