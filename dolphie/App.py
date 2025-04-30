@@ -21,6 +21,7 @@ from packaging.version import parse as parse_version
 from rich import box
 from rich.align import Align
 from rich.console import Group
+from rich.emoji import Emoji
 from rich.style import Style
 from rich.table import Table
 from rich.theme import Theme as RichTheme
@@ -450,7 +451,7 @@ class DolphieApp(App):
                     if self.tab_manager.active_tab.id != tab.id or self.tab_manager.loading_hostgroups:
                         self.notify(
                             (
-                                f"[b light_blue]{dolphie.host}:{dolphie.port}[/b light_blue]: "
+                                f"[light_blue]{dolphie.host}:{dolphie.port}[/b light_blue]: "
                                 f"{tab.worker_cancel_error.reason}"
                             ),
                             title="Connection Error",
@@ -894,12 +895,12 @@ class DolphieApp(App):
                 # If the tab is not active, include the host in the notification
                 include_host = ""
                 if self.tab_manager.active_tab.id != tab.id:
-                    include_host = f"Host:      [light_blue]{dolphie.host_with_port}[/light_blue]\n"
+                    include_host = f"Host:      [$light_blue]{dolphie.host_with_port}[/$light_blue]\n"
                 self.app.notify(
-                    f"[b][dark_yellow]{variable}[/b][/dark_yellow]\n"
+                    f"[b][$dark_yellow]{variable}[/b][/$dark_yellow]\n"
                     f"{include_host}"
-                    f"Old Value: [highlight]{old_value}[/highlight]\n"
-                    f"New Value: [highlight]{new_value}[/highlight]",
+                    f"Old Value: [$highlight]{old_value}[/$highlight]\n"
+                    f"New Value: [$highlight]{new_value}[/$highlight]",
                     title="Global Variable Change",
                     severity="warning",
                     timeout=15,
@@ -927,12 +928,14 @@ class DolphieApp(App):
         formatted_ro_status = ConnectionStatus.read_only if current_ro_status == "ON" else ConnectionStatus.read_write
         status = "read-only" if current_ro_status == "ON" else "read/write"
 
-        message = f"Host [light_blue]{dolphie.host_with_port}[/light_blue] is now [b highlight]{status}[/b highlight]"
+        message = (
+            f"Host [$light_blue]{dolphie.host_with_port}[/$light_blue] is now [$b_highlight]{status}[/$b_highlight]"
+        )
 
         if current_ro_status == "ON" and not dolphie.replication_status and not dolphie.group_replication:
-            message += " ([dark_yellow]SHOULD BE READ/WRITE?[/dark_yellow])"
+            message += " ([$dark_yellow]SHOULD BE READ/WRITE?[/$dark_yellow])"
         elif current_ro_status == "ON" and dolphie.group_replication and dolphie.is_group_replication_primary:
-            message += " ([dark_yellow]SHOULD BE READ/WRITE?[/dark_yellow])"
+            message += " ([$dark_yellow]SHOULD BE READ/WRITE?[/$dark_yellow])"
 
         if (
             dolphie.connection_status in [ConnectionStatus.read_write, ConnectionStatus.read_only]
@@ -950,7 +953,7 @@ class DolphieApp(App):
     @work()
     async def connect_as_hostgroup(self, hostgroup: str):
         self.tab_manager.loading_hostgroups = True
-        self.notify(f"Connecting to hosts in hostgroup [highlight]{hostgroup}", severity="information")
+        self.notify(f"Connecting to hosts in hostgroup [$highlight]{hostgroup}", severity="information")
 
         for hostgroup_member in self.config.hostgroup_hosts.get(hostgroup, []):
             # We only want to switch if it's the first tab created
@@ -968,7 +971,7 @@ class DolphieApp(App):
                 await asyncio.sleep(0.1)
 
         self.tab_manager.loading_hostgroups = False
-        self.notify(f"Finished connecting to hosts in hostgroup [highlight]{hostgroup}", severity="success")
+        self.notify(f"Finished connecting to hosts in hostgroup [$highlight]{hostgroup}", severity="success")
 
     @on(Button.Pressed, "#back_button")
     def replay_back(self):
@@ -1196,7 +1199,7 @@ class DolphieApp(App):
 
         if key not in self.command_manager.exclude_keys:
             if not self.command_manager.get_commands(dolphie.replay_file, dolphie.connection_source).get(key):
-                self.notify(f"Key [highlight]{key}[/highlight] is not a valid command", severity="warning")
+                self.notify(f"Key [$highlight]{key}[/$highlight] is not a valid command", severity="warning")
                 return
 
             # Prevent commands from being run if the secondary connection is processing a query already
@@ -1272,7 +1275,7 @@ class DolphieApp(App):
             if not dolphie.metadata_locks_enabled and not dolphie.replay_file:
                 self.notify(
                     "Metadata Locks panel requires MySQL 5.7+ with Performance Schema enabled along with "
-                    "[highlight]wait/lock/metadata/sql/mdl[/highlight] enabled in setup_instruments table"
+                    "[$highlight]wait/lock/metadata/sql/mdl[/$highlight] enabled in setup_instruments table"
                 )
                 return
 
@@ -1352,7 +1355,7 @@ class DolphieApp(App):
                 await self.tab_manager.remove_tab(tab)
                 await self.tab_manager.disconnect_tab(tab=tab, update_topbar=False)
 
-                self.notify(f"Tab [highlight]{tab.name}[/highlight] [white]has been removed", severity="success")
+                self.notify(f"Tab [$highlight]{tab.name}[/$highlight] [$white]has been removed", severity="success")
                 self.tab_manager.tabs.pop(tab.id, None)
         elif key == "left_square_bracket":
             if dolphie.replay_file:
@@ -1422,7 +1425,7 @@ class DolphieApp(App):
 
         elif key == "e":
             if dolphie.connection_source_alt == ConnectionSource.mariadb:
-                self.notify(f"Command [highlight]{key}[/highlight] is only available for MySQL connections")
+                self.notify(f"Command [$highlight]{key}[/$highlight] is only available for MySQL connections")
             elif dolphie.connection_source == ConnectionSource.proxysql:
                 self.run_command_in_worker(key=key, dolphie=dolphie)
             else:
@@ -1459,7 +1462,7 @@ class DolphieApp(App):
                         writer.writerow(process_thread.thread_data)
 
                 self.notify(
-                    f"Processlist has been exported to CSV file [highlight]{filename}", severity="success", timeout=10
+                    f"Processlist has been exported to CSV file [$highlight]{filename}", severity="success", timeout=10
                 )
             else:
                 self.notify("There's no processlist data to export", severity="warning")
@@ -1487,7 +1490,7 @@ class DolphieApp(App):
 
                         setattr(dolphie, filters_mapping[filter_name], filter_value)
                         self.notify(
-                            f"[b]{filter_name}[/b]: [b highlight]{filter_value}[/b highlight]",
+                            f"[b]{filter_name}[/b]: [$b_highlight]{filter_value}[/$b_highlight]",
                             title="Filter applied",
                             severity="success",
                         )
@@ -1597,7 +1600,7 @@ class DolphieApp(App):
             else:
                 if not dolphie.pause_refresh:
                     dolphie.pause_refresh = True
-                    self.notify(f"Refresh is paused! Press [b highlight]{key}[/b highlight] again to resume")
+                    self.notify(f"Refresh is paused! Press [$b_highlight]{key}[/$b_highlight] again to resume")
                 else:
                     dolphie.pause_refresh = False
                     self.notify("Refreshing has resumed", severity="success")
@@ -1605,14 +1608,16 @@ class DolphieApp(App):
         if key == "P":
             if dolphie.use_performance_schema_for_processlist:
                 dolphie.use_performance_schema_for_processlist = False
-                self.notify("Switched to using [b highlight]Information Schema[/b highlight] for Processlist panel")
+                self.notify("Switched to using [$b_highlight]Information Schema[/$b_highlight] for Processlist panel")
             else:
                 if dolphie.performance_schema_enabled:
                     dolphie.use_performance_schema_for_processlist = True
-                    self.notify("Switched to using [b highlight]Performance Schema[/b highlight] for Processlist panel")
+                    self.notify(
+                        "Switched to using [$b_highlight]Performance Schema[/$b_highlight] for Processlist panel"
+                    )
                 else:
                     self.notify(
-                        "You can't switch to [b highlight]Performance Schema[/b highlight] for "
+                        "You can't switch to [$b_highlight]Performance Schema[/$b_highlight] for "
                         "Processlist panel because it isn't enabled",
                         severity="warning",
                     )
@@ -1626,7 +1631,7 @@ class DolphieApp(App):
                 dolphie.refresh_interval = refresh_interval
 
                 self.notify(
-                    f"Refresh interval set to [b highlight]{refresh_interval}[/b highlight] second(s)",
+                    f"Refresh interval set to [$b_highlight]{refresh_interval}[/$b_highlight] second(s)",
                     severity="success",
                 )
 
@@ -1669,7 +1674,7 @@ class DolphieApp(App):
                     thread_id = data
                     thread_data: ProxySQLProcesslistThread = dolphie.processlist_threads_snapshot.get(thread_id)
                     if not thread_data:
-                        self.notify(f"Thread ID [highlight]{thread_id}[/highlight] was not found", severity="error")
+                        self.notify(f"Thread ID [$highlight]{thread_id}[/$highlight] was not found", severity="error")
                         return
 
                     thread_table.add_row("[label]Process ID", thread_id)
@@ -1815,7 +1820,7 @@ class DolphieApp(App):
                     )
                 else:
                     if input_variable:
-                        self.notify("No variable(s) found that match [b highlight]%s[/b highlight]" % input_variable)
+                        self.notify(f"No variable(s) found that match [$b_highlight]{input_variable}[/$b_highlight]")
 
             self.app.push_screen(
                 CommandModal(HotkeyCommands.variable_search, message="Specify a variable to wildcard search"),
@@ -1986,7 +1991,7 @@ class DolphieApp(App):
                         query = dolphie.build_kill_query(kill_by_id)
                         dolphie.secondary_db_connection.execute(query)
 
-                        self.notify(f"Killed Thread ID [b highlight]{kill_by_id}[/b highlight]", severity="success")
+                        self.notify(f"Killed Thread ID [$b_highlight]{kill_by_id}[/$b_highlight]", severity="success")
                     except ManualException as e:
                         self.notify(e.reason, title="Error killing Thread ID", severity="error")
                 else:
@@ -2021,7 +2026,7 @@ class DolphieApp(App):
                             self.notify(e.reason, title=f"Error Killing Thread ID {thread_id}", severity="error")
 
                     if threads_killed:
-                        self.notify(f"Killed [highlight]{threads_killed}[/highlight] thread(s)")
+                        self.notify(f"Killed [$highlight]{threads_killed}[/$highlight] thread(s)")
                     else:
                         self.notify("No threads were killed")
 
@@ -2127,7 +2132,7 @@ class DolphieApp(App):
                 thread_id = additional_data
                 thread_data: ProcesslistThread = dolphie.processlist_threads_snapshot.get(thread_id)
                 if not thread_data:
-                    self.notify(f"Thread ID [highlight]{thread_id}[/highlight] was not found", severity="error")
+                    self.notify(f"Thread ID [$highlight]{thread_id}[/$highlight] was not found", severity="error")
                     tab.spinner.hide()
                     return
 
@@ -2409,16 +2414,16 @@ class DolphieApp(App):
                 # Compare the current version with the latest version
                 if parse_version(latest_version) > parse_version(__version__):
                     self.notify(
-                        f":tada:  [b]New version [highlight]{latest_version}[/highlight] is available![/b] :tada:\n\n"
-                        f"Please update at your earliest convenience\n"
-                        f"[dark_gray]Find more details at https://github.com/charles-001/dolphie",
+                        f"{Emoji('tada')}  [b]New version [$highlight]{latest_version}[/$highlight] is available![/b] "
+                        f"{Emoji('tada')}\n\nPlease update at your earliest convenience\n"
+                        f"[$dark_gray]Find more details at https://github.com/charles-001/dolphie",
                         title="",
                         severity="information",
                         timeout=20,
                     )
 
                     logger.warning(
-                        f"New version v{latest_version} is available! Please update at your earliest convenience. "
+                        f"New version {latest_version} is available! Please update at your earliest convenience. "
                         "Find more details at https://github.com/charles-001/dolphie"
                     )
         except Exception:

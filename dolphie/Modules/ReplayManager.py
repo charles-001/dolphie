@@ -90,7 +90,7 @@ class ReplayManager:
             self.replay_file = f"{dolphie.replay_dir}/{hostname}/daemon.db"
         elif dolphie.record_for_replay:
             self.replay_file = f"{dolphie.replay_dir}/{hostname}/{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.db"
-            dolphie.app.notify(f"File: [highlight]{self.replay_file}[/highlight]", title="Recording data", timeout=10)
+            dolphie.app.notify(f"File: [$highlight]{self.replay_file}[/$highlight]", title="Recording data", timeout=10)
         else:
             # No options specified for replaying, skip initialization
             return
@@ -245,7 +245,7 @@ class ReplayManager:
             # We subtract 1 because get_next_refresh_interval naturally increments the index
             self.current_replay_id = row[0] - 1
             self.dolphie.app.notify(
-                f"Seeking to timestamp [light_blue]{timestamp}[/light_blue]", severity="success", timeout=10
+                f"Seeking to timestamp [$light_blue]{timestamp}[/$light_blue]", severity="success", timeout=10
             )
 
             return True
@@ -260,14 +260,14 @@ class ReplayManager:
                 # We subtract 1 because get_next_refresh_interval naturally increments the index
                 self.current_replay_id = row[0] - 1
                 self.dolphie.app.notify(
-                    f"Timestamp not found, seeking to closest timestamp [light_blue]{row[1]}[/light_blue]",
+                    f"Timestamp not found, seeking to closest timestamp [$light_blue]{row[1]}[/$light_blue]",
                     timeout=10,
                 )
 
                 return True
             else:
                 self.dolphie.app.notify(
-                    f"No timestamps found on or before [light_blue]{timestamp}[/light_blue]",
+                    f"No timestamps found on or before [$light_blue]{timestamp}[/$light_blue]",
                     severity="error",
                     timeout=10,
                 )
@@ -409,7 +409,7 @@ class ReplayManager:
         Helper method to display error notifications.
         """
         self.dolphie.app.notify(
-            f"[b]Replay file[/b]: [highlight]{self.replay_file}[/highlight]\n{message}",
+            f"[b]Replay file[/b]: [$highlight]{self.replay_file}[/$highlight]\n{message}",
             title=title,
             severity="error",
             timeout=10,
@@ -739,10 +739,10 @@ class ReplayManager:
                 continue
 
             self.dolphie.app.notify(
-                f"[b][dark_yellow]{variable}[/b][/dark_yellow]\n"
-                f"Timestamp: [light_blue]{timestamp}[/light_blue]\n"
-                f"Old Value: [highlight]{old_value}[/highlight]\n"
-                f"New Value: [highlight]{new_value}[/highlight]",
+                f"[b][$dark_yellow]{variable}[/b][/$dark_yellow]\n"
+                f"Timestamp: [$light_blue]{timestamp}[/$light_blue]\n"
+                f"Old Value: [$highlight]{old_value}[/$highlight]\n"
+                f"New Value: [$highlight]{new_value}[/$highlight]",
                 title="Global Variable Change",
                 severity="warning",
                 timeout=10,

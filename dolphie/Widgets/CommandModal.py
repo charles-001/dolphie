@@ -337,9 +337,9 @@ class CommandModal(ModalScreen):
                     self.update_error_response("Invalid age range")
                     return
 
-            # Ensure at least one parameter is provided
+            # Ensure thread ID or at least one parameter is provided
             if not any([kill_by_id, kill_by_username, kill_by_host, kill_by_age_range, kill_by_query_text]):
-                self.update_error_response("At least Thread ID or one parameter must be provided")
+                self.update_error_response("Thread ID or at least one parameter must be provided")
                 return
 
             # Dismiss with the filter values

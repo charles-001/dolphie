@@ -64,7 +64,9 @@ def create_panel(tab: Tab):
                         )
                     )
                 except DuplicateIds:
-                    tab.dolphie.app.notify(f"Failed to mount clusterset [highlight]{clusterset_name}", severity="error")
+                    tab.dolphie.app.notify(
+                        f"Failed to mount clusterset [$highlight]{clusterset_name}", severity="error"
+                    )
 
         # Remove ClusterSets that no longer exist
         for clusterset_name, container in existing_clusterset_components.items():
@@ -134,7 +136,9 @@ def create_panel(tab: Tab):
                         )
                     )
                 except DuplicateIds:
-                    tab.dolphie.app.notify(f"Failed to mount member [highlight]{member_info['host']}", severity="error")
+                    tab.dolphie.app.notify(
+                        f"Failed to mount member [$highlight]{member_info['host']}", severity="error"
+                    )
 
         # Remove members that no longer exist
         for member_id, container in existing_member_components.items():
@@ -287,7 +291,7 @@ def create_replica_panel(tab: Tab):
                 )
             except DuplicateIds:
                 tab.dolphie.app.notify(
-                    f"Failed to mount replica [highlight]{replica.host}:{replica.port}", severity="error"
+                    f"Failed to mount replica [$highlight]{replica.host}:{replica.port}", severity="error"
                 )
 
     # Remove replicas that no longer exist

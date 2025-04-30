@@ -89,8 +89,12 @@ class Database:
         except pymysql.Error as e:
             if reconnect_attempt:
                 logger.error(f"Failed to reconnect to {self.source}: {e.args[1]}")
+                escaped_error_message = e.args[1].replace("[", "\\[")
                 self.app.notify(
-                    f"[b light_blue]{self.host}:{self.port}[/b light_blue]: Failed to reconnect to MySQL: {e.args[1]}",
+                    (
+                        f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: "
+                        f"Failed to reconnect to MySQL: {escaped_error_message}"
+                    ),
                     title="MySQL Reconnection Failed",
                     severity="error",
                     timeout=10,
@@ -237,8 +241,10 @@ class Database:
                             logger.error(
                                 f"{self.source} has lost its connection: {error_message}, attempting to reconnect..."
                             )
+                            # Escape [ and ] characters in the error message
+                            escaped_error_message = error_message.replace("[", "\\[")
                             self.app.notify(
-                                f"[b light_blue]{self.host}:{self.port}[/b light_blue]: {error_message}",
+                                f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: {escaped_error_message}",
                                 title="MySQL Connection Lost",
                                 severity="error",
                                 timeout=10,
@@ -255,7 +261,7 @@ class Database:
                             continue
 
                         self.app.notify(
-                            f"[b light_blue]{self.host}:{self.port}[/b light_blue]: Successfully reconnected",
+                            f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: Successfully reconnected",
                             title="MySQL Connection Created",
                             severity="success",
                             timeout=10,
