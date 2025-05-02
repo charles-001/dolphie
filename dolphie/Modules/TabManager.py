@@ -511,8 +511,8 @@ class TabManager:
                         *(
                             [
                                 RadioButton("Delta since panel opened", id="statements_summarys_delta", value=True),
-                                RadioButton("Total since MySQL restart", id="statements_summary_total"),
                                 RadioButton("Delta since last sample", id="statements_summary_delta_last_sample"),
+                                RadioButton("Total since MySQL restart", id="statements_summary_total"),
                             ]
                         ),
                         id="statements_summary_radio_set",
