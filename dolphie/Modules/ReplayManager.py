@@ -37,6 +37,7 @@ class MySQLReplayData:
     metadata_locks: dict
     file_io_data: dict
     table_io_waits_data: dict
+    statements_summary_data: dict
     group_replication_data: dict
     group_replication_members: dict
 
@@ -581,6 +582,10 @@ class ReplayManager:
 
             if self.dolphie.table_io_waits_data and self.dolphie.table_io_waits_data.filtered_data:
                 data_dict.update({"table_io_waits_data": self.dolphie.table_io_waits_data.filtered_data})
+
+            if self.dolphie.statements_summary_data and self.dolphie.statements_summary_data.filtered_data:
+                data_dict.update({"statements_summary_data": self.dolphie.statements_summary_data.filtered_data})
+
         else:
             # Add ProxySQL specific data to the dictionary
             data_dict.update(
@@ -695,7 +700,8 @@ class ReplayManager:
             file_io_data.filtered_data = data.get("file_io_data", {})
             table_io_waits = PerformanceSchemaMetrics({}, "table_io", "OBJECT_TABLE")
             table_io_waits.filtered_data = data.get("table_io_waits_data", {})
-
+            statements_summary_data = PerformanceSchemaMetrics({}, "statements_summary", "digest")
+            statements_summary_data.filtered_data = data.get("statements_summary_data", {})
             return MySQLReplayData(
                 **common_params,
                 binlog_status=data.get("binlog_status", {}),
@@ -709,6 +715,7 @@ class ReplayManager:
                 group_replication_members=data.get("group_replication_members", {}),
                 file_io_data=file_io_data,
                 table_io_waits_data=table_io_waits,
+                statements_summary_data=statements_summary_data,
             )
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist

@@ -275,6 +275,7 @@ class DolphieApp(App):
             dolphie.group_replication_data = replay_event_data.group_replication_data
             dolphie.file_io_data = replay_event_data.file_io_data
             dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
+            dolphie.statements_summary_data = replay_event_data.statements_summary_data
 
             dolphie.pfs_metrics_last_reset_time = dolphie.global_status.get("pfs_metrics_last_reset_time", 0)
 
@@ -697,7 +698,7 @@ class DolphieApp(App):
                     else:
                         dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
 
-                if dolphie.panels.statements_summary.visible:
+                if dolphie.panels.statements_summary.visible or dolphie.record_for_replay:
                     if (
                         dolphie.is_mysql_version_at_least("8.0")
                         and dolphie.connection_source_alt != ConnectionSource.mariadb
