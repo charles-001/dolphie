@@ -17,7 +17,7 @@ class PerformanceSchemaMetrics:
             row[self.metric_key]: {
                 "event_name": row.get("EVENT_NAME"),
                 "metrics": {
-                    metric: {"total": value, "delta": 0}
+                    metric: {"total": value, "delta": 0, "delta_last_sample": 0}
                     for metric, value in row.items()
                     if isinstance(value, int) and metric not in self.ignore_int_columns
                 },
@@ -56,7 +56,7 @@ class PerformanceSchemaMetrics:
             if instance_name not in self.internal_data:
                 self.internal_data[instance_name] = {
                     "event_name": row.get("EVENT_NAME"),
-                    "metrics": {metric: {"total": value, "delta": 0} for metric, value in metrics.items()},
+                    "metrics": {metric: {"total": value, "delta": 0, "delta_last_sample": 0} for metric, value in metrics.items()},
                 }
 
             deltas_changed = False
@@ -71,6 +71,7 @@ class PerformanceSchemaMetrics:
                 metric_data["total"] = current_value
                 if delta > 0:
                     metric_data["delta"] += delta
+                    metric_data["delta_last_sample"] = delta
                     deltas_changed = True
 
                 if metric_data["delta"] > 0:
@@ -86,10 +87,11 @@ class PerformanceSchemaMetrics:
 
                     # Only add delta if it's greater than 0
                     delta = values["delta"] if values["delta"] > 0 else 0
+                    delta_last_sample = values["delta_last_sample"] if values["delta_last_sample"] > 0 else 0
 
                     # Only include the metric in filtered_data if it has a delta greater than 0
                     if delta > 0:
-                        self.filtered_data[instance_name][metric] = {"t": total, "d": delta}
+                        self.filtered_data[instance_name][metric] = {"t": total, "d": delta, "d_last_sample": delta_last_sample}
                     else:
                         self.filtered_data[instance_name][metric] = {"t": total}
 

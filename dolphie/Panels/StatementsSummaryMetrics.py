@@ -73,8 +73,10 @@ def create_panel(tab: Tab):
                 if isinstance(column_value, dict):
                     if tab.statements_summary_radio_set.pressed_button.id == "statements_summary_total":
                         column_value = column_value.get("t", 0)
-                    else:
+                    elif tab.statements_summary_radio_set.pressed_button.id == "statements_summarys_delta":
                         column_value = column_value.get("d", 0)
+                    else:
+                        column_value = column_value.get("d_last_sample", 0)
 
                 if column_name == "Query":
                     if tab.dolphie.show_statements_summary_query_digest_text_sample:
