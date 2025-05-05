@@ -75,13 +75,14 @@ options:
   --ssl-ca              Path to the file that contains a CA (certificate authority)
   --ssl-cert            Path to the file that contains a certificate
   --ssl-key             Path to the file that contains a private key for the certificate
-  --panels              What panels to display on startup separated by a comma. Supports: dashboard,processlist,graphs,replication,metadata_locks,ddl,proxysql_hostgroup_summary,proxysql_mysql_query_rules,proxysql_command_stats [default: dashboard,processlist]
+  --panels              What panels to display on startup separated by a comma. Supports: ['dashboard', 'processlist', 'graphs', 'replication', 'metadata_locks', 'ddl', 'pfs_metrics', 'statements_summary', 'proxysql_hostgroup_summary', 'proxysql_mysql_query_rules', 'proxysql_command_stats'], [default: ['dashboard', 'processlist']]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repo           What PyPi repository to use when checking for a new version default: [https://pypi.org/pypi/dolphie/json]
   -H , --hostgroup      This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
   -R, --record          Enables recording of Dolphie's data to a replay file. Note: This can use significant disk space. Monitor accordingly!
   -D, --daemon          Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the background with whatever solution you decide to use. Automatically enables --record. This mode is solely used for recording data to a replay file
   --daemon-log-file     Full path of the log file for daemon mode
+  --daemon-panels       Which panels to support in daemon mode separated by a comma. This can control queries that may introduce significant load. Supports: ['dashboard', 'processlist', 'replication', 'metadata_locks', 'pfs_metrics', 'statements_summary', 'proxysql_hostgroup_summary'], [default: ['dashboard', 'processlist', 'replication', 'metadata_locks', 'pfs_metrics']]
   --replay-file         Specify the full path of the replay file to load and enable replay mode
   --replay-dir          Directory to store replay data files
   --replay-retention-hours
@@ -170,6 +171,7 @@ Dolphie's config supports these options under [dolphie] section:
 	(bool) show_additional_query_columns
 	(bool) record_for_replay
 	(bool) daemon_mode
+	(str) daemon_mode_panels
 	(str) daemon_mode_log_file
 	(str) replay_file
 	(str) replay_dir

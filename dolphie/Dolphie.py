@@ -27,7 +27,7 @@ class Dolphie:
         self.app = app
         self.app_version = config.app_version
 
-        self.tab_id: int = None
+        self.tab_id: str = None
 
         # Config options
         self.credential_profile = config.credential_profile
@@ -52,6 +52,7 @@ class Dolphie:
         self.hostgroup_hosts = config.hostgroup_hosts
         self.record_for_replay = config.record_for_replay
         self.daemon_mode = config.daemon_mode
+        self.daemon_mode_panels = config.daemon_mode_panels
         self.replay_file = config.replay_file  # This denotes that we're replaying a file
         self.replay_dir = config.replay_dir
         self.replay_retention_hours = config.replay_retention_hours
