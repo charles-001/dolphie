@@ -56,7 +56,10 @@ class PerformanceSchemaMetrics:
             if instance_name not in self.internal_data:
                 self.internal_data[instance_name] = {
                     "event_name": row.get("EVENT_NAME"),
-                    "metrics": {metric: {"total": value, "delta": 0, "delta_last_sample": 0} for metric, value in metrics.items()},
+                    "metrics": {
+                        metric: {"total": value, "delta": 0, "delta_last_sample": 0}
+                        for metric, value in metrics.items()
+                    },
                 }
 
             deltas_changed = False
@@ -91,7 +94,11 @@ class PerformanceSchemaMetrics:
 
                     # Only include the metric in filtered_data if it has a delta greater than 0
                     if delta > 0:
-                        self.filtered_data[instance_name][metric] = {"t": total, "d": delta, "d_last_sample": delta_last_sample}
+                        self.filtered_data[instance_name][metric] = {
+                            "t": total,
+                            "d": delta,
+                            "d_last_sample": delta_last_sample,
+                        }
                     else:
                         self.filtered_data[instance_name][metric] = {"t": total}
 

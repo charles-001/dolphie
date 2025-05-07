@@ -85,10 +85,10 @@ class Panel:
 
 class Panels:
     def __init__(self):
-        self.dashboard = Panel("dashboard", "Dashboard", "¹")
+        self.dashboard = Panel("dashboard", "Dashboard", "¹", daemon_supported=False)
         self.processlist = Panel("processlist", "Processlist", "²")
         self.graphs = Panel("graphs", "Metric Graphs", "³", daemon_supported=False)
-        self.replication = Panel("replication", "Replication", "⁴")
+        self.replication = Panel("replication", "Replication", "⁴", daemon_supported=False)
         self.metadata_locks = Panel("metadata_locks", "Metadata Locks", "⁵")
         self.ddl = Panel("ddl", "DDL", "⁶", daemon_supported=False)
         self.pfs_metrics = Panel("pfs_metrics", "Performance Schema Metrics", "⁷")
@@ -99,9 +99,7 @@ class Panels:
         )
         self.proxysql_command_stats = Panel("proxysql_command_stats", "Command Stats", "⁶", daemon_supported=False)
 
-    def validate_panels(
-        self, panel_list_str: Union[str, List[str]], valid_panel_names: List[str], daemon_mode_supported=False
-    ) -> List[str]:
+    def validate_panels(self, panel_list_str: Union[str, List[str]], valid_panel_names: List[str]) -> List[str]:
         panels = panel_list_str.split(",") if isinstance(panel_list_str, str) else panel_list_str
 
         invalid_panels = [panel for panel in panels if panel not in valid_panel_names]

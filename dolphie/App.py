@@ -221,7 +221,6 @@ class DolphieApp(App):
                 f"interval of {config.refresh_interval}s"
             )
             logger.info(f"Log file: {config.daemon_mode_log_file}")
-            logger.info(f"Supporting panel(s): {', '.join(config.daemon_mode_panels)}")
 
     @work(thread=True, group="replay", exclusive=True)
     async def run_worker_replay(self, tab_id: str, manual_control: bool = False):

@@ -60,12 +60,11 @@ class Dolphie:
 
         # Set the default panels based on startup_panels to be visible
         self.panels = DataTypes.Panels()
-        for panel in self.panels.all():
-            setattr(getattr(self.panels, panel), "visible", False)
 
-        for panel in self.startup_panels:
+        panels_to_show = self.daemon_mode_panels if self.daemon_mode else self.startup_panels
+        for panel in panels_to_show:
             if panel in self.panels.all():
-                setattr(getattr(self.panels, panel), "visible", True)
+                getattr(self.panels, panel).visible = True
 
         self.show_idle_threads: bool = False
         self.sort_by_time_descending: bool = True

@@ -82,7 +82,7 @@ options:
   -R, --record          Enables recording of Dolphie's data to a replay file. Note: This can use significant disk space. Monitor accordingly!
   -D, --daemon          Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the background with whatever solution you decide to use. Automatically enables --record. This mode is solely used for recording data to a replay file
   --daemon-log-file     Full path of the log file for daemon mode
-  --daemon-panels       Which panels to support in daemon mode separated by a comma. This can control queries that may introduce significant load. Supports: ['dashboard', 'processlist', 'replication', 'metadata_locks', 'pfs_metrics', 'statements_summary', 'proxysql_hostgroup_summary'], [default: ['dashboard', 'processlist', 'replication', 'metadata_locks', 'pfs_metrics']]
+  --daemon-panels       Which panels to run queries for in daemon mode separated by a comma. This can control significant load if the queries are responsible. Dashboard/Replication panels cannot be turned off. Supports: ['processlist', 'metadata_locks', 'pfs_metrics', 'statements_summary', 'proxysql_hostgroup_summary'], [default: ['processlist', 'metadata_locks', 'pfs_metrics']]
   --replay-file         Specify the full path of the replay file to load and enable replay mode
   --replay-dir          Directory to store replay data files
   --replay-retention-hours
@@ -163,7 +163,7 @@ Dolphie's config supports these options under [dolphie] section:
 	(str) tab_setup_file
 	(int) refresh_interval
 	(str) heartbeat_table
-	(str) startup_panels
+	(comma-delimited str) startup_panels
 	(str) graph_marker
 	(str) pypi_repository
 	(str) hostgroup
@@ -171,12 +171,12 @@ Dolphie's config supports these options under [dolphie] section:
 	(bool) show_additional_query_columns
 	(bool) record_for_replay
 	(bool) daemon_mode
-	(str) daemon_mode_panels
+	(comma-delimited str) daemon_mode_panels
 	(str) daemon_mode_log_file
 	(str) replay_file
 	(str) replay_dir
 	(int) replay_retention_hours
-	(str) exclude_notify_global_vars
+	(comma-delimited str) exclude_notify_global_vars
 ```
 
 ## Supported MySQL versions
