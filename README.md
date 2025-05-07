@@ -163,7 +163,7 @@ Dolphie's config supports these options under [dolphie] section:
 	(str) tab_setup_file
 	(int) refresh_interval
 	(str) heartbeat_table
-	(comma-delimited str) startup_panels
+	(comma-separated str) startup_panels
 	(str) graph_marker
 	(str) pypi_repository
 	(str) hostgroup
@@ -171,12 +171,12 @@ Dolphie's config supports these options under [dolphie] section:
 	(bool) show_additional_query_columns
 	(bool) record_for_replay
 	(bool) daemon_mode
-	(comma-delimited str) daemon_mode_panels
+	(comma-separated str) daemon_mode_panels
 	(str) daemon_mode_log_file
 	(str) replay_file
 	(str) replay_dir
 	(int) replay_retention_hours
-	(comma-delimited str) exclude_notify_global_vars
+	(comma-separated str) exclude_notify_global_vars
 ```
 
 ## Supported MySQL versions

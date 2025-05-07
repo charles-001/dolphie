@@ -104,7 +104,7 @@ class ArgumentParser:
         self.formatted_options = "\n\t".join(
             [
                 (
-                    f"(comma-delimited str) {option}"
+                    f"(comma-separated str) {option}"
                     if option in ("daemon_mode_panels", "startup_panels", "exclude_notify_global_vars")
                     else f"({data_type.__name__}) {option}" if hasattr(data_type, "__name__") else f"(str) {option} []"
                 )
