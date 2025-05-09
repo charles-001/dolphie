@@ -306,8 +306,10 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     # When replica is specified, that means we're creating a table for a replica and not replication
     if replica:
         data = replica.replication_status
+        mysql_version = replica.mysql_version
     else:
         data = dolphie.replication_status
+        mysql_version = dolphie.host_version
 
     replica_lag = data.get("Seconds_Behind", 0)
     formatted_replica_lag = None
@@ -326,7 +328,10 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
 
         formatted_replica_lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
 
-    if dolphie.is_mysql_version_at_least("8.0.22") and dolphie.connection_source_alt != ConnectionSource.mariadb:
+    if (
+        dolphie.is_mysql_version_at_least("8.0.22", mysql_version)
+        and dolphie.connection_source_alt != ConnectionSource.mariadb
+    ):
         uuid_key = "Source_UUID"
         primary_uuid = data.get(uuid_key)
         primary_host = dolphie.get_hostname(data.get("Source_Host"))
@@ -339,10 +344,8 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         read_primary_log_pos = data.get("Read_Source_Log_Pos")
         exec_primary_log_pos = data.get("Exec_Source_Log_Pos")
 
-        io_thread_running = "[green]ON[/green]" if data.get("Replica_IO_Running").lower() == "yes" else "[red]OFF[/red]"
-        sql_thread_running = (
-            "[green]ON[/green]" if data.get("Replica_SQL_Running").lower() == "yes" else "[red]OFF[/red]"
-        )
+        io_thread_running = "[green]ON[/green]" if data.get("Replica_IO_Running") == "Yes" else "[red]OFF[/red]"
+        sql_thread_running = "[green]ON[/green]" if data.get("Replica_SQL_Running") == "Yes" else "[red]OFF[/red]"
     else:
         uuid_key = "Master_UUID"
         primary_uuid = data.get(uuid_key)
@@ -356,8 +359,8 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         read_primary_log_pos = data.get("Read_Master_Log_Pos")
         exec_primary_log_pos = data.get("Exec_Master_Log_Pos")
 
-        io_thread_running = "[green]ON[/green]" if data.get("Slave_IO_Running").lower() == "yes" else "[red]OFF[/red]"
-        sql_thread_running = "[green]ON[/green]" if data.get("Slave_SQL_Running").lower() == "yes" else "[red]OFF[/red]"
+        io_thread_running = "[green]ON[/green]" if data.get("Slave_IO_Running") == "Yes" else "[red]OFF[/red]"
+        sql_thread_running = "[green]ON[/green]" if data.get("Slave_SQL_Running") == "Yes" else "[red]OFF[/red]"
 
     mysql_gtid_enabled = False
     mariadb_gtid_enabled = False
