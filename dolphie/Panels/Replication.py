@@ -311,6 +311,45 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         data = dolphie.replication_status
         mysql_version = dolphie.host_version
 
+    # Determine replication terminology based on MySQL version
+    # and connection source (MariaDB or MySQL)
+    source_prefix = (
+        "Source"
+        if dolphie.is_mysql_version_at_least("8.0.22", mysql_version)
+        and not dolphie.connection_source_alt == ConnectionSource.mariadb
+        else "Master"
+    )
+    replica_prefix = "Replica" if source_prefix == "Source" else "Slave"
+    uuid_key = f"{source_prefix}_UUID"
+
+    primary_uuid = data.get(uuid_key)
+    primary_host = dolphie.get_hostname(data.get(f"{source_prefix}_Host"))
+    primary_user = data.get(f"{source_prefix}_User")
+    primary_log_file = data.get(f"{source_prefix}_Log_File")
+    primary_ssl_allowed = data.get(f"{source_prefix}_SSL_Allowed")
+    relay_primary_log_file = data.get(f"Relay_{source_prefix}_Log_File")
+    replica_sql_running_state = data.get(f"{replica_prefix}_SQL_Running_State")
+    replica_io_state = data.get(f"{replica_prefix}_IO_State")
+    read_primary_log_pos = data.get(f"Read_{source_prefix}_Log_Pos")
+    exec_primary_log_pos = data.get(f"Exec_{source_prefix}_Log_Pos")
+
+    io_thread_running = "[green]ON[/green]" if data.get(f"{replica_prefix}_IO_Running") == "Yes" else "[red]OFF[/red]"
+    sql_thread_running = "[green]ON[/green]" if data.get(f"{replica_prefix}_SQL_Running") == "Yes" else "[red]OFF[/red]"
+
+    mysql_gtid_enabled = False
+    mariadb_gtid_enabled = False
+    gtid_status = "OFF"
+
+    using_gtid = data.get("Using_Gtid")
+    if using_gtid and using_gtid != "No":
+        mariadb_gtid_enabled = True
+        gtid_status = using_gtid
+    elif data.get("Executed_Gtid_Set"):
+        mysql_gtid_enabled = True
+        auto_position = "ON" if data.get("Auto_Position") == 1 else "OFF"
+        gtid_status = f"ON [label]Auto Position[/label] {auto_position}"
+
+    # Replica lag calculation
     replica_lag = data.get("Seconds_Behind", 0)
     formatted_replica_lag = None
     if replica_lag is not None:
@@ -327,53 +366,6 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             lag_color = "yellow"
 
         formatted_replica_lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
-
-    if (
-        dolphie.is_mysql_version_at_least("8.0.22", mysql_version)
-        and dolphie.connection_source_alt != ConnectionSource.mariadb
-    ):
-        uuid_key = "Source_UUID"
-        primary_uuid = data.get(uuid_key)
-        primary_host = dolphie.get_hostname(data.get("Source_Host"))
-        primary_user = data.get("Source_User")
-        primary_log_file = data.get("Source_Log_File")
-        primary_ssl_allowed = data.get("Source_SSL_Allowed")
-        relay_primary_log_file = data.get("Relay_Source_Log_File")
-        replica_sql_running_state = data.get("Replica_SQL_Running_State")
-        replica_io_state = data.get("Replica_IO_State")
-        read_primary_log_pos = data.get("Read_Source_Log_Pos")
-        exec_primary_log_pos = data.get("Exec_Source_Log_Pos")
-
-        io_thread_running = "[green]ON[/green]" if data.get("Replica_IO_Running") == "Yes" else "[red]OFF[/red]"
-        sql_thread_running = "[green]ON[/green]" if data.get("Replica_SQL_Running") == "Yes" else "[red]OFF[/red]"
-    else:
-        uuid_key = "Master_UUID"
-        primary_uuid = data.get(uuid_key)
-        primary_host = dolphie.get_hostname(data.get("Master_Host"))
-        primary_user = data.get("Master_User")
-        primary_log_file = data.get("Master_Log_File")
-        primary_ssl_allowed = data.get("Master_SSL_Allowed")
-        relay_primary_log_file = data.get("Relay_Master_Log_File")
-        replica_sql_running_state = data.get("Slave_SQL_Running_State")
-        replica_io_state = data.get("Slave_IO_State")
-        read_primary_log_pos = data.get("Read_Master_Log_Pos")
-        exec_primary_log_pos = data.get("Exec_Master_Log_Pos")
-
-        io_thread_running = "[green]ON[/green]" if data.get("Slave_IO_Running") == "Yes" else "[red]OFF[/red]"
-        sql_thread_running = "[green]ON[/green]" if data.get("Slave_SQL_Running") == "Yes" else "[red]OFF[/red]"
-
-    mysql_gtid_enabled = False
-    mariadb_gtid_enabled = False
-    gtid_status = "OFF"
-
-    using_gtid = data.get("Using_Gtid")
-    if using_gtid and using_gtid != "No":
-        mariadb_gtid_enabled = True
-        gtid_status = using_gtid
-    elif data.get("Executed_Gtid_Set"):
-        mysql_gtid_enabled = True
-        auto_position = "ON" if data.get("Auto_Position") == 1 else "OFF"
-        gtid_status = f"ON [label]Auto Position[/label] {auto_position}"
 
     table = Table(show_header=False, box=None)
     if dashboard_table:
