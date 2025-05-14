@@ -2040,6 +2040,8 @@ class DolphieApp(App):
                 if output:
                     deadlock = output.group(1)
 
+                    # Escape brackets so they don't get parsed as markup
+                    deadlock = deadlock.replace("[", r"\[")
                     deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
                     screen_data = deadlock
                 else:
