@@ -453,7 +453,7 @@ class DolphieApp(App):
                     if self.tab_manager.active_tab.id != tab.id or self.tab_manager.loading_hostgroups:
                         self.notify(
                             (
-                                f"[light_blue]{dolphie.host}:{dolphie.port}[/b light_blue]: "
+                                f"[$b_light_blue]{dolphie.host}:{dolphie.port}[/$b_light_blue]: "
                                 f"{tab.worker_cancel_error.reason}"
                             ),
                             title="Connection Error",
