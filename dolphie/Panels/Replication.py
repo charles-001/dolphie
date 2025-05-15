@@ -307,16 +307,18 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     if replica:
         data = replica.replication_status
         mysql_version = replica.mysql_version
+        connection_source_alt = replica.connection_source_alt
     else:
         data = dolphie.replication_status
         mysql_version = dolphie.host_version
+        connection_source_alt = dolphie.connection_source_alt
 
     # Determine replication terminology based on MySQL version
     # and connection source (MariaDB or MySQL)
     source_prefix = (
         "Source"
         if dolphie.is_mysql_version_at_least("8.0.22", mysql_version)
-        and not dolphie.connection_source_alt == ConnectionSource.mariadb
+        and connection_source_alt != ConnectionSource.mariadb
         else "Master"
     )
     replica_prefix = "Replica" if source_prefix == "Source" else "Slave"
@@ -336,18 +338,18 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
     io_thread_running = "[green]ON[/green]" if data.get(f"{replica_prefix}_IO_Running") == "Yes" else "[red]OFF[/red]"
     sql_thread_running = "[green]ON[/green]" if data.get(f"{replica_prefix}_SQL_Running") == "Yes" else "[red]OFF[/red]"
 
-    mysql_gtid_enabled = False
-    mariadb_gtid_enabled = False
-    gtid_status = "OFF"
+    # Determine GTID status
+    mariadb_using_gtid = data.get("Using_Gtid")
+    mariadb_gtid_enabled = mariadb_using_gtid not in (None, "No")
+    mysql_gtid_enabled = bool(data.get("Executed_Gtid_Set"))
 
-    using_gtid = data.get("Using_Gtid")
-    if using_gtid and using_gtid != "No":
-        mariadb_gtid_enabled = True
-        gtid_status = using_gtid
-    elif data.get("Executed_Gtid_Set"):
-        mysql_gtid_enabled = True
+    if mariadb_gtid_enabled:
+        gtid_status = mariadb_using_gtid
+    elif mysql_gtid_enabled:
         auto_position = "ON" if data.get("Auto_Position") == 1 else "OFF"
         gtid_status = f"ON [label]Auto Position[/label] {auto_position}"
+    else:
+        gtid_status = "OFF"
 
     # Replica lag calculation
     replica_lag = data.get("Seconds_Behind", 0)
@@ -637,12 +639,12 @@ def create_group_replication_member_table(tab: Tab):
 def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
     dolphie = tab.dolphie
     connection = replica.connection if replica else dolphie.main_db_connection
-    version_to_check = replica.mysql_version if replica else None
+    mysql_version = replica.mysql_version if replica else None
     connection_source_alt = replica.connection_source_alt if replica else dolphie.connection_source_alt
 
     # Determine replication status query
     use_show_replica_status = (
-        dolphie.is_mysql_version_at_least("8.0.22", use_version=version_to_check)
+        dolphie.is_mysql_version_at_least("8.0.22", use_version=mysql_version)
         and connection_source_alt != ConnectionSource.mariadb
     )
     replication_status_query = (

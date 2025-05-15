@@ -46,6 +46,7 @@ from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.CommandManager import CommandManager
 from dolphie.Modules.Functions import (
+    escape_markup,
     format_bytes,
     format_number,
     format_query,
@@ -2030,30 +2031,26 @@ class DolphieApp(App):
                         self.notify("No threads were killed")
 
             elif key == "l":
-                deadlock = ""
-                output = re.search(
+                status = dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
+                # Extract the most recent deadlock info from the output of SHOW ENGINE INNODB STATUS
+                match = re.search(
                     r"------------------------\nLATEST\sDETECTED\sDEADLOCK\n------------------------"
-                    "\n(.*?)------------\nTRANSACTIONS",
-                    dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status"),
+                    r"\n(.*?)------------\nTRANSACTIONS",
+                    status,
                     flags=re.S,
                 )
-                if output:
-                    deadlock = output.group(1)
 
-                    # Escape brackets so they don't get parsed as markup
-                    deadlock = deadlock.replace("[", r"\[")
-                    deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
-                    screen_data = deadlock
+                if match:
+                    screen_data = escape_markup(match.group(1)).replace("***", "[yellow]*****[/yellow]")
                 else:
                     screen_data = Align.center("No deadlock detected")
 
                 self.call_from_thread(show_command_screen)
 
             elif key == "o":
-                screen_data = dolphie.secondary_db_connection.fetch_value_from_field(
-                    MySQLQueries.innodb_status, "Status"
+                screen_data = escape_markup(
+                    dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
                 )
-
                 self.call_from_thread(show_command_screen)
 
             elif key == "m":
