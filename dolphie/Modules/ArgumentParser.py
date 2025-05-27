@@ -69,7 +69,7 @@ class Config:
     heartbeat_table: str = None
     credential_profiles: Dict[str, CredentialProfile] = field(default_factory=dict)
     tab_setup_available_hosts: List[str] = field(default_factory=list)
-    startup_panels: str = "dashboard,processlist"
+    startup_panels: List[str] = field(default_factory=lambda: ["dashboard", "processlist"])
     graph_marker: str = "braille"
     pypi_repository: str = "https://pypi.org/pypi/dolphie/json"
     hostgroup: str = None
@@ -78,6 +78,7 @@ class Config:
     show_additional_query_columns: bool = False
     record_for_replay: bool = False
     daemon_mode: bool = False
+    daemon_mode_panels: List[str] = field(default_factory=lambda: ["processlist", "metadata_locks", "pfs_metrics"])
     daemon_mode_log_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_daemon.log")
     replay_file: str = None
     replay_dir: str = None
@@ -102,7 +103,11 @@ class ArgumentParser:
 
         self.formatted_options = "\n\t".join(
             [
-                f"({data_type.__name__}) {option}" if hasattr(data_type, "__name__") else f"(str) {option} []"
+                (
+                    f"(comma-separated str) {option}"
+                    if option in ("daemon_mode_panels", "startup_panels", "exclude_notify_global_vars")
+                    else f"({data_type.__name__}) {option}" if hasattr(data_type, "__name__") else f"(str) {option} []"
+                )
                 for option, data_type in self.config_object_options.items()
                 if option != "config_file"
             ]
@@ -124,6 +129,10 @@ The following options are supported in credential profiles:
 \tuser
 \tpassword
 \tsocket
+\tssl_mode REQUIRED/VERIFY_CA/VERIFY_IDENTITY
+\tssl_ca
+\tssl_cert
+\tssl_key
 \tmycnf_file
 \tlogin_path
 
@@ -346,7 +355,7 @@ Dolphie's config supports these options under [dolphie] section:
             type=str,
             help=(
                 "What panels to display on startup separated by a comma. Supports: "
-                f"{','.join(self.panels.all())} [default: {self.config.startup_panels}]"
+                f"{self.panels.all()}, [default: {self.config.startup_panels}]"
             ),
             metavar="",
         )
@@ -411,6 +420,17 @@ Dolphie's config supports these options under [dolphie] section:
             dest="daemon_mode_log_file",
             type=str,
             help="Full path of the log file for daemon mode",
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--daemon-panels",
+            dest="daemon_mode_panels",
+            type=str,
+            help=(
+                "Which panels to run queries for in daemon mode separated by a comma. This can control significant "
+                f"load if the queries are responsible. Dashboard/Replication panels cannot be turned off. Supports: "
+                f"{self.panels.get_all_daemon_panel_names()}, [default: {self.config.daemon_mode_panels}]"
+            ),
             metavar="",
         )
         self.parser.add_argument(
@@ -655,10 +675,14 @@ Dolphie's config supports these options under [dolphie] section:
         if self.config.exclude_notify_global_vars:
             self.config.exclude_notify_global_vars = self.config.exclude_notify_global_vars.split(",")
 
-        self.config.startup_panels = self.config.startup_panels.split(",")
-        for panel in self.config.startup_panels:
-            if panel not in self.panels.all():
-                self.exit(f"Panel [red2]{panel}[/red2] is not valid (see --help for more information)")
+        # Validate panels
+        try:
+            self.config.startup_panels = self.panels.validate_panels(self.config.startup_panels, self.panels.all())
+            self.config.daemon_mode_panels = self.panels.validate_panels(
+                self.config.daemon_mode_panels, self.panels.get_all_daemon_panel_names()
+            )
+        except ValueError as e:
+            self.exit(str(e))
 
         if os.path.exists(self.config.tab_setup_file):
             with open(self.config.tab_setup_file, "r") as file:

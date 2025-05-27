@@ -27,7 +27,7 @@ class Dolphie:
         self.app = app
         self.app_version = config.app_version
 
-        self.tab_id: int = None
+        self.tab_id: str = None
 
         # Config options
         self.credential_profile = config.credential_profile
@@ -52,6 +52,7 @@ class Dolphie:
         self.hostgroup_hosts = config.hostgroup_hosts
         self.record_for_replay = config.record_for_replay
         self.daemon_mode = config.daemon_mode
+        self.daemon_mode_panels = config.daemon_mode_panels
         self.replay_file = config.replay_file  # This denotes that we're replaying a file
         self.replay_dir = config.replay_dir
         self.replay_retention_hours = config.replay_retention_hours
@@ -59,12 +60,11 @@ class Dolphie:
 
         # Set the default panels based on startup_panels to be visible
         self.panels = DataTypes.Panels()
-        for panel in self.panels.all():
-            setattr(getattr(self.panels, panel), "visible", False)
 
-        for panel in self.startup_panels:
+        panels_to_show = self.daemon_mode_panels if self.daemon_mode else self.startup_panels
+        for panel in panels_to_show:
             if panel in self.panels.all():
-                setattr(getattr(self.panels, panel), "visible", True)
+                getattr(self.panels, panel).visible = True
 
         self.show_idle_threads: bool = False
         self.sort_by_time_descending: bool = True

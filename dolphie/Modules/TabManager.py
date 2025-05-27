@@ -511,6 +511,7 @@ class TabManager:
                         *(
                             [
                                 RadioButton("Delta since panel opened", id="statements_summarys_delta", value=True),
+                                RadioButton("Delta since last sample", id="statements_summary_delta_last_sample"),
                                 RadioButton("Total since MySQL restart", id="statements_summary_total"),
                             ]
                         ),
@@ -664,6 +665,9 @@ class TabManager:
             self.active_tab = tab
             self.tabs[tab_id] = tab
 
+            for panel in dolphie.daemon_mode_panels:
+                setattr(getattr(dolphie.panels, panel), "visible", True)
+
             return tab
 
         tab.save_references_to_components()
@@ -749,7 +753,7 @@ class TabManager:
                 new_name, console=self.app.console
             )
 
-    def switch_tab(self, tab_id: int, set_active: bool = True):
+    def switch_tab(self, tab_id: str, set_active: bool = True):
         tab = self.get_tab(tab_id)
         if not tab:
             return

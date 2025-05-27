@@ -46,6 +46,7 @@ from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.CommandManager import CommandManager
 from dolphie.Modules.Functions import (
+    escape_markup,
     format_bytes,
     format_number,
     format_query,
@@ -223,7 +224,7 @@ class DolphieApp(App):
             logger.info(f"Log file: {config.daemon_mode_log_file}")
 
     @work(thread=True, group="replay", exclusive=True)
-    async def run_worker_replay(self, tab_id: int, manual_control: bool = False):
+    async def run_worker_replay(self, tab_id: str, manual_control: bool = False):
         tab = self.tab_manager.get_tab(tab_id)
 
         # Get our worker thread
@@ -309,7 +310,7 @@ class DolphieApp(App):
                         metric.last_value = metric_values[-1]
 
     @work(thread=True, group="main")
-    async def run_worker_main(self, tab_id: int):
+    async def run_worker_main(self, tab_id: str):
         tab = self.tab_manager.get_tab(tab_id)
         if not tab:
             return
@@ -367,7 +368,7 @@ class DolphieApp(App):
             await self.tab_manager.disconnect_tab(tab)
 
     @work(thread=True, group="replicas")
-    def run_worker_replicas(self, tab_id: int):
+    def run_worker_replicas(self, tab_id: str):
         tab = self.tab_manager.get_tab(tab_id)
         if not tab:
             return
@@ -452,7 +453,7 @@ class DolphieApp(App):
                     if self.tab_manager.active_tab.id != tab.id or self.tab_manager.loading_hostgroups:
                         self.notify(
                             (
-                                f"[light_blue]{dolphie.host}:{dolphie.port}[/b light_blue]: "
+                                f"[$b_light_blue]{dolphie.host}:{dolphie.port}[/$b_light_blue]: "
                                 f"{tab.worker_cancel_error.reason}"
                             ),
                             title="Connection Error",
@@ -586,7 +587,7 @@ class DolphieApp(App):
         else:
             dolphie.replica_manager.available_replicas = available_replicas
 
-        if dolphie.panels.dashboard.visible or dolphie.record_for_replay:
+        if dolphie.panels.dashboard.visible:
             if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
                 dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
             else:
@@ -602,7 +603,7 @@ class DolphieApp(App):
             else:
                 dolphie.binlog_status["Diff_Position"] = dolphie.binlog_status["Position"] - previous_position
 
-        if dolphie.panels.processlist.visible or dolphie.record_for_replay:
+        if dolphie.panels.processlist.visible:
             dolphie.processlist_threads = ProcesslistPanel.fetch_data(tab)
 
         if dolphie.panels.replication.visible and (dolphie.innodb_cluster or dolphie.innodb_cluster_read_replica):
@@ -616,7 +617,7 @@ class DolphieApp(App):
             if (
                 dolphie.is_mysql_version_at_least("8.0")
                 and dolphie.replication_status
-                and (dolphie.panels.replication.visible or dolphie.record_for_replay)
+                and dolphie.panels.replication.visible
                 and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
             ):
                 dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
@@ -665,16 +666,14 @@ class DolphieApp(App):
 
             if dolphie.is_mysql_version_at_least("5.7"):
                 dolphie.metadata_locks = {}
-                if dolphie.metadata_locks_enabled and (
-                    dolphie.panels.metadata_locks.visible or dolphie.record_for_replay
-                ):
+                if dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible:
                     dolphie.metadata_locks = MetadataLocksPanel.fetch_data(tab)
 
                 if dolphie.panels.ddl.visible:
                     dolphie.main_db_connection.execute(MySQLQueries.ddls)
                     dolphie.ddl = dolphie.main_db_connection.fetchall()
 
-                if dolphie.panels.pfs_metrics.visible or dolphie.record_for_replay:
+                if dolphie.panels.pfs_metrics.visible:
                     # Reset the PFS metrics deltas if we're in daemon mode and it's been 10 minutes since the last reset
                     # This is to keep a realistic point-in-time view of the metrics
                     if dolphie.daemon_mode and datetime.now() - dolphie.pfs_metrics_last_reset_time >= timedelta(
@@ -770,7 +769,7 @@ class DolphieApp(App):
         else:
             dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = 100
 
-        if dolphie.panels.proxysql_hostgroup_summary.visible or dolphie.record_for_replay:
+        if dolphie.panels.proxysql_hostgroup_summary.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
 
             previous_values = {}
@@ -798,7 +797,7 @@ class DolphieApp(App):
                         value_per_sec = (current_value - previous_value) / dolphie.polling_latency
                         row[f"{column_key}_per_sec"] = round(value_per_sec)
 
-        if dolphie.panels.processlist.visible or dolphie.record_for_replay:
+        if dolphie.panels.processlist.visible:
             dolphie.processlist_threads = ProxySQLProcesslistPanel.fetch_data(tab)
 
         if dolphie.panels.proxysql_mysql_query_rules.visible:
@@ -2032,28 +2031,26 @@ class DolphieApp(App):
                         self.notify("No threads were killed")
 
             elif key == "l":
-                deadlock = ""
-                output = re.search(
+                status = dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
+                # Extract the most recent deadlock info from the output of SHOW ENGINE INNODB STATUS
+                match = re.search(
                     r"------------------------\nLATEST\sDETECTED\sDEADLOCK\n------------------------"
-                    "\n(.*?)------------\nTRANSACTIONS",
-                    dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status"),
+                    r"\n(.*?)------------\nTRANSACTIONS",
+                    status,
                     flags=re.S,
                 )
-                if output:
-                    deadlock = output.group(1)
 
-                    deadlock = deadlock.replace("***", "[yellow]*****[/yellow]")
-                    screen_data = deadlock
+                if match:
+                    screen_data = escape_markup(match.group(1)).replace("***", "[yellow]*****[/yellow]")
                 else:
                     screen_data = Align.center("No deadlock detected")
 
                 self.call_from_thread(show_command_screen)
 
             elif key == "o":
-                screen_data = dolphie.secondary_db_connection.fetch_value_from_field(
-                    MySQLQueries.innodb_status, "Status"
+                screen_data = escape_markup(
+                    dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
                 )
-
                 self.call_from_thread(show_command_screen)
 
             elif key == "m":

@@ -530,6 +530,7 @@ RadioSet {
 RadioButton {
     background: transparent;
     margin-right: 2;
+    width: auto;
 
     & > .toggle--button {
         color: #0f1525;

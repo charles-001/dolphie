@@ -80,24 +80,41 @@ class Panel:
     display_name: str
     key: str = None
     visible: bool = False
+    daemon_supported: bool = True
 
 
 class Panels:
     def __init__(self):
-        self.dashboard = Panel("dashboard", "Dashboard", "¹")
+        self.dashboard = Panel("dashboard", "Dashboard", "¹", daemon_supported=False)
         self.processlist = Panel("processlist", "Processlist", "²")
-        self.graphs = Panel("graphs", "Metric Graphs", "³")
-        self.replication = Panel("replication", "Replication", "⁴")
+        self.graphs = Panel("graphs", "Metric Graphs", "³", daemon_supported=False)
+        self.replication = Panel("replication", "Replication", "⁴", daemon_supported=False)
         self.metadata_locks = Panel("metadata_locks", "Metadata Locks", "⁵")
-        self.ddl = Panel("ddl", "DDL", "⁶")
+        self.ddl = Panel("ddl", "DDL", "⁶", daemon_supported=False)
         self.pfs_metrics = Panel("pfs_metrics", "Performance Schema Metrics", "⁷")
         self.statements_summary = Panel("statements_summary", "Statements Summary", "⁸")
         self.proxysql_hostgroup_summary = Panel("proxysql_hostgroup_summary", "Hostgroup Summary", "⁴")
-        self.proxysql_mysql_query_rules = Panel("proxysql_mysql_query_rules", "Query Rules", "⁵")
-        self.proxysql_command_stats = Panel("proxysql_command_stats", "Command Stats", "⁶")
+        self.proxysql_mysql_query_rules = Panel(
+            "proxysql_mysql_query_rules", "Query Rules", "⁵", daemon_supported=False
+        )
+        self.proxysql_command_stats = Panel("proxysql_command_stats", "Command Stats", "⁶", daemon_supported=False)
+
+    def validate_panels(self, panel_list_str: Union[str, List[str]], valid_panel_names: List[str]) -> List[str]:
+        panels = panel_list_str.split(",") if isinstance(panel_list_str, str) else panel_list_str
+
+        invalid_panels = [panel for panel in panels if panel not in valid_panel_names]
+        if invalid_panels:
+            raise ValueError(
+                f"Panel(s) [red2]{', '.join(invalid_panels)}[/red2] are not valid (see --help for more information)"
+            )
+
+        return panels
 
     def get_panel(self, panel_name: str) -> Panel:
         return self.__dict__.get(panel_name, None)
+
+    def get_all_daemon_panel_names(self) -> List[str]:
+        return [panel.name for panel in self.__dict__.values() if isinstance(panel, Panel) and panel.daemon_supported]
 
     def get_all_panels(self) -> List[Panel]:
         return [panel for panel in self.__dict__.values() if isinstance(panel, Panel)]

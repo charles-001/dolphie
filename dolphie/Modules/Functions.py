@@ -265,3 +265,16 @@ def format_sys_table_memory(data):
         return f"{value}[highlight]{suffix}"
 
     return data
+
+
+def escape_markup(text: str) -> str:
+    """
+    Escape Rich markup characters in the given text.
+
+    Args:
+        text (str): The text to escape.
+
+    Returns:
+        str: The escaped text.
+    """
+    return text.replace("[", r"\[")
