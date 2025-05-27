@@ -10,6 +10,7 @@ import asyncio
 import csv
 import os
 import re
+import signal
 import sys
 from datetime import datetime, timedelta
 from functools import partial
@@ -2488,6 +2489,10 @@ def setup_logger(config: Config):
     logger.add(lambda _: sys.exit(1), level="CRITICAL")
 
 
+def handle_signal(signum, frame):
+    sys.exit(0)
+
+
 def main():
     # Set environment variables for better color support
     os.environ["TERM"] = "xterm-256color"
@@ -2496,6 +2501,10 @@ def main():
     arg_parser = ArgumentParser(__version__)
 
     setup_logger(arg_parser.config)
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGHUP, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
 
     app = DolphieApp(arg_parser.config)
     app.run(headless=arg_parser.config.daemon_mode)
