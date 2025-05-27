@@ -697,7 +697,7 @@ class DolphieApp(App):
                     else:
                         dolphie.table_io_waits_data.update_internal_data(table_io_waits_data)
 
-                if dolphie.panels.statements_summary.visible:
+                if dolphie.panels.statements_summary.visible or dolphie.record_for_replay:
                     if (
                         dolphie.is_mysql_version_at_least("8.0")
                         and dolphie.connection_source_alt != ConnectionSource.mariadb
