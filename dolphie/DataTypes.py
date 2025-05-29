@@ -213,6 +213,21 @@ class ProxySQLProcesslistThread:
         self.command = self._get_formatted_command(thread_data.get("command", ""))
         self.extended_info = thread_data.get("extended_info", "")
         self.status_flags = self._get_formatted_status_flags(thread_data.get("status_flags", ""))
+        
+        # Extended info fields extracted from JSON
+        self.backend_multiplex_disabled = self._get_formatted_int_field(thread_data.get("backend_multiplex_disabled"))
+        self.backend_multiplex_disabled_ext = self._get_formatted_int_field(thread_data.get("backend_multiplex_disabled_ext"))
+        self.status_compression = self._get_formatted_int_field(thread_data.get("status_compression"))
+        self.status_found_rows = self._get_formatted_int_field(thread_data.get("status_found_rows"))
+        self.status_get_lock = self._get_formatted_int_field(thread_data.get("status_get_lock"))
+        self.status_has_savepoint = self._get_formatted_int_field(thread_data.get("status_has_savepoint"))
+        self.status_has_warnings = self._get_formatted_int_field(thread_data.get("status_has_warnings"))
+        self.status_lock_tables = self._get_formatted_int_field(thread_data.get("status_lock_tables"))
+        self.status_no_multiplex = self._get_formatted_int_field(thread_data.get("status_no_multiplex"))
+        self.status_no_multiplex_hg = self._get_formatted_int_field(thread_data.get("status_no_multiplex_hg"))
+        self.status_prepared_statement = self._get_formatted_int_field(thread_data.get("status_prepared_statement"))
+        self.status_temporary_table = self._get_formatted_int_field(thread_data.get("status_temporary_table"))
+        self.status_user_variable = self._get_formatted_int_field(thread_data.get("status_user_variable"))
 
     def _get_formatted_time(self) -> str:
         thread_color = self._get_time_color()
@@ -259,6 +274,18 @@ class ProxySQLProcesslistThread:
             return f"[red bold]{status_flags}[/red bold]"
         
         return status_flags
+        
+    def _get_formatted_int_field(self, value):
+        """Format integer fields extracted from JSON (can be None, int, or string)"""
+        if value is None:
+            return "[dark_gray]-"
+        
+        # Handle MySQL JSON_EXTRACT which may return int, string, or None
+        try:
+            int_value = int(value)
+            return str(int_value)
+        except (ValueError, TypeError):
+            return "[dark_gray]-"
 
 
 class HotkeyCommands:
