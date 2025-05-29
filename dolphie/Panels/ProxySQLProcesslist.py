@@ -28,6 +28,7 @@ def create_panel(tab: Tab) -> DataTable:
     columns.extend(
         [
             {"name": "Backend Host", "field": "host", "width": 25},
+            {"name": "Status Flags", "field": "status_flags", "width": 12},
             {"name": "Database", "field": "db", "width": 17},
             {"name": "Command", "field": "command", "width": 8},
             {"name": "Age", "field": "formatted_time", "width": 9},

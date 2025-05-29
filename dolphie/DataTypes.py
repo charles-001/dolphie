@@ -212,6 +212,7 @@ class ProxySQLProcesslistThread:
         self.formatted_time = self._get_formatted_time()
         self.command = self._get_formatted_command(thread_data.get("command", ""))
         self.extended_info = thread_data.get("extended_info", "")
+        self.status_flags = self._get_formatted_status_flags(thread_data.get("status_flags", ""))
 
     def _get_formatted_time(self) -> str:
         thread_color = self._get_time_color()
@@ -248,6 +249,16 @@ class ProxySQLProcesslistThread:
             return "[dark_gray]0"
 
         return number
+
+    def _get_formatted_status_flags(self, status_flags: str):
+        if not status_flags:
+            return "[dark_gray]N/A"
+        
+        # Highlight status_flags = 4 which indicates multiplexing is disabled
+        if status_flags == "4":
+            return f"[red bold]{status_flags}[/red bold]"
+        
+        return status_flags
 
 
 class HotkeyCommands:
