@@ -28,20 +28,6 @@ def create_panel(tab: Tab) -> DataTable:
     columns.extend(
         [
             {"name": "Backend Host", "field": "host", "width": 25},
-            {"name": "Status Flags", "field": "status_flags", "width": 12},
-            {"name": "MuxDisabled", "field": "backend_multiplex_disabled", "width": 11},
-            {"name": "MuxDisExt", "field": "backend_multiplex_disabled_ext", "width": 10},
-            {"name": "Compress", "field": "status_compression", "width": 9},
-            {"name": "FoundRows", "field": "status_found_rows", "width": 10},
-            {"name": "GetLock", "field": "status_get_lock", "width": 8},
-            {"name": "Savepoint", "field": "status_has_savepoint", "width": 10},
-            {"name": "Warnings", "field": "status_has_warnings", "width": 9},
-            {"name": "LockTbls", "field": "status_lock_tables", "width": 9},
-            {"name": "NoMux", "field": "status_no_multiplex", "width": 6},
-            {"name": "NoMuxHG", "field": "status_no_multiplex_hg", "width": 8},
-            {"name": "PrepStmt", "field": "status_prepared_statement", "width": 9},
-            {"name": "TmpTbl", "field": "status_temporary_table", "width": 7},
-            {"name": "UserVar", "field": "status_user_variable", "width": 8},
             {"name": "Database", "field": "db", "width": 17},
             {"name": "Command", "field": "command", "width": 8},
             {"name": "Age", "field": "formatted_time", "width": 9},
@@ -49,6 +35,24 @@ def create_panel(tab: Tab) -> DataTable:
             {"name": "time_seconds", "field": "time", "width": 0},
         ]
     )
+
+    if dolphie.show_additional_query_columns:
+        columns.extend(
+            [
+                {"name": "Status Flags", "field": "status_flags", "width": 12},
+                {"name": "MuxDisabled", "field": "backend_multiplex_disabled", "width": 11},
+                {"name": "MuxDisExt", "field": "backend_multiplex_disabled_ext", "width": 10},
+                {"name": "NoMux", "field": "status_no_multiplex", "width": 6},
+                {"name": "UserVar", "field": "status_user_variable", "width": 8},
+                {"name": "FoundRows", "field": "status_found_rows", "width": 10},
+                {"name": "GetLock", "field": "status_get_lock", "width": 8},
+                {"name": "LockTbls", "field": "status_lock_tables", "width": 9},
+                {"name": "TmpTbl", "field": "status_temporary_table", "width": 7},
+                {"name": "PrepStmt", "field": "status_prepared_statement", "width": 9},
+                {"name": "NoMuxHG", "field": "status_no_multiplex_hg", "width": 8},
+            ]
+        )
+
 
     # Refresh optimization
     query_length_max = 300
