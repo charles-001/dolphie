@@ -220,7 +220,7 @@ Screen.-maximized-view {
     }
 }
 
-#pfs_metrics_file_io_datatable, #pfs_metrics_table_io_waits_datatable, #proxysql_hostgroup_summary_datatable, #proxysql_mysql_query_rules_datatable {
+#pfs_metrics_file_io_datatable, #pfs_metrics_table_io_waits_datatable, #proxysql_hostgroup_summary_datatable, #proxysql_mysql_query_rules_datatable, #processlist_data {
     overflow-x: auto;
 }
 
