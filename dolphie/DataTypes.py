@@ -269,10 +269,6 @@ class ProxySQLProcesslistThread:
         if not status_flags:
             return "[dark_gray]N/A"
         
-        # Highlight status_flags = 4 which indicates multiplexing is disabled
-        if status_flags == "4":
-            return f"[red bold]{status_flags}[/red bold]"
-        
         return status_flags
         
     def _get_formatted_int_field(self, value):
