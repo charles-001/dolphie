@@ -14,7 +14,8 @@ class ProxySQLQueries:
             command        AS command,
             time_ms        AS time,
             info           AS query,
-            extended_info  AS extended_info
+            extended_info  AS extended_info,
+            status_flags   AS status_flags
         FROM
             stats_mysql_processlist
         WHERE
