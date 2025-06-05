@@ -15,20 +15,7 @@ class ProxySQLQueries:
             time_ms        AS time,
             info           AS query,
             extended_info  AS extended_info,
-            status_flags   AS status_flags,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.MultiplexDisabled') AS backend_multiplex_disabled,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.MultiplexDisabled_ext') AS backend_multiplex_disabled_ext,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.compression') AS status_compression,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.found_rows') AS status_found_rows,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.get_lock') AS status_get_lock,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.has_savepoint') AS status_has_savepoint,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.has_warnings') AS status_has_warnings,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.lock_tables') AS status_lock_tables,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.no_multiplex') AS status_no_multiplex,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.no_multiplex_HG') AS status_no_multiplex_hg,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.prepared_statement') AS status_prepared_statement,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.temporary_table') AS status_temporary_table,
-            JSON_EXTRACT(extended_info, '$.backends[0].conn.status.user_variable') AS status_user_variable
+            status_flags   AS status_flags
         FROM
             stats_mysql_processlist
         WHERE

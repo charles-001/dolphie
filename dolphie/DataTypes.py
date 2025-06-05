@@ -214,20 +214,23 @@ class ProxySQLProcesslistThread:
         self.extended_info = thread_data.get("extended_info", "")
         self.status_flags = self._get_formatted_status_flags(thread_data.get("status_flags", ""))
         
+        # Extract JSON fields from extended_info
+        json_fields = self._extract_json_fields(self.extended_info)
+        
         # Extended info fields extracted from JSON
-        self.backend_multiplex_disabled = self._get_formatted_int_field(thread_data.get("backend_multiplex_disabled"))
-        self.backend_multiplex_disabled_ext = self._get_formatted_int_field(thread_data.get("backend_multiplex_disabled_ext"))
-        self.status_compression = self._get_formatted_int_field(thread_data.get("status_compression"))
-        self.status_found_rows = self._get_formatted_int_field(thread_data.get("status_found_rows"))
-        self.status_get_lock = self._get_formatted_int_field(thread_data.get("status_get_lock"))
-        self.status_has_savepoint = self._get_formatted_int_field(thread_data.get("status_has_savepoint"))
-        self.status_has_warnings = self._get_formatted_int_field(thread_data.get("status_has_warnings"))
-        self.status_lock_tables = self._get_formatted_int_field(thread_data.get("status_lock_tables"))
-        self.status_no_multiplex = self._get_formatted_int_field(thread_data.get("status_no_multiplex"))
-        self.status_no_multiplex_hg = self._get_formatted_int_field(thread_data.get("status_no_multiplex_hg"))
-        self.status_prepared_statement = self._get_formatted_int_field(thread_data.get("status_prepared_statement"))
-        self.status_temporary_table = self._get_formatted_int_field(thread_data.get("status_temporary_table"))
-        self.status_user_variable = self._get_formatted_int_field(thread_data.get("status_user_variable"))
+        self.backend_multiplex_disabled = self._get_formatted_int_field(json_fields.get("backend_multiplex_disabled"))
+        self.backend_multiplex_disabled_ext = self._get_formatted_int_field(json_fields.get("backend_multiplex_disabled_ext"))
+        self.status_compression = self._get_formatted_int_field(json_fields.get("status_compression"))
+        self.status_found_rows = self._get_formatted_int_field(json_fields.get("status_found_rows"))
+        self.status_get_lock = self._get_formatted_int_field(json_fields.get("status_get_lock"))
+        self.status_has_savepoint = self._get_formatted_int_field(json_fields.get("status_has_savepoint"))
+        self.status_has_warnings = self._get_formatted_int_field(json_fields.get("status_has_warnings"))
+        self.status_lock_tables = self._get_formatted_int_field(json_fields.get("status_lock_tables"))
+        self.status_no_multiplex = self._get_formatted_int_field(json_fields.get("status_no_multiplex"))
+        self.status_no_multiplex_hg = self._get_formatted_int_field(json_fields.get("status_no_multiplex_hg"))
+        self.status_prepared_statement = self._get_formatted_int_field(json_fields.get("status_prepared_statement"))
+        self.status_temporary_table = self._get_formatted_int_field(json_fields.get("status_temporary_table"))
+        self.status_user_variable = self._get_formatted_int_field(json_fields.get("status_user_variable"))
 
     def _get_formatted_time(self) -> str:
         thread_color = self._get_time_color()
@@ -276,12 +279,45 @@ class ProxySQLProcesslistThread:
         if value is None:
             return "[dark_gray]-"
         
-        # Handle MySQL JSON_EXTRACT which may return int, string, or None
+        # Handle JSON values which may return int, string, or None
         try:
             int_value = int(value)
             return str(int_value)
         except (ValueError, TypeError):
             return "[dark_gray]-"
+
+    def _extract_json_fields(self, extended_info: str):
+        """Extract specific fields from extended_info JSON string"""
+        try:
+            if not extended_info:
+                return {}
+            
+            import json
+            data = json.loads(extended_info)
+            
+            # Extract backend connection info if available
+            backend_info = data.get('backends', [{}])[0] if 'backends' in data else {}
+            conn_info = backend_info.get('conn', {})
+            status_info = conn_info.get('status', {})
+            
+            return {
+                'backend_multiplex_disabled': conn_info.get('MultiplexDisabled'),
+                'backend_multiplex_disabled_ext': conn_info.get('MultiplexDisabled_ext'),
+                'status_compression': status_info.get('compression'),
+                'status_found_rows': status_info.get('found_rows'),
+                'status_get_lock': status_info.get('get_lock'),
+                'status_has_savepoint': status_info.get('has_savepoint'),
+                'status_has_warnings': status_info.get('has_warnings'),
+                'status_lock_tables': status_info.get('lock_tables'),
+                'status_no_multiplex': status_info.get('no_multiplex'),
+                'status_no_multiplex_hg': status_info.get('no_multiplex_HG'),
+                'status_prepared_statement': status_info.get('prepared_statement'),
+                'status_temporary_table': status_info.get('temporary_table'),
+                'status_user_variable': status_info.get('user_variable'),
+            }
+        except (json.JSONDecodeError, KeyError, IndexError) as e:
+            # Log error if needed, return empty dict to gracefully handle malformed JSON
+            return {}
 
 
 class HotkeyCommands:
