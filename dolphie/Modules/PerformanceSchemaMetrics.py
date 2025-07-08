@@ -70,11 +70,14 @@ class PerformanceSchemaMetrics:
                 metric_data = self.internal_data[instance_name]["metrics"][metric]
                 initial_value = metric_data["total"]
                 delta = current_value - initial_value
+                previous_delta = metric_data["delta_last_sample"]
 
                 metric_data["total"] = current_value
+                metric_data["delta_last_sample"] = delta
                 if delta > 0:
                     metric_data["delta"] += delta
-                    metric_data["delta_last_sample"] = delta
+                    deltas_changed = True
+                elif previous_delta > 0:
                     deltas_changed = True
 
                 if metric_data["delta"] > 0:

@@ -4,6 +4,7 @@ from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.Functions import format_number, format_picoseconds, format_query
 from dolphie.Modules.TabManager import Tab
 
+MAX_ROWS = 100
 
 def create_panel(tab: Tab):
     dolphie = tab.dolphie
@@ -62,8 +63,29 @@ def create_panel(tab: Tab):
             datatable.add_column(column_name, key=column_name, width=column_width)
 
     data = tab.dolphie.statements_summary_data.filtered_data
-    if data:
-        for digest, metrics in data.items():
+    display_mode = ""
+    if tab.statements_summary_radio_set.pressed_button.id == "statements_summary_total":
+        display_mode = "t"
+    elif tab.statements_summary_radio_set.pressed_button.id == "statements_summarys_delta":
+        display_mode = "d"
+    else:
+        display_mode = "d_last_sample"
+
+    # We sort by sum_timer_wait and retain only the top MAX_ROWS elements to minimize useless
+    # UI processing of many rows - at the expense of the sort & slice operations.
+    display_data = dict(sorted(
+        data.items(),
+        key=lambda element: element[1]["sum_timer_wait"][display_mode],
+        reverse=True,
+    )[:MAX_ROWS])
+
+    if display_data:
+        rows_so_far = 0
+        for digest, metrics in display_data.items():
+            rows_so_far += 1
+            if rows_so_far > MAX_ROWS:
+                break
+
             row_values = []
 
             for column_id, (column_data) in enumerate(columns):
@@ -71,12 +93,7 @@ def create_panel(tab: Tab):
                 column_value = metrics.get(column_data["field"], {})
 
                 if isinstance(column_value, dict):
-                    if tab.statements_summary_radio_set.pressed_button.id == "statements_summary_total":
-                        column_value = column_value.get("t", 0)
-                    elif tab.statements_summary_radio_set.pressed_button.id == "statements_summarys_delta":
-                        column_value = column_value.get("d", 0)
-                    else:
-                        column_value = column_value.get("d_last_sample", 0)
+                    column_value = column_value.get(display_mode, 0)
 
                 if column_name == "Query":
                     if tab.dolphie.show_statements_summary_query_digest_text_sample:
@@ -125,8 +142,8 @@ def create_panel(tab: Tab):
             if row_values:
                 tab.statements_summary_datatable.add_row(*row_values, key=digest)
 
-    if data:
-        current_rows = set(data.keys())
+    if display_data:
+        current_rows = set(display_data.keys())
         existing_rows = set(datatable.rows.keys())
 
         rows_to_remove = existing_rows - current_rows
