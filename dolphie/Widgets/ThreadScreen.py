@@ -2,9 +2,10 @@ from rich.style import Style
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Center, Container, ScrollableContainer
+from textual.containers import Center, Container, Horizontal, ScrollableContainer
 from textual.screen import Screen
 from textual.widgets import (
+    Button,
     DataTable,
     Label,
     Rule,
@@ -76,7 +77,7 @@ class ThreadScreen(Screen):
 
             & .table {
                 content-align: center middle;
-                background: #101626;
+                background: #0f1525;
                 border: tall #1d253e;
                 padding-left: 1;
                 padding-right: 1;
@@ -87,12 +88,30 @@ class ThreadScreen(Screen):
                 border: tall #1d253e;
                 max-height: 25;
             }
+
+            & .copy-button {
+                margin-left: 1;
+                margin-right: 1;
+                background: #1d253e;
+                color: #bbc8e8;
+                border: tall #2F3C59;
+            }
+
+            & .copy-button:hover {
+                background: #2F3C59;
+                color: #ffffff;
+            }
+
+            & .copy-buttons {
+                margin-bottom: 1;
+            }
         }
 
     """
 
     BINDINGS = [
         Binding("q", "app.pop_screen", "", show=False),
+        Binding("c", "copy_query", "Copy Query", show=True),
     ]
 
     def __init__(
@@ -135,6 +154,34 @@ class ThreadScreen(Screen):
         }
 
         self.explain_json_text_area = TextArea(language="json", theme="dracula", show_line_numbers=True, read_only=True)
+
+    def copy_to_clipboard(self, text: str, content_type: str = "content"):
+        """Copy text to clipboard and show notification"""
+        try:
+            self.app.copy_to_clipboard(text)
+            self.notify(f"Copied {content_type} to clipboard!", severity="information")
+        except Exception as e:
+            self.notify(f"Failed to copy {content_type} to clipboard: {e}", severity="error")
+
+    def action_copy_query(self) -> None:
+        """Action to copy the query via keyboard shortcut"""
+        if self.formatted_query:
+            self.copy_to_clipboard(self.formatted_query.code, "query")
+        else:
+            self.notify("No query to copy", severity="warning")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        """Handle button press events"""
+        if event.button.id == "copy_query_btn":
+            if self.formatted_query:
+                self.copy_to_clipboard(self.formatted_query.code, "query")
+            else:
+                self.notify("No query to copy", severity="warning")
+        elif event.button.id == "copy_json_btn":
+            if self.explain_json_data:
+                self.copy_to_clipboard(self.explain_json_data, "JSON data")
+            else:
+                self.notify("No JSON data to copy", severity="warning")
 
     def on_mount(self):
         self.query_one("#thread_table").update(self.thread_table)
@@ -205,6 +252,20 @@ class ThreadScreen(Screen):
 
         with Container(id="query_container", classes="container"):
             yield Rule(line_style="heavy")
+
+            # Only show copy buttons if there's data to copy
+            copy_buttons = []
+            if self.formatted_query:
+                copy_buttons.append(Button("📋 Copy Query", id="copy_query_btn", classes="copy-button"))
+            if self.explain_json_data:
+                copy_buttons.append(Button("📋 Copy JSON", id="copy_json_btn", classes="copy-button"))
+
+            # Only create the horizontal container if there are buttons to show
+            if copy_buttons:
+                with Horizontal(classes="button_container copy-buttons"):
+                    for button in copy_buttons:
+                        yield button
+
             yield Label("Query", classes="title")
             yield Center(Static(id="query", shrink=True, classes="table"))
 
