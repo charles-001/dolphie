@@ -21,6 +21,8 @@ from dolphie.Modules.Queries import MySQLQueries
 @dataclass
 class CredentialProfile:
     name: str
+    host: str = None
+    port: int = None
     user: str = None
     password: str = None
     socket: str = None
@@ -126,6 +128,8 @@ Credential profiles can be defined in Dolphie's config file as a way to store cr
 A profile can be created by adding a section in the config file with the format: [credential_profile_<name>]
 When using a credential profile, do not include the prefix 'credential_profile' (i.e. -C production)
 The following options are supported in credential profiles:
+\thost
+\tport (default is 3306)
 \tuser
 \tpassword
 \tsocket
@@ -751,7 +755,17 @@ Dolphie's config supports these options under [dolphie] section:
 
     def parse_credential_profile(self, cfg: RawConfigParser, section: str):
         # Options that can be set directly
-        credential_profile_options = ["user", "password", "socket", "ssl_mode", "ssl_ca", "ssl_cert", "ssl_key"]
+        credential_profile_options = [
+            "host",
+            "port",
+            "user",
+            "password",
+            "socket",
+            "ssl_mode",
+            "ssl_ca",
+            "ssl_cert",
+            "ssl_key",
+        ]
 
         # All options. mycnf_file and login_path are processed instead of directly set
         supported_options = credential_profile_options + ["mycnf_file", "login_path"]

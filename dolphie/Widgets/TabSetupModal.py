@@ -297,6 +297,9 @@ class TabSetupModal(ModalScreen):
         if not credential_profile:
             return
 
+        if credential_profile.host:
+            set_field("#host", f"{credential_profile.host}:{credential_profile.port or 3306}", default=self.host or "")
+
         set_field("#username", credential_profile.user, default=self.username or "")
         set_field("#password", credential_profile.password, default=self.password or "")
         set_field("#socket_file", credential_profile.socket, default=self.socket_file or "")

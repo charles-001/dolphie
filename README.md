@@ -265,6 +265,8 @@ Credential profiles can be defined in Dolphie's config file as a way to store cr
 
 The following options are supported in credential profiles:
 
+- host
+- port (default is 3306)
 - user
 - password
 - socket
