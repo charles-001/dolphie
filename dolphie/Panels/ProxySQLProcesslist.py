@@ -36,6 +36,24 @@ def create_panel(tab: Tab) -> DataTable:
         ]
     )
 
+    if dolphie.show_additional_query_columns:
+        columns.extend(
+            [
+                {"name": "Status Flags", "field": "status_flags", "width": 12},
+                {"name": "MuxDisabled", "field": "backend_multiplex_disabled", "width": 11},
+                {"name": "MuxDisExt", "field": "backend_multiplex_disabled_ext", "width": 10},
+                {"name": "NoMux", "field": "status_no_multiplex", "width": 6},
+                {"name": "UserVar", "field": "status_user_variable", "width": 8},
+                {"name": "FoundRows", "field": "status_found_rows", "width": 10},
+                {"name": "GetLock", "field": "status_get_lock", "width": 8},
+                {"name": "LockTbls", "field": "status_lock_tables", "width": 9},
+                {"name": "TmpTbl", "field": "status_temporary_table", "width": 7},
+                {"name": "PrepStmt", "field": "status_prepared_statement", "width": 9},
+                {"name": "NoMuxHG", "field": "status_no_multiplex_hg", "width": 8},
+            ]
+        )
+
+
     # Refresh optimization
     query_length_max = 300
     processlist_datatable = tab.processlist_datatable
