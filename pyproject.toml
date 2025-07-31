@@ -21,9 +21,15 @@ loguru = "^0.7.3"
 orjson = "^3.10.15"
 psutil = "^7.0.0"
 
+[tool.poetry.group.dev.dependencies]
+pytest = "~8.3.5"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
 dolphie = "dolphie.App:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
