@@ -85,9 +85,7 @@ class ProxySQLThreadScreen(Screen):
             "number": Style(color="#ca87a5"),
         }
 
-        self.extended_info_text_area = TextArea(
-            language="json", theme="dracula", show_line_numbers=True, read_only=True
-        )
+        self.extended_info_text_area = TextArea(theme="dracula", show_line_numbers=True, read_only=True)
         if self.extended_info:
             self.extended_info_text_area.text = extended_info
 

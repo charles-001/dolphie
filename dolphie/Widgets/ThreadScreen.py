@@ -153,7 +153,7 @@ class ThreadScreen(Screen):
             "number": Style(color="#ca87a5"),
         }
 
-        self.explain_json_text_area = TextArea(language="json", theme="dracula", show_line_numbers=True, read_only=True)
+        self.explain_json_text_area = TextArea(theme="dracula", show_line_numbers=True, read_only=True)
 
     def copy_to_clipboard(self, text: str, content_type: str = "content"):
         """Copy text to clipboard and show notification"""
