@@ -7,9 +7,11 @@
 
 
 import asyncio
+import atexit
 import csv
 import os
 import re
+import signal
 import sys
 from datetime import datetime, timedelta
 from functools import partial
@@ -2456,6 +2458,23 @@ class DolphieApp(App):
 
         self.check_for_new_version()
 
+    async def on_unmount(self):
+        """Ensure all workers are properly cancelled when app unmounts."""
+        logger.info("Unmounting app, cancelling all workers...")
+
+        # Cancel all running workers
+        for worker in self.workers:
+            if worker.state == WorkerState.RUNNING:
+                logger.debug(f"Cancelling worker: {worker.name}")
+                try:
+                    worker.cancel()
+                except Exception as e:
+                    logger.warning(f"Error cancelling worker {worker.name}: {e}")
+
+        # Give workers a moment to clean up
+        await asyncio.sleep(0.5)
+        logger.info("All workers cancelled")
+
     def compose(self):
         yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for commands")
         yield Tabs(id="host_tabs")
@@ -2488,17 +2507,64 @@ def setup_logger(config: Config):
     logger.add(lambda _: sys.exit(1), level="CRITICAL")
 
 
+def setup_signal_handlers(app: DolphieApp):
+    """
+    Setup signal handlers for graceful shutdown on terminal disconnection.
+
+    For preventing orphaned processes when terminal closes without
+    properly exiting the application (e.g., closed SSH session, killed terminal).
+    """
+
+    def signal_handler(signum, frame):
+        """Handle termination signals gracefully."""
+        # Try to exit the app gracefully
+        if app.is_running:
+            # Stop all workers first to prevent them from continuing
+            for worker in app.workers:
+                try:
+                    if worker.state == WorkerState.RUNNING:
+                        worker.cancel()
+                except Exception:
+                    pass
+
+            app.exit()
+
+        # Force exit to prevent zombie process
+        sys.exit(0)
+
+    # Register handlers for all common termination signals
+    signal.signal(signal.SIGHUP, signal_handler)  # Terminal hangup
+    signal.signal(signal.SIGTERM, signal_handler)  # Standard termination request
+    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
+    signal.signal(signal.SIGQUIT, signal_handler)  # Quit signal (Ctrl+\)
+
+    # Register cleanup function to run on normal exit
+    atexit.register(lambda: None)
+
+
 def main():
     # Set environment variables for better color support
     os.environ["TERM"] = "xterm-256color"
     os.environ["COLORTERM"] = "truecolor"
 
     arg_parser = ArgumentParser(__version__)
-
     setup_logger(arg_parser.config)
 
     app = DolphieApp(arg_parser.config)
-    app.run(headless=arg_parser.config.daemon_mode)
+
+    # Setup signal handlers BEFORE running the app
+    # This catches SIGHUP when terminal closes
+    setup_signal_handlers(app)
+
+    try:
+        app.run(headless=arg_parser.config.daemon_mode)
+    except (KeyboardInterrupt, SystemExit):
+        # Clean exit on Ctrl+C or system exit
+        if arg_parser.config.daemon_mode:
+            logger.info("Dolphie terminated by user")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise
 
 
 if __name__ == "__main__":
