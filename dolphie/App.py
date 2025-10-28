@@ -10,12 +10,10 @@ import asyncio
 import csv
 import os
 import re
-import signal
 import sys
 from datetime import datetime, timedelta
 from functools import partial
 from importlib import metadata
-from pathlib import Path
 
 import requests
 from loguru import logger
@@ -160,8 +158,8 @@ class DolphieApp(App):
 
     def __init__(self, config: Config):
         super().__init__()
+        self._has_tty = sys.stdin.isatty()
 
-        self._has_tty = sys.stdout.isatty()
         self.config = config
         self.command_manager = CommandManager()
 
@@ -2430,10 +2428,32 @@ class DolphieApp(App):
         except Exception:
             pass
 
-    async def on_mount(self):
-        if not self.config.daemon_mode:
-            self.set_interval(2.0, self._check_tty_health)
+    def _monitor_terminal_disconnect(self):
+        """
+        Periodically check if we still have a valid TTY connection.
+        If TTY is lost, gracefully shut down to prevent CPU spinning.
+        """
+        if not self._has_tty or self.config.daemon_mode:
+            return
 
+        try:
+            current_tty = sys.stdin.isatty()
+
+            # If TTY is lost, exit the application
+            if not current_tty:
+                self.exit()
+                return
+        except (OSError, ValueError) as e:
+            self.exit()
+            return
+        except Exception as e:
+            # Don't exit on other errors
+            logger.debug(f"TTY health check error (non-fatal): {e}")
+
+        # If we're still running, schedule the next check ( every 5 seconds)
+        self.set_timer(5.0, self._monitor_terminal_disconnect)
+
+    async def on_mount(self):
         self.tab_manager = TabManager(app=self.app, config=self.config)
         await self.tab_manager.create_ui_widgets()
 
@@ -2462,52 +2482,8 @@ class DolphieApp(App):
 
         self.check_for_new_version()
 
-    def _check_tty_health(self):
-        """
-        Periodically check if we still have a valid TTY connection.
-        If TTY is lost, gracefully shut down to prevent CPU spinning.
-        """
-        try:
-            current_tty = sys.stdout.isatty()
-
-            # Only shutdown if we HAD a TTY and now we DON'T
-            if self._has_tty and not current_tty:
-                # Log to signal file since we can't log to screen
-                try:
-                    log_file = Path.home() / "dolphie_signals.log"
-                    with open(log_file, "a") as f:
-                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        f.write(f"[{timestamp}] TTY health check: Terminal disconnected\n")
-                except Exception:
-                    pass
-
-                logger.warning("TTY disconnected, initiating shutdown...")
-                self.exit()
-
-        except (OSError, ValueError) as e:
-            logger.error(f"TTY error detected: {e}, shutting down...")
-            self.exit()
-        except Exception as e:
-            # Log but don't exit on other errors
-            if self.config.daemon_mode:
-                logger.debug(f"TTY health check error (non-fatal): {e}")
-
-    async def on_unmount(self):
-        """Ensure all workers are properly cancelled when app unmounts."""
-        logger.info("Unmounting app, cancelling all workers...")
-
-        # Cancel all running workers
-        for worker in self.workers:
-            if worker.state == WorkerState.RUNNING:
-                logger.debug(f"Cancelling worker: {worker.name}")
-                try:
-                    worker.cancel()
-                except Exception as e:
-                    logger.warning(f"Error cancelling worker {worker.name}: {e}")
-
-        # Give workers a moment to clean up
-        await asyncio.sleep(0.5)
-        logger.info("All workers cancelled")
+        if self._has_tty and not self.config.daemon_mode:
+            self.set_timer(5.0, self._monitor_terminal_disconnect)
 
     def compose(self):
         yield TopBar(host="", app_version=__version__, help="press [b highlight]?[/b highlight] for commands")
@@ -2541,96 +2517,17 @@ def setup_logger(config: Config):
     logger.add(lambda _: sys.exit(1), level="CRITICAL")
 
 
-def setup_signal_handlers(app: DolphieApp):
-    """
-    Setup signal handlers for graceful shutdown on terminal disconnection.
-
-    For preventing orphaned processes when terminal closes without
-    properly exiting the application (e.g., closed SSH session, killed terminal).
-    """
-    # Create signal debug log
-    signal_log = Path.home() / "dolphie_signals.log"
-
-    def log_signal(message: str):
-        """Log signal events to debug file."""
-        try:
-            with open(signal_log, "a") as f:
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-                f.write(f"[{timestamp}] {message}\n")
-                f.flush()
-        except Exception:
-            pass  # Don't let logging break signal handling
-
-    def signal_handler(signum, frame):
-        """Handle termination signals gracefully."""
-        signal_name = signal.Signals(signum).name
-
-        # Log signal reception
-        log_signal(f"=== SIGNAL RECEIVED: {signal_name} (#{signum}) ===")
-        log_signal(f"  App running: {getattr(app, 'is_running', 'unknown')}")
-        log_signal(f"  Workers: {len(getattr(app, 'workers', []))}")
-        log_signal(f"  TTY connected: {sys.stdout.isatty()}")
-
-        try:
-            # Try to exit the app gracefully
-            if app.is_running:
-                log_signal("  Cancelling workers...")
-                # Stop all workers first to prevent them from continuing
-                for worker in app.workers:
-                    try:
-                        if worker.state == WorkerState.RUNNING:
-                            log_signal(f"    - Cancelling: {worker.name}")
-                            worker.cancel()
-                    except Exception as e:
-                        log_signal(f"    - Error cancelling {worker.name}: {e}")
-
-                log_signal("  Calling app.exit()...")
-                app.exit()
-        except Exception as e:
-            log_signal(f"  Error during graceful shutdown: {e}")
-
-        log_signal("  Forcing sys.exit(0)")
-        # Force exit to prevent zombie process
-        sys.exit(0)
-
-    # Log handler setup
-    log_signal("=== Signal handlers initialized ===")
-    log_signal(f"  PID: {os.getpid()}")
-    log_signal(f"  Log file: {signal_log}")
-
-    # Register handlers for all common termination signals
-    signal.signal(signal.SIGHUP, signal_handler)  # Terminal hangup
-    signal.signal(signal.SIGTERM, signal_handler)  # Standard termination request
-    signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-
-    # SIGQUIT doesn't exist on Windows - it's Unix/Linux only
-    if hasattr(signal, "SIGQUIT"):
-        signal.signal(signal.SIGQUIT, signal_handler)  # Quit signal (Ctrl+\)
-
-
 def main():
     # Set environment variables for better color support
     os.environ["TERM"] = "xterm-256color"
     os.environ["COLORTERM"] = "truecolor"
 
     arg_parser = ArgumentParser(__version__)
+
     setup_logger(arg_parser.config)
 
     app = DolphieApp(arg_parser.config)
-
-    # Setup signal handlers BEFORE running the app
-    # This catches SIGHUP when terminal closes
-    setup_signal_handlers(app)
-
-    try:
-        app.run(headless=arg_parser.config.daemon_mode)
-    except (KeyboardInterrupt, SystemExit):
-        # Clean exit on Ctrl+C or system exit
-        if arg_parser.config.daemon_mode:
-            logger.info("Dolphie terminated by user")
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}")
-        raise
+    app.run(headless=arg_parser.config.daemon_mode)
 
 
 if __name__ == "__main__":
