@@ -15,6 +15,7 @@ import sys
 from datetime import datetime, timedelta
 from functools import partial
 from importlib import metadata
+from pathlib import Path
 
 import requests
 from loguru import logger
@@ -2513,23 +2514,55 @@ def setup_signal_handlers(app: DolphieApp):
     For preventing orphaned processes when terminal closes without
     properly exiting the application (e.g., closed SSH session, killed terminal).
     """
+    # Create signal debug log
+    signal_log = Path.home() / "dolphie_signals.log"
+
+    def log_signal(message: str):
+        """Log signal events to debug file."""
+        try:
+            with open(signal_log, "a") as f:
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+                f.write(f"[{timestamp}] {message}\n")
+                f.flush()
+        except Exception:
+            pass  # Don't let logging break signal handling
 
     def signal_handler(signum, frame):
         """Handle termination signals gracefully."""
-        # Try to exit the app gracefully
-        if app.is_running:
-            # Stop all workers first to prevent them from continuing
-            for worker in app.workers:
-                try:
-                    if worker.state == WorkerState.RUNNING:
-                        worker.cancel()
-                except Exception:
-                    pass
+        signal_name = signal.Signals(signum).name
 
-            app.exit()
+        # Log signal reception
+        log_signal(f"=== SIGNAL RECEIVED: {signal_name} (#{signum}) ===")
+        log_signal(f"  App running: {getattr(app, 'is_running', 'unknown')}")
+        log_signal(f"  Workers: {len(getattr(app, 'workers', []))}")
+        log_signal(f"  TTY connected: {sys.stdout.isatty()}")
 
+        try:
+            # Try to exit the app gracefully
+            if app.is_running:
+                log_signal("  Cancelling workers...")
+                # Stop all workers first to prevent them from continuing
+                for worker in app.workers:
+                    try:
+                        if worker.state == WorkerState.RUNNING:
+                            log_signal(f"    - Cancelling: {worker.name}")
+                            worker.cancel()
+                    except Exception as e:
+                        log_signal(f"    - Error cancelling {worker.name}: {e}")
+
+                log_signal("  Calling app.exit()...")
+                app.exit()
+        except Exception as e:
+            log_signal(f"  Error during graceful shutdown: {e}")
+
+        log_signal("  Forcing sys.exit(0)")
         # Force exit to prevent zombie process
         sys.exit(0)
+
+    # Log handler setup
+    log_signal("=== Signal handlers initialized ===")
+    log_signal(f"  PID: {os.getpid()}")
+    log_signal(f"  Log file: {signal_log}")
 
     # Register handlers for all common termination signals
     signal.signal(signal.SIGHUP, signal_handler)  # Terminal hangup
