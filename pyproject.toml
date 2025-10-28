@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dolphie"
-version = "6.10.3"
+version = "6.10.4"
 license = "GPL-3.0-or-later"
 description = "Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]
@@ -14,7 +14,7 @@ myloginpath = "^0.0.4"
 packaging = "^25.0"
 requests = "^2.32.5"
 sqlparse = "^0.5.3"
-textual = {extras = ["syntax"], version = "^6.4.0"}
+textual = "^6.4.0"
 plotext = "^5.3.2"
 zstandard = "^0.25.0"
 loguru = "^0.7.3"
