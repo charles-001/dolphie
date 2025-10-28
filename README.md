@@ -16,7 +16,7 @@
 
 ## Installation
 
-Requires Python 3.8.1+
+Requires Python 3.9+
 
 #### Using PyPi
 

@@ -185,6 +185,8 @@ def create_panel(tab: Tab):
                 last_error_time = row.get("applying_transaction_last_transient_error_timestamp", "N/A")
                 if last_error_time == "0000-00-00 00:00:00.000000":
                     last_error_time = ""
+                else:
+                    last_error_time = str(last_error_time)
 
                 # Calculate the usage percentage for each worker for the current poll
                 usage_percentage = round(100 * (worker_diff / all_workers_diff), 2) if all_workers_diff > 0 else 0.0

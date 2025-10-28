@@ -1,25 +1,25 @@
 [tool.poetry]
 name = "dolphie"
-version = "6.10.2"
+version = "6.10.3"
 license = "GPL-3.0-or-later"
 description = "Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8.1"
-rich = "^14.0.0"
-pymysql = "^1.1.1"
+python = "^3.9"
+rich = "^14.2.0"
+pymysql = "^1.1.2"
 myloginpath = "^0.0.4"
 packaging = "^25.0"
-requests = "^2.32.3"
+requests = "^2.32.5"
 sqlparse = "^0.5.3"
-textual = {extras = ["syntax"], version = "^5.0.1"}
+textual = {extras = ["syntax"], version = "^6.4.0"}
 plotext = "^5.3.2"
-zstandard = "^0.23.0"
+zstandard = "^0.25.0"
 loguru = "^0.7.3"
 orjson = "^3.10.15"
-psutil = "^7.0.0"
+psutil = "^7.1.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "~8.3.5"
