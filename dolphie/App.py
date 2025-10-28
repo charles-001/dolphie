@@ -161,6 +161,7 @@ class DolphieApp(App):
     def __init__(self, config: Config):
         super().__init__()
 
+        self._has_tty = sys.stdout.isatty()
         self.config = config
         self.command_manager = CommandManager()
 
@@ -2430,6 +2431,9 @@ class DolphieApp(App):
             pass
 
     async def on_mount(self):
+        if not self.config.daemon_mode:
+            self.set_interval(2.0, self._check_tty_health)
+
         self.tab_manager = TabManager(app=self.app, config=self.config)
         await self.tab_manager.create_ui_widgets()
 
@@ -2457,6 +2461,36 @@ class DolphieApp(App):
                     self.run_worker_replicas(self.tab_manager.active_tab.id)
 
         self.check_for_new_version()
+
+    def _check_tty_health(self):
+        """
+        Periodically check if we still have a valid TTY connection.
+        If TTY is lost, gracefully shut down to prevent CPU spinning.
+        """
+        try:
+            current_tty = sys.stdout.isatty()
+
+            # Only shutdown if we HAD a TTY and now we DON'T
+            if self._has_tty and not current_tty:
+                # Log to signal file since we can't log to screen
+                try:
+                    log_file = Path.home() / "dolphie_signals.log"
+                    with open(log_file, "a") as f:
+                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        f.write(f"[{timestamp}] TTY health check: Terminal disconnected\n")
+                except Exception:
+                    pass
+
+                logger.warning("TTY disconnected, initiating shutdown...")
+                self.exit()
+
+        except (OSError, ValueError) as e:
+            logger.error(f"TTY error detected: {e}, shutting down...")
+            self.exit()
+        except Exception as e:
+            # Log but don't exit on other errors
+            if self.config.daemon_mode:
+                logger.debug(f"TTY health check error (non-fatal): {e}")
 
     async def on_unmount(self):
         """Ensure all workers are properly cancelled when app unmounts."""
