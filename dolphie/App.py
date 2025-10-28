@@ -7,7 +7,6 @@
 
 
 import asyncio
-import atexit
 import csv
 import os
 import re
@@ -2536,10 +2535,10 @@ def setup_signal_handlers(app: DolphieApp):
     signal.signal(signal.SIGHUP, signal_handler)  # Terminal hangup
     signal.signal(signal.SIGTERM, signal_handler)  # Standard termination request
     signal.signal(signal.SIGINT, signal_handler)  # Ctrl+C
-    signal.signal(signal.SIGQUIT, signal_handler)  # Quit signal (Ctrl+\)
 
-    # Register cleanup function to run on normal exit
-    atexit.register(lambda: None)
+    # SIGQUIT doesn't exist on Windows - it's Unix/Linux only
+    if hasattr(signal, "SIGQUIT"):
+        signal.signal(signal.SIGQUIT, signal_handler)  # Quit signal (Ctrl+\)
 
 
 def main():
