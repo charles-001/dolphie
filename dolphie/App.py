@@ -2443,7 +2443,7 @@ class DolphieApp(App):
             if not current_tty:
                 self.exit()
                 return
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError):
             self.exit()
             return
         except Exception as e:
