@@ -36,11 +36,24 @@ class Database:
         self.save_connection_id = save_connection_id
         self.daemon_mode = daemon_mode
 
+        self._PRIVILEGE_ERROR_CODES = {
+            1227,  # Access denied; SUPER privilege
+            1370,  # execute command denied; REPLICATION CLIENT privilege
+            1044,  # Access denied for user to database
+            1142,  # command denied to user
+            1143,  # column command denied to user
+            1146,  # Table doesn't exist (e.g., performance_schema access)
+        }
+
         self.connection: pymysql.Connection = None
         self.connection_id: int = None
         self.source: ConnectionSource = None
         self.is_running_query: bool = False
         self.has_connected: bool = False
+        self.last_execute_successful: bool = False
+        self.privilege_errors_notified: set = (
+            set()
+        )  # Track queries that have already shown privilege error notifications
 
         # Pre-compile regex pattern to filter non-printable characters
         self.non_printable_regex = re.compile(f"[^{re.escape(string.printable)}]")
@@ -84,7 +97,9 @@ class Database:
             if self.source == ConnectionSource.mysql:
                 self.execute("SET SESSION sql_mode=''")
 
-            logger.info(f"Connected to {self.source} with Process ID {self.connection_id}")
+            logger.info(
+                f"Connected to {self.source} with Process ID {self.connection_id}"
+            )
             self.has_connected = True
         except pymysql.Error as e:
             if reconnect_attempt:
@@ -137,14 +152,14 @@ class Database:
         return value
 
     def fetchall(self):
-        if not self.is_connected():
+        if not self.is_connected() or not self.last_execute_successful:
             return []
 
         rows = self.cursor.fetchall()
         return [self._process_row(row) for row in rows] if rows else []
 
     def fetchone(self):
-        if not self.is_connected():
+        if not self.is_connected() or not self.last_execute_successful:
             return {}
 
         row = self.cursor.fetchone()
@@ -160,7 +175,9 @@ class Database:
         if not data:
             return None
 
-        field = field or next(iter(data))  # Use field if provided, otherwise get first field
+        field = field or next(
+            iter(data)
+        )  # Use field if provided, otherwise get first field
         value = data.get(field)
         return self._decode_value(value)
 
@@ -177,13 +194,17 @@ class Database:
 
         if command in {"status", "variables", "mysql_stats"}:
             return {
-                row["Variable_name"]: int(row["Value"]) if row["Value"].isnumeric() else row["Value"] for row in data
+                row["Variable_name"]: int(row["Value"])
+                if row["Value"].isnumeric()
+                else row["Value"]
+                for row in data
             }
         elif command == "innodb_metrics":
             return {row["NAME"]: int(row["COUNT"]) for row in data}
 
     def execute(self, query, values=None, ignore_error=False):
         if not self.is_connected():
+            self.last_execute_successful = False
             return None
 
         if self.is_running_query:
@@ -193,11 +214,18 @@ class Database:
                 severity="error",
                 timeout=10,
             )
+            self.last_execute_successful = False
             return None
 
-        # Prefix all queries with Dolphie so they can be easily identified in the processlist from other people
+        # Prefix all queries with Dolphie so they can be easily identified in the processlist
         if self.source != ConnectionSource.proxysql:
             query = "/* Dolphie */ " + query
+
+        # Check if this query has already failed with a privilege error - skip execution to save database call
+        raw_query = query.replace("/* Dolphie */ ", "")
+        if raw_query in self.privilege_errors_notified:
+            self.last_execute_successful = False
+            return None
 
         for attempt_number in range(self.max_reconnect_attempts):
             self.is_running_query = True
@@ -206,11 +234,13 @@ class Database:
             try:
                 rows = self.cursor.execute(query, values)
                 self.is_running_query = False
+                self.last_execute_successful = True
 
                 return rows
             except AttributeError:
                 # If the cursor is not defined, reconnect and try again
                 self.is_running_query = False
+                self.last_execute_successful = False
 
                 self.close()
                 self.connect()
@@ -218,59 +248,93 @@ class Database:
                 time.sleep(1)
             except pymysql.Error as e:
                 self.is_running_query = False
+                self.last_execute_successful = False
 
-                if ignore_error:
-                    return None
+                if len(e.args) == 1:
+                    error_code = e.args[0]
                 else:
-                    if len(e.args) == 1:
-                        error_code = e.args[0]
-                    else:
-                        error_code = e.args[0]
-                        if e.args[1]:
-                            error_message = e.args[1]
+                    error_code = e.args[0]
+                    if e.args[1]:
+                        error_message = e.args[1]
 
-                    # Check if the error is due to a connection issue or is in daemon mode and already has
-                    # an established connection. If so, attempt to exponential backoff reconnect
-                    if error_code in (0, 2006, 2013, 2055) or (self.daemon_mode and self.has_connected):
-                        # 0: Not connected to MySQL
-                        # 2006: MySQL server has gone away
-                        # 2013: Lost connection to MySQL server during query
-                        # 2055: Lost connection to MySQL server at hostname
+                # Check if this is a privilege error - silently return None without raising exception
+                if error_code in self._PRIVILEGE_ERROR_CODES:
+                    # Show notification only the first time this query fails with privilege error
+                    if raw_query not in self.privilege_errors_notified:
+                        self.privilege_errors_notified.add(raw_query)
 
-                        if error_message:
-                            logger.error(
-                                f"{self.source} has lost its connection: {error_message}, attempting to reconnect..."
-                            )
-                            # Escape [ and ] characters in the error message
-                            escaped_error_message = error_message.replace("[", "\\[")
-                            self.app.notify(
-                                f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: {escaped_error_message}",
-                                title="MySQL Connection Lost",
-                                severity="error",
-                                timeout=10,
-                            )
+                        logger.warning(
+                            f"Privilege error (code {error_code}): {error_message}. "
+                            f"Query: {raw_query}. "
+                            f"This query will be skipped and stats for this feature won't be available."
+                        )
 
-                        self.close()
-                        self.connect(reconnect_attempt=True)
-
-                        if not self.connection.open:
-                            # Exponential backoff
-                            time.sleep(min(1 * (2**attempt_number), 20))  # Cap the wait time at 20 seconds
-
-                            # Skip the rest of the loop
-                            continue
+                        # Escape [ and ] characters in the error message and query
+                        escaped_error_message = (
+                            error_message.replace("[", "\\[")
+                            if error_message
+                            else "Access denied"
+                        )
+                        escaped_query = raw_query.replace("[", "\\[")
 
                         self.app.notify(
-                            f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: Successfully reconnected",
-                            title="MySQL Connection Created",
-                            severity="success",
+                            f"[$b_highlight]{self.host}:{self.port}[/$b_highlight]: [dim]{escaped_error_message}[/dim]\n"
+                            f"Query: [$b_light_blue]{escaped_query}[/$b_light_blue]\n"
+                            "Stats for this feature won't be available.",
+                            title="Insufficient Privileges",
+                            severity="warning",
+                            timeout=15,
+                        )
+
+                    return None
+
+                # If ignore_error is set, return None for any error
+                if ignore_error:
+                    return None
+
+                # Handle lost connection errors
+                if error_code in (0, 2006, 2013, 2055):
+                    # 0: Not connected to MySQL
+                    # 2006: MySQL server has gone away
+                    # 2013: Lost connection to MySQL server during query
+                    # 2055: Lost connection to MySQL server at hostname
+
+                    if error_message:
+                        logger.error(
+                            f"{self.source} has lost its connection: {error_message}, attempting to reconnect..."
+                        )
+                        # Escape [ and ] characters in the error message
+                        escaped_error_message = error_message.replace("[", "\\[")
+                        self.app.notify(
+                            f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: {escaped_error_message}",
+                            title="MySQL Connection Lost",
+                            severity="error",
                             timeout=10,
                         )
 
-                        # Retry the query
-                        return self.execute(query, values)
-                    else:
-                        raise ManualException(error_message, query=query, code=error_code)
+                    self.close()
+                    self.connect(reconnect_attempt=True)
+
+                    if not self.connection.open:
+                        # Exponential backoff
+                        time.sleep(
+                            min(1 * (2**attempt_number), 20)
+                        )  # Cap the wait time at 20 seconds
+
+                        # Skip the rest of the loop
+                        continue
+
+                    self.app.notify(
+                        f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: Successfully reconnected",
+                        title="MySQL Connection Created",
+                        severity="success",
+                        timeout=10,
+                    )
+
+                    # Retry the query
+                    return self.execute(query, values)
+                else:
+                    raise ManualException(error_message, query=query, code=error_code)
 
         if not self.connection.open:
             raise ManualException(
