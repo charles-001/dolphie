@@ -283,7 +283,7 @@ class Database:
                             "Stats for this feature won't be available.",
                             title="Insufficient Privileges",
                             severity="warning",
-                            timeout=15,
+                            timeout=9,
                         )
 
                     return None
