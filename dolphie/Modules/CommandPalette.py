@@ -1,11 +1,3 @@
-"""
-Command Palette Module
-
-This module provides the command palette functionality,
-allowing users to discover and search for available commands based on
-the current connection source and replay state.
-"""
-
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -16,7 +8,7 @@ if TYPE_CHECKING:
 
 
 class CommandPaletteCommands(Provider):
-    """Command palette commands for Dolphie based on connection source."""
+    """Command palette commands based on connection source."""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -96,7 +96,9 @@ def format_query(query: str, minify: bool = True) -> Syntax:
 
     query = markup_escape(re.sub(r"\s+", " ", query)) if minify else query
 
-    formatted_query = Syntax(code=query, lexer="sql", word_wrap=True, theme=NordModifiedTheme)
+    formatted_query = Syntax(
+        code=query, lexer="sql", word_wrap=True, theme=NordModifiedTheme
+    )
 
     return formatted_query
 
