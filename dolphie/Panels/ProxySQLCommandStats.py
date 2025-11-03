@@ -51,10 +51,8 @@ def create_panel(tab: Tab) -> DataTable:
 
     for row in dolphie.proxysql_command_stats:
         row_id = row["Command"]
-        row_exists = row_id in command_stats.rows
 
-        if row_exists:
-            # Get the existing row data ONCE before the column loop
+        if row_id in command_stats.rows:
             datatable_row = command_stats.get_row(row_id)
 
             for column_id, (column_key, column_name, column_format) in enumerate(

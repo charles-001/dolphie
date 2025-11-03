@@ -101,7 +101,6 @@ def create_panel(tab: Tab) -> DataTable:
         thread: ProxySQLProcesslistThread
 
         if thread_id in processlist_datatable.rows:
-            # Get the existing row data ONCE before the column loop
             datatable_row = processlist_datatable.get_row(thread_id)
 
             for column_id, (column_name, column_field) in enumerate(

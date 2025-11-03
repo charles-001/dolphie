@@ -71,9 +71,8 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
 
     for file_name, metrics in data.items():
         row_id = file_name
-        row_exists = row_id in datatable.rows
 
-        if row_exists:
+        if row_id in datatable.rows:
             # Get the existing row data ONCE before the column loop
             datatable_row = datatable.get_row(row_id)
 

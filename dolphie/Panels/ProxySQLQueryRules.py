@@ -130,10 +130,8 @@ def create_panel(tab: Tab) -> DataTable:
 
     for row in dolphie.proxysql_mysql_query_rules:
         row_id = row["rule_id"]
-        row_exists = row_id in mysql_query_rules.rows
 
-        if row_exists:
-            # Get the existing row data ONCE before the column loop
+        if row_id in mysql_query_rules.rows:
             datatable_row = mysql_query_rules.get_row(row_id)
 
             for column_id, (column_key, column_name, column_format) in enumerate(
@@ -143,9 +141,9 @@ def create_panel(tab: Tab) -> DataTable:
 
                 # Calculate the values per second for the following columns
                 if column_key in ["hits_s"]:
-                    previous_value = dolphie.proxysql_per_second_data.get(row_id, {}).get(
-                        column_key, 0
-                    )
+                    previous_value = dolphie.proxysql_per_second_data.get(
+                        row_id, {}
+                    ).get(column_key, 0)
                     if not previous_value:
                         column_value = "[dark_gray]0"
                     else:
@@ -153,9 +151,9 @@ def create_panel(tab: Tab) -> DataTable:
                         value_diff = current_value - previous_value
                         column_value = round(value_diff / polling_latency)
 
-                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = (
-                        int(row.get(column_key, 0))
-                    )
+                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[
+                        column_key
+                    ] = int(row.get(column_key, 0))
 
                 if column_key in ["apply", "log"]:
                     column_value = "Yes" if column_value == "1" else "No"
@@ -184,9 +182,9 @@ def create_panel(tab: Tab) -> DataTable:
 
                 # Calculate the values per second for the following columns
                 if column_key in ["hits_s"]:
-                    previous_value = dolphie.proxysql_per_second_data.get(row_id, {}).get(
-                        column_key, 0
-                    )
+                    previous_value = dolphie.proxysql_per_second_data.get(
+                        row_id, {}
+                    ).get(column_key, 0)
                     if not previous_value:
                         column_value = "[dark_gray]0"
                     else:
@@ -194,9 +192,9 @@ def create_panel(tab: Tab) -> DataTable:
                         value_diff = current_value - previous_value
                         column_value = round(value_diff / polling_latency)
 
-                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = (
-                        int(row.get(column_key, 0))
-                    )
+                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[
+                        column_key
+                    ] = int(row.get(column_key, 0))
 
                 if column_key in ["apply", "log"]:
                     column_value = "Yes" if column_value == "1" else "No"

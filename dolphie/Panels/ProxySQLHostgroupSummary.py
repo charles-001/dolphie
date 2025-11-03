@@ -59,10 +59,8 @@ def create_panel(tab: Tab) -> DataTable:
     # Iterate through hostgroup summary data
     for row in dolphie.proxysql_hostgroup_summary:
         row_id = f"{row['hostgroup']}_{row['srv_host']}_{row['srv_port']}"
-        row_exists = row_id in hostgroup_summary_datatable.rows
 
-        if row_exists:
-            # Get the existing row data ONCE before the column loop
+        if row_id in hostgroup_summary_datatable.rows:
             datatable_row = hostgroup_summary_datatable.get_row(row_id)
 
             for column_id, (column_key, column_name, column_format) in enumerate(

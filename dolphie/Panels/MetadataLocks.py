@@ -51,10 +51,8 @@ def create_panel(tab: Tab) -> DataTable:
     for lock in dolphie.metadata_locks:
         lock_id = str(lock["id"])
         row_height = 1
-        row_exists = lock_id in metadata_locks_datatable.rows
 
-        if row_exists:
-            # Get the existing row data ONCE before the column loop
+        if lock_id in metadata_locks_datatable.rows:
             datatable_row = metadata_locks_datatable.get_row(lock_id)
 
             for column_id, (column_key, column_name, column_width) in enumerate(

@@ -165,10 +165,7 @@ def create_panel(tab: Tab):
 
     if display_data:
         for digest, metrics in display_data.items():
-            row_exists = digest in tab.statements_summary_datatable.rows
-
-            if row_exists:
-                # Get the existing row data ONCE before the column loop
+            if digest in tab.statements_summary_datatable.rows:
                 datatable_row = tab.statements_summary_datatable.get_row(digest)
 
                 for column_id, (
