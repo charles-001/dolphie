@@ -46,15 +46,11 @@ def create_panel(tab: Tab) -> DataTable:
             hostgroup_summary_datatable.add_column(
                 column_data["name"], key=column_key, width=column_data["width"]
             )
-            column_keys.append(column_key)
-            column_names.append(column_data["name"])
-            column_formats.append(column_data["format"])
-    else:
-        # Extract column info from existing columns dict
-        for column_key, column_data in columns.items():
-            column_keys.append(column_key)
-            column_names.append(column_data["name"])
-            column_formats.append(column_data["format"])
+
+    for column_key, column_data in columns.items():
+        column_keys.append(column_key)
+        column_names.append(column_data["name"])
+        column_formats.append(column_data["format"])
 
     # Iterate through hostgroup summary data
     for row in dolphie.proxysql_hostgroup_summary:

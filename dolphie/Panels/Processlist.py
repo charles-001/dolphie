@@ -138,14 +138,11 @@ def create_panel(tab: Tab) -> DataTable:
             processlist_datatable.add_column(
                 column_data["name"], key=column_data["name"], width=column_data["width"]
             )
-            column_names.append(column_data["name"])
-            column_fields.append(column_data["field"])
-            column_format_numbers.append(column_data["format_number"])
-    else:
-        for column_data in columns:
-            column_names.append(column_data["name"])
-            column_fields.append(column_data["field"])
-            column_format_numbers.append(column_data["format_number"])
+
+    for column_data in columns:
+        column_names.append(column_data["name"])
+        column_fields.append(column_data["field"])
+        column_format_numbers.append(column_data["format_number"])
 
     threads_to_render: Dict[str, ProcesslistThread] = {}
     # We use filter here for replays since the original way requires changing WHERE clause

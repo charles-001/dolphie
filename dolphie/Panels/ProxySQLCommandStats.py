@@ -37,15 +37,11 @@ def create_panel(tab: Tab) -> DataTable:
             command_stats.add_column(
                 column_data["name"], key=column_key, width=column_data["width"]
             )
-            column_keys.append(column_key)
-            column_names.append(column_data["name"])
-            column_formats.append(column_data["format"])
-    else:
-        # Extract column info from existing columns dictionary
-        for column_key, column_data in columns.items():
-            column_keys.append(column_key)
-            column_names.append(column_data["name"])
-            column_formats.append(column_data["format"])
+
+    for column_key, column_data in columns.items():
+        column_keys.append(column_key)
+        column_names.append(column_data["name"])
+        column_formats.append(column_data["format"])
 
     polling_latency = dolphie.polling_latency
 

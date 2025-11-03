@@ -132,14 +132,11 @@ def create_panel(tab: Tab):
             datatable.add_column(
                 column_data["name"], key=column_data["name"], width=column_data["width"]
             )
-            column_names.append(column_data["name"])
-            column_fields.append(column_data["field"])
-            column_format_numbers.append(column_data["format_number"])
-    else:
-        for column_data in columns:
-            column_names.append(column_data["name"])
-            column_fields.append(column_data["field"])
-            column_format_numbers.append(column_data["format_number"])
+
+    for column_data in columns:
+        column_names.append(column_data["name"])
+        column_fields.append(column_data["field"])
+        column_format_numbers.append(column_data["format_number"])
 
     data = tab.dolphie.statements_summary_data.filtered_data
     display_mode = ""

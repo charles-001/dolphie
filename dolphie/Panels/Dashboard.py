@@ -135,10 +135,10 @@ def create_panel(tab: Tab) -> Table:
     table_innodb.add_row("[label]Read Hit", innodb_efficiency)
     table_innodb.add_row(
         "[label]Chkpt Age",
-        dolphie.metric_manager.get_metric_checkpoint_age(format=True),
+        dolphie.metric_manager.get_formatted_checkpoint_age(),
     )
     table_innodb.add_row(
-        "[label]AHI Hit", dolphie.metric_manager.get_metric_adaptive_hash_index()
+        "[label]AHI Hit", dolphie.metric_manager.get_formatted_ahi_status()
     )
 
     bp_instances = global_variables.get("innodb_buffer_pool_instances", 1)

@@ -53,13 +53,10 @@ def create_panel(tab: Tab) -> DataTable:
             processlist_datatable.add_column(
                 column_data["name"], key=column_data["name"], width=column_data["width"]
             )
-            column_names.append(column_data["name"])
-            column_fields.append(column_data["field"])
-    else:
-        # Extract column info from existing columns list
-        for column_data in columns:
-            column_names.append(column_data["name"])
-            column_fields.append(column_data["field"])
+
+    for column_data in columns:
+        column_names.append(column_data["name"])
+        column_fields.append(column_data["field"])
 
     threads_to_render: Dict[str, ProxySQLProcesslistThread] = {}
     if dolphie.replay_file:

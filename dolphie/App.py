@@ -220,7 +220,7 @@ class DolphieApp(App):
         # Wait for all workers to finish before notifying the user
         await asyncio.sleep(0.2)
         for tab in self.tab_manager.tabs.values():
-            while tab.worker.is_running:
+            while tab.worker and tab.worker.is_running:
                 await asyncio.sleep(0.1)
 
         self.tab_manager.loading_hostgroups = False
@@ -291,7 +291,8 @@ class DolphieApp(App):
         # If the previous tab is a replay file, cancel its worker and timer
         if previous_tab and previous_tab.dolphie.replay_file and previous_tab.worker:
             previous_tab.worker.cancel()
-            previous_tab.worker_timer.stop()
+            if previous_tab.worker_timer:
+                previous_tab.worker_timer.stop()
 
         self.tab_manager.switch_tab(event.tab.id, set_active=False)
 
@@ -338,12 +339,13 @@ class DolphieApp(App):
 
         for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
             if metric_tab_name == metric_instance.tab_name:
-                for graph_name in metric_instance.graphs:
-                    getattr(tab, graph_name).render_graph(
-                        metric_instance, tab.dolphie.metric_manager.datetimes
-                    )
-
-        self.update_stats_label(metric_tab_name)
+                # Batch all graph and stats label updates into a single rendering cycle
+                with self.batch_update():
+                    for graph_name in metric_instance.graphs:
+                        getattr(tab, graph_name).render_graph(
+                            metric_instance, tab.dolphie.metric_manager.datetimes
+                        )
+                    self.update_stats_label(metric_tab_name)
 
     def update_stats_label(self, metric_tab_name: str):
         stat_data = {}
@@ -399,9 +401,11 @@ class DolphieApp(App):
         # This function lets us force a refresh of the worker thread when we're in a replay
         tab = self.tab_manager.active_tab
 
-        if tab.dolphie.replay_file and not tab.worker.is_running:
-            tab.worker.cancel()
-            tab.worker_timer.stop()
+        if tab.dolphie.replay_file and (not tab.worker or not tab.worker.is_running):
+            if tab.worker:
+                tab.worker.cancel()
+            if tab.worker_timer:
+                tab.worker_timer.stop()
 
             if need_current_data:
                 # We subtract 1 because get_next_refresh_interval will increment the index

@@ -32,110 +32,125 @@ class WorkerManager:
 
     async def run_worker_replay(self, tab_id: str, manual_control: bool = False):
         tab = self.app.tab_manager.get_tab(tab_id)
-
-        # Get our worker thread
-        tab.worker = get_current_worker()
-        tab.worker.name = tab_id
-
-        dolphie = tab.dolphie
-
-        tab.replay_manual_control = manual_control
-        if (
-            len(self.app.screen_stack) > 1
-            or (dolphie.pause_refresh and not manual_control)
-            or tab.id != self.app.tab_manager.active_tab.id
-        ):
+        if not tab:
             return
 
-        # Get the next event from the replay file
-        replay_event_data = tab.replay_manager.get_next_refresh_interval()
-        # If there's no more events, stop here and cancel the worker
-        if not replay_event_data:
-            tab.worker.cancel()
+        try:
+            # Get our worker thread
+            tab.worker = get_current_worker()
+            tab.worker.name = tab_id
 
-            return
+            dolphie = tab.dolphie
 
-        tab.replay_manager.fetch_global_variable_changes_for_current_replay_id()
+            tab.replay_manual_control = manual_control
+            if (
+                len(self.app.screen_stack) > 1
+                or (dolphie.pause_refresh and not manual_control)
+                or tab.id != self.app.tab_manager.active_tab.id
+            ):
+                return
 
-        # Common data for refreshing
-        dolphie.system_utilization = replay_event_data.system_utilization
-        dolphie.global_variables = replay_event_data.global_variables
-        dolphie.global_status = replay_event_data.global_status
-        common_metrics = {
-            "system_utilization": dolphie.system_utilization,
-            "global_variables": dolphie.global_variables,
-            "global_status": dolphie.global_status,
-        }
+            # Get the next event from the replay file
+            replay_event_data = tab.replay_manager.get_next_refresh_interval()
+            # If there's no more events, stop here and cancel the worker
+            if not replay_event_data:
+                tab.worker.cancel()
 
-        dolphie.worker_processing_time = dolphie.global_status.get(
-            "replay_polling_latency", 0
-        )
+                return
 
-        if dolphie.connection_source == ConnectionSource.mysql:
-            dolphie.host_version = dolphie.parse_server_version(
-                dolphie.global_variables.get("version")
-            )
-            dolphie.binlog_status = replay_event_data.binlog_status
-            dolphie.innodb_metrics = replay_event_data.innodb_metrics
-            dolphie.replica_manager.available_replicas = (
-                replay_event_data.replica_manager
-            )
-            dolphie.processlist_threads = replay_event_data.processlist
-            dolphie.replication_status = replay_event_data.replication_status
-            dolphie.replication_applier_status = (
-                replay_event_data.replication_applier_status
-            )
-            dolphie.metadata_locks = replay_event_data.metadata_locks
-            dolphie.group_replication_members = (
-                replay_event_data.group_replication_members
-            )
-            dolphie.group_replication_data = replay_event_data.group_replication_data
-            dolphie.file_io_data = replay_event_data.file_io_data
-            dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
-            dolphie.statements_summary_data = replay_event_data.statements_summary_data
+            tab.replay_manager.fetch_global_variable_changes_for_current_replay_id()
 
-            dolphie.pfs_metrics_last_reset_time = dolphie.global_status.get(
-                "pfs_metrics_last_reset_time", 0
-            )
-
-            connection_source_metrics = {
-                "innodb_metrics": dolphie.innodb_metrics,
-                "replication_status": dolphie.replication_status,
+            # Common data for refreshing
+            dolphie.system_utilization = replay_event_data.system_utilization
+            dolphie.global_variables = replay_event_data.global_variables
+            dolphie.global_status = replay_event_data.global_status
+            common_metrics = {
+                "system_utilization": dolphie.system_utilization,
+                "global_variables": dolphie.global_variables,
+                "global_status": dolphie.global_status,
             }
 
-            if not dolphie.server_uuid:
-                dolphie.configure_mysql_variables()
-        elif dolphie.connection_source == ConnectionSource.proxysql:
-            dolphie.host_version = dolphie.parse_server_version(
-                dolphie.global_variables.get("admin-version")
+            dolphie.worker_processing_time = dolphie.global_status.get(
+                "replay_polling_latency", 0
             )
-            dolphie.proxysql_command_stats = replay_event_data.command_stats
-            dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
-            dolphie.processlist_threads = replay_event_data.processlist
 
-            connection_source_metrics = {
-                "proxysql_command_stats": dolphie.proxysql_command_stats
-            }
+            if dolphie.connection_source == ConnectionSource.mysql:
+                dolphie.host_version = dolphie.parse_server_version(
+                    dolphie.global_variables.get("version")
+                )
+                dolphie.binlog_status = replay_event_data.binlog_status
+                dolphie.innodb_metrics = replay_event_data.innodb_metrics
+                dolphie.replica_manager.available_replicas = (
+                    replay_event_data.replica_manager
+                )
+                dolphie.processlist_threads = replay_event_data.processlist
+                dolphie.replication_status = replay_event_data.replication_status
+                dolphie.replication_applier_status = (
+                    replay_event_data.replication_applier_status
+                )
+                dolphie.metadata_locks = replay_event_data.metadata_locks
+                dolphie.group_replication_members = (
+                    replay_event_data.group_replication_members
+                )
+                dolphie.group_replication_data = replay_event_data.group_replication_data
+                dolphie.file_io_data = replay_event_data.file_io_data
+                dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
+                dolphie.statements_summary_data = replay_event_data.statements_summary_data
 
-        # Refresh the metric manager metrics to the state of the replay event
-        dolphie.metric_manager.refresh_data(
-            **common_metrics, **connection_source_metrics
-        )
+                dolphie.pfs_metrics_last_reset_time = dolphie.global_status.get(
+                    "pfs_metrics_last_reset_time", 0
+                )
 
-        # Metrics data is already calculated in the replay event data so we just need to update the values
-        dolphie.metric_manager.datetimes = replay_event_data.metric_manager.get(
-            "datetimes"
-        )
-        for metric_name, metric_data in replay_event_data.metric_manager.items():
-            metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
-            if metric_instance:
-                for metric_name, metric_values in metric_data.items():
-                    metric: MetricManager.MetricData = metric_instance.__dict__.get(
-                        metric_name
-                    )
-                    if metric:
-                        metric.values = metric_values
-                        metric.last_value = metric_values[-1]
+                connection_source_metrics = {
+                    "innodb_metrics": dolphie.innodb_metrics,
+                    "replication_status": dolphie.replication_status,
+                }
+
+                if not dolphie.server_uuid:
+                    dolphie.configure_mysql_variables()
+            elif dolphie.connection_source == ConnectionSource.proxysql:
+                dolphie.host_version = dolphie.parse_server_version(
+                    dolphie.global_variables.get("admin-version")
+                )
+                dolphie.proxysql_command_stats = replay_event_data.command_stats
+                dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
+                dolphie.processlist_threads = replay_event_data.processlist
+
+                connection_source_metrics = {
+                    "proxysql_command_stats": dolphie.proxysql_command_stats
+                }
+
+            # Refresh the metric manager metrics to the state of the replay event
+            dolphie.metric_manager.refresh_data(
+                worker_start_time=datetime.now(),
+                **common_metrics,
+                **connection_source_metrics,
+            )
+
+            # Metrics data is already calculated in the replay event data so we just need to update the values
+            dolphie.metric_manager.datetimes = replay_event_data.metric_manager.get(
+                "datetimes"
+            )
+            for metric_name, metric_data in replay_event_data.metric_manager.items():
+                metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
+                if metric_instance:
+                    for metric_name, metric_values in metric_data.items():
+                        metric: MetricManager.MetricData = metric_instance.__dict__.get(
+                            metric_name
+                        )
+                        if metric:
+                            metric.values = metric_values
+                            metric.last_value = metric_values[-1]
+
+        except Exception as e:
+            # Catch any errors during replay and log them without crashing the app
+            self.app.notify(
+                f"Error during replay: {str(e)}",
+                title="Replay Error",
+                severity="error",
+            )
+            if tab.worker:
+                tab.worker.cancel()
 
     async def run_worker_main(self, tab_id: str):
         tab = self.app.tab_manager.get_tab(tab_id)

@@ -54,6 +54,18 @@ class KeyEventManager:
         """
         self.app = app
 
+        # Debouncing to prevent rapid key presses from overwhelming the system
+        self.last_key_time = {}
+        self.default_debounce_interval = timedelta(milliseconds=50)
+
+        # Custom debounce intervals for specific keys that trigger expensive operations
+        self.key_debounce_intervals = {
+            "left_square_bracket": timedelta(milliseconds=100),  # Replay backward
+            "right_square_bracket": timedelta(milliseconds=100),  # Replay forward
+            "space": timedelta(milliseconds=300),  # Start worker
+            "minus": timedelta(milliseconds=300),  # Remove tab (destructive)
+        }
+
     async def process_key_event(self, key: str) -> None:
         """
         Process a keyboard event and execute the corresponding action.
@@ -67,6 +79,18 @@ class KeyEventManager:
         tab = self.app.tab_manager.active_tab
         if not tab:
             return
+
+        # Apply debouncing to prevent rapid key presses
+        now = datetime.now()
+        debounce_interval = self.key_debounce_intervals.get(
+            key, self.default_debounce_interval
+        )
+        last_time = self.last_key_time.get(key, datetime.min)
+
+        if now - last_time < debounce_interval:
+            return  # Key press is too soon, ignore it
+
+        self.last_key_time[key] = now
 
         screen_data = None
         dolphie = tab.dolphie
@@ -232,8 +256,9 @@ class KeyEventManager:
             self.app.tab_manager.setup_host_tab(tab)
 
         elif key == "space":
-            if not tab.worker.is_running:
-                tab.worker_timer.stop()
+            if not tab.worker or not tab.worker.is_running:
+                if tab.worker_timer:
+                    tab.worker_timer.stop()
                 self.app.run_worker_main(tab.id)
 
         elif key == "plus":

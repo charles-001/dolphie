@@ -58,13 +58,10 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
         for column_key, column_data in columns.items():
             column_width = column_data["width"]
             datatable.add_column(column_key, key=column_key, width=column_width)
-            column_names.append(column_key)
-            column_fields.append(column_data["field"])
-    else:
-        # Extract column info from existing columns dictionary
-        for column_key, column_data in columns.items():
-            column_names.append(column_key)
-            column_fields.append(column_data["field"])
+
+    for column_key, column_data in columns.items():
+        column_names.append(column_key)
+        column_fields.append(column_data["field"])
 
     data = dolphie.table_io_waits_data.filtered_data
     use_total = tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total"
@@ -223,15 +220,11 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
         for column_key, column_data in columns.items():
             column_width = column_data["width"]
             datatable.add_column(column_key, key=column_key, width=column_width)
-            column_names.append(column_key)
-            column_fields.append(column_data["field"])
-            column_formats.append(column_data.get("format"))
-    else:
-        # Extract column info from existing columns dictionary
-        for column_key, column_data in columns.items():
-            column_names.append(column_key)
-            column_fields.append(column_data["field"])
-            column_formats.append(column_data.get("format"))
+
+    for column_key, column_data in columns.items():
+        column_names.append(column_key)
+        column_fields.append(column_data["field"])
+        column_formats.append(column_data.get("format"))
 
     data = dolphie.file_io_data.filtered_data
     use_total = tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total"

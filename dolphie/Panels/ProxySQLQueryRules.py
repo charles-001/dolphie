@@ -117,14 +117,11 @@ def create_panel(tab: Tab) -> DataTable:
             mysql_query_rules.add_column(
                 column_data["name"], key=column_key, width=column_data["width"]
             )
-            column_keys.append(column_key)
-            column_names.append(column_data["name"])
-            column_formats.append(column_data["format"])
-    else:
-        for column_key, column_data in columns_filtered.items():
-            column_keys.append(column_key)
-            column_names.append(column_data["name"])
-            column_formats.append(column_data["format"])
+
+    for column_key, column_data in columns_filtered.items():
+        column_keys.append(column_key)
+        column_names.append(column_data["name"])
+        column_formats.append(column_data["format"])
 
     polling_latency = dolphie.polling_latency
 

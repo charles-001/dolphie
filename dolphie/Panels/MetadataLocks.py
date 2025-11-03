@@ -38,15 +38,11 @@ def create_panel(tab: Tab) -> DataTable:
             metadata_locks_datatable.add_column(
                 column_data["name"], key=column_data["name"], width=column_data["width"]
             )
-            column_keys.append(column_key)
-            column_names.append(column_data["name"])
-            column_widths.append(column_data["width"])
-    else:
-        # Extract column info from existing columns dictionary
-        for column_key, column_data in columns.items():
-            column_keys.append(column_key)
-            column_names.append(column_data["name"])
-            column_widths.append(column_data["width"])
+
+    for column_key, column_data in columns.items():
+        column_keys.append(column_key)
+        column_names.append(column_data["name"])
+        column_widths.append(column_data["width"])
 
     for lock in dolphie.metadata_locks:
         lock_id = str(lock["id"])

@@ -67,9 +67,9 @@ class WorkerDataProcessor:
         # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
         # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
         if not dolphie.global_status.get("Innodb_lsn_current"):
-            dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status[
+            dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status.get(
                 "Innodb_os_log_written"
-            ]
+            )
 
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables(
             "innodb_metrics"

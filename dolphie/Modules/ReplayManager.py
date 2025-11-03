@@ -73,11 +73,15 @@ class ReplayManager:
         self.current_replay_id: int = 0  # This is used to keep track of the last primary key read from the database
         self.min_replay_id: int = 0
         self.max_replay_id: int = 0
-        self.current_replay_timestamp: str = None  # Only used for dashboard replay section
+        self.current_replay_timestamp: str = (
+            None  # Only used for dashboard replay section
+        )
         self.min_replay_timestamp: str = None
         self.max_replay_timestamp: str = None
         self.total_replay_rows: int = 0
-        self.last_purge_time = datetime.now() - timedelta(hours=1)  # Initialize to an hour ago
+        self.last_purge_time = datetime.now() - timedelta(
+            hours=1
+        )  # Initialize to an hour ago
         self.replay_file_size: int = 0
         self.compression_dict: zstd.ZstdCompressionDict = None
         self.dict_samples: List[bytes] = []
@@ -91,13 +95,19 @@ class ReplayManager:
             self.replay_file = f"{dolphie.replay_dir}/{hostname}/daemon.db"
         elif dolphie.record_for_replay:
             self.replay_file = f"{dolphie.replay_dir}/{hostname}/{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.db"
-            dolphie.app.notify(f"File: [$highlight]{self.replay_file}[/$highlight]", title="Recording data", timeout=10)
+            dolphie.app.notify(
+                f"File: [$highlight]{self.replay_file}[/$highlight]",
+                title="Recording data",
+                timeout=10,
+            )
         else:
             # No options specified for replaying, skip initialization
             return
 
         os.makedirs(os.path.dirname(self.replay_file), mode=0o770, exist_ok=True)
-        logger.info(f"Replay SQLite file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)")
+        logger.info(
+            f"Replay SQLite file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)"
+        )
 
         self._initialize_sqlite()
         self._manage_metadata()
@@ -145,7 +155,11 @@ class ReplayManager:
                     return cursor.rowcount
         except sqlite3.Error as e:
             logger.error(f"Error executing SQLite query: {e}")
-            self.dolphie.app.notify(f"Query: {query}\n{e}", title="Error executing SQLite query", severity="error")
+            self.dolphie.app.notify(
+                f"Query: {query}\n{e}",
+                title="Error executing SQLite query",
+                severity="error",
+            )
 
             return None
 
@@ -155,7 +169,9 @@ class ReplayManager:
         """
         database_exists = True if os.path.exists(self.replay_file) else False
 
-        self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
+        self.connection = sqlite3.connect(
+            self.replay_file, isolation_level=None, check_same_thread=False
+        )
 
         # Lock down the permissions of the replay file
         os.chmod(self.replay_file, 0o660)
@@ -174,7 +190,9 @@ class ReplayManager:
                 data BLOB
             )"""
         )
-        self._execute_query("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
+        self._execute_query(
+            "CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)"
+        )
 
         # Create metadata table if it doesn't exist
         self._execute_query(
@@ -202,8 +220,12 @@ class ReplayManager:
                 new_value VARCHAR(255)
             )"""
         )
-        self._execute_query("CREATE INDEX IF NOT EXISTS idx_variable_changes_timestamp ON variable_changes (timestamp)")
-        self._execute_query("CREATE INDEX IF NOT EXISTS idx_variable_changes_replay_id ON variable_changes (replay_id)")
+        self._execute_query(
+            "CREATE INDEX IF NOT EXISTS idx_variable_changes_timestamp ON variable_changes (timestamp)"
+        )
+        self._execute_query(
+            "CREATE INDEX IF NOT EXISTS idx_variable_changes_replay_id ON variable_changes (replay_id)"
+        )
 
         # Enable auto-vacuum if it's not already enabled. This will help keep the database file size down.
         result = self._execute_query("PRAGMA auto_vacuum", fetchone=True)
@@ -225,12 +247,16 @@ class ReplayManager:
         if (current_time - self.last_purge_time) < timedelta(hours=1):
             return  # Skip purging if less than an hour has passed
 
-        retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        retention_date = (
+            current_time - timedelta(hours=self.dolphie.replay_retention_hours)
+        ).strftime("%Y-%m-%d %H:%M:%S")
 
-        self._execute_query("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
-        self._execute_query("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
+        self._execute_query(
+            "DELETE FROM replay_data WHERE timestamp < ?", (retention_date,)
+        )
+        self._execute_query(
+            "DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,)
+        )
 
         self.last_purge_time = current_time
 
@@ -241,12 +267,18 @@ class ReplayManager:
         Args:
             timestamp: The timestamp to seek to.
         """
-        row = self._execute_query("SELECT id FROM replay_data WHERE timestamp = ?", (timestamp,), fetchone=True)
+        row = self._execute_query(
+            "SELECT id FROM replay_data WHERE timestamp = ?",
+            (timestamp,),
+            fetchone=True,
+        )
         if row:
             # We subtract 1 because get_next_refresh_interval naturally increments the index
             self.current_replay_id = row[0] - 1
             self.dolphie.app.notify(
-                f"Seeking to timestamp [$light_blue]{timestamp}[/$light_blue]", severity="success", timeout=10
+                f"Seeking to timestamp [$light_blue]{timestamp}[/$light_blue]",
+                severity="success",
+                timeout=10,
             )
 
             return True
@@ -371,7 +403,9 @@ class ReplayManager:
         """
         row = self._execute_query("SELECT * FROM metadata", fetchone=True)
         if not row:
-            self._notify_error("Metadata not found in replay file", "Error reading replay file")
+            self._notify_error(
+                "Metadata not found in replay file", "Error reading replay file"
+            )
             return False
 
         schema_version = row[0]
@@ -383,7 +417,12 @@ class ReplayManager:
             )
             return False
 
-        self.dolphie.host, self.dolphie.port, self.dolphie.host_distro, self.dolphie.connection_source = row[1:5]
+        (
+            self.dolphie.host,
+            self.dolphie.port,
+            self.dolphie.host_distro,
+            self.dolphie.connection_source,
+        ) = row[1:5]
         self.dolphie.host_with_port = f"{self.dolphie.host}:{self.dolphie.port}"
 
         if row[6]:
@@ -431,7 +470,9 @@ class ReplayManager:
         )
 
         # Store the compression dictionary in the metadata table to be used with decompression
-        self._execute_query("UPDATE metadata SET compression_dict = ?", (compression_dict.as_bytes(),))
+        self._execute_query(
+            "UPDATE metadata SET compression_dict = ?", (compression_dict.as_bytes(),)
+        )
 
         return compression_dict
 
@@ -476,9 +517,12 @@ class ReplayManager:
         Returns:
             dict: A dictionary of captured metrics.
         """
-        metrics = {"datetimes": metric_manager.datetimes}
+        metrics = {"datetimes": list(metric_manager.datetimes)}
 
-        for metric_instance_name, metric_instance_data in metric_manager.metrics.__dict__.items():
+        for (
+            metric_instance_name,
+            metric_instance_data,
+        ) in metric_manager.metrics.__dict__.items():
             # Skip if the metric instance is not for the current connection source
             if self.dolphie.connection_source == ConnectionSource.mysql:
                 if (
@@ -488,7 +532,8 @@ class ReplayManager:
                     continue
             elif (
                 self.dolphie.connection_source == ConnectionSource.proxysql
-                and ConnectionSource.proxysql not in metric_instance_data.connection_source
+                and ConnectionSource.proxysql
+                not in metric_instance_data.connection_source
             ):
                 continue
 
@@ -499,7 +544,7 @@ class ReplayManager:
 
                 metric_entry.setdefault(k, [])
                 if v.values:
-                    metric_entry[k] = v.values
+                    metric_entry[k] = list(v.values)
 
         return metrics
 
@@ -512,8 +557,12 @@ class ReplayManager:
 
         # Convert the dictionary of processlist objecs to a list of dictionaries with JSON
         processlist = [
-            {**thread_data, "query": minify_query(thread_data["query"])} if "query" in thread_data else thread_data
-            for thread_data in (v.thread_data for v in self.dolphie.processlist_threads.values())
+            {**thread_data, "query": minify_query(thread_data["query"])}
+            if "query" in thread_data
+            else thread_data
+            for thread_data in (
+                v.thread_data for v in self.dolphie.processlist_threads.values()
+            )
         ]
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -526,7 +575,9 @@ class ReplayManager:
             "metric_manager": self._condition_metrics(self.dolphie.metric_manager),
         }
 
-        data_dict["global_status"]["replay_polling_latency"] = self.dolphie.worker_processing_time
+        data_dict["global_status"]["replay_polling_latency"] = (
+            self.dolphie.worker_processing_time
+        )
 
         if self.dolphie.system_utilization:
             data_dict.update({"system_utilization": self.dolphie.system_utilization})
@@ -538,7 +589,13 @@ class ReplayManager:
                 for var_name in self.dolphie.global_status.keys()
                 if any(
                     exclude_var in var_name.lower()
-                    for exclude_var in ["performance_schema", "mysqlx", "ssl", "rsa", "tls"]
+                    for exclude_var in [
+                        "performance_schema",
+                        "mysqlx",
+                        "ssl",
+                        "rsa",
+                        "tls",
+                    ]
                 )
             ]
 
@@ -548,7 +605,8 @@ class ReplayManager:
             # Add the replay_pfs_metrics_last_reset_time to the global status dictionary
             # It will be loaded into the UI for the replay section
             data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
-                datetime.now().timestamp() - self.dolphie.pfs_metrics_last_reset_time.timestamp()
+                datetime.now().timestamp()
+                - self.dolphie.pfs_metrics_last_reset_time.timestamp()
             )
 
             # Add MySQL specific data to the dictionary
@@ -561,13 +619,21 @@ class ReplayManager:
             )
 
             if self.dolphie.replication_status:
-                data_dict.update({"replication_status": self.dolphie.replication_status})
+                data_dict.update(
+                    {"replication_status": self.dolphie.replication_status}
+                )
 
             if self.dolphie.replication_applier_status:
-                data_dict.update({"replication_applier_status": self.dolphie.replication_applier_status})
+                data_dict.update(
+                    {
+                        "replication_applier_status": self.dolphie.replication_applier_status
+                    }
+                )
 
             if self.dolphie.replica_manager.available_replicas:
-                data_dict.update({"replica_manager": self.dolphie.replica_manager.available_replicas})
+                data_dict.update(
+                    {"replica_manager": self.dolphie.replica_manager.available_replicas}
+                )
 
             if self.dolphie.group_replication or self.dolphie.innodb_cluster:
                 data_dict.update(
@@ -578,13 +644,29 @@ class ReplayManager:
                 )
 
             if self.dolphie.file_io_data and self.dolphie.file_io_data.filtered_data:
-                data_dict.update({"file_io_data": self.dolphie.file_io_data.filtered_data})
+                data_dict.update(
+                    {"file_io_data": self.dolphie.file_io_data.filtered_data}
+                )
 
-            if self.dolphie.table_io_waits_data and self.dolphie.table_io_waits_data.filtered_data:
-                data_dict.update({"table_io_waits_data": self.dolphie.table_io_waits_data.filtered_data})
+            if (
+                self.dolphie.table_io_waits_data
+                and self.dolphie.table_io_waits_data.filtered_data
+            ):
+                data_dict.update(
+                    {
+                        "table_io_waits_data": self.dolphie.table_io_waits_data.filtered_data
+                    }
+                )
 
-            if self.dolphie.statements_summary_data and self.dolphie.statements_summary_data.filtered_data:
-                data_dict.update({"statements_summary_data": self.dolphie.statements_summary_data.filtered_data})
+            if (
+                self.dolphie.statements_summary_data
+                and self.dolphie.statements_summary_data.filtered_data
+            ):
+                data_dict.update(
+                    {
+                        "statements_summary_data": self.dolphie.statements_summary_data.filtered_data
+                    }
+                )
 
         else:
             # Add ProxySQL specific data to the dictionary
@@ -630,7 +712,10 @@ class ReplayManager:
         if self.global_variable_change_ids:
             self._execute_query(
                 "UPDATE variable_changes SET replay_id = ?, timestamp = ? WHERE id = ?",
-                [(self.current_replay_id, timestamp, id) for id in self.global_variable_change_ids],
+                [
+                    (self.current_replay_id, timestamp, id)
+                    for id in self.global_variable_change_ids
+                ],
                 executemany=True,
             )
 
@@ -642,7 +727,9 @@ class ReplayManager:
         if not self.dolphie.daemon_mode:
             self.replay_file_size = os.path.getsize(self.replay_file)
 
-    def get_next_refresh_interval(self) -> Union[MySQLReplayData, ProxySQLReplayData, None]:
+    def get_next_refresh_interval(
+        self,
+    ) -> Union[MySQLReplayData, ProxySQLReplayData, None]:
         """
         Gets the next refresh interval's data from the SQLite database and returns it as a ReplayData object.
 
@@ -652,7 +739,8 @@ class ReplayManager:
 
         # Get the min and max timestamps and IDs from the database so we can update the UI
         row = self._execute_query(
-            "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data", fetchone=True
+            "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data",
+            fetchone=True,
         )
         if row:
             self.min_replay_timestamp = row[0]
@@ -679,7 +767,9 @@ class ReplayManager:
         try:
             data = orjson.loads(self._decompress_data(row[2]))
         except Exception as e:
-            self.dolphie.app.notify(str(e), title="Error parsing replay data", severity="error")
+            self.dolphie.app.notify(
+                str(e), title="Error parsing replay data", severity="error"
+            )
 
             return
 
@@ -700,8 +790,12 @@ class ReplayManager:
             file_io_data.filtered_data = data.get("file_io_data", {})
             table_io_waits = PerformanceSchemaMetrics({}, "table_io", "OBJECT_TABLE")
             table_io_waits.filtered_data = data.get("table_io_waits_data", {})
-            statements_summary_data = PerformanceSchemaMetrics({}, "statements_summary", "digest")
-            statements_summary_data.filtered_data = data.get("statements_summary_data", {})
+            statements_summary_data = PerformanceSchemaMetrics(
+                {}, "statements_summary", "digest"
+            )
+            statements_summary_data.filtered_data = data.get(
+                "statements_summary_data", {}
+            )
             return MySQLReplayData(
                 **common_params,
                 binlog_status=data.get("binlog_status", {}),
@@ -720,7 +814,9 @@ class ReplayManager:
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist
             for thread_data in data["processlist"]:
-                processlist[str(thread_data["id"])] = ProxySQLProcesslistThread(thread_data)
+                processlist[str(thread_data["id"])] = ProxySQLProcesslistThread(
+                    thread_data
+                )
 
             return ProxySQLReplayData(
                 **common_params,
@@ -729,7 +825,9 @@ class ReplayManager:
                 processlist=processlist,
             )
         else:
-            self.dolphie.app.notify("Invalid connection source for replay data", severity="error")
+            self.dolphie.app.notify(
+                "Invalid connection source for replay data", severity="error"
+            )
 
     def fetch_global_variable_changes_for_current_replay_id(self):
         """
@@ -765,7 +863,9 @@ class ReplayManager:
 
         return rows
 
-    def capture_global_variable_change(self, variable_name: str, old_value: str, new_value: str):
+    def capture_global_variable_change(
+        self, variable_name: str, old_value: str, new_value: str
+    ):
         """
         Captures a global variable change and stores it in the SQLite database.
 
