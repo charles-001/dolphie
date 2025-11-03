@@ -13,6 +13,8 @@ def create_panel(tab: Tab) -> Table:
     dolphie = tab.dolphie
 
     global_status = dolphie.global_status
+    global_variables = dolphie.global_variables
+    metric_manager = dolphie.metric_manager
 
     ####################
     # Host Information #
@@ -30,11 +32,13 @@ def create_panel(tab: Tab) -> Table:
     table.add_column()
     table.add_column(min_width=15)
     table.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
-    table.add_row("[label]Uptime", str(timedelta(seconds=global_status["ProxySQL_Uptime"])))
+    table.add_row(
+        "[label]Uptime", str(timedelta(seconds=global_status["ProxySQL_Uptime"]))
+    )
     table.add_row(
         "[label]MySQL",
         (
-            f"{dolphie.global_variables['mysql-server_version']} "
+            f"{global_variables['mysql-server_version']} "
             f"[label]Workers[/label] {global_status['MySQL_Thread_Workers']}"
         ),
     )
@@ -52,14 +56,16 @@ def create_panel(tab: Tab) -> Table:
     table = create_system_utilization_table(tab)
 
     if table:
-        tab.dashboard_section_6.update(create_system_utilization_table(tab))
+        tab.dashboard_section_6.update(table)
 
     ##########################
     # Connection Information #
     ##########################
-    proxysql_connections = dolphie.metric_manager.metrics.proxysql_connections
+    proxysql_connections = metric_manager.metrics.proxysql_connections
 
-    table = Table(show_header=False, box=None, title="Connections", title_style=table_title_style)
+    table = Table(
+        show_header=False, box=None, title="Connections", title_style=table_title_style
+    )
 
     table.add_column()
     table.add_column(min_width=6)
@@ -72,12 +78,15 @@ def create_panel(tab: Tab) -> Table:
     }
 
     fe_usage = round(
-        (dolphie.global_status["Client_Connections_connected"] / dolphie.global_variables["mysql-max_connections"])
+        (
+            global_status["Client_Connections_connected"]
+            / global_variables["mysql-max_connections"]
+        )
         * 100,
         2,
     )
 
-    metric_data = dolphie.metric_manager.metrics.proxysql_multiplex_efficiency.proxysql_multiplex_efficiency_ratio
+    metric_data = metric_manager.metrics.proxysql_multiplex_efficiency.proxysql_multiplex_efficiency_ratio
     if metric_data.values:
         if metric_data.values[-1] >= 85:
             color_code = "green"
@@ -117,9 +126,14 @@ def create_panel(tab: Tab) -> Table:
     ####################################
     # Query Sent/Recv Rate Information #
     ####################################
-    proxysql_queries_network_data = dolphie.metric_manager.metrics.proxysql_queries_data_network
+    proxysql_queries_network_data = metric_manager.metrics.proxysql_queries_data_network
 
-    table = Table(show_header=False, box=None, title="Query Data Rates/s", title_style=table_title_style)
+    table = Table(
+        show_header=False,
+        box=None,
+        title="Query Data Rates/s",
+        title_style=table_title_style,
+    )
 
     table.add_column()
     table.add_column(min_width=9)
@@ -147,13 +161,15 @@ def create_panel(tab: Tab) -> Table:
     ###############
     # Statistics #
     ###############
-    table = Table(show_header=False, box=None, title="Statistics/s", title_style=table_title_style)
+    table = Table(
+        show_header=False, box=None, title="Statistics/s", title_style=table_title_style
+    )
 
     table.add_column()
     table.add_column(min_width=7)
 
     # Add DML statistics
-    metrics = dolphie.metric_manager.metrics.dml
+    metrics = metric_manager.metrics.dml
     metric_labels = {
         "Queries": "Queries",
         "SELECT": "Com_select",

@@ -12,22 +12,30 @@ def create_panel(tab: Tab) -> DataTable:
         "percentage_completed": {"name": "Completed", "width": 9, "format": None},
         "memory": {"name": "Memory", "width": 10, "format": "bytes"},
         "started_ago": {"name": "Current Time", "width": 12, "format": "time"},
-        "estimated_remaining_time": {"name": "Remaining Time", "width": 14, "format": "time"},
+        "estimated_remaining_time": {
+            "name": "Remaining Time",
+            "width": 14,
+            "format": "time",
+        },
         "state": {"name": "State", "width": None, "format": None},
     }
 
     ddl_datatable = tab.ddl_datatable
     ddl_datatable.clear(columns=True)
 
+    column_keys = []
+    column_formats = []
     for column_key, column_data in columns.items():
-        ddl_datatable.add_column(column_data["name"], key=column_key, width=column_data["width"])
+        ddl_datatable.add_column(
+            column_data["name"], key=column_key, width=column_data["width"]
+        )
+        column_keys.append(column_key)
+        column_formats.append(column_data["format"])
 
     for ddl in dolphie.ddl:
         row_values = []
 
-        for column_key, column_data in columns.items():
-            column_format = column_data["format"]
-
+        for column_key, column_format in zip(column_keys, column_formats):
             if column_format == "time":
                 value = format_time(ddl[column_key], picoseconds=True)
             elif column_format == "bytes":

@@ -27,51 +27,105 @@ def create_panel(tab: Tab) -> DataTable:
 
     command_stats = tab.proxysql_command_stats_datatable
 
+    column_keys = []
+    column_names = []
+    column_formats = []
+
     # Add columns to the datatable if it is empty
     if not command_stats.columns:
         for column_key, column_data in columns.items():
-            column_name = column_data["name"]
-            column_width = column_data["width"]
-            command_stats.add_column(column_name, key=column_key, width=column_width)
+            command_stats.add_column(
+                column_data["name"], key=column_key, width=column_data["width"]
+            )
+            column_keys.append(column_key)
+            column_names.append(column_data["name"])
+            column_formats.append(column_data["format"])
+    else:
+        # Extract column info from existing columns dictionary
+        for column_key, column_data in columns.items():
+            column_keys.append(column_key)
+            column_names.append(column_data["name"])
+            column_formats.append(column_data["format"])
+
+    polling_latency = dolphie.polling_latency
 
     for row in dolphie.proxysql_command_stats:
         row_id = row["Command"]
-        row_values = []
+        row_exists = row_id in command_stats.rows
 
-        for column_id, (column_key, column_data) in enumerate(columns.items()):
-            column_name = column_data["name"]
-            column_format = column_data["format"]
-            column_value = row.get(column_key)
+        if row_exists:
+            # Get the existing row data ONCE before the column loop
+            datatable_row = command_stats.get_row(row_id)
 
-            # Calculate the values per second for the following columns
-            if "cnt_" in column_key:
-                if not dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0):
-                    column_value = 0
-                else:
-                    value_diff = int(column_value) - dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0)
-                    column_value = round(value_diff / dolphie.polling_latency)
+            for column_id, (column_key, column_name, column_format) in enumerate(
+                zip(column_keys, column_names, column_formats)
+            ):
+                column_value = row.get(column_key)
 
-                dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = int(row.get(column_key, 0))
+                # Calculate the values per second for the following columns
+                if "cnt_" in column_key:
+                    current_value = int(column_value or 0)
+                    previous_value = dolphie.proxysql_per_second_data.get(
+                        row_id, {}
+                    ).get(column_key, 0)
+                    if not previous_value:
+                        column_value = 0
+                    else:
+                        value_diff = current_value - previous_value
+                        column_value = round(value_diff / polling_latency)
 
-            if column_format == "number":
-                column_value = format_number(column_value)
+                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[
+                        column_key
+                    ] = current_value
 
-            if column_value == "0":
-                column_value = "[dark_gray]0"
+                if column_format == "number":
+                    column_value = format_number(column_value)
 
-            if row_id in command_stats.rows:
-                datatable_value = command_stats.get_row(row_id)[column_id]
+                if column_value == "0":
+                    column_value = "[dark_gray]0"
+
+                # Use the cached row data
+                datatable_value = datatable_row[column_id]
 
                 # Update the datatable if values differ
                 if column_value != datatable_value:
                     command_stats.update_cell(row_id, column_key, column_value)
-            else:
+        else:
+            row_values = []
+
+            for column_id, (column_key, column_name, column_format) in enumerate(
+                zip(column_keys, column_names, column_formats)
+            ):
+                column_value = row.get(column_key)
+
+                # Calculate the values per second for the following columns
+                if "cnt_" in column_key:
+                    current_value = int(column_value or 0)
+                    previous_value = dolphie.proxysql_per_second_data.get(
+                        row_id, {}
+                    ).get(column_key, 0)
+                    if not previous_value:
+                        column_value = 0
+                    else:
+                        value_diff = current_value - previous_value
+                        column_value = round(value_diff / polling_latency)
+
+                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[
+                        column_key
+                    ] = current_value
+
+                if column_format == "number":
+                    column_value = format_number(column_value)
+
+                if column_value == "0":
+                    column_value = "[dark_gray]0"
+
                 # Create an array of values to append to the datatable
                 row_values.append(column_value)
 
-        # Add a new row to the datatable
-        if row_values:
-            command_stats.add_row(*row_values, key=row_id)
+            # Add a new row to the datatable
+            if row_values:
+                command_stats.add_row(*row_values, key=row_id)
 
     # Remove rows from datatable that no longer exist in the data
     if dolphie.proxysql_command_stats:

@@ -44,48 +44,75 @@ def create_panel(tab: Tab) -> DataTable:
     if len(processlist_datatable.columns) != len(columns):
         processlist_datatable.clear(columns=True)
 
+    column_names = []
+    column_fields = []
+
     # Add columns to the datatable if it is empty
     if not processlist_datatable.columns:
         for column_data in columns:
-            column_name = column_data["name"]
-            column_width = column_data["width"]
-            processlist_datatable.add_column(column_name, key=column_name, width=column_width)
+            processlist_datatable.add_column(
+                column_data["name"], key=column_data["name"], width=column_data["width"]
+            )
+            column_names.append(column_data["name"])
+            column_fields.append(column_data["field"])
+    else:
+        # Extract column info from existing columns list
+        for column_data in columns:
+            column_names.append(column_data["name"])
+            column_fields.append(column_data["field"])
 
-    filter_threads = []
-    # Iterate through processlist_threads
-    for thread_id, thread in dolphie.processlist_threads.items():
-        row_values = []
+    threads_to_render: Dict[str, ProxySQLProcesslistThread] = {}
+    if dolphie.replay_file:
+        for thread_id, thread in dolphie.processlist_threads.items():
+            thread: ProxySQLProcesslistThread
 
-        thread: ProxySQLProcesslistThread
-        # We use filter here for replays since the original way requires changing WHERE clause
-        if dolphie.replay_file:
-            found = False
+            # Check each filter condition and skip thread if it doesn't match
             if dolphie.user_filter and dolphie.user_filter != thread.user:
-                found = True
-            elif dolphie.db_filter and dolphie.db_filter != thread.db:
-                found = True
-            elif dolphie.host_filter and dolphie.host_filter not in thread.host:
-                found = True
-            elif dolphie.query_time_filter and dolphie.query_time_filter >= thread.time:
-                found = True
-            elif dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
-                found = True
-            elif dolphie.hostgroup_filter and dolphie.hostgroup_filter != thread.hostgroup:
-                found = True
-
-            if found:
-                filter_threads.append(thread_id)
                 continue
 
-        for column_id, (column_data) in enumerate(columns):
-            column_name = column_data["name"]
-            column_field = column_data["field"]
-            column_value = getattr(thread, column_field)
+            if dolphie.db_filter and dolphie.db_filter != thread.db:
+                continue
 
-            thread_value = column_value
+            if dolphie.host_filter and dolphie.host_filter not in thread.host:
+                continue
 
-            if thread_id in processlist_datatable.rows:
-                datatable_value = processlist_datatable.get_row(thread_id)[column_id]
+            if dolphie.query_time_filter and thread.time < dolphie.query_time_filter:
+                continue
+
+            if (
+                dolphie.query_filter
+                and dolphie.query_filter not in thread.formatted_query.code
+            ):
+                continue
+
+            if (
+                dolphie.hostgroup_filter
+                and dolphie.hostgroup_filter != thread.hostgroup
+            ):
+                continue
+
+            # If all checks passed, add it to the visible list
+            threads_to_render[thread_id] = thread
+    else:
+        # Not a replay file, so fetch_data() already filtered.
+        threads_to_render = dolphie.processlist_threads
+
+    for thread_id, thread in threads_to_render.items():
+        thread: ProxySQLProcesslistThread
+
+        if thread_id in processlist_datatable.rows:
+            # Get the existing row data ONCE before the column loop
+            datatable_row = processlist_datatable.get_row(thread_id)
+
+            for column_id, (column_name, column_field) in enumerate(
+                zip(column_names, column_fields)
+            ):
+                column_value = getattr(thread, column_field)
+
+                thread_value = column_value
+
+                # Use the cached row data
+                datatable_value = datatable_row[column_id]
 
                 # Initialize temp values for possible Syntax object comparison below
                 temp_thread_value = thread_value
@@ -107,26 +134,40 @@ def create_panel(tab: Tab) -> DataTable:
                     or column_field == "formatted_time"
                     or column_field == "time"
                 ):
-                    processlist_datatable.update_cell(thread_id, column_name, thread_value, update_width=update_width)
-            else:
+                    processlist_datatable.update_cell(
+                        thread_id, column_name, thread_value, update_width=update_width
+                    )
+        else:
+            row_values = []
+
+            for column_id, (column_name, column_field) in enumerate(
+                zip(column_names, column_fields)
+            ):
+                column_value = getattr(thread, column_field)
+
+                thread_value = column_value
+
                 # Only show the first {query_length_max} characters of the query
-                if column_field == "formatted_query" and isinstance(thread_value, Syntax):
+                if column_field == "formatted_query" and isinstance(
+                    thread_value, Syntax
+                ):
                     thread_value = format_query(thread_value.code[:query_length_max])
 
                 # Create an array of values to append to the datatable
                 row_values.append(thread_value)
 
-        # Add a new row to the datatable
-        if row_values:
-            processlist_datatable.add_row(*row_values, key=thread_id)
+            # Add a new row to the datatable
+            if row_values:
+                processlist_datatable.add_row(*row_values, key=thread_id)
 
-    # Remove threads that were filtered out
-    for thread_id in filter_threads:
-        dolphie.processlist_threads.pop(thread_id)
+    if dolphie.replay_file:
+        dolphie.processlist_threads = threads_to_render
 
-    # Remove rows from processlist_datatable that no longer exist in processlist_threads
-    if dolphie.processlist_threads:
-        rows_to_remove = set(processlist_datatable.rows.keys()) - set(dolphie.processlist_threads.keys())
+    # Remove rows from datatable that are no longer in our render list
+    if threads_to_render:
+        rows_to_remove = set(processlist_datatable.rows.keys()) - set(
+            threads_to_render.keys()
+        )
         for id in rows_to_remove:
             processlist_datatable.remove_row(id)
     else:
@@ -155,33 +196,34 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
 
     # Filter user
     if dolphie.user_filter:
-        where_clause.append("user = '%s'" % dolphie.user_filter)
+        where_clause.append(f"user = '{dolphie.user_filter}'")
 
     # Filter database
     if dolphie.db_filter:
-        where_clause.append("db = '%s'" % dolphie.db_filter)
+        where_clause.append(f"db = '{dolphie.db_filter}'")
 
     # Filter hostname/IP
     if dolphie.host_filter:
-        where_clause.append("srv_host = '%s'" % dolphie.host_filter)
+        where_clause.append(f"srv_host = '{dolphie.host_filter}'")
 
     # Filter time
     if dolphie.query_time_filter:
-        # Convert to seconds
-        time = dolphie.query_time_filter * 1000
-        where_clause.append("time_ms >= '%s'" % time)
+        # Convert to milliseconds
+        where_clause.append(f"time_ms >= '{dolphie.query_time_filter * 1000}'")
 
     # Filter query
     if dolphie.query_filter:
-        where_clause.append("info LIKE '%%%s%%'" % dolphie.query_filter)
+        where_clause.append(f"info LIKE '%%{dolphie.query_filter}%%'")
 
     # Filter hostgroup
     if dolphie.hostgroup_filter:
-        where_clause.append("hostgroup = '%s'" % dolphie.hostgroup_filter)
+        where_clause.append(f"hostgroup = '{dolphie.hostgroup_filter}'")
 
     # Add in our dynamic WHERE clause for filtering
     if where_clause:
-        processlist_query = ProxySQLQueries.processlist.replace("$1", " AND ".join(where_clause))
+        processlist_query = ProxySQLQueries.processlist.replace(
+            "$1", " AND ".join(where_clause)
+        )
     else:
         processlist_query = ProxySQLQueries.processlist.replace("$1", "1=1")
 
@@ -200,7 +242,7 @@ def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
 
         thread["frontend_host"] = dolphie.get_hostname(thread["frontend_host"])
         thread["backend_host"] = dolphie.get_hostname(thread["backend_host"])
-        thread["query"] = "" if thread["query"] is None else thread["query"]
+        thread["query"] = thread["query"] or ""
 
         processlist_threads[str(thread["id"])] = ProxySQLProcesslistThread(thread)
 

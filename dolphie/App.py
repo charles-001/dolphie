@@ -65,13 +65,13 @@ class DolphieApp(App):
     def __init__(self, config: Config):
         super().__init__()
 
-        self._has_tty = sys.stdin.isatty()
         self.config = config
         self.command_manager = CommandManager()
-
         self.key_event_manager: KeyEventManager = None
         self.worker_manager: WorkerManager = None
         self.worker_data_processor: WorkerDataProcessor = None
+
+        self._has_tty = sys.stdin.isatty()
 
         theme = RichTheme(
             {
@@ -193,7 +193,6 @@ class DolphieApp(App):
         Args:
             event: The key event
         """
-
         if len(self.screen_stack) > 1:
             return
 

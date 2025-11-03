@@ -294,7 +294,7 @@ class CommandModal(ModalScreen):
             # Use IP address instead of hostname since that's what is used in the processlist
             if filters["host"]:
                 filters["host"] = next(
-                    (ip for ip, addr in self.host_cache_data.candidates() if filters["host"] == addr), filters["host"]
+                    (ip for ip, addr in self.host_cache_data.items() if filters["host"] == addr), filters["host"]
                 )
 
             # Validate numeric fields

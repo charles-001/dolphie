@@ -29,37 +29,59 @@ def create_panel(tab: Tab) -> DataTable:
     query_length_max = 300
     metadata_locks_datatable = tab.metadata_locks_datatable
 
+    column_keys = []
+    column_names = []
+    column_widths = []
+
     if not metadata_locks_datatable.columns:
         for column_key, column_data in columns.items():
-            column_name = column_data["name"]
-            metadata_locks_datatable.add_column(column_name, key=column_name, width=column_data["width"])
+            metadata_locks_datatable.add_column(
+                column_data["name"], key=column_data["name"], width=column_data["width"]
+            )
+            column_keys.append(column_key)
+            column_names.append(column_data["name"])
+            column_widths.append(column_data["width"])
+    else:
+        # Extract column info from existing columns dictionary
+        for column_key, column_data in columns.items():
+            column_keys.append(column_key)
+            column_names.append(column_data["name"])
+            column_widths.append(column_data["width"])
 
     for lock in dolphie.metadata_locks:
         lock_id = str(lock["id"])
-        row_values = []
         row_height = 1
+        row_exists = lock_id in metadata_locks_datatable.rows
 
-        for column_id, (column_key, column_data) in enumerate(columns.items()):
-            column_name = column_data["name"]
-            column_value = lock[column_key]
+        if row_exists:
+            # Get the existing row data ONCE before the column loop
+            datatable_row = metadata_locks_datatable.get_row(lock_id)
 
-            # Get height of row based on the how many objects are in the OBJECT_NAME field
-            if (
-                column_key == "OBJECT_NAME"
-                and column_value
-                and len(column_value) > column_data["width"]
-                and "," in column_value
+            for column_id, (column_key, column_name, column_width) in enumerate(
+                zip(column_keys, column_names, column_widths)
             ):
-                # Truncate the object names to the width of the column
-                object_names = [object_name[: column_data["width"]] for object_name in column_value.split(",")]
-                thread_value = "\n".join(object_names)
+                column_value = lock[column_key]
 
-                row_height = len(object_names)
-            else:
-                thread_value = format_value(lock, column_key, column_value)
+                # Get height of row based on the how many objects are in the OBJECT_NAME field
+                if (
+                    column_key == "OBJECT_NAME"
+                    and column_value
+                    and len(column_value) > column_width
+                    and "," in column_value
+                ):
+                    # Truncate the object names to the width of the column
+                    object_names = [
+                        object_name[:column_width]
+                        for object_name in column_value.split(",")
+                    ]
+                    thread_value = "\n".join(object_names)
 
-            if lock_id in metadata_locks_datatable.rows:
-                datatable_value = metadata_locks_datatable.get_row(lock_id)[column_id]
+                    row_height = len(object_names)
+                else:
+                    thread_value = format_value(lock, column_key, column_value)
+
+                # Use the cached row data
+                datatable_value = datatable_row[column_id]
 
                 temp_thread_value = thread_value
                 temp_datatable_value = datatable_value
@@ -74,8 +96,35 @@ def create_panel(tab: Tab) -> DataTable:
 
                 # Update the datatable if values differ
                 if temp_thread_value != temp_datatable_value:
-                    metadata_locks_datatable.update_cell(lock_id, column_name, thread_value)
-            else:
+                    metadata_locks_datatable.update_cell(
+                        lock_id, column_name, thread_value
+                    )
+        else:
+            row_values = []
+
+            for column_id, (column_key, column_name, column_width) in enumerate(
+                zip(column_keys, column_names, column_widths)
+            ):
+                column_value = lock[column_key]
+
+                # Get height of row based on the how many objects are in the OBJECT_NAME field
+                if (
+                    column_key == "OBJECT_NAME"
+                    and column_value
+                    and len(column_value) > column_width
+                    and "," in column_value
+                ):
+                    # Truncate the object names to the width of the column
+                    object_names = [
+                        object_name[:column_width]
+                        for object_name in column_value.split(",")
+                    ]
+                    thread_value = "\n".join(object_names)
+
+                    row_height = len(object_names)
+                else:
+                    thread_value = format_value(lock, column_key, column_value)
+
                 # Only show the first {query_length_max} characters of the query
                 if column_name == "Query" and isinstance(thread_value, Syntax):
                     thread_value = format_query(thread_value.code[:query_length_max])
@@ -83,9 +132,11 @@ def create_panel(tab: Tab) -> DataTable:
                 # Create an array of values to append to the datatable
                 row_values.append(thread_value)
 
-        # Add a new row to the datatable
-        if row_values:
-            metadata_locks_datatable.add_row(*row_values, key=lock_id, height=row_height)
+            # Add a new row to the datatable
+            if row_values:
+                metadata_locks_datatable.add_row(
+                    *row_values, key=lock_id, height=row_height
+                )
 
     # Find the ids that exist in datatable but not in metadata_locks
     if dolphie.metadata_locks:
@@ -116,28 +167,30 @@ def fetch_data(tab: Tab) -> List[Dict[str, Union[int, str]]]:
 
     # Filter user
     if dolphie.user_filter:
-        where_clause.append("processlist_user = '%s'" % dolphie.user_filter)
+        where_clause.append(f"processlist_user = '{dolphie.user_filter}'")
 
     # Filter database
     if dolphie.db_filter:
-        where_clause.append("processlist_db = '%s'" % dolphie.db_filter)
+        where_clause.append(f"processlist_db = '{dolphie.db_filter}'")
 
     # Filter hostname/IP
     if dolphie.host_filter:
         # Have to use LIKE since there's a port at the end
-        where_clause.append("processlist_host LIKE '%s%%'" % dolphie.host_filter)
+        where_clause.append(f"processlist_host LIKE '{dolphie.host_filter}%'")
 
     # Filter time
     if dolphie.query_time_filter:
-        where_clause.append("processlist_time >= '%s'" % dolphie.query_time_filter)
+        where_clause.append(f"processlist_time >= '{dolphie.query_time_filter}'")
 
     # Filter query
     if dolphie.query_filter:
-        where_clause.append("(processlist_info LIKE '%%%s%%')" % (dolphie.query_filter))
+        where_clause.append(f"(processlist_info LIKE '%{dolphie.query_filter}%')")
 
     if where_clause:
         # Add in our dynamic WHERE clause for filtering
-        query = MySQLQueries.metadata_locks.replace("$1", "AND " + " AND ".join(where_clause))
+        query = MySQLQueries.metadata_locks.replace(
+            "$1", "AND " + " AND ".join(where_clause)
+        )
     else:
         query = MySQLQueries.metadata_locks.replace("$1", "")
 
@@ -152,7 +205,12 @@ def format_value(lock: dict, column_key: str, value: str) -> str:
 
     # OBJECT_NAME is in the format "schema/table" sometimes where OBJECT_SCHEMA is empty,
     # so I want to split OBJECT_NAME and correct it if necessary
-    if column_key == "OBJECT_SCHEMA" and not value and lock["OBJECT_NAME"] and "/" in lock["OBJECT_NAME"]:
+    if (
+        column_key == "OBJECT_SCHEMA"
+        and not value
+        and lock["OBJECT_NAME"]
+        and "/" in lock["OBJECT_NAME"]
+    ):
         formatted_value = lock["OBJECT_NAME"].split("/")[0]
     elif column_key == "OBJECT_NAME" and value and "/" in value:
         formatted_value = value.split("/")[1]
