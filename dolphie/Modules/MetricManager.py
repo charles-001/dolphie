@@ -41,9 +41,6 @@ class MetricColor:
     orange: tuple = (252, 121, 121)
 
 
-# --- Graph Widget ---
-
-
 class Graph(Static):
     """A Textual widget for rendering time-series graphs using plotext."""
 
@@ -320,7 +317,7 @@ class MetricData:
     last_value: Optional[int] = None
     graphable: bool = True
     create_switch: bool = True
-    # **PERFORMANCE**: Use a deque for O(1) appends and pops
+    # Use a deque for O(1) appends and pops
     values: deque[int] = field(default_factory=deque)
 
 

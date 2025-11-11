@@ -59,6 +59,12 @@ class ReplayManager:
     ReplayManager class for capturing and replaying Dolphie instance states.
     """
 
+    # Constants
+    PURGE_CHECK_INTERVAL_HOURS = 1
+    COMPRESSION_DICT_SIZE = 10 * 1024 * 1024  # 10MB
+    COMPRESSION_LEVEL = 5
+    COMPRESSION_DICT_SAMPLES = 10
+
     def __init__(self, dolphie: Dolphie):
         """
         Initializes the ReplayManager with Dolphie instance and SQLite database settings.
@@ -79,8 +85,11 @@ class ReplayManager:
         self.min_replay_timestamp: str = None
         self.max_replay_timestamp: str = None
         self.total_replay_rows: int = 0
+        self.replay_metadata_cache_valid: bool = (
+            False  # Track if cached metadata needs updating
+        )
         self.last_purge_time = datetime.now() - timedelta(
-            hours=1
+            hours=self.PURGE_CHECK_INTERVAL_HOURS
         )  # Initialize to an hour ago
         self.replay_file_size: int = 0
         self.compression_dict: zstd.ZstdCompressionDict = None
@@ -112,56 +121,165 @@ class ReplayManager:
         self._initialize_sqlite()
         self._manage_metadata()
 
-    def _execute_query(
-        self,
-        query: str,
-        params: Optional[Union[Tuple[Any, ...], List[Tuple[Any, ...]]]] = (),
-        fetchone: bool = False,
-        executemany: bool = False,
-        return_lastrowid: bool = False,
-    ) -> Union[Optional[Tuple[Any, ...]], int, None]:
+    def _begin_transaction(self) -> None:
         """
-        Executes a query or batch of queries using a cursor
+        Begins an immediate transaction for write operations.
+        """
+        with closing(self.connection.cursor()) as cursor:
+            cursor.execute("BEGIN IMMEDIATE")
+
+    def _commit_transaction(self) -> None:
+        """
+        Commits the current transaction.
+        """
+        with closing(self.connection.cursor()) as cursor:
+            cursor.execute("COMMIT")
+
+    def _rollback_transaction(self) -> None:
+        """
+        Rolls back the current transaction.
+        """
+        with closing(self.connection.cursor()) as cursor:
+            cursor.execute("ROLLBACK")
+
+    def _execute_select_one(
+        self, query: str, params: Tuple[Any, ...] = ()
+    ) -> Optional[Tuple[Any, ...]]:
+        """
+        Executes a SELECT query and returns a single row.
+
         Args:
-            query: The SQL query to execute.
+            query: The SQL SELECT query to execute.
             params: The parameters to bind to the query.
-            fetchone: If True, returns a single row. If False, returns all rows.
-            return_lastrowid: If True, returns the last inserted row ID after an INSERT operation.
-            executemany: If True, uses executemany() for batch execution of the query.
+
         Returns:
-            Union[Optional[Tuple[Any, ...]], int, None]: A single row if `fetchone` is True, otherwise a list of rows.
-                                                        Returns lastrowid if `return_lastrowid` is True.
-                                                        Returns row count for UPDATE/DELETE queries if neither
-                                                            `fetchone` nor `return_lastrowid` are set.
+            Optional[Tuple[Any, ...]]: A single row or None if no results.
+
+        Raises:
+            sqlite3.Error: If the query execution fails.
         """
         try:
             with closing(self.connection.cursor()) as cursor:
-                if executemany and isinstance(params, list):
-                    cursor.executemany(query, params)
-                else:
-                    cursor.execute(query, params)
-
-                # Will only be used for INSERT queries
-                if return_lastrowid:
-                    return cursor.lastrowid
-
-                if fetchone:
-                    return cursor.fetchone()
-                elif cursor.description is not None:
-                    # If there's a description, it's a SELECT query with results
-                    return cursor.fetchall()
-                else:
-                    # For everything else, which have no results, return row count
-                    return cursor.rowcount
+                cursor.execute(query, params)
+                return cursor.fetchone()
         except sqlite3.Error as e:
-            logger.error(f"Error executing SQLite query: {e}")
+            logger.error(f"Error executing SQLite SELECT query: {e}")
             self.dolphie.app.notify(
                 f"Query: {query}\n{e}",
                 title="Error executing SQLite query",
                 severity="error",
             )
+            raise
 
-            return None
+    def _execute_select_all(
+        self, query: str, params: Tuple[Any, ...] = ()
+    ) -> List[Tuple[Any, ...]]:
+        """
+        Executes a SELECT query and returns all rows.
+
+        Args:
+            query: The SQL SELECT query to execute.
+            params: The parameters to bind to the query.
+
+        Returns:
+            List[Tuple[Any, ...]]: A list of rows.
+
+        Raises:
+            sqlite3.Error: If the query execution fails.
+        """
+        try:
+            with closing(self.connection.cursor()) as cursor:
+                cursor.execute(query, params)
+                return cursor.fetchall()
+        except sqlite3.Error as e:
+            logger.error(f"Error executing SQLite SELECT query: {e}")
+            self.dolphie.app.notify(
+                f"Query: {query}\n{e}",
+                title="Error executing SQLite query",
+                severity="error",
+            )
+            raise
+
+    def _execute_insert(self, query: str, params: Tuple[Any, ...] = ()) -> int:
+        """
+        Executes an INSERT query and returns the last inserted row ID.
+
+        Args:
+            query: The SQL INSERT query to execute.
+            params: The parameters to bind to the query.
+
+        Returns:
+            int: The last inserted row ID.
+
+        Raises:
+            sqlite3.Error: If the query execution fails.
+        """
+        try:
+            with closing(self.connection.cursor()) as cursor:
+                cursor.execute(query, params)
+                return cursor.lastrowid
+        except sqlite3.Error as e:
+            logger.error(f"Error executing SQLite INSERT query: {e}")
+            self.dolphie.app.notify(
+                f"Query: {query}\n{e}",
+                title="Error executing SQLite query",
+                severity="error",
+            )
+            raise
+
+    def _execute_modify(self, query: str, params: Tuple[Any, ...] = ()) -> int:
+        """
+        Executes an UPDATE or DELETE query and returns the number of affected rows.
+
+        Args:
+            query: The SQL UPDATE or DELETE query to execute.
+            params: The parameters to bind to the query.
+
+        Returns:
+            int: The number of affected rows.
+
+        Raises:
+            sqlite3.Error: If the query execution fails.
+        """
+        try:
+            with closing(self.connection.cursor()) as cursor:
+                cursor.execute(query, params)
+                return cursor.rowcount
+        except sqlite3.Error as e:
+            logger.error(f"Error executing SQLite UPDATE/DELETE query: {e}")
+            self.dolphie.app.notify(
+                f"Query: {query}\n{e}",
+                title="Error executing SQLite query",
+                severity="error",
+            )
+            raise
+
+    def _execute_many(self, query: str, params: List[Tuple[Any, ...]]) -> int:
+        """
+        Executes a batch of queries and returns the number of affected rows.
+
+        Args:
+            query: The SQL query to execute.
+            params: A list of parameter tuples for batch execution.
+
+        Returns:
+            int: The number of affected rows.
+
+        Raises:
+            sqlite3.Error: If the query execution fails.
+        """
+        try:
+            with closing(self.connection.cursor()) as cursor:
+                cursor.executemany(query, params)
+                return cursor.rowcount
+        except sqlite3.Error as e:
+            logger.error(f"Error executing SQLite batch query: {e}")
+            self.dolphie.app.notify(
+                f"Query: {query}\n{e}",
+                title="Error executing SQLite query",
+                severity="error",
+            )
+            raise
 
     def _initialize_sqlite(self):
         """
@@ -182,7 +300,7 @@ class ReplayManager:
             logger.info("Connected to SQLite")
 
         # Create replay_data table if it doesn't exist
-        self._execute_query(
+        self._execute_modify(
             """
             CREATE TABLE IF NOT EXISTS replay_data (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -190,12 +308,12 @@ class ReplayManager:
                 data BLOB
             )"""
         )
-        self._execute_query(
+        self._execute_modify(
             "CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)"
         )
 
         # Create metadata table if it doesn't exist
-        self._execute_query(
+        self._execute_modify(
             """
             CREATE TABLE IF NOT EXISTS metadata (
                 schema_version INTEGER DEFAULT 1,
@@ -209,7 +327,7 @@ class ReplayManager:
         )
 
         # Create variable_changes table if it doesn't exist
-        self._execute_query(
+        self._execute_modify(
             """
             CREATE TABLE IF NOT EXISTS variable_changes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -220,18 +338,18 @@ class ReplayManager:
                 new_value VARCHAR(255)
             )"""
         )
-        self._execute_query(
+        self._execute_modify(
             "CREATE INDEX IF NOT EXISTS idx_variable_changes_timestamp ON variable_changes (timestamp)"
         )
-        self._execute_query(
+        self._execute_modify(
             "CREATE INDEX IF NOT EXISTS idx_variable_changes_replay_id ON variable_changes (replay_id)"
         )
 
         # Enable auto-vacuum if it's not already enabled. This will help keep the database file size down.
-        result = self._execute_query("PRAGMA auto_vacuum", fetchone=True)
+        result = self._execute_select_one("PRAGMA auto_vacuum")
         if result and result[0] != 1:
-            self._execute_query("PRAGMA auto_vacuum = FULL")
-            self._execute_query("VACUUM")
+            self._execute_modify("PRAGMA auto_vacuum = FULL")
+            self._execute_modify("VACUUM")
 
         self.purge_old_data()
 
@@ -240,23 +358,30 @@ class ReplayManager:
         Purges data older than the retention period specified by hours_of_retention.
         Only runs if at least an hour has passed since the last purge.
         """
-        if not self.dolphie.record_for_replay:
+        # Don't purge when not recording, or when loading a replay file (read-only mode)
+        if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
         current_time = datetime.now()
-        if (current_time - self.last_purge_time) < timedelta(hours=1):
+        if (current_time - self.last_purge_time) < timedelta(
+            hours=self.PURGE_CHECK_INTERVAL_HOURS
+        ):
             return  # Skip purging if less than an hour has passed
 
         retention_date = (
             current_time - timedelta(hours=self.dolphie.replay_retention_hours)
         ).strftime("%Y-%m-%d %H:%M:%S")
 
-        self._execute_query(
+        rows_deleted = self._execute_modify(
             "DELETE FROM replay_data WHERE timestamp < ?", (retention_date,)
         )
-        self._execute_query(
+        self._execute_modify(
             "DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,)
         )
+
+        # Invalidate cache if rows were deleted
+        if rows_deleted and rows_deleted > 0:
+            self.replay_metadata_cache_valid = False
 
         self.last_purge_time = current_time
 
@@ -267,10 +392,9 @@ class ReplayManager:
         Args:
             timestamp: The timestamp to seek to.
         """
-        row = self._execute_query(
+        row = self._execute_select_one(
             "SELECT id FROM replay_data WHERE timestamp = ?",
             (timestamp,),
-            fetchone=True,
         )
         if row:
             # We subtract 1 because get_next_refresh_interval naturally increments the index
@@ -284,10 +408,9 @@ class ReplayManager:
             return True
         else:
             # Try to find a timestamp before the specified timestamp
-            row = self._execute_query(
+            row = self._execute_select_one(
                 "SELECT id, timestamp FROM replay_data WHERE timestamp < ? ORDER BY timestamp DESC LIMIT 1",
                 (timestamp,),
-                fetchone=True,
             )
             if row:
                 # We subtract 1 because get_next_refresh_interval naturally increments the index
@@ -321,12 +444,13 @@ class ReplayManager:
         """
         Manages the metadata table with information we care about.
         """
-        if not self.dolphie.record_for_replay:
+        # Don't manage metadata when not recording, or when loading a replay file (read-only mode)
+        if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
-        row = self._execute_query("SELECT * FROM metadata", fetchone=True)
+        row = self._execute_select_one("SELECT * FROM metadata")
         if row is None:
-            self._execute_query(
+            self._execute_insert(
                 "INSERT INTO metadata (schema_version, host, port, host_distro, connection_source, dolphie_version)"
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (
@@ -401,7 +525,7 @@ class ReplayManager:
         Returns:
             bool: True if metadata is found and schema matches; False otherwise.
         """
-        row = self._execute_query("SELECT * FROM metadata", fetchone=True)
+        row = self._execute_select_one("SELECT * FROM metadata")
         if not row:
             self._notify_error(
                 "Metadata not found in replay file", "Error reading replay file"
@@ -437,7 +561,7 @@ class ReplayManager:
         Returns:
             bool: True if data is found, False if not.
         """
-        row = self._execute_query("SELECT COUNT(*) FROM replay_data", fetchone=True)
+        row = self._execute_select_one("SELECT COUNT(*) FROM replay_data")
         if row and row[0] == 0:
             self._notify_error("File has no data to replay", "No replay data found")
             return False
@@ -462,7 +586,9 @@ class ReplayManager:
         Returns:
             bytes: The created compression dictionary.
         """
-        compression_dict = zstd.train_dictionary(10485760, self.dict_samples, level=5)
+        compression_dict = zstd.train_dictionary(
+            self.COMPRESSION_DICT_SIZE, self.dict_samples, level=self.COMPRESSION_LEVEL
+        )
 
         logger.info(
             f"ZSTD compression dictionary trained with {len(self.dict_samples)} samples "
@@ -470,7 +596,7 @@ class ReplayManager:
         )
 
         # Store the compression dictionary in the metadata table to be used with decompression
-        self._execute_query(
+        self._execute_modify(
             "UPDATE metadata SET compression_dict = ?", (compression_dict.as_bytes(),)
         )
 
@@ -488,7 +614,9 @@ class ReplayManager:
             bytes: Compressed data.
         """
 
-        compressor = zstd.ZstdCompressor(level=5, dict_data=self.compression_dict)
+        compressor = zstd.ZstdCompressor(
+            level=self.COMPRESSION_LEVEL, dict_data=self.compression_dict
+        )
 
         return compressor.compress(data)
 
@@ -548,15 +676,14 @@ class ReplayManager:
 
         return metrics
 
-    def capture_state(self):
+    def _prepare_processlist(self) -> list:
         """
-        Captures the current state of the Dolphie instance and stores it in the SQLite database.
-        """
-        if not self.dolphie.record_for_replay:
-            return
+        Prepares the processlist data by extracting thread data and minifying queries.
 
-        # Convert the dictionary of processlist objecs to a list of dictionaries with JSON
-        processlist = [
+        Returns:
+            list: A list of processlist thread dictionaries with minified queries.
+        """
+        return [
             {**thread_data, "query": minify_query(thread_data["query"])}
             if "query" in thread_data
             else thread_data
@@ -565,9 +692,16 @@ class ReplayManager:
             )
         ]
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    def _build_base_data_dict(self, processlist: list) -> dict:
+        """
+        Builds the base data dictionary with common data for all connection sources.
 
-        # Prepare data dictionary
+        Args:
+            processlist: The prepared processlist data.
+
+        Returns:
+            dict: The base data dictionary.
+        """
         data_dict = {
             "global_status": self.dolphie.global_status,
             "global_variables": self.dolphie.global_variables,
@@ -580,152 +714,358 @@ class ReplayManager:
         )
 
         if self.dolphie.system_utilization:
-            data_dict.update({"system_utilization": self.dolphie.system_utilization})
+            data_dict["system_utilization"] = self.dolphie.system_utilization
 
-        if self.dolphie.connection_source == ConnectionSource.mysql:
-            # Remove some global status variables that are not useful for replaying
-            keys_to_remove = [
-                var_name
-                for var_name in self.dolphie.global_status.keys()
-                if any(
-                    exclude_var in var_name.lower()
-                    for exclude_var in [
-                        "performance_schema",
-                        "mysqlx",
-                        "ssl",
-                        "rsa",
-                        "tls",
-                    ]
-                )
-            ]
+        return data_dict
 
-            for key in keys_to_remove:
-                self.dolphie.global_status.pop(key)
+    def _add_mysql_specific_data(self, data_dict: dict) -> None:
+        """
+        Adds MySQL-specific data to the data dictionary.
 
-            # Add the replay_pfs_metrics_last_reset_time to the global status dictionary
-            # It will be loaded into the UI for the replay section
-            data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
-                datetime.now().timestamp()
-                - self.dolphie.pfs_metrics_last_reset_time.timestamp()
+        Args:
+            data_dict: The data dictionary to update.
+        """
+        # Remove some global status variables that are not useful for replaying
+        keys_to_remove = [
+            var_name
+            for var_name in self.dolphie.global_status.keys()
+            if any(
+                exclude_var in var_name.lower()
+                for exclude_var in [
+                    "performance_schema",
+                    "mysqlx",
+                    "ssl",
+                    "rsa",
+                    "tls",
+                ]
+            )
+        ]
+
+        for key in keys_to_remove:
+            self.dolphie.global_status.pop(key)
+
+        # Add the replay_pfs_metrics_last_reset_time to the global status dictionary
+        data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
+            datetime.now().timestamp()
+            - self.dolphie.pfs_metrics_last_reset_time.timestamp()
+        )
+
+        # Add MySQL specific data to the dictionary
+        data_dict.update(
+            {
+                "binlog_status": self.dolphie.binlog_status,
+                "innodb_metrics": self.dolphie.innodb_metrics,
+                "metadata_locks": self.dolphie.metadata_locks,
+            }
+        )
+
+        if self.dolphie.replication_status:
+            data_dict["replication_status"] = self.dolphie.replication_status
+
+        if self.dolphie.replication_applier_status:
+            data_dict["replication_applier_status"] = (
+                self.dolphie.replication_applier_status
             )
 
-            # Add MySQL specific data to the dictionary
+        if self.dolphie.replica_manager.available_replicas:
+            data_dict["replica_manager"] = (
+                self.dolphie.replica_manager.available_replicas
+            )
+
+        if self.dolphie.group_replication or self.dolphie.innodb_cluster:
             data_dict.update(
                 {
-                    "binlog_status": self.dolphie.binlog_status,
-                    "innodb_metrics": self.dolphie.innodb_metrics,
-                    "metadata_locks": self.dolphie.metadata_locks,
+                    "group_replication_data": self.dolphie.group_replication_data,
+                    "group_replication_members": self.dolphie.group_replication_members,
                 }
             )
 
-            if self.dolphie.replication_status:
-                data_dict.update(
-                    {"replication_status": self.dolphie.replication_status}
-                )
+        if self.dolphie.file_io_data and self.dolphie.file_io_data.filtered_data:
+            data_dict["file_io_data"] = self.dolphie.file_io_data.filtered_data
 
-            if self.dolphie.replication_applier_status:
-                data_dict.update(
-                    {
-                        "replication_applier_status": self.dolphie.replication_applier_status
-                    }
-                )
-
-            if self.dolphie.replica_manager.available_replicas:
-                data_dict.update(
-                    {"replica_manager": self.dolphie.replica_manager.available_replicas}
-                )
-
-            if self.dolphie.group_replication or self.dolphie.innodb_cluster:
-                data_dict.update(
-                    {
-                        "group_replication_data": self.dolphie.group_replication_data,
-                        "group_replication_members": self.dolphie.group_replication_members,
-                    }
-                )
-
-            if self.dolphie.file_io_data and self.dolphie.file_io_data.filtered_data:
-                data_dict.update(
-                    {"file_io_data": self.dolphie.file_io_data.filtered_data}
-                )
-
-            if (
-                self.dolphie.table_io_waits_data
-                and self.dolphie.table_io_waits_data.filtered_data
-            ):
-                data_dict.update(
-                    {
-                        "table_io_waits_data": self.dolphie.table_io_waits_data.filtered_data
-                    }
-                )
-
-            if (
-                self.dolphie.statements_summary_data
-                and self.dolphie.statements_summary_data.filtered_data
-            ):
-                data_dict.update(
-                    {
-                        "statements_summary_data": self.dolphie.statements_summary_data.filtered_data
-                    }
-                )
-
-        else:
-            # Add ProxySQL specific data to the dictionary
-            data_dict.update(
-                {
-                    "command_stats": self.dolphie.proxysql_command_stats,
-                    "hostgroup_summary": self.dolphie.proxysql_hostgroup_summary,
-                }
+        if (
+            self.dolphie.table_io_waits_data
+            and self.dolphie.table_io_waits_data.filtered_data
+        ):
+            data_dict["table_io_waits_data"] = (
+                self.dolphie.table_io_waits_data.filtered_data
             )
 
+        if (
+            self.dolphie.statements_summary_data
+            and self.dolphie.statements_summary_data.filtered_data
+        ):
+            data_dict["statements_summary_data"] = (
+                self.dolphie.statements_summary_data.filtered_data
+            )
+
+    def _add_proxysql_specific_data(self, data_dict: dict) -> None:
+        """
+        Adds ProxySQL-specific data to the data dictionary.
+
+        Args:
+            data_dict: The data dictionary to update.
+        """
+        data_dict.update(
+            {
+                "command_stats": self.dolphie.proxysql_command_stats,
+                "hostgroup_summary": self.dolphie.proxysql_hostgroup_summary,
+            }
+        )
+
+    def _serialize_data_dict(self, data_dict: dict) -> bytes:
+        """
+        Serializes the data dictionary to bytes using orjson or json as fallback.
+
+        Args:
+            data_dict: The data dictionary to serialize.
+
+        Returns:
+            bytes: The serialized data.
+        """
         # For large numbers, we need to use json instead of orjson to serialize the data
         # to avoid exceeding 64-bit integer limit
         # https://github.com/ijl/orjson/issues/301
         try:
-            data_dict_bytes = orjson.dumps(data_dict)
+            return orjson.dumps(data_dict)
         except TypeError as e:
             if str(e) == "Integer exceeds 64-bit range":
-                data_dict_bytes = json.dumps(data_dict).encode()
+                return json.dumps(data_dict).encode()
             else:
                 raise e
 
-        # Store the first 10 samples to create a compression dictionary via training
+    def _handle_compression_training(self, data_dict_bytes: bytes) -> None:
+        """
+        Handles compression dictionary training by collecting samples and training when ready.
+
+        Args:
+            data_dict_bytes: The serialized data to use as a training sample.
+        """
         if not self.compression_dict:
-            if len(self.dict_samples) < 10:
+            if len(self.dict_samples) < self.COMPRESSION_DICT_SAMPLES:
                 self.dict_samples.append(data_dict_bytes)
             else:
                 self.compression_dict = self._train_compression_dict()
-
                 # Remove the samples to save memory
                 del self.dict_samples
 
-        # Execute the SQL insert using the constructed dictionary
-        self.current_replay_id = self._execute_query(
-            "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
-            (
-                timestamp,
-                self._compress_data(data_dict_bytes),
-            ),
-            return_lastrowid=True,
-        )
+    def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes) -> None:
+        """
+        Inserts the replay data into the database and handles variable change linkage.
 
-        # Update the variable_changes table with the data of the replay row so they're linked
-        if self.global_variable_change_ids:
-            self._execute_query(
-                "UPDATE variable_changes SET replay_id = ?, timestamp = ? WHERE id = ?",
-                [
-                    (self.current_replay_id, timestamp, id)
-                    for id in self.global_variable_change_ids
-                ],
-                executemany=True,
+        Args:
+            timestamp: The timestamp of the capture.
+            data_dict_bytes: The serialized and compressed data to insert.
+        """
+        try:
+            # Begin transaction for atomic insert and update
+            self._begin_transaction()
+
+            # Execute the SQL insert using the constructed dictionary
+            self.current_replay_id = self._execute_insert(
+                "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
+                (
+                    timestamp,
+                    self._compress_data(data_dict_bytes),
+                ),
             )
 
-            # Clear the list of global variable change IDs now that they've been linked
-            self.global_variable_change_ids = []
+            # Update the variable_changes table with the data of the replay row so they're linked
+            if self.global_variable_change_ids:
+                self._execute_many(
+                    "UPDATE variable_changes SET replay_id = ?, timestamp = ? WHERE id = ?",
+                    [
+                        (self.current_replay_id, timestamp, id)
+                        for id in self.global_variable_change_ids
+                    ],
+                )
+
+                # Clear the list of global variable change IDs now that they've been linked
+                self.global_variable_change_ids = []
+
+            # Commit the transaction
+            self._commit_transaction()
+
+        except Exception as e:
+            # Rollback on any error
+            self._rollback_transaction()
+            logger.error(f"Error inserting replay data: {e}")
+            raise
 
         self.purge_old_data()
 
         if not self.dolphie.daemon_mode:
             self.replay_file_size = os.path.getsize(self.replay_file)
+
+    def capture_state(self):
+        """
+        Captures the current state of the Dolphie instance and stores it in the SQLite database.
+        """
+        # Don't capture when not recording, or when loading a replay file (read-only mode)
+        if not self.dolphie.record_for_replay or self.dolphie.replay_file:
+            return
+
+        # Prepare processlist data
+        processlist = self._prepare_processlist()
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # Build base data dictionary
+        data_dict = self._build_base_data_dict(processlist)
+
+        # Add connection-source specific data
+        if self.dolphie.connection_source == ConnectionSource.mysql:
+            self._add_mysql_specific_data(data_dict)
+        else:
+            self._add_proxysql_specific_data(data_dict)
+
+        # Serialize and compress the data
+        data_dict_bytes = self._serialize_data_dict(data_dict)
+        self._handle_compression_training(data_dict_bytes)
+
+        # Insert into database
+        self._insert_replay_data(timestamp, data_dict_bytes)
+
+    def _update_replay_metadata_cache(self) -> bool:
+        """
+        Updates the cached replay metadata (min/max timestamps and IDs, total rows).
+        This should be called when the cache is invalid or needs refreshing.
+
+        Returns:
+            bool: True if cache was successfully updated, False otherwise.
+        """
+        row = self._execute_select_one(
+            "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data"
+        )
+        if row:
+            self.min_replay_timestamp = row[0]
+            self.max_replay_timestamp = row[1]
+            self.min_replay_id = row[2]
+            self.max_replay_id = row[3]
+            self.total_replay_rows = row[4]
+            self.replay_metadata_cache_valid = True
+            return True
+        return False
+
+    def _load_and_parse_replay_data(self) -> Optional[Tuple[str, dict]]:
+        """
+        Loads the next replay data row from the database and parses it.
+
+        Returns:
+            Optional[Tuple[str, dict]]: A tuple of (timestamp, data_dict) or None if no data available.
+        """
+        # Get the next row
+        row = self._execute_select_one(
+            "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
+            (self.current_replay_id,),
+        )
+        if not row:
+            return None
+
+        self.current_replay_id = row[0]
+        self.current_replay_timestamp = row[1]
+
+        # Decompress and parse the JSON data
+        try:
+            data = orjson.loads(self._decompress_data(row[2]))
+            return row[1], data
+        except Exception as e:
+            self.dolphie.app.notify(
+                str(e), title="Error parsing replay data", severity="error"
+            )
+            return None
+
+    def _build_processlist_from_data(
+        self, processlist_data: list, thread_class
+    ) -> dict:
+        """
+        Builds a processlist dictionary from raw data using the specified thread class.
+
+        Args:
+            processlist_data: List of thread data dictionaries.
+            thread_class: The class to use for creating thread objects (ProcesslistThread or ProxySQLProcesslistThread).
+
+        Returns:
+            dict: Dictionary mapping thread IDs to thread objects.
+        """
+        return {
+            str(thread_data["id"]): thread_class(thread_data)
+            for thread_data in processlist_data
+        }
+
+    def _create_mysql_replay_data(self, timestamp: str, data: dict) -> MySQLReplayData:
+        """
+        Creates a MySQLReplayData object from parsed replay data.
+
+        Args:
+            timestamp: The timestamp of the replay data.
+            data: The parsed data dictionary.
+
+        Returns:
+            MySQLReplayData: The constructed replay data object.
+        """
+        processlist = self._build_processlist_from_data(
+            data["processlist"], ProcesslistThread
+        )
+
+        # Create Performance Schema metrics objects
+        file_io_data = PerformanceSchemaMetrics({}, "file_io", "FILE_NAME")
+        file_io_data.filtered_data = data.get("file_io_data", {})
+
+        table_io_waits = PerformanceSchemaMetrics({}, "table_io", "OBJECT_TABLE")
+        table_io_waits.filtered_data = data.get("table_io_waits_data", {})
+
+        statements_summary_data = PerformanceSchemaMetrics(
+            {}, "statements_summary", "digest"
+        )
+        statements_summary_data.filtered_data = data.get("statements_summary_data", {})
+
+        return MySQLReplayData(
+            timestamp=timestamp,
+            system_utilization=data.get("system_utilization", {}),
+            global_status=data.get("global_status", {}),
+            global_variables=data.get("global_variables", {}),
+            metric_manager=data.get("metric_manager", {}),
+            binlog_status=data.get("binlog_status", {}),
+            innodb_metrics=data.get("innodb_metrics", {}),
+            replica_manager=data.get("replica_manager", {}),
+            replication_status=data.get("replication_status", {}),
+            replication_applier_status=data.get("replication_applier_status", {}),
+            metadata_locks=data.get("metadata_locks", {}),
+            processlist=processlist,
+            group_replication_data=data.get("group_replication_data", {}),
+            group_replication_members=data.get("group_replication_members", {}),
+            file_io_data=file_io_data,
+            table_io_waits_data=table_io_waits,
+            statements_summary_data=statements_summary_data,
+        )
+
+    def _create_proxysql_replay_data(
+        self, timestamp: str, data: dict
+    ) -> ProxySQLReplayData:
+        """
+        Creates a ProxySQLReplayData object from parsed replay data.
+
+        Args:
+            timestamp: The timestamp of the replay data.
+            data: The parsed data dictionary.
+
+        Returns:
+            ProxySQLReplayData: The constructed replay data object.
+        """
+        processlist = self._build_processlist_from_data(
+            data["processlist"], ProxySQLProcesslistThread
+        )
+
+        return ProxySQLReplayData(
+            timestamp=timestamp,
+            system_utilization=data.get("system_utilization", {}),
+            global_status=data.get("global_status", {}),
+            global_variables=data.get("global_variables", {}),
+            metric_manager=data.get("metric_manager", {}),
+            command_stats=data.get("command_stats", {}),
+            hostgroup_summary=data.get("hostgroup_summary", {}),
+            processlist=processlist,
+        )
 
     def get_next_refresh_interval(
         self,
@@ -736,104 +1076,34 @@ class ReplayManager:
         Returns:
             ReplayData: The next replay data.
         """
+        # Update metadata cache if it's not valid or this is the first call
+        if not self.replay_metadata_cache_valid:
+            if not self._update_replay_metadata_cache():
+                return None
 
-        # Get the min and max timestamps and IDs from the database so we can update the UI
-        row = self._execute_query(
-            "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data",
-            fetchone=True,
-        )
-        if row:
-            self.min_replay_timestamp = row[0]
-            self.max_replay_timestamp = row[1]
-            self.min_replay_id = row[2]
-            self.max_replay_id = row[3]
-            self.total_replay_rows = row[4]
-        else:
-            return
+        # Load and parse the next replay data
+        result = self._load_and_parse_replay_data()
+        if not result:
+            return None
 
-        # Get the next row
-        row = self._execute_query(
-            "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
-            (self.current_replay_id,),
-            fetchone=True,
-        )
-        if row:
-            self.current_replay_id = row[0]
-            self.current_replay_timestamp = row[1]
-        else:
-            return
+        timestamp, data = result
 
-        # Decompress and parse the JSON data
-        try:
-            data = orjson.loads(self._decompress_data(row[2]))
-        except Exception as e:
-            self.dolphie.app.notify(
-                str(e), title="Error parsing replay data", severity="error"
-            )
-
-            return
-
-        processlist = {}
-        common_params = {
-            "timestamp": row[1],
-            "system_utilization": data.get("system_utilization", {}),
-            "global_status": data.get("global_status", {}),
-            "global_variables": data.get("global_variables", {}),
-            "metric_manager": data.get("metric_manager", {}),
-        }
+        # Create and return the appropriate replay data object based on connection source
         if self.dolphie.connection_source == ConnectionSource.mysql:
-            # Re-create the ProcesslistThread object for each thread in the JSON's processlist
-            for thread_data in data["processlist"]:
-                processlist[str(thread_data["id"])] = ProcesslistThread(thread_data)
-
-            file_io_data = PerformanceSchemaMetrics({}, "file_io", "FILE_NAME")
-            file_io_data.filtered_data = data.get("file_io_data", {})
-            table_io_waits = PerformanceSchemaMetrics({}, "table_io", "OBJECT_TABLE")
-            table_io_waits.filtered_data = data.get("table_io_waits_data", {})
-            statements_summary_data = PerformanceSchemaMetrics(
-                {}, "statements_summary", "digest"
-            )
-            statements_summary_data.filtered_data = data.get(
-                "statements_summary_data", {}
-            )
-            return MySQLReplayData(
-                **common_params,
-                binlog_status=data.get("binlog_status", {}),
-                innodb_metrics=data.get("innodb_metrics", {}),
-                replica_manager=data.get("replica_manager", {}),
-                replication_status=data.get("replication_status", {}),
-                replication_applier_status=data.get("replication_applier_status", {}),
-                metadata_locks=data.get("metadata_locks", {}),
-                processlist=processlist,
-                group_replication_data=data.get("group_replication_data", {}),
-                group_replication_members=data.get("group_replication_members", {}),
-                file_io_data=file_io_data,
-                table_io_waits_data=table_io_waits,
-                statements_summary_data=statements_summary_data,
-            )
+            return self._create_mysql_replay_data(timestamp, data)
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
-            # Re-create the ProxySQLProcesslistThread object for each thread in the JSON's processlist
-            for thread_data in data["processlist"]:
-                processlist[str(thread_data["id"])] = ProxySQLProcesslistThread(
-                    thread_data
-                )
-
-            return ProxySQLReplayData(
-                **common_params,
-                command_stats=data.get("command_stats", {}),
-                hostgroup_summary=data.get("hostgroup_summary", {}),
-                processlist=processlist,
-            )
+            return self._create_proxysql_replay_data(timestamp, data)
         else:
             self.dolphie.app.notify(
                 "Invalid connection source for replay data", severity="error"
             )
+            return None
 
     def fetch_global_variable_changes_for_current_replay_id(self):
         """
         Fetches global variable changes for the current replay ID.
         """
-        rows = self._execute_query(
+        rows = self._execute_select_all(
             "SELECT timestamp, variable_name, old_value, new_value FROM variable_changes WHERE replay_id = ?",
             (self.current_replay_id,),
         )
@@ -857,7 +1127,7 @@ class ReplayManager:
         """
         Fetches all global variable changes for command 'V'
         """
-        rows = self._execute_query(
+        rows = self._execute_select_all(
             "SELECT timestamp, variable_name, old_value, new_value FROM variable_changes ORDER BY timestamp"
         )
 
@@ -874,15 +1144,15 @@ class ReplayManager:
             old_value: The old value of the variable.
             new_value: The new value of the variable.
         """
-        if not self.dolphie.record_for_replay:
+        # Don't capture when not recording, or when loading a replay file (read-only mode)
+        if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        last_row_id = self._execute_query(
+        last_row_id = self._execute_insert(
             "INSERT INTO variable_changes (timestamp, variable_name, old_value, new_value) VALUES (?, ?, ?, ?)",
             (timestamp, variable_name, old_value, new_value),
-            return_lastrowid=True,
         )
 
         # Keep track of the primary key of the global variable change so we can link it to the replay data

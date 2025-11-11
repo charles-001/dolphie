@@ -340,6 +340,9 @@ class TabSetupModal(ModalScreen):
 
     @on(Select.Changed, "#replay_file")
     def replay_file_changed(self, event: Select.Changed):
+        # When loading a replay file, disable recording and reset the checkbox
+        if event.value != Select.BLANK:
+            self.query_one("#record_for_replay", Checkbox).value = False
         self.update_inputs(disable=event.value != Select.BLANK, exclude=["#replay_file"])
 
     @on(RadioSet.Changed, "#ssl_mode")

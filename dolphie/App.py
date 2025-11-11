@@ -579,8 +579,7 @@ class DolphieApp(App):
 
         self.check_for_new_version()
 
-        if self._has_tty and not self.config.daemon_mode:
-            self.set_timer(5.0, self._monitor_terminal_disconnect)
+        self.set_timer(5.0, self._monitor_terminal_disconnect)
 
     def compose(self):
         yield TopBar(
