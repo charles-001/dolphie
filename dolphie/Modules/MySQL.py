@@ -42,7 +42,6 @@ class Database:
             1044,  # Access denied for user to database
             1142,  # command denied to user
             1143,  # column command denied to user
-            1146,  # Table doesn't exist (e.g., performance_schema access)
         }
 
         self.connection: pymysql.Connection = None
@@ -278,7 +277,7 @@ class Database:
                         escaped_query = raw_query.replace("[", "\\[")
 
                         self.app.notify(
-                            f"[$b_highlight]{self.host}:{self.port}[/$b_highlight]: [dim]{escaped_error_message}[/dim]\n"
+                            f"[$b_highlight]{self.host}:{self.port}[/$b_highlight]: [dim]{error_code}: {escaped_error_message}[/dim]\n"
                             f"Query: [$b_light_blue]{escaped_query}[/$b_light_blue]\n"
                             "Stats for this feature won't be available.",
                             title="Insufficient Privileges",
