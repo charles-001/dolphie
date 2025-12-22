@@ -79,7 +79,6 @@ class ReplayManager:
         self.min_replay_timestamp: str = None
         self.max_replay_timestamp: str = None
         self.total_replay_rows: int = 0
-        self.replay_metadata_cache_valid: bool = False  # Track if cached metadata needs updating
         self.last_purge_time = datetime.now().astimezone() - timedelta(
             hours=self.PURGE_CHECK_INTERVAL_HOURS
         )  # Initialize to an hour ago
@@ -339,12 +338,8 @@ class ReplayManager:
             "%Y-%m-%d %H:%M:%S"
         )
 
-        rows_deleted = self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
+        self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
         self._execute_modify("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
-
-        # Invalidate cache if rows were deleted
-        if rows_deleted and rows_deleted > 0:
-            self.replay_metadata_cache_valid = False
 
         self.last_purge_time = current_time
 
@@ -826,11 +821,10 @@ class ReplayManager:
         self._insert_replay_data(timestamp, data_dict_bytes)
 
     def _update_replay_metadata_cache(self) -> bool:
-        """Updates the cached replay metadata (min/max timestamps and IDs, total rows).
-        This should be called when the cache is invalid or needs refreshing.
+        """Updates the replay metadata (min/max timestamps and IDs, total rows).
 
         Returns:
-            bool: True if cache was successfully updated, False otherwise.
+            bool: True if metadata was successfully updated, False otherwise.
         """
         row = self._execute_select_one(
             "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data"
@@ -841,7 +835,6 @@ class ReplayManager:
             self.min_replay_id = row[2]
             self.max_replay_id = row[3]
             self.total_replay_rows = row[4]
-            self.replay_metadata_cache_valid = True
             return True
         return False
 
@@ -955,8 +948,9 @@ class ReplayManager:
         Returns:
             ReplayData: The next replay data.
         """
-        # Update metadata cache if it's not valid or this is the first call
-        if not self.replay_metadata_cache_valid and not self._update_replay_metadata_cache():
+        # Always update metadata cache when replaying to account for new data being recorded
+        # This ensures max_replay_timestamp and max_replay_id reflect the latest state
+        if not self._update_replay_metadata_cache():
             return None
 
         # Load and parse the next replay data

@@ -426,7 +426,7 @@ def create_replication_table(
             if isinstance(sql_delay, int) or (
                 isinstance(sql_delay, str) and sql_delay.isdigit()
             ):
-                replica_lag -= int(sql_delay)
+                replica_lag = max(0, replica_lag - int(sql_delay))
 
         lag_color = "green"
         if replica_lag >= 20:

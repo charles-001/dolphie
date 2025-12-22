@@ -7,7 +7,7 @@ from collections import defaultdict, deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from enum import StrEnum
+from enum import Enum
 
 import plotext as plt
 from rich.text import Text
@@ -17,7 +17,7 @@ from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.Functions import format_bytes, format_number, format_time
 
 
-class MetricSource(StrEnum):
+class MetricSource(Enum):
     """Enumeration of sources for metric data."""
 
     SYSTEM_UTILIZATION = "system_utilization"
