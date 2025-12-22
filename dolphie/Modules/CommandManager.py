@@ -1,4 +1,3 @@
-from typing import Dict
 
 from dolphie.DataTypes import ConnectionSource
 
@@ -467,9 +466,7 @@ class CommandManager:
             "ctrl+d",
         ]
 
-    def get_commands(
-        self, replay_file: str, connection_source: ConnectionSource
-    ) -> Dict[str, Dict[str, str]]:
+    def get_commands(self, replay_file: str, connection_source: ConnectionSource) -> dict[str, dict[str, str]]:
         if replay_file:
             key = {
                 ConnectionSource.mysql: "mysql_replay",

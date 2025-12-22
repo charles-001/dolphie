@@ -1,7 +1,6 @@
 import copy
 import os
 import uuid
-from typing import Dict, List
 
 from rich.text import Text
 from textual.app import App
@@ -25,9 +24,11 @@ from textual.widgets import (
     Sparkline,
     Static,
     Switch,
+    TabbedContent,
+    TabPane,
+    Tabs,
 )
 from textual.widgets import Tab as TabWidget
-from textual.widgets import TabbedContent, TabPane, Tabs
 from textual.worker import Worker
 
 import dolphie.Modules.MetricManager as MetricManager
@@ -315,7 +316,7 @@ class TabManager:
         self.config = config
 
         self.active_tab: Tab = None
-        self.tabs: Dict[str, Tab] = {}
+        self.tabs: dict[str, Tab] = {}
 
         self.host_tabs = self.app.query_one("#host_tabs", Tabs)
 
@@ -666,7 +667,7 @@ class TabManager:
             self.tabs[tab_id] = tab
 
             for panel in dolphie.daemon_mode_panels:
-                setattr(getattr(dolphie.panels, panel), "visible", True)
+                getattr(dolphie.panels, panel).visible = True
 
             return tab
 
@@ -702,7 +703,7 @@ class TabManager:
         # Set panels to be visible for the ones the user specifies
         for panel in dolphie.startup_panels:
             self.app.query_one(f"#panel_{panel}").display = True
-            setattr(getattr(dolphie.panels, panel), "visible", True)
+            getattr(dolphie.panels, panel).visible = True
 
         # Set what marker we use for graphs
         graphs = self.app.query(MetricManager.Graph)
@@ -776,7 +777,7 @@ class TabManager:
     def get_tab(self, id: str) -> Tab:
         return self.tabs.get(id)
 
-    def get_all_tabs(self) -> List[Tab]:
+    def get_all_tabs(self) -> list[Tab]:
         all_tabs = []
 
         for tab in self.tabs.values():

@@ -3,7 +3,6 @@ import os
 import socket
 import time
 from datetime import datetime
-from typing import Dict, List, Tuple, Union
 
 import psutil
 from loguru import logger
@@ -75,40 +74,40 @@ class Dolphie:
         self.metric_manager = MetricManager.MetricManager(self.replay_file, self.daemon_mode)
         self.replica_manager = DataTypes.ReplicaManager()
 
-        self.dolphie_start_time: datetime = datetime.now()
-        self.worker_previous_start_time: datetime = datetime.now()
+        self.dolphie_start_time: datetime = datetime.now().astimezone()
+        self.worker_previous_start_time: datetime = datetime.now().astimezone()
         self.worker_processing_time: float = 0
         self.polling_latency: float = 0
         self.connection_status: DataTypes.ConnectionStatus = None
 
-        self.global_variables: Dict[str, Union[int, str]] = {}
-        self.global_status: Dict[str, Union[int, str]] = {}
-        self.binlog_status: Dict[str, Union[int, str]] = {}
-        self.replication_status: Dict[str, Union[int, str]] = {}
-        self.replication_applier_status: Dict[str, Union[List[Dict[str, Union[int, str]]], int]] = {}
-        self.innodb_metrics: Dict[str, Union[int, str]] = {}
-        self.metadata_locks: List[Dict[str, Union[int, str]]] = []
-        self.ddl: List[Dict[str, Union[int, str]]] = []
-        self.disk_io_metrics: Dict[str, Union[int, str]] = {}
-        self.statements_summary_metrics: Dict[str, Union[int, str]] = {}
-        self.system_utilization: Dict[str, Union[int, str]] = {}
-        self.host_cache: Dict[str, str] = {}
-        self.proxysql_hostgroup_summary: List[Dict[str, str]] = []
-        self.proxysql_mysql_query_rules: List[Dict[str, str]] = []
-        self.proxysql_per_second_data: Dict[str, Union[int, str]] = {}
-        self.proxysql_command_stats: List[Dict[str, Union[int, str]]] = []
-        self.processlist_threads: Dict[int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]] = (
+        self.global_variables: dict[str, int | str] = {}
+        self.global_status: dict[str, int | str] = {}
+        self.binlog_status: dict[str, int | str] = {}
+        self.replication_status: dict[str, int | str] = {}
+        self.replication_applier_status: dict[str, list[dict[str, int | str]] | int] = {}
+        self.innodb_metrics: dict[str, int | str] = {}
+        self.metadata_locks: list[dict[str, int | str]] = []
+        self.ddl: list[dict[str, int | str]] = []
+        self.disk_io_metrics: dict[str, int | str] = {}
+        self.statements_summary_metrics: dict[str, int | str] = {}
+        self.system_utilization: dict[str, int | str] = {}
+        self.host_cache: dict[str, str] = {}
+        self.proxysql_hostgroup_summary: list[dict[str, str]] = []
+        self.proxysql_mysql_query_rules: list[dict[str, str]] = []
+        self.proxysql_per_second_data: dict[str, int | str] = {}
+        self.proxysql_command_stats: list[dict[str, int | str]] = []
+        self.processlist_threads: dict[int, DataTypes.ProcesslistThread | DataTypes.ProxySQLProcesslistThread] = (
             {}
         )
-        self.processlist_threads_snapshot: Dict[
-            int, Union[DataTypes.ProcesslistThread, DataTypes.ProxySQLProcesslistThread]
+        self.processlist_threads_snapshot: dict[
+            int, DataTypes.ProcesslistThread | DataTypes.ProxySQLProcesslistThread
         ] = {}
 
         # These are for group replication in replication panel
         self.is_group_replication_primary: bool = False
-        self.group_replication_data: Dict[str, str] = {}
-        self.group_replication_members: List[Dict[str, str]] = []
-        self.innodb_cluster_clustersets: List[Dict[str, str]] = []
+        self.group_replication_data: dict[str, str] = {}
+        self.group_replication_members: list[dict[str, str]] = []
+        self.innodb_cluster_clustersets: list[dict[str, str]] = []
 
         # Filters that can be applied
         self.user_filter: str = None
@@ -161,7 +160,7 @@ class Dolphie:
         self.statements_summary_data: PerformanceSchemaMetrics = None
 
         if self.record_for_replay or self.panels.pfs_metrics.visible:
-            self.pfs_metrics_last_reset_time: datetime = datetime.now()
+            self.pfs_metrics_last_reset_time: datetime = datetime.now().astimezone()
         else:
             # This will be set when user presses key to bring up panel
             self.pfs_metrics_last_reset_time: datetime = None
@@ -239,8 +238,8 @@ class Dolphie:
             self.group_replication = True
 
     def determine_distro_and_connection_source_alt(
-        self, global_variables: Dict[str, Union[int, str]]
-    ) -> Tuple[str, ConnectionSource]:
+        self, global_variables: dict[str, int | str]
+    ) -> tuple[str, ConnectionSource]:
         is_percona = "percona" in global_variables.get("version_comment", "").casefold()
         is_mariadb = any(variable.startswith("aria_") for variable in global_variables)
         is_rds = "rdsdb" in self.global_variables.get("basedir", "").casefold()
@@ -335,10 +334,7 @@ class Dolphie:
             file.seek(0)
             lines = file.readlines()
 
-            if self.port != 3306:
-                host = f"{self.host}:{self.port}\n"
-            else:
-                host = f"{self.host}\n"
+            host = f"{self.host}:{self.port}\n" if self.port != 3306 else f"{self.host}\n"
 
             if host not in lines:
                 file.write(host)
@@ -375,7 +371,7 @@ class Dolphie:
             ipaddress.IPv4Network(host)
             hostname = socket.gethostbyaddr(host)[0]
             self.host_cache[host] = hostname
-        except (ValueError, socket.error):
+        except (OSError, ValueError):
             self.host_cache[host] = host
             hostname = host
 
@@ -435,8 +431,7 @@ class Dolphie:
         self.metadata_locks_enabled = True
 
     def get_replay_files(self):
-        """
-        Gets a list of replay files in the replay directory.
+        """Gets a list of replay files in the replay directory.
 
         Returns:
             list: A list of tuples in the format (full_path, formatted host name + replay name).
@@ -490,4 +485,4 @@ class Dolphie:
                             elif "delta" in metric_data:
                                 metric_data["delta"] = 0
 
-        self.pfs_metrics_last_reset_time = datetime.now()
+        self.pfs_metrics_last_reset_time = datetime.now().astimezone()

@@ -1,7 +1,7 @@
 import csv
 import re
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from rich import box
@@ -38,16 +38,14 @@ if TYPE_CHECKING:
 
 
 class KeyEventManager:
-    """
-    This module manages all keyboard event processing.
+    """This module manages all keyboard event processing.
 
     This includes both immediate key event handling and background command execution
     in threads.
     """
 
     def __init__(self, app: "DolphieApp"):
-        """
-        Initialize the KeyEventManager.
+        """Initialize the KeyEventManager.
 
         Args:
             app: Reference to the main DolphieApp instance
@@ -67,8 +65,7 @@ class KeyEventManager:
         }
 
     async def process_key_event(self, key: str) -> None:
-        """
-        Process a keyboard event and execute the corresponding action.
+        """Process a keyboard event and execute the corresponding action.
 
         This method handles all keyboard shortcuts and commands in the application,
         from panel switching to data filtering to command execution.
@@ -81,11 +78,9 @@ class KeyEventManager:
             return
 
         # Apply debouncing to prevent rapid key presses
-        now = datetime.now()
-        debounce_interval = self.key_debounce_intervals.get(
-            key, self.default_debounce_interval
-        )
-        last_time = self.last_key_time.get(key, datetime.min)
+        now = datetime.now().astimezone()
+        debounce_interval = self.key_debounce_intervals.get(key, self.default_debounce_interval)
+        last_time = self.last_key_time.get(key, datetime.min.replace(tzinfo=timezone.utc))
 
         if now - last_time < debounce_interval:
             return  # Key press is too soon, ignore it
@@ -97,9 +92,7 @@ class KeyEventManager:
 
         # Validate key is a valid command (excluding special keys)
         if key not in self.app.command_manager.exclude_keys:
-            if not self.app.command_manager.get_commands(
-                dolphie.replay_file, dolphie.connection_source
-            ).get(key):
+            if not self.app.command_manager.get_commands(dolphie.replay_file, dolphie.connection_source).get(key):
                 self.app.notify(
                     f"Key [$highlight]{key}[/$highlight] is not a valid command",
                     severity="warning",
@@ -107,26 +100,16 @@ class KeyEventManager:
                 return
 
             # Prevent commands from being run if the secondary connection is processing a query already
-            if (
-                dolphie.secondary_db_connection
-                and dolphie.secondary_db_connection.is_running_query
-            ):
-                self.app.notify(
-                    "There's already a command running - please wait for it to finish"
-                )
+            if dolphie.secondary_db_connection and dolphie.secondary_db_connection.is_running_query:
+                self.app.notify("There's already a command running - please wait for it to finish")
                 return
 
-            if (
-                not dolphie.main_db_connection.is_connected()
-                and not dolphie.replay_file
-            ):
+            if not dolphie.main_db_connection.is_connected() and not dolphie.replay_file:
                 self.app.notify("You must be connected to a host to use commands")
                 return
 
         if self.app.tab_manager.loading_hostgroups:
-            self.app.notify(
-                "You can't run commands while hosts are connecting as a hostgroup"
-            )
+            self.app.notify("You can't run commands while hosts are connecting as a hostgroup")
             return
 
         # Panel switching commands (1-8)
@@ -139,9 +122,7 @@ class KeyEventManager:
 
         elif key == "3":
             self.app.toggle_panel(dolphie.panels.graphs.name)
-            self.app.update_graphs(
-                tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name
-            )
+            self.app.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
 
         elif key == "4":
             if dolphie.connection_source == ConnectionSource.proxysql:
@@ -150,9 +131,7 @@ class KeyEventManager:
                 self.app.tab_manager.active_tab.proxysql_hostgroup_summary_datatable.clear()
                 return
 
-            if dolphie.replay_file and (
-                not dolphie.replication_status and not dolphie.group_replication_members
-            ):
+            if dolphie.replay_file and (not dolphie.replication_status and not dolphie.group_replication_members):
                 self.app.notify("This replay file has no replication data")
                 return
 
@@ -205,40 +184,30 @@ class KeyEventManager:
             if dolphie.connection_source == ConnectionSource.proxysql:
                 self.app.toggle_panel(dolphie.panels.proxysql_command_stats.name)
             else:
-                if (
-                    not dolphie.is_mysql_version_at_least("5.7")
-                    or not dolphie.performance_schema_enabled
-                ):
-                    self.app.notify(
-                        "DDL panel requires MySQL 5.7+ with Performance Schema enabled"
-                    )
+                if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
+                    self.app.notify("DDL panel requires MySQL 5.7+ with Performance Schema enabled")
                     return
 
-                query = "SELECT enabled FROM performance_schema.setup_instruments WHERE name LIKE 'stage/innodb/alter%';"
+                query = (
+                    "SELECT enabled FROM performance_schema.setup_instruments WHERE name LIKE 'stage/innodb/alter%';"
+                )
                 dolphie.secondary_db_connection.execute(query)
                 data = dolphie.secondary_db_connection.fetchall()
                 for row in data:
                     if row.get("enabled") == "NO":
-                        self.app.notify(
-                            "DDL panel requires Performance Schema to have 'stage/innodb/alter%' enabled"
-                        )
+                        self.app.notify("DDL panel requires Performance Schema to have 'stage/innodb/alter%' enabled")
                         return
 
                 self.app.toggle_panel(dolphie.panels.ddl.name)
                 self.app.tab_manager.active_tab.ddl_datatable.clear()
 
         elif key == "7":
-            if (
-                dolphie.is_mysql_version_at_least("5.7")
-                and dolphie.performance_schema_enabled
-            ):
+            if dolphie.is_mysql_version_at_least("5.7") and dolphie.performance_schema_enabled:
                 if not dolphie.pfs_metrics_last_reset_time:
-                    dolphie.pfs_metrics_last_reset_time = datetime.now()
+                    dolphie.pfs_metrics_last_reset_time = datetime.now().astimezone()
                 self.app.toggle_panel(dolphie.panels.pfs_metrics.name)
             else:
-                self.app.notify(
-                    "Performance Schema Metrics panel requires MySQL 5.7+ with Performance Schema enabled"
-                )
+                self.app.notify("Performance Schema Metrics panel requires MySQL 5.7+ with Performance Schema enabled")
 
         elif key == "8":
             if dolphie.is_mysql_version_at_least("5.7"):
@@ -247,9 +216,7 @@ class KeyEventManager:
                     dolphie.statements_summary_data.filtered_data = {}
                 self.app.toggle_panel(dolphie.panels.statements_summary.name)
             else:
-                self.app.notify(
-                    "Statements Summary panel requires MySQL 5.7+ with Performance Schema enabled"
-                )
+                self.app.notify("Statements Summary panel requires MySQL 5.7+ with Performance Schema enabled")
 
         # Tab management commands
         elif key == "grave_accent":
@@ -347,23 +314,17 @@ class KeyEventManager:
 
         elif key == "C":
             if not dolphie.global_variables.get("innodb_thread_concurrency"):
-                self.app.notify(
-                    "InnoDB thread concurrency is not setup", severity="warning"
-                )
+                self.app.notify("InnoDB thread concurrency is not setup", severity="warning")
                 return
 
             if dolphie.show_threads_with_concurrency_tickets:
                 dolphie.show_threads_with_concurrency_tickets = False
                 dolphie.show_idle_threads = False
-                self.app.notify(
-                    "Processlist will no longer only show threads with concurrency tickets"
-                )
+                self.app.notify("Processlist will no longer only show threads with concurrency tickets")
             else:
                 dolphie.show_threads_with_concurrency_tickets = True
                 dolphie.show_idle_threads = True
-                self.app.notify(
-                    "Processlist will only show threads with concurrency tickets"
-                )
+                self.app.notify("Processlist will only show threads with concurrency tickets")
 
             self.app.force_refresh_for_replay(need_current_data=True)
 
@@ -376,16 +337,11 @@ class KeyEventManager:
 
         elif key == "e":
             if dolphie.connection_source_alt == ConnectionSource.mariadb:
-                self.app.notify(
-                    f"Command [$highlight]{key}[/$highlight] is only available for MySQL connections"
-                )
+                self.app.notify(f"Command [$highlight]{key}[/$highlight] is only available for MySQL connections")
             elif dolphie.connection_source == ConnectionSource.proxysql:
                 self.execute_command_in_thread(key=key)
             else:
-                if (
-                    dolphie.is_mysql_version_at_least("8.0")
-                    and dolphie.performance_schema_enabled
-                ):
+                if dolphie.is_mysql_version_at_least("8.0") and dolphie.performance_schema_enabled:
                     self.app.app.push_screen(
                         EventLog(
                             dolphie.connection_status,
@@ -395,21 +351,17 @@ class KeyEventManager:
                         )
                     )
                 else:
-                    self.app.notify(
-                        "Error log command requires MySQL 8+ with Performance Schema enabled"
-                    )
+                    self.app.notify("Error log command requires MySQL 8+ with Performance Schema enabled")
 
         elif key == "E":
-            processlist = (
-                dolphie.processlist_threads_snapshot or dolphie.processlist_threads
-            )
+            processlist = dolphie.processlist_threads_snapshot or dolphie.processlist_threads
             if processlist:
                 # Extract headers from the first entry's thread_data
                 first_entry = next(iter(processlist.values()))
                 headers = first_entry.thread_data.keys()
 
                 # Generate the filename with a timestamp prefix
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
                 filename = f"processlist-{timestamp}.csv"
 
                 # Write the CSV to a file
@@ -427,9 +379,7 @@ class KeyEventManager:
                     timeout=10,
                 )
             else:
-                self.app.notify(
-                    "There's no processlist data to export", severity="warning"
-                )
+                self.app.notify("There's no processlist data to export", severity="warning")
 
         elif key == "f":
 
@@ -444,7 +394,7 @@ class KeyEventManager:
                     "Partial Query Text": "query_filter",
                 }
 
-                filters = dict(zip(filters_mapping.keys(), filter_data))
+                filters = dict(zip(filters_mapping.keys(), filter_data, strict=False))
 
                 # Apply filters and notify the user for each valid input
                 for filter_name, filter_value in filters.items():
@@ -499,10 +449,7 @@ class KeyEventManager:
                 command_get_input,
             )
 
-        elif key == "l":
-            self.execute_command_in_thread(key=key)
-
-        elif key == "o":
+        elif key == "l" or key == "o":
             self.execute_command_in_thread(key=key)
 
         elif key == "m":
@@ -510,13 +457,8 @@ class KeyEventManager:
                 self.execute_command_in_thread(key=key)
                 return
 
-            if (
-                not dolphie.is_mysql_version_at_least("5.7")
-                or not dolphie.performance_schema_enabled
-            ):
-                self.app.notify(
-                    "Memory usage command requires MySQL 5.7+ with Performance Schema enabled"
-                )
+            if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
+                self.app.notify("Memory usage command requires MySQL 5.7+ with Performance Schema enabled")
             else:
                 self.execute_command_in_thread(key=key)
 
@@ -569,9 +511,7 @@ class KeyEventManager:
             else:
                 if not dolphie.pause_refresh:
                     dolphie.pause_refresh = True
-                    self.app.notify(
-                        f"Refresh is paused! Press [$b_highlight]{key}[/$b_highlight] again to resume"
-                    )
+                    self.app.notify(f"Refresh is paused! Press [$b_highlight]{key}[/$b_highlight] again to resume")
                 else:
                     dolphie.pause_refresh = False
                     self.app.notify("Refreshing has resumed", severity="success")
@@ -609,9 +549,7 @@ class KeyEventManager:
                 )
 
             self.app.app.push_screen(
-                CommandModal(
-                    HotkeyCommands.refresh_interval, message="Refresh Interval"
-                ),
+                CommandModal(HotkeyCommands.refresh_interval, message="Refresh Interval"),
                 command_get_input,
             )
 
@@ -619,23 +557,17 @@ class KeyEventManager:
             dolphie.metric_manager.reset()
             dolphie.reset_pfs_metrics_deltas()
 
-            self.app.update_graphs(
-                tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name
-            )
+            self.app.update_graphs(tab.metric_graph_tabs.get_pane(tab.metric_graph_tabs.active).name)
             dolphie.update_switches_after_reset()
             self.app.notify("Metrics have been reset", severity="success")
 
         elif key == "s":
             if dolphie.sort_by_time_descending:
                 dolphie.sort_by_time_descending = False
-                self.app.notify(
-                    "Processlist will now sort threads by time in ascending order"
-                )
+                self.app.notify("Processlist will now sort threads by time in ascending order")
             else:
                 dolphie.sort_by_time_descending = True
-                self.app.notify(
-                    "Processlist will now sort threads by time in descending order"
-                )
+                self.app.notify("Processlist will now sort threads by time in descending order")
 
             self.app.force_refresh_for_replay(need_current_data=True)
 
@@ -652,9 +584,7 @@ class KeyEventManager:
                     thread_table.add_column("", overflow="fold")
 
                     thread_id = data
-                    thread_data: ProxySQLProcesslistThread = (
-                        dolphie.processlist_threads_snapshot.get(thread_id)
-                    )
+                    thread_data: ProxySQLProcesslistThread = dolphie.processlist_threads_snapshot.get(thread_id)
                     if not thread_data:
                         self.app.notify(
                             f"Thread ID [$highlight]{thread_id}[/$highlight] was not found",
@@ -665,21 +595,15 @@ class KeyEventManager:
                     thread_table.add_row("[label]Process ID", thread_id)
                     thread_table.add_row("[label]Hostgroup", str(thread_data.hostgroup))
                     thread_table.add_row("[label]User", thread_data.user)
-                    thread_table.add_row(
-                        "[label]Frontend Host", thread_data.frontend_host
-                    )
+                    thread_table.add_row("[label]Frontend Host", thread_data.frontend_host)
                     thread_table.add_row("[label]Backend Host", thread_data.host)
                     thread_table.add_row("[label]Database", thread_data.db)
                     thread_table.add_row("[label]Command", thread_data.command)
-                    thread_table.add_row(
-                        "[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8)
-                    )
+                    thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8))
 
                     formatted_query = None
                     if thread_data.formatted_query.code:
-                        query = sqlformat(
-                            thread_data.formatted_query.code, reindent_aligned=True
-                        )
+                        query = sqlformat(thread_data.formatted_query.code, reindent_aligned=True)
                         formatted_query = format_query(query, minify=False)
 
                     self.app.app.push_screen(
@@ -711,34 +635,23 @@ class KeyEventManager:
             if dolphie.show_trxs_only:
                 dolphie.show_trxs_only = False
                 dolphie.show_idle_threads = False
-                self.app.notify(
-                    "Processlist will no longer only show threads that have an active transaction"
-                )
+                self.app.notify("Processlist will no longer only show threads that have an active transaction")
             else:
                 dolphie.show_trxs_only = True
                 dolphie.show_idle_threads = True
-                self.app.notify(
-                    "Processlist will only show threads that have an active transaction"
-                )
+                self.app.notify("Processlist will only show threads that have an active transaction")
 
             self.app.force_refresh_for_replay(need_current_data=True)
 
         elif key == "u":
-            if (
-                not dolphie.performance_schema_enabled
-                and dolphie.connection_source != ConnectionSource.proxysql
-            ):
-                self.app.notify(
-                    "User statistics command requires Performance Schema to be enabled"
-                )
+            if not dolphie.performance_schema_enabled and dolphie.connection_source != ConnectionSource.proxysql:
+                self.app.notify("User statistics command requires Performance Schema to be enabled")
                 return
 
             self.execute_command_in_thread(key=key)
 
         elif key == "V":
-            global_variable_changes = (
-                tab.replay_manager.fetch_all_global_variable_changes()
-            )
+            global_variable_changes = tab.replay_manager.fetch_all_global_variable_changes()
 
             if global_variable_changes:
                 table = Table(
@@ -788,23 +701,16 @@ class KeyEventManager:
 
                 for variable, value in dolphie.global_variables.items():
                     if input_variable == "all":
-                        display_global_variables[variable] = dolphie.global_variables[
-                            variable
-                        ]
+                        display_global_variables[variable] = dolphie.global_variables[variable]
                     else:
-                        if input_variable:
-                            if input_variable in variable:
-                                display_global_variables[variable] = (
-                                    dolphie.global_variables[variable]
-                                )
+                        if input_variable and input_variable in variable:
+                            display_global_variables[variable] = dolphie.global_variables[variable]
 
                 max_num_tables = 1 if len(display_global_variables) <= 50 else 2
 
                 # Create the number of tables we want
                 while table_counter <= max_num_tables:
-                    tables[table_counter] = Table(
-                        box=box.HORIZONTALS, show_header=False, style="table_border"
-                    )
+                    tables[table_counter] = Table(box=box.HORIZONTALS, show_header=False, style="table_border")
                     tables[table_counter].add_column("")
                     tables[table_counter].add_column("")
 
@@ -815,12 +721,9 @@ class KeyEventManager:
 
                 # Loop global_variables
                 for variable, value in display_global_variables.items():
-                    tables[variable_num].add_row("[label]%s" % variable, str(value))
+                    tables[variable_num].add_row(f"[label]{variable}", str(value))
 
-                    if (
-                        variable_counter == row_per_count
-                        and row_counter != max_num_tables
-                    ):
+                    if variable_counter == row_per_count and row_counter != max_num_tables:
                         row_counter += 1
                         variable_counter = 0
                         variable_num += 1
@@ -828,9 +731,7 @@ class KeyEventManager:
                     variable_counter += 1
 
                 # Put all the variable data from dict into an array
-                all_tables = [
-                    table_data for table_data in tables.values() if table_data
-                ]
+                all_tables = [table_data for table_data in tables.values() if table_data]
 
                 # Add the data into a single tuple for add_row
                 if display_global_variables:
@@ -881,8 +782,8 @@ class KeyEventManager:
 
                 screen_data = Group(
                     Align.center(
-                        "[b light_blue]Host Cache[/b light_blue] ([b highlight]%s[/b highlight])\n"
-                        % len(dolphie.host_cache)
+                        f"[b light_blue]Host Cache[/b light_blue] "
+                        f"([b highlight]{len(dolphie.host_cache)}[/b highlight])\n"
                     ),
                     table,
                 )
@@ -900,8 +801,7 @@ class KeyEventManager:
             )
 
     def execute_command_in_thread(self, key: str, additional_data=None) -> None:
-        """
-        Execute a command in a background thread.
+        """Execute a command in a background thread.
 
         This method creates a daemon thread to run the command without blocking
         the UI, using call_from_thread to safely interact with Textual.
@@ -957,9 +857,7 @@ class KeyEventManager:
                 tables = {}
                 all_tables = []
 
-                db_count = dolphie.secondary_db_connection.execute(
-                    MySQLQueries.databases
-                )
+                db_count = dolphie.secondary_db_connection.execute(MySQLQueries.databases)
                 databases = dolphie.secondary_db_connection.fetchall()
 
                 # Determine how many tables to provide data
@@ -974,9 +872,7 @@ class KeyEventManager:
                     if max_num_tables == 1:
                         table_box = None
 
-                    tables[table_counter] = Table(
-                        box=table_box, show_header=False, style="table_border"
-                    )
+                    tables[table_counter] = Table(box=table_box, show_header=False, style="table_border")
                     tables[table_counter].add_column("")
 
                 # Loop over databases
@@ -993,18 +889,13 @@ class KeyEventManager:
                         db_counter = 1
 
                 # Collect table data into an array
-                all_tables = [
-                    table_data for table_data in tables.values() if table_data
-                ]
+                all_tables = [table_data for table_data in tables.values() if table_data]
 
                 table_grid = Table.grid()
                 table_grid.add_row(*all_tables)
 
                 screen_data = Group(
-                    Align.center(
-                        "[b light_blue]Databases[/b light_blue] ([b highlight]%s[/b highlight])\n"
-                        % db_count
-                    ),
+                    Align.center(f"[b light_blue]Databases[/b light_blue] ([b highlight]{db_count}[/b highlight])\n"),
                     Align.center(table_grid),
                 )
 
@@ -1012,13 +903,9 @@ class KeyEventManager:
 
             elif key == "e":
                 header_style = Style(bold=True)
-                table = Table(
-                    box=box.SIMPLE_HEAVY, style="table_border", show_edge=False
-                )
+                table = Table(box=box.SIMPLE_HEAVY, style="table_border", show_edge=False)
                 table.add_column("Hostgroup", header_style=header_style)
-                table.add_column(
-                    "Backend Host", max_width=35, header_style=header_style
-                )
+                table.add_column("Backend Host", max_width=35, header_style=header_style)
                 table.add_column("Username", header_style=header_style)
                 table.add_column("Schema", header_style=header_style)
                 table.add_column("First Seen", header_style=header_style)
@@ -1035,17 +922,14 @@ class KeyEventManager:
                         f"{dolphie.get_hostname(row.get('hostname'))}:{row.get('port')}",
                         row.get("username"),
                         row.get("schemaname"),
-                        str(datetime.fromtimestamp(int(row.get("first_seen", 0)))),
-                        str(datetime.fromtimestamp(int(row.get("last_seen", 0)))),
+                        str(datetime.fromtimestamp(int(row.get("first_seen", 0))).astimezone()),
+                        str(datetime.fromtimestamp(int(row.get("last_seen", 0))).astimezone()),
                         format_number(int(row.get("count_star", 0))),
-                        "[b][highlight]%s[/b][/highlight]: %s"
-                        % (row.get("errno", 0), row.get("last_error")),
+                        "[b][highlight]{}[/b][/highlight]: {}".format(row.get("errno", 0), row.get("last_error")),
                     )
 
                 screen_data = Group(
-                    Align.center(
-                        f"[b light_blue]Query Errors ([highlight]{table.row_count}[/highlight])\n"
-                    ),
+                    Align.center(f"[b light_blue]Query Errors ([highlight]{table.row_count}[/highlight])\n"),
                     Align.center(table),
                 )
 
@@ -1074,9 +958,7 @@ class KeyEventManager:
                             severity="success",
                         )
                     except ManualException as e:
-                        self.app.notify(
-                            e.reason, title="Error killing Thread ID", severity="error"
-                        )
+                        self.app.notify(e.reason, title="Error killing Thread ID", severity="error")
                 else:
                     threads_killed = 0
                     commands_to_kill = ["Query", "Execute"]
@@ -1093,21 +975,13 @@ class KeyEventManager:
                             # Check if the thread matches all conditions
                             if (
                                 thread.command in commands_to_kill
-                                and (
-                                    not kill_by_username
-                                    or kill_by_username == thread.user
-                                )
+                                and (not kill_by_username or kill_by_username == thread.user)
                                 and (not kill_by_host or kill_by_host == thread.host)
                                 and (
                                     not kill_by_age_range
-                                    or age_range_lower_limit
-                                    <= thread.time
-                                    <= age_range_upper_limit
+                                    or age_range_lower_limit <= thread.time <= age_range_upper_limit
                                 )
-                                and (
-                                    not kill_by_query_text
-                                    or kill_by_query_text in thread.formatted_query.code
-                                )
+                                and (not kill_by_query_text or kill_by_query_text in thread.formatted_query.code)
                             ):
                                 query = dolphie.build_kill_query(thread_id)
                                 dolphie.secondary_db_connection.execute(query)
@@ -1121,16 +995,12 @@ class KeyEventManager:
                             )
 
                     if threads_killed:
-                        self.app.notify(
-                            f"Killed [$highlight]{threads_killed}[/$highlight] thread(s)"
-                        )
+                        self.app.notify(f"Killed [$highlight]{threads_killed}[/$highlight] thread(s)")
                     else:
                         self.app.notify("No threads were killed")
 
             elif key == "l":
-                status = dolphie.secondary_db_connection.fetch_value_from_field(
-                    MySQLQueries.innodb_status, "Status"
-                )
+                status = dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
                 # Extract the most recent deadlock info from the output of SHOW ENGINE INNODB STATUS
                 match = re.search(
                     r"------------------------\nLATEST\sDETECTED\sDEADLOCK\n------------------------"
@@ -1140,9 +1010,7 @@ class KeyEventManager:
                 )
 
                 if match:
-                    screen_data = escape_markup(match.group(1)).replace(
-                        "***", "[yellow]*****[/yellow]"
-                    )
+                    screen_data = escape_markup(match.group(1)).replace("***", "[yellow]*****[/yellow]")
                 else:
                     screen_data = Align.center("No deadlock detected")
 
@@ -1150,9 +1018,7 @@ class KeyEventManager:
 
             elif key == "o":
                 screen_data = escape_markup(
-                    dolphie.secondary_db_connection.fetch_value_from_field(
-                        MySQLQueries.innodb_status, "Status"
-                    )
+                    dolphie.secondary_db_connection.fetch_value_from_field(MySQLQueries.innodb_status, "Status")
                 )
                 self.app.call_from_thread(show_command_screen)
 
@@ -1160,15 +1026,11 @@ class KeyEventManager:
                 header_style = Style(bold=True)
 
                 if dolphie.connection_source == ConnectionSource.proxysql:
-                    table = Table(
-                        box=box.SIMPLE_HEAVY, style="table_border", show_edge=False
-                    )
+                    table = Table(box=box.SIMPLE_HEAVY, style="table_border", show_edge=False)
                     table.add_column("Variable", header_style=header_style)
                     table.add_column("Value", header_style=header_style)
 
-                    dolphie.secondary_db_connection.execute(
-                        ProxySQLQueries.memory_metrics
-                    )
+                    dolphie.secondary_db_connection.execute(ProxySQLQueries.memory_metrics)
                     data = dolphie.secondary_db_connection.fetchall()
 
                     for row in data:
@@ -1205,9 +1067,7 @@ class KeyEventManager:
                     table2.add_column("Code Area", header_style=header_style)
                     table2.add_column("Current", header_style=header_style)
 
-                    dolphie.secondary_db_connection.execute(
-                        MySQLQueries.memory_by_code_area
-                    )
+                    dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_code_area)
                     data = dolphie.secondary_db_connection.fetchall()
                     for row in data:
                         table2.add_row(
@@ -1229,9 +1089,7 @@ class KeyEventManager:
                             format_sys_table_memory(row["total_allocated"]),
                         )
 
-                    table_grid.add_row(
-                        "", Align.center("[b light_blue]Memory Allocation"), ""
-                    )
+                    table_grid.add_row("", Align.center("[b light_blue]Memory Allocation"), "")
                     table_grid.add_row(table1, table3, table2)
 
                     screen_data = Align.center(table_grid)
@@ -1248,9 +1106,7 @@ class KeyEventManager:
                 thread_table.add_column("", overflow="fold")
 
                 thread_id = additional_data
-                thread_data: ProcesslistThread = (
-                    dolphie.processlist_threads_snapshot.get(thread_id)
-                )
+                thread_data: ProcesslistThread = dolphie.processlist_threads_snapshot.get(thread_id)
                 if not thread_data:
                     self.app.notify(
                         f"Thread ID [$highlight]{thread_id}[/$highlight] was not found",
@@ -1265,50 +1121,32 @@ class KeyEventManager:
                 thread_table.add_row("[label]Database", thread_data.db)
                 thread_table.add_row("[label]Command", thread_data.command)
                 thread_table.add_row("[label]State", thread_data.state)
-                thread_table.add_row(
-                    "[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8)
-                )
-                thread_table.add_row(
-                    "[label]Rows Locked", format_number(thread_data.trx_rows_locked)
-                )
-                thread_table.add_row(
-                    "[label]Rows Modified", format_number(thread_data.trx_rows_modified)
-                )
+                thread_table.add_row("[label]Time", str(timedelta(seconds=thread_data.time)).zfill(8))
+                thread_table.add_row("[label]Rows Locked", format_number(thread_data.trx_rows_locked))
+                thread_table.add_row("[label]Rows Modified", format_number(thread_data.trx_rows_modified))
 
                 thread_table.add_row("", "")
                 thread_table.add_row("[label]TRX Time", thread_data.trx_time)
                 thread_table.add_row("[label]TRX State", thread_data.trx_state)
-                thread_table.add_row(
-                    "[label]TRX Operation", thread_data.trx_operation_state
-                )
+                thread_table.add_row("[label]TRX Operation", thread_data.trx_operation_state)
 
                 if thread_data.formatted_query.code:
-                    query = sqlformat(
-                        thread_data.formatted_query.code, reindent_aligned=True
-                    )
+                    query = sqlformat(thread_data.formatted_query.code, reindent_aligned=True)
                     query_db = thread_data.db
 
                     formatted_query = format_query(query, minify=False)
 
                     if query_db:
                         try:
-                            dolphie.secondary_db_connection.execute("USE %s" % query_db)
+                            dolphie.secondary_db_connection.execute(f"USE {query_db}")
 
-                            dolphie.secondary_db_connection.execute(
-                                "EXPLAIN %s" % query
-                            )
+                            dolphie.secondary_db_connection.execute(f"EXPLAIN {query}")
                             explain_data = dolphie.secondary_db_connection.fetchall()
 
-                            dolphie.secondary_db_connection.execute(
-                                "EXPLAIN FORMAT=JSON %s" % query
-                            )
-                            explain_fetched_json_data = (
-                                dolphie.secondary_db_connection.fetchone()
-                            )
+                            dolphie.secondary_db_connection.execute(f"EXPLAIN FORMAT=JSON {query}")
+                            explain_fetched_json_data = dolphie.secondary_db_connection.fetchone()
                             if explain_fetched_json_data:
-                                explain_json_data = explain_fetched_json_data.get(
-                                    "EXPLAIN"
-                                )
+                                explain_json_data = explain_fetched_json_data.get("EXPLAIN")
                         except ManualException as e:
                             # Error 1054 means unknown column which would result in a truncated query
                             # Error 1064 means bad syntax which would result in a truncated query
@@ -1324,13 +1162,13 @@ class KeyEventManager:
                                 else ""
                             )
 
-                            explain_failure = f"{tip}[b][indian_red]EXPLAIN ERROR ({e.code}):[/b] [indian_red]{e.reason}"
+                            explain_failure = (
+                                f"{tip}[b][indian_red]EXPLAIN ERROR ({e.code}):[/b] [indian_red]{e.reason}"
+                            )
 
                 user_thread_attributes_table = None
                 if dolphie.performance_schema_enabled:
-                    user_thread_attributes_table = Table(
-                        box=None, show_header=False, expand=True
-                    )
+                    user_thread_attributes_table = Table(box=None, show_header=False, expand=True)
 
                     dolphie.secondary_db_connection.execute(
                         MySQLQueries.user_thread_attributes.replace("$1", thread_id)
@@ -1357,9 +1195,7 @@ class KeyEventManager:
                     and dolphie.performance_schema_enabled
                     and thread_data.mysql_thread_id
                 ):
-                    query = MySQLQueries.thread_transaction_history.replace(
-                        "$1", str(thread_data.mysql_thread_id)
-                    )
+                    query = MySQLQueries.thread_transaction_history.replace("$1", str(thread_data.mysql_thread_id))
                     dolphie.secondary_db_connection.execute(query)
                     transaction_history = dolphie.secondary_db_connection.fetchall()
 
@@ -1427,9 +1263,7 @@ class KeyEventManager:
                             value = user.get(data["field"], "N/A")
 
                             if data["format_number"]:
-                                row_values.append(
-                                    format_number(value) if value else "0"
-                                )
+                                row_values.append(format_number(value) if value else "0")
                             elif column == "SSL":
                                 row_values.append("ON" if value == "1" else "OFF")
                             else:
@@ -1440,13 +1274,9 @@ class KeyEventManager:
                     title = "Users"
 
                     if dolphie.is_mysql_version_at_least("5.7"):
-                        dolphie.secondary_db_connection.execute(
-                            MySQLQueries.ps_user_statisitics
-                        )
+                        dolphie.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics)
                     else:
-                        dolphie.secondary_db_connection.execute(
-                            MySQLQueries.ps_user_statisitics_56
-                        )
+                        dolphie.secondary_db_connection.execute(MySQLQueries.ps_user_statisitics_56)
 
                     users = dolphie.secondary_db_connection.fetchall()
 
@@ -1490,18 +1320,14 @@ class KeyEventManager:
                             value = user.get(data.get("field"), "N/A")
 
                             if data["format_number"]:
-                                row_values.append(
-                                    format_number(value) if value else "0"
-                                )
+                                row_values.append(format_number(value) if value else "0")
                             else:
                                 row_values.append(value or "")
 
                         table.add_row(*row_values)
 
                 screen_data = Group(
-                    Align.center(
-                        f"[b light_blue]{title} Connected ([highlight]{len(users)}[/highlight])\n"
-                    ),
+                    Align.center(f"[b light_blue]{title} Connected ([highlight]{len(users)}[/highlight])\n"),
                     Align.center(table),
                 )
 
@@ -1509,10 +1335,7 @@ class KeyEventManager:
 
             elif key == "Z":
                 query = MySQLQueries.table_sizes.replace("$1", "INNODB_SYS_TABLESPACES")
-                if (
-                    dolphie.is_mysql_version_at_least("8.0")
-                    and dolphie.connection_source_alt == ConnectionSource.mysql
-                ):
+                if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt == ConnectionSource.mysql:
                     query = MySQLQueries.table_sizes.replace("$1", "INNODB_TABLESPACES")
 
                 dolphie.secondary_db_connection.execute(query)
@@ -1567,9 +1390,7 @@ class KeyEventManager:
                         elif column == "Table":
                             # Color the database name. Format is database/table
                             database_table = value.split(".")
-                            row_values.append(
-                                f"[dark_gray]{database_table[0]}[/dark_gray].{database_table[1]}"
-                            )
+                            row_values.append(f"[dark_gray]{database_table[0]}[/dark_gray].{database_table[1]}")
 
                         else:
                             row_values.append(str(value) or "")
@@ -1578,8 +1399,8 @@ class KeyEventManager:
 
                 screen_data = Group(
                     Align.center(
-                        "[b light_blue]Table Sizes & Fragmentation[/b light_blue] ([highlight]%s[/highlight])\n"
-                        % len(database_tables_data)
+                        f"[b light_blue]Table Sizes & Fragmentation[/b light_blue] "
+                        f"([highlight]{len(database_tables_data)}[/highlight])\n"
                     ),
                     Align.center(table),
                 )

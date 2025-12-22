@@ -1,4 +1,3 @@
-from typing import Dict
 
 from textual import on
 from textual.app import ComposeResult
@@ -47,17 +46,7 @@ class TabSetupModal(ModalScreen):
                 text-style: bold;
                 width: 100%;
                 content-align: center middle;
-                padding-bottom: 1;
-            }
-
-            & Rule {
-                width: 100%;
                 margin-bottom: 1;
-            }
-
-            & Input {
-                width: 100%;
-                border-title-color: #d2d2d2;
             }
 
             & .main_container {
@@ -72,23 +61,28 @@ class TabSetupModal(ModalScreen):
             }
 
             & #password {
-                width: 53;
+                width: 1fr;
+                margin: 0 0 0 1;
             }
 
             & #show_password {
-                max-width: 8;
+                width: auto;
+                min-width: 8;
                 height: 3;
-                background: #262c4b;
-                border: blank #344063;
+                background: transparent;
+                border: none;
+                tint: transparent 0%;
 
                 &:hover {
-                    background: #313960;
-                    border: blank #344063;
+                    background: transparent;
+                    color: #91abec;
+                    tint: transparent 0%;
                 }
 
                 &:focus {
-                    background: #313960;
-                    border: blank #344063;
+                    background: transparent;
+                    color: #91abec;
+                    tint: transparent 0%;
                 }
             }
 
@@ -108,20 +102,12 @@ class TabSetupModal(ModalScreen):
             & Checkbox {
                 background: #131626;
                 border: none;
-                padding-left: 2;
-                padding-bottom: 1;
-                content-align: left middle;
+                padding-left: 1;
             }
 
-            & #replay_file {
-                & > SelectOverlay > .option-list--option {
-                    padding: 0;
-                }
-
-                & > OptionList {
-                    width: auto;
-                    min-width: 100%;
-                }
+            & #replay_file > OptionList {
+                width: auto;
+                min-width: 100%;
             }
         }
     """
@@ -132,7 +118,7 @@ class TabSetupModal(ModalScreen):
     def __init__(
         self,
         credential_profile: str,
-        credential_profiles: Dict[str, CredentialProfile],
+        credential_profiles: dict[str, CredentialProfile],
         host: str,
         port: int,
         username: str,
@@ -175,7 +161,7 @@ class TabSetupModal(ModalScreen):
 
         self.options_credential_profiles = []
         if credential_profiles:
-            self.options_credential_profiles = [(profile, profile) for profile in credential_profiles.keys()]
+            self.options_credential_profiles = [(profile, profile) for profile in credential_profiles]
 
         self.options_replay_files = []
         if replay_files:
@@ -198,6 +184,12 @@ class TabSetupModal(ModalScreen):
         self.query_one("#ssl_ca", Input).border_title = "CA File [dark_gray](optional)[/dark_gray]"
         self.query_one("#ssl_cert", Input).border_title = "Client Certificate File [dark_gray](optional)[/dark_gray]"
         self.query_one("#ssl_key", Input).border_title = "Client Key File [dark_gray](optional)[/dark_gray]"
+
+        self.query_one("#credential_profile", Select).border_title = (
+            "Credential Profile [dark_gray](optional)[/dark_gray]"
+        )
+        self.query_one("#hostgroup", Select).border_title = "Hostgroup"
+        self.query_one("#replay_file", Select).border_title = "Replay File"
 
         if self.ssl:
             self.query_one("#ssl", Checkbox).value = True
@@ -231,7 +223,6 @@ class TabSetupModal(ModalScreen):
                     options=self.options_credential_profiles,
                     id="credential_profile",
                     value=self.credential_profile,
-                    prompt="Select a credential profile (optional)",
                 )
 
                 host = Input(value=self.host, id="host", placeholder="Host:Port")
@@ -255,6 +246,7 @@ class TabSetupModal(ModalScreen):
                             ]
                         ),
                         id="ssl_mode",
+                        classes="pad_top_1",
                     )
                     yield Input(id="ssl_ca")
                     yield Input(id="ssl_cert")
@@ -264,7 +256,6 @@ class TabSetupModal(ModalScreen):
                 yield Select(
                     options=self.options_hostgroups,
                     id="hostgroup",
-                    prompt="Select a hostgroup",
                 )
                 yield Rule(line_style="heavy")
                 yield Label("Load a Replay File")
@@ -272,7 +263,6 @@ class TabSetupModal(ModalScreen):
                 yield Select(
                     options=self.options_replay_files,
                     id="replay_file",
-                    prompt="Select a replay file",
                 )
             with Horizontal(classes="button_container"):
                 yield Button("Submit", id="submit", variant="primary")
@@ -313,7 +303,9 @@ class TabSetupModal(ModalScreen):
         else:
             self.query_one("#ssl", Checkbox).value = False
 
-    def update_inputs(self, disable: bool = None, exclude: list = []):
+    def update_inputs(self, disable: bool = None, exclude: list = None):
+        if exclude is None:
+            exclude = []
         inputs = {
             "#host": Input,
             "#username": Input,

@@ -5,17 +5,15 @@ import re
 import sys
 from configparser import RawConfigParser
 from dataclasses import dataclass, field, fields
-from typing import Dict, List
 from urllib.parse import ParseResult, urlparse
 
 import myloginpath
+from dolphie.DataTypes import Panels
+from dolphie.Modules.Queries import MySQLQueries
 from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.theme import Theme
-
-from dolphie.DataTypes import Panels
-from dolphie.Modules.Queries import MySQLQueries
 
 
 @dataclass
@@ -26,7 +24,7 @@ class CredentialProfile:
     user: str = None
     password: str = None
     socket: str = None
-    ssl: Dict = field(default_factory=dict)
+    ssl: dict = field(default_factory=dict)
     ssl_mode: str = None
     ssl_ca: str = None
     ssl_cert: str = None
@@ -51,12 +49,12 @@ class Config:
     host: str = "localhost"
     port: int = 3306
     socket: str = None
-    ssl: Dict = field(default_factory=dict)
+    ssl: dict = field(default_factory=dict)
     ssl_mode: str = None
     ssl_ca: str = None
     ssl_cert: str = None
     ssl_key: str = None
-    config_file: List[str] = field(
+    config_file: list[str] = field(
         default_factory=lambda: [
             "/etc/dolphie.cnf",
             "/etc/dolphie/dolphie.cnf",
@@ -69,18 +67,18 @@ class Config:
     tab_setup_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_hosts")
     refresh_interval: int = 1
     heartbeat_table: str = None
-    credential_profiles: Dict[str, CredentialProfile] = field(default_factory=dict)
-    tab_setup_available_hosts: List[str] = field(default_factory=list)
-    startup_panels: List[str] = field(default_factory=lambda: ["dashboard", "processlist"])
+    credential_profiles: dict[str, CredentialProfile] = field(default_factory=dict)
+    tab_setup_available_hosts: list[str] = field(default_factory=list)
+    startup_panels: list[str] = field(default_factory=lambda: ["dashboard", "processlist"])
     graph_marker: str = "braille"
     pypi_repository: str = "https://pypi.org/pypi/dolphie/json"
     hostgroup: str = None
-    hostgroup_hosts: Dict[str, List[HostGroupMember]] = field(default_factory=dict)
+    hostgroup_hosts: dict[str, list[HostGroupMember]] = field(default_factory=dict)
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
     record_for_replay: bool = False
     daemon_mode: bool = False
-    daemon_mode_panels: List[str] = field(default_factory=lambda: ["processlist", "metadata_locks", "pfs_metrics"])
+    daemon_mode_panels: list[str] = field(default_factory=lambda: ["processlist", "metadata_locks", "pfs_metrics"])
     daemon_mode_log_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_daemon.log")
     replay_file: str = None
     replay_dir: str = None
@@ -526,7 +524,7 @@ Dolphie's config supports these options under [dolphie] section:
             self.debug_options_table.add_column("Option", style="#91abec")
             self.debug_options_table.add_column("Value", style="#bbc8e8")
 
-        for option in self.config_object_options.keys():
+        for option in self.config_object_options:
             if self.debug_options:
                 self.debug_options_table.add_row("default", option, str(getattr(self.config, option)))
 
@@ -577,7 +575,7 @@ Dolphie's config supports these options under [dolphie] section:
         self.config.hostgroup_hosts = hostgroups
 
         # We need to loop through all options and set non-login options so we can use them for the logic below
-        for option in self.config_object_options.keys():
+        for option in self.config_object_options:
             if option not in login_options and options[option]:
                 self.set_config_value("command-line", option, options[option])
 
@@ -689,7 +687,7 @@ Dolphie's config supports these options under [dolphie] section:
             self.exit(str(e))
 
         if os.path.exists(self.config.tab_setup_file):
-            with open(self.config.tab_setup_file, "r") as file:
+            with open(self.config.tab_setup_file) as file:
                 self.config.tab_setup_available_hosts = [line.strip() for line in file]
 
         if self.debug_options:
@@ -713,7 +711,7 @@ Dolphie's config supports these options under [dolphie] section:
         if self.config.replay_file and not self.config.replay_dir:
             self.config.replay_dir = os.path.dirname(os.path.dirname(self.config.replay_file))
 
-    def parse_hostgroup(self, cfg, section, config_file) -> List[HostGroupMember]:
+    def parse_hostgroup(self, cfg, section, config_file) -> list[HostGroupMember]:
         hosts = []
         for key in cfg.options(section):
             host_json = cfg.get(section, key).strip()
@@ -825,10 +823,8 @@ Dolphie's config supports these options under [dolphie] section:
         # If section has no options listed
         if not any(getattr(credential, option) for option in credential_profile_options):
             self.exit(
-                (
-                    f"Credential profile [red2]{credential_name}[/red2] has no valid options set. "
-                    f"Supported options are: {', '.join(supported_options)}"
-                )
+                f"Credential profile [red2]{credential_name}[/red2] has no valid options set. "
+                f"Supported options are: {', '.join(supported_options)}"
             )
 
         credential.ssl = self.create_ssl_object(credential.__dict__)
@@ -837,7 +833,7 @@ Dolphie's config supports these options under [dolphie] section:
 
         self.config.credential_profiles[credential_name] = credential
 
-    def create_ssl_object(self, data: Dict) -> Dict:
+    def create_ssl_object(self, data: dict) -> dict:
         ssl_payload = {}
 
         ssl_mode = data.get("ssl_mode")
@@ -875,7 +871,7 @@ Dolphie's config supports these options under [dolphie] section:
         return ssl_payload
 
     def verify_config_value(self, option, value, data_type):
-        if data_type == bool:
+        if data_type is bool:
             if value.lower() == "true":
                 return True
             elif value.lower() == "false":
@@ -884,7 +880,7 @@ Dolphie's config supports these options under [dolphie] section:
                 self.exit(
                     f"Error with Dolphie config: [red2]{option}[/red2] is a boolean and must either be true/false"
                 )
-        elif data_type == int:
+        elif data_type is int:
             try:
                 return int(value)
             except ValueError:

@@ -1,4 +1,3 @@
-from typing import Dict, List, Union
 
 from rich.syntax import Syntax
 from textual.widgets import DataTable
@@ -52,7 +51,7 @@ def create_panel(tab: Tab) -> DataTable:
             datatable_row = metadata_locks_datatable.get_row(lock_id)
 
             for column_id, (column_key, column_name, column_width) in enumerate(
-                zip(column_keys, column_names, column_widths)
+                zip(column_keys, column_names, column_widths, strict=False)
             ):
                 column_value = lock[column_key]
 
@@ -97,7 +96,7 @@ def create_panel(tab: Tab) -> DataTable:
             row_values = []
 
             for column_id, (column_key, column_name, column_width) in enumerate(
-                zip(column_keys, column_names, column_widths)
+                zip(column_keys, column_names, column_widths, strict=False)
             ):
                 column_value = lock[column_key]
 
@@ -151,7 +150,7 @@ def create_panel(tab: Tab) -> DataTable:
     )
 
 
-def fetch_data(tab: Tab) -> List[Dict[str, Union[int, str]]]:
+def fetch_data(tab: Tab) -> list[dict[str, int | str]]:
     dolphie = tab.dolphie
 
     ########################

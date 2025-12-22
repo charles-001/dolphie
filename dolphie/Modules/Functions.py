@@ -96,9 +96,7 @@ def format_query(query: str, minify: bool = True) -> Syntax:
 
     query = markup_escape(re.sub(r"\s+", " ", query)) if minify else query
 
-    formatted_query = Syntax(
-        code=query, lexer="sql", word_wrap=True, theme=NordModifiedTheme
-    )
+    formatted_query = Syntax(code=query, lexer="sql", word_wrap=True, theme=NordModifiedTheme)
 
     return formatted_query
 
@@ -242,10 +240,7 @@ def format_number(n, decimal=2, color=True):
     for x in range(len(sci_expr)):
         if n >= sci_expr[x] and n < sci_expr[x + 1]:
             sufix = sufixes[x]
-            if n >= 1e3:
-                num = str(round_num(n / sci_expr[x], decimal))
-            else:
-                num = str(round_num(n, 0))
+            num = str(round_num(n / sci_expr[x], decimal)) if n >= 1000.0 else str(round_num(n, 0))
             if color:
                 return f"{num}[highlight]{sufix}[/highlight]" if sufix else num
             else:
@@ -270,8 +265,7 @@ def format_sys_table_memory(data):
 
 
 def escape_markup(text: str) -> str:
-    """
-    Escape Rich markup characters in the given text.
+    """Escape Rich markup characters in the given text.
 
     Args:
         text (str): The text to escape.

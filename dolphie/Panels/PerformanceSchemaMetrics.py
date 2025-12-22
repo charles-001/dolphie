@@ -17,7 +17,7 @@ def create_panel(tab: Tab):
         time = dolphie.global_status.get("replay_pfs_metrics_last_reset_time", 0)
     else:
         time = (
-            (datetime.now() - dolphie.pfs_metrics_last_reset_time).total_seconds()
+            (datetime.now().astimezone() - dolphie.pfs_metrics_last_reset_time).total_seconds()
             if dolphie.pfs_metrics_last_reset_time
             else 0
         )
@@ -74,7 +74,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
             datatable_row = datatable.get_row(row_id)
 
             for column_id, (column_name, field) in enumerate(
-                zip(column_names, column_fields)
+                zip(column_names, column_fields, strict=False)
             ):
                 if column_name == "Table":
                     continue
@@ -98,15 +98,13 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
                         wait_time_value = wait_time_value.get("d", 0)
 
                     if count_value and wait_time_value:
-                        column_value = f"{format_time(wait_time_value, picoseconds=True)} ({format_number(count_value)})"
+                        formatted_time = format_time(wait_time_value, picoseconds=True)
+                        column_value = f"{formatted_time} ({format_number(count_value)})"
                     else:
                         column_value = "[dark_gray]N/A"
                 else:
                     column_value = metrics.get(field, {})
-                    if use_total:
-                        column_value = column_value.get("t", 0)
-                    else:
-                        column_value = column_value.get("d", 0)
+                    column_value = column_value.get("t", 0) if use_total else column_value.get("d", 0)
 
                 # Use the cached row data
                 current_value = datatable_row[column_id]
@@ -117,7 +115,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
             row_values.append(file_name)
 
             for column_id, (column_name, field) in enumerate(
-                zip(column_names, column_fields)
+                zip(column_names, column_fields, strict=False)
             ):
                 if column_name == "Table":
                     continue
@@ -141,15 +139,13 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
                         wait_time_value = wait_time_value.get("d", 0)
 
                     if count_value and wait_time_value:
-                        column_value = f"{format_time(wait_time_value, picoseconds=True)} ({format_number(count_value)})"
+                        formatted_time = format_time(wait_time_value, picoseconds=True)
+                        column_value = f"{formatted_time} ({format_number(count_value)})"
                     else:
                         column_value = "[dark_gray]N/A"
                 else:
                     column_value = metrics.get(field, {})
-                    if use_total:
-                        column_value = column_value.get("t", 0)
-                    else:
-                        column_value = column_value.get("d", 0)
+                    column_value = column_value.get("t", 0) if use_total else column_value.get("d", 0)
 
                 row_values.append(column_value)
 
@@ -248,25 +244,19 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
             datatable_row = datatable.get_row(row_id)
 
             for column_id, (column_name, field, column_format) in enumerate(
-                zip(column_names, column_fields, column_formats)
+                zip(column_names, column_fields, column_formats, strict=False)
             ):
                 if field == "FILE_NAME":
                     continue
 
                 column_value = metrics.get(field, {})
-                if use_total:
-                    column_value = column_value.get("t", 0)
-                else:
-                    column_value = column_value.get("d", 0)
+                column_value = column_value.get("t", 0) if use_total else column_value.get("d", 0)
 
                 # Handle special formatting
                 if column_format == "time":
                     column_value = format_time(column_value, picoseconds=True)
                 elif column_value == 0 or column_value is None:
-                    if column_name == "wait_time_ps":
-                        column_value = 0
-                    else:
-                        column_value = "[dark_gray]0"
+                    column_value = 0 if column_name == "wait_time_ps" else "[dark_gray]0"
                 elif column_format == "number":
                     column_value = format_number(column_value)
                 elif column_format == "bytes":
@@ -281,25 +271,19 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
             row_values.append(file_name)
 
             for column_id, (column_name, field, column_format) in enumerate(
-                zip(column_names, column_fields, column_formats)
+                zip(column_names, column_fields, column_formats, strict=False)
             ):
                 if field == "FILE_NAME":
                     continue
 
                 column_value = metrics.get(field, {})
-                if use_total:
-                    column_value = column_value.get("t", 0)
-                else:
-                    column_value = column_value.get("d", 0)
+                column_value = column_value.get("t", 0) if use_total else column_value.get("d", 0)
 
                 # Handle special formatting
                 if column_format == "time":
                     column_value = format_time(column_value, picoseconds=True)
                 elif column_value == 0 or column_value is None:
-                    if column_name == "wait_time_ps":
-                        column_value = 0
-                    else:
-                        column_value = "[dark_gray]0"
+                    column_value = 0 if column_name == "wait_time_ps" else "[dark_gray]0"
                 elif column_format == "number":
                     column_value = format_number(column_value)
                 elif column_format == "bytes":

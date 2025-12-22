@@ -96,9 +96,7 @@ class Database:
             if self.source == ConnectionSource.mysql:
                 self.execute("SET SESSION sql_mode=''")
 
-            logger.info(
-                f"Connected to {self.source} with Process ID {self.connection_id}"
-            )
+            logger.info(f"Connected to {self.source} with Process ID {self.connection_id}")
             self.has_connected = True
         except pymysql.Error as e:
             if reconnect_attempt:
@@ -115,13 +113,13 @@ class Database:
                 )
             else:
                 if len(e.args) == 1:
-                    raise ManualException(e.args[0])
+                    raise ManualException(e.args[0]) from e
                 else:
-                    raise ManualException(e.args[1])
-        except FileNotFoundError:  # Catch SSL file path errors
-            raise ManualException("SSL certificate file path isn't valid!")
+                    raise ManualException(e.args[1]) from e
+        except FileNotFoundError as e:  # Catch SSL file path errors
+            raise ManualException("SSL certificate file path isn't valid!") from e
         except SSLError as e:
-            raise ManualException(f"SSL error: {e}")
+            raise ManualException(f"SSL error: {e}") from e
 
     def close(self):
         if self.is_connected():
@@ -174,9 +172,7 @@ class Database:
         if not data:
             return None
 
-        field = field or next(
-            iter(data)
-        )  # Use field if provided, otherwise get first field
+        field = field or next(iter(data))  # Use field if provided, otherwise get first field
         value = data.get(field)
         return self._decode_value(value)
 
@@ -193,10 +189,7 @@ class Database:
 
         if command in {"status", "variables", "mysql_stats"}:
             return {
-                row["Variable_name"]: int(row["Value"])
-                if row["Value"].isnumeric()
-                else row["Value"]
-                for row in data
+                row["Variable_name"]: int(row["Value"]) if row["Value"].isnumeric() else row["Value"] for row in data
             }
         elif command == "innodb_metrics":
             return {row["NAME"]: int(row["COUNT"]) for row in data}
@@ -269,16 +262,12 @@ class Database:
                         )
 
                         # Escape [ and ] characters in the error message and query
-                        escaped_error_message = (
-                            error_message.replace("[", "\\[")
-                            if error_message
-                            else "Access denied"
-                        )
+                        escaped_error_message = error_message.replace("[", "\\[") if error_message else "Access denied"
                         escaped_query = raw_query.replace("[", "\\[")
 
                         self.app.notify(
-                            f"[$b_highlight]{self.host}:{self.port}[/$b_highlight]: [dim]{error_code}: {escaped_error_message}[/dim]\n"
-                            f"Query: [$b_light_blue]{escaped_query}[/$b_light_blue]\n"
+                            f"[$b_highlight]{self.host}:{self.port}[/$b_highlight]: [dim]{error_code}: "
+                            f"{escaped_error_message}[/dim]\nQuery: [$b_light_blue]{escaped_query}[/$b_light_blue]\n"
                             "Stats for this feature won't be available.",
                             title="Insufficient Privileges",
                             severity="warning",
@@ -316,9 +305,7 @@ class Database:
 
                     if not self.connection.open:
                         # Exponential backoff
-                        time.sleep(
-                            min(1 * (2**attempt_number), 20)
-                        )  # Cap the wait time at 20 seconds
+                        time.sleep(min(1 * (2**attempt_number), 20))  # Cap the wait time at 20 seconds
 
                         # Skip the rest of the loop
                         continue
@@ -333,7 +320,7 @@ class Database:
                     # Retry the query
                     return self.execute(query, values)
                 else:
-                    raise ManualException(error_message, query=query, code=error_code)
+                    raise ManualException(error_message, query=query, code=error_code) from e
 
         if not self.connection.open:
             raise ManualException(

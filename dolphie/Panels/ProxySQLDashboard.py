@@ -19,7 +19,7 @@ def create_panel(tab: Tab) -> Table:
     ####################
     # Host Information #
     ####################
-    runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
+    runtime = str(datetime.now().astimezone() - dolphie.dolphie_start_time).split(".")[0]
 
     table_title_style = Style(color="#bbc8e8", bold=True)
     table = Table(
@@ -110,10 +110,7 @@ def create_panel(tab: Tab) -> Table:
     table.add_row("[label]FE Usage", f"[{color_code}]{fe_usage}%")
     table.add_row("[label]Active TRX", f"{global_status['Active_Transactions']}")
     for label, values in data_dict.items():
-        if values:
-            value = format_number(values[-1])
-        else:
-            value = 0
+        value = format_number(values[-1]) if values else 0
 
         if "Created" in label or "Aborted" in label or "Wrong Passwd" in label:
             table.add_row(label, f"{value}/s")
@@ -145,10 +142,7 @@ def create_panel(tab: Tab) -> Table:
     }
 
     for label, values in data_dict.items():
-        if values:
-            value = format_bytes(values[-1])
-        else:
-            value = 0
+        value = format_bytes(values[-1]) if values else 0
 
         if "Created" in label or "Aborted" in label or "Wrong Passwd" in label:
             table.add_row(label, f"{value}/s")

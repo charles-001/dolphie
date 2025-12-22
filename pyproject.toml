@@ -14,7 +14,7 @@ myloginpath = "^0.0.4"
 packaging = "^25.0"
 requests = "^2.32.5"
 sqlparse = "^0.5.3"
-textual = "^6.6.0"
+textual = "^6.11.0"
 plotext = "^5.3.2"
 zstandard = "^0.25.0"
 loguru = "^0.7.3"
@@ -33,3 +33,92 @@ dolphie = "dolphie.App:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.format]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort - import sorting
+    "N",      # pep8-naming - naming conventions
+    "UP",     # pyupgrade - use modern Python syntax (3.11+)
+    "ASYNC",  # flake8-async - async/await best practices
+    "B",      # flake8-bugbear - likely bugs and design problems
+    "C4",     # flake8-comprehensions - better comprehensions
+    "DTZ",    # flake8-datetimez - timezone-aware datetimes
+    "SIM",    # flake8-simplify - simplification suggestions
+    "PT",     # flake8-pytest-style - pytest best practices
+    "ARG",    # flake8-unused-arguments - catch unused function arguments
+
+    # --- New Rules ---
+    "D",      # pydocstyle - docstring conventions
+    "ANN",    # flake8-annotations - enforce type annotations
+    "T20",    # flake8-print - detect print statements
+    "ISC",    # flake8-implicit-str-concat - implicit string concatenation
+]
+
+ignore = [
+    # --- Formatter compatibility ---
+    "ISC001",    # Implicit string concatenation (conflicts with formatter)
+
+    # --- Intentional naming conventions ---
+    "N811",      # Constant imported as non-constant (1 violation - intentional panel naming)
+    "N815",      # Mixed case variable in class scope (2 violations - cnt_INFs variable name)
+    "N818",      # Exception name should end with Error (1 violation - ManualException is intentional)
+    "N999",      # Invalid module name (Steps - prefer capitalized for this module)
+
+    # --- Code patterns requiring refactoring ---
+    "ARG002",    # Unused method argument (required by interface)
+    "ARG005",    # Unused lambda argument (required by yaml representer)
+    "B007",      # Unused loop control variable (15 violations - common enumerate/zip pattern)
+    "SIM102",    # Collapsible if statements (6 violations - nested ifs sometimes clearer)
+    "SIM105",    # Use contextlib.suppress (2 violations - try-except-pass sometimes clearer)
+    "SIM115",    # Use context manager (minor improvement)
+    "SIM117",    # Combine with statements (sometimes nested is clearer)
+    "UP017",     # Use datetime.UTC alias (only available in Python 3.11+, we support 3.9+)
+
+    # --- Async patterns ---
+    "ASYNC110",  # Async busy wait (1 violation - intentional polling pattern)
+    "ASYNC230",  # Blocking open in async (1 violation - would require extensive refactoring)
+
+    # --- Annotation ignores ---
+    "ANN001",    # Missing type annotation for function argument
+    "ANN002",    # Missing type annotation for *args (2 violations)
+    "ANN003",    # Missing type annotation for **kwargs
+    "ANN201",    # Missing return type for public function
+    "ANN202",    # Missing return type for private function
+    "ANN204",    # Missing return type for special method
+    "ANN206",    # Missing return type for classmethod
+
+    # --- Documentation ignores (too noisy for existing codebase) ---
+    "D100",      # Missing docstring in public module
+    "D101",      # Missing docstring in public class
+    "D102",      # Missing docstring in public method
+    "D103",      # Missing docstring in public function
+    "D104",      # Missing docstring in public package
+    "D105",      # Missing docstring in magic method
+    "D107",      # Missing docstring in __init__
+    "D205",      # 1 blank line required between summary line and description
+    "D417",      # Missing argument description in docstring
+]
+
+# Per-file ignores - allow print and missing annotations in tests
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["T20", "ANN", "D"]
+
+[tool.ruff.lint.isort]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+known-first-party = ["dolphie"]
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

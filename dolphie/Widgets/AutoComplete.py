@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from operator import itemgetter
 from re import IGNORECASE, escape, finditer, search
-from typing import Callable, ClassVar, Iterable, NamedTuple, Sequence, cast
+from typing import ClassVar, NamedTuple, cast
 
 from rich.text import Text
 from textual import events, on
@@ -180,7 +181,6 @@ class AutoComplete(Widget):
 
     def _listen_to_messages(self, event: events.Event) -> None:
         """Listen to some events of the target widget."""
-
         try:
             option_list = self.option_list
         except NoMatches:
@@ -307,7 +307,8 @@ class AutoComplete(Widget):
 
     def _align_to_target(self) -> None:
         """Align the dropdown to the position of the cursor within
-        the target widget, and constrain it to be within the screen."""
+        the target widget, and constrain it to be within the screen.
+        """
         try:
             x, y = self.target.cursor_screen_offset
             dropdown = self.option_list
@@ -362,8 +363,7 @@ class AutoComplete(Widget):
             self.action_hide()
 
     def should_show_dropdown(self, search_string: str) -> bool:
-        """
-        Determine whether to show or hide the dropdown based on the current state.
+        """Determine whether to show or hide the dropdown based on the current state.
 
         This method can be overridden to customize the visibility behavior.
 
@@ -418,7 +418,6 @@ class AutoComplete(Widget):
         Returns:
             The matches to display in the dropdown.
         """
-
         # If items is a callable, then it's a factory function that returns the candidates.
         # Otherwise, it's a list of candidates.
         candidates = self.get_candidates(target_state)
@@ -510,6 +509,7 @@ class AutoComplete(Widget):
             candidate: The candidate which matched the query. Note that this may already have its
                 own styling applied.
             offsets: The offsets to highlight.
+
         Returns:
             A [rich.text.Text][`Text`] object with highlighted matches.
         """
@@ -583,7 +583,6 @@ class FuzzySearch:
         Args:
             case_sensitive: Is the match case sensitive?
         """
-
         self.case_sensitive = case_sensitive
 
     def match(self, query: str, candidate: str) -> tuple[float, tuple[int, ...]]:

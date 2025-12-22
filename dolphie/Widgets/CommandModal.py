@@ -33,10 +33,12 @@ class CommandModal(ModalScreen):
 
                 & Input, Select {
                     width: 60;
-                    border-title-color: #d2d2d2;
                 }
             }
 
+            & Input {
+                width: 40;
+            }
             & Label {
                 width: 100%;
                 content-align: center middle;
@@ -45,7 +47,6 @@ class CommandModal(ModalScreen):
 
             & Rule {
                 width: 100%;
-                margin-bottom: 1;
             }
 
             & #error_response {
@@ -126,9 +127,7 @@ class CommandModal(ModalScreen):
                     yield AutoComplete(filter_by_host_input, id="filter_by_host_dropdown_items", candidates=[])
                     yield AutoComplete(filter_by_db_input, id="filter_by_db_dropdown_items", candidates=[])
                     yield AutoComplete(
-                        filter_by_hostgroup_input,
-                        id="filter_by_hostgroup_dropdown_items",
-                        candidates=[],
+                        filter_by_hostgroup_input, id="filter_by_hostgroup_dropdown_items", candidates=[]
                     )
 
                     yield Input(id="filter_by_query_time_input")
@@ -255,11 +254,11 @@ class CommandModal(ModalScreen):
         if field:
             # Filter out None values before sorting
             sorted_array = sorted(
-                set(
+                {
                     getattr(thread, field)
                     for thread in self.processlist_data.values()
                     if getattr(thread, field) is not None
-                )
+                }
             )
             dropdown_items = [DropdownItem(str(value)) for value in sorted_array]
 

@@ -1,3 +1,4 @@
+/* --- Global & Defaults --- */
 * {
     scrollbar-background: #161e31;
     scrollbar-background-hover: #161e31;
@@ -13,16 +14,39 @@
 #_default, CommandScreen, EventLog {
     background: #0a0e1b;
 }
-Graph {
+
+Screen.-maximized-view {
     height: 100%;
+
+    & .metric_graph_container,
+    & .metric_graph_container2,
+    & TabPane {
+        height: 1fr !important;
+    }
+    & Tabs {
+        margin-top: 0;
+    }
+    & DataTable {
+        height: 100% !important;
+        max-height: 100% !important;
+    }
 }
-Horizontal {
-    height: auto;
-}
+
+/* --- Layout Widgets --- */
+Graph { height: 100%; }
+Horizontal { height: auto; }
+
 Rule {
     color: #32416a;
     margin: 0;
 }
+
+Center > * {
+    /* General spacing for items inside Center layouts */
+    margin-bottom: 0;
+}
+
+/* --- Data Tables --- */
 DataTable {
     background: #0f1525;
     overflow-x: hidden;
@@ -31,7 +55,6 @@ DataTable {
     &:focus {
         background-tint: #0f1525;
     }
-
     & > .datatable--odd-row {
         background: #131a2c;
     }
@@ -44,47 +67,51 @@ DataTable {
     }
 }
 
-LoadingIndicator {
+/* Horizontal scrolling specific tables */
+#pfs_metrics_file_io_datatable,
+#pfs_metrics_table_io_waits_datatable,
+#proxysql_hostgroup_summary_datatable,
+#proxysql_mysql_query_rules_datatable {
+    overflow-x: auto;
+}
+
+/* --- Indicators & Overlays --- */
+LoadingIndicator, SpinnerWidget {
     color: #8fb0ee;
     height: auto;
     content-align: center middle;
-    margin-top: 3;
 }
+
+LoadingIndicator { margin-top: 3; }
+
 ModalScreen {
     background: #0d1015 70%;
     align: center middle;
     height: 40;
     color: #4d5a85;
 }
-Sparkline {
-    margin-top: 1;
-    margin-bottom: 1;
-}
-SpinnerWidget {
-    color: #8fb0ee;
-    height: auto;
-    content-align: center middle;
-}
-CommandList {
-    text-style: none;
-    border-bottom: hkey #1c2440;
-    max-height: 80vh;
 
-    & > .option-list--option {
-        text-style: none;
-        padding: 0;
+Toast {
+    width: auto;
+    max-width: 50%;
+    background: #20283e;
+    border-right: wide #192036;
+
+    &.-information { border-left: wide #788bc9; }
+    &.-warning     { border-left: wide #f0e357; }
+
+    &.-success {
+        border-left: wide #5bd088;
+        & .toast--title { color: #6ae398; }
     }
-    & > .option-list--option-highlighted {
-        color: #b7c7ee;
-        background: #171e2f;
-        text-style: bold;
-    }
-    & > .option-list--option-hover {
-        color: #b7c7ee;
-        background: #171e2f;
-        text-style: bold;
+    
+    &.-error {
+        border-left: wide #f05757;
+        & .toast--title { color: #ed6363; }
     }
 }
+
+/* --- Command Palette & Input --- */
 CommandPalette {
     background: #0d1015 70%;
 
@@ -95,6 +122,25 @@ CommandPalette {
         border-top: hkey #1c2440;
     }
 }
+
+CommandList {
+    text-style: none;
+    border-bottom: hkey #1c2440;
+    max-height: 80vh;
+
+    & > .option-list--option {
+        text-style: none;
+        padding: 0;
+    }
+    /* Combine hover and highlight states */
+    & > .option-list--option-highlighted,
+    & > .option-list--option-hover {
+        color: #b7c7ee;
+        background: #171e2f;
+        text-style: bold;
+    }
+}
+
 CommandInput, CommandInput:focus {
     background: #0a0e1b !important;
     width: 1fr !important;
@@ -102,29 +148,78 @@ CommandInput, CommandInput:focus {
     padding-left: 0 !important;
     margin: 0 1 !important;
 }
+
+AutoComplete {
+    & AutoCompleteList {
+        background: #151926;
+        border: none !important;
+        border-left: wide #384673;
+        margin: 0;
+        width: auto;
+        height: auto;
+        max-height: 100%;
+
+        &:hover {
+            border: none !important;
+            border-left: wide #384673;
+        }
+
+        & > .option-list--option-hover {
+            background: #2c3757;
+            color: #cbdbfe;
+            text-style: bold;
+        }
+
+        & > .option-list--option-highlighted {
+            background: #22293e;
+            color: #9babd4;
+            text-style: bold;
+        }
+    }
+
+    & .autocomplete--highlight-match {
+        color: #c7d734;
+        background: #384673;
+        text-style: bold;
+    }
+
+    & .option-list--option-highlighted {
+        background: #22293e;
+        color: #9babd4;
+        text-style: bold;
+    }
+}
+
+/* --- Top Bar --- */
 TopBar {
     dock: top;
     background: #192036;
     height: 1;
     layout: horizontal;
-}
-#topbar_title {
-    width: 15%;
-    content-align: left middle;
-}
-#topbar_host {
-    color: #bbc8e8;
-    width: 70%;
-    content-align: center middle;
-    text-style: bold;
-}
-#topbar_help {
-    width: 15%;
-    content-align: right middle;
-    color: #8f9fc1;
+
+    & #topbar_title {
+        width: 15%;
+        content-align: left middle;
+    }
+    & #topbar_host {
+        color: #bbc8e8;
+        width: 70%;
+        content-align: center middle;
+        text-style: bold;
+    }
+    & #topbar_help {
+        width: 15%;
+        content-align: right middle;
+        color: #8f9fc1;
+    }
 }
 
-#metric_graphs_title, #replication_title, #replicas_title, #group_replication_title, #clusterset_title {
+/* --- Dashboard & Replay --- */
+#metric_graphs_title, 
+#replication_title, 
+#replicas_title, 
+#group_replication_title, 
+#clusterset_title {
     color: #bbc8e8;
     text-style: bold;
     width: 100%;
@@ -134,19 +229,35 @@ TopBar {
 #statements_summary_radio_set {
     margin-bottom: 1;
 }
+
+.dashboard {
+    height: auto;
+
+    & > Center {
+        height: auto;
+        layout: horizontal;
+        content-align: center middle;
+
+        & > * {
+            content-align: center top;
+            height: 11;
+            width: auto;
+            padding: 0 1; /* Shorthand padding */
+        }
+    }
+}
+
 .dashboard_replay {
     height: auto;
     width: 65;
     content-align: center middle;
     align: center middle;
 }
+
 #dashboard_replay_progressbar {
     width: 100%;
 
-    & > #bar {
-        width: 65;
-    }
-
+    & > #bar { width: 65; }
     & > #bar > .bar--bar {
         color: #91abec;
         background: #3a3f51;
@@ -163,67 +274,33 @@ TopBar {
     border-top: tall #192033;
     border-bottom: tall #192033;
 }
+
 .replay_button {
     text-style: none;
-    background: #20283b;
+    background: transparent;
     background-tint: transparent;
     border: none;
+    tint: transparent 0%;
 
-    &:hover {
-        background: #20283b;
+    /* Combine hover and focus */
+    &:hover, &:focus {
+        background: transparent;
         color: #91abec;
-        border: none;
         text-style: bold;
-    }
-    &:focus {
-        background: #20283b;
-        color: #91abec;
         border: none;
-        text-style: bold;
+        tint: transparent 0%;
     }
+
     &.-active {
-        background: #20283b;
         color: #5475c7;
-        border: none;
         text-style: bold;
-        tint: #273148 0%;
+        background: transparent;
+        border: none;
+        tint: transparent 0%;
     }
 }
 
-#panel_graphs, #panel_replication {
-    height: auto;
-
-    & Tabs {
-        margin-top: 0;
-    }
-}
-#panel_graphs {
-    & .metric_graph_container, .metric_graph_container2  {
-        height: 19;
-    }
-    & .metric_graph_stats {
-        width: 100%;
-        content-align: center middle;
-    }
-}
-Screen.-maximized-view {
-    height: 100%;
-    & .metric_graph_container, .metric_graph_container2, TabPane {
-        height: 1fr !important;
-    }
-    & Tabs {
-        margin-top: 0;
-    }
-    & DataTable {
-        height: 100% !important;
-        max-height: 100% !important;
-    }
-}
-
-#pfs_metrics_file_io_datatable, #pfs_metrics_table_io_waits_datatable, #proxysql_hostgroup_summary_datatable, #proxysql_mysql_query_rules_datatable {
-    overflow-x: auto;
-}
-
+/* --- Panels (Graphs, Replication, Replicas) --- */
 .panel_container {
     height: auto;
     width: 100%;
@@ -237,29 +314,25 @@ Screen.-maximized-view {
         text-style: bold;
         content-align: center middle;
     }
-
     & #statements_summary_info {
         content-align: left middle;
         margin-left: 1;
     }
 }
 
-.dashboard {
+#panel_graphs, #panel_replication {
     height: auto;
+    & Tabs { margin-top: 0; }
+}
 
-    & > Center {
-        height: auto;
-        layout: horizontal;
+#panel_graphs {
+    & .metric_graph_container, 
+    & .metric_graph_container2  {
+        height: 19;
+    }
+    & .metric_graph_stats {
+        width: 100%;
         content-align: center middle;
-
-        & > * {
-            content-align: center top;
-            height: 11;
-            width: auto;
-            padding-left: 1;
-            padding-right: 1;
-            margin-bottom: 0;
-        }
     }
 }
 
@@ -271,7 +344,6 @@ Screen.-maximized-view {
         width: 100%;
         content-align: center middle;
     }
-
     & > Center {
         height: auto;
         layout: horizontal;
@@ -284,13 +356,8 @@ Screen.-maximized-view {
             height: auto;
             max-height: 18;
         }
-
-        & > .replication_status {
-            max-width: 85;
-        }
-        & > .replication_thread_applier {
-            max-width: 105;
-        }
+        & > .replication_status { max-width: 85; }
+        & > .replication_thread_applier { max-width: 105; }
     }
 }
 
@@ -303,12 +370,13 @@ Screen.-maximized-view {
         layout: grid;
         grid-size: 2;
         grid-gutter: 1 0;
-    }
-    & > Container > ScrollableContainer  {
-        background: #0f1525;
-        border: tall #1b233a;
-        height: auto;
-        max-height: 20;
+        
+        & > ScrollableContainer  {
+            background: #0f1525;
+            border: tall #1b233a;
+            height: auto;
+            max-height: 20;
+        }
     }
     & > Label {
         width: 100%;
@@ -318,38 +386,25 @@ Screen.-maximized-view {
         margin-top: 0;
     }
 }
+
 .group_replication > Container {
     grid-size: 3;
 }
 
-
-TabPane {
-    padding: 0;
-}
+/* --- Tabs --- */
+TabPane { padding: 0; }
 Tabs {
     margin-top: 1;
 
     &:focus {
-        & .-active {
-            background: #0a0e1b;
-        }
-        & .underline--bar {
-            color: #caddfe;
-        }
+        & .-active { background: #0a0e1b; }
+        & .underline--bar { color: #caddfe; }
     }
-
 }
+
 Tab {
-    &:focus {
-        text-style: bold;
-    }
-    &:hover {
-        text-style: bold;
-    }
-    &.-active {
-        text-style: bold;
-    }
-    &.-active:focus {
+    /* Consolidate all bold states */
+    &:focus, &:hover, &.-active, &.-active:focus {
         text-style: bold;
     }
 }
@@ -359,42 +414,23 @@ Underline > .underline--bar {
     color: #82a5e1;
 }
 
-AutoComplete {
-    AutoCompleteList {
-        background: #151926;
-        border-left: wide #384673;
+/* --- Form Controls --- */
 
-        & > .option-list--option-hover {
-            background: #283048;
-            color: #b7c7ee;
-            text-style: bold;
-        }
+TextArea, Input, Select, OptionList {
+    background: transparent;
+    border: heavy #252e49;
+    border-title-color: #bbc5dc;
+    margin: 0 1 0 1;
+    width: 100%;
+
+    &:hover {
+        border: heavy #32416d;
     }
-
-    & .autocomplete--highlight-match {
-        color: #c7d734;
-        background: #384673;
-        text-style: bold;
-    }
-
-    & .option-list--option-highlighted {
-        background: #283048;
-        color: #b7c7ee;
-        text-style: bold;
-    }
-}
-
-Input {
-    width: 40;
-    margin: 0 2;
-    margin-bottom: 1;
-    background: #111322;
-    border: tall #252e49;
 
     &:focus {
+        border: heavy #43548b;
+        border-title-color: #B1C4F2;
         background-tint: transparent;
-        background: #151729;
-        border: tall #43548b;
     }
 
     & > .input--placeholder {
@@ -402,30 +438,50 @@ Input {
     }
 }
 
-.button_container {
-    height: auto;
-    width: 100%;
-    align-horizontal: center;
-}
-.switch_container {
-    align: center top;
-    margin: 1 0 1 0;
-    height: auto;
+SelectCurrent {
+    background: transparent;
+    border: none;
 
-    & > .switch_container > Label {
-        color: #bbc8e8;
-        padding-left: 1;
+    & Static#label { color: #606e88; }
+    &.-has-value Static#label { color: #e9e9e9; }
+}
+
+Select > OptionList {
+    background: #111322;
+    border: round #252e49;
+    width: 100%;
+    height: 15;
+    margin: 0;
+
+    &:focus {
+        margin: 0;
+        height: auto;
+        max-height: 15;
+        background: transparent;
+        border: round #43548b;
+    }
+
+    /* Option States */
+    & > .option-list--option-highlighted {
+        background: #22293e;
+        color: #9babd4;
+        text-style: bold;
+    }
+    & > .option-list--option-hover,
+    & > .option-list--option-hover-highlighted,
+    &:focus > .option-list--option-hover-highlighted {
+        background: #35405f;
+        color: #cbdbfe;
         text-style: bold;
     }
 }
 
-Sparkline {
-    & > .sparkline--max-color {
-        color: #869fd9;
-    }
-    & > .sparkline--min-color {
-        color: #384c7a;
-    }
+/* Buttons */
+.button_container {
+    height: auto;
+    width: 100%;
+    align-horizontal: center;
+    margin-top: 1;
 }
 
 Button {
@@ -436,12 +492,10 @@ Button {
     &:hover {
         background: #383e5c;
         border-top: tall #69709a;
-        border-bottom: tall #171922;
     }
     &:focus {
         background: #383e5c;
         border-top: tall #69709a;
-        border-bottom: tall #171922;
         text-style: bold;
     }
 
@@ -449,16 +503,28 @@ Button {
         background: #192c5b;
         border-top: tall #425894;
         border-bottom: tall #151b2b;
+        
+        &:hover {
+            background: #203875;
+            border-top: tall #4a62a4;
+        }
+        &:focus {
+            background: #203875;
+            border-top: tall #4a62a4;
+            text-style: bold;
+        }
     }
-    &.-primary:hover {
-        background: #203875;
-        border-top: tall #4a62a4;
-        border-bottom: tall #151b2b;
-    }
-    &.-primary:focus {
-        background: #203875;
-        border-top: tall #4a62a4;
-        border-bottom: tall #151b2b;
+}
+
+/* Switches & Toggles */
+.switch_container {
+    align: center top;
+    margin: 1 0;
+    height: auto;
+
+    & > Label {
+        color: #bbc8e8;
+        padding-left: 1;
         text-style: bold;
     }
 }
@@ -467,30 +533,24 @@ Switch {
     background: #0a0e1b;
     border: none #364774;
 
-    &:focus {
-        background-tint: transparent;
-    }
+    &:focus { background-tint: transparent; }
 
     & > .switch--slider {
         color: #424d6f;
         background: #192132;
     }
-
-    &:focus > .switch--slider {
-        color: #fd8383;
-    }
+    /* Combined focus/hover slider states */
+    &:focus > .switch--slider, 
     &:hover > .switch--slider {
         color: #fd8383;
     }
 
-    &.-on > .switch--slider {
-        color: #5c81d7;
-    }
-    &.-on:focus > .switch--slider {
-        color: #54efae;
-    }
-    &.-on:hover > .switch--slider {
-        color: #54efae;
+    &.-on {
+        & > .switch--slider { color: #5c81d7; }
+        &:focus > .switch--slider, 
+        &:hover > .switch--slider { 
+            color: #54efae; 
+        }
     }
 }
 
@@ -512,6 +572,7 @@ RadioSet {
     background: transparent;
     border: none;
     layout: horizontal;
+    width: 100%;
 
     &:focus {
         background-tint: transparent;
@@ -532,6 +593,10 @@ RadioButton {
     margin-right: 2;
     width: auto;
 
+    & > .toggle--label {
+        background: transparent !important;
+    }
+
     & > .toggle--button {
         color: #0f1525;
         background: #343d56;
@@ -539,19 +604,13 @@ RadioButton {
 }
 
 ToggleButton {
-    &:focus {
+    background: transparent !important;
+    &:focus, &:hover {
         background-tint: transparent;
         & > .toggle--label {
             text-style: bold;
             color: #a5b8e7;
-            background: transparent;
-        }
-    }
-    &:hover {
-        & > .toggle--label {
-            text-style: bold;
-            color: #a5b8e7;
-            background: transparent;
+            background: transparent !important;
         }
     }
     &.-on {
@@ -563,100 +622,12 @@ ToggleButton {
         }
     }
 }
-
-Toast {
-    width: auto;
-    max-width: 50%;
-    background: #20283e;
-
-    &.-information {
-        border-left: wide #788bc9;
-        border-right: wide #192036;
-    }
-    &.-warning {
-        border-left: wide #f0e357;
-        border-right: wide #192036;
-    }
-    &.-success {
-        border-left: wide #5bd088;
-        border-right: wide #192036;
-    }
-    &.-success .toast--title {
-        color: #6ae398;
-    }
-    &.-error {
-        border-left: wide #f05757;
-        border-right: wide #192036;
-    }
-    &.-error .toast--title {
-        color: #ed6363;
-    }
+/* Sparklines */
+Sparkline {
+    margin: 1 0;
+    & > .sparkline--max-color { color: #869fd9; }
+    & > .sparkline--min-color { color: #384c7a; }
 }
 
-Select {
-    margin: 0 2;
-    margin-bottom: 1;
-    width: 100%;
-
-    & > SelectOverlay {
-        background: #111322;
-
-        &:focus {
-            background-tint: transparent;
-        }
-    }
-
-    &:focus > SelectCurrent {
-        border: tall #43548b;
-        background-tint: transparent;
-        background: #151729;
-    }
-}
-
-SelectCurrent {
-    background: #111322;
-    border: tall #252e49;
-
-    & Static#label {
-        color: #606e88;
-    }
-
-    &.-has-value Static#label {
-        color: #e9e9e9;
-    }
-}
-
-Select > OptionList {
-    background: #111322;
-    border: tall #252e49;
-    width: 100%;
-    height: 15;
-    margin: 0 1 0 1;
-
-    &:focus {
-        margin: 0;
-        height: auto;
-        max-height: 15;
-        border: tall #3c476b;
-    }
-
-    & > .option-list--option-highlighted {
-        text-style: bold;
-        background: #131626;
-    }
-    &:focus > .option-list--option-highlighted {
-        text-style: bold;
-        background: #283048;
-    }
-    & > .option-list--option-hover {
-        background: #21283c;
-    }
-    & > .option-list--option-hover-highlighted {
-        background: #21283c;
-        text-style: none;
-    }
-    &:focus > .option-list--option-hover-highlighted {
-        background: #21283c;
-        text-style: none;
-    }
-}
+.pad_top_1 { margin-top: 1; }
+.pad_bottom_1 { margin-bottom: 1; }

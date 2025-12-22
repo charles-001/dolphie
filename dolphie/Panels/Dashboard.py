@@ -40,10 +40,7 @@ def create_panel(tab: Tab) -> Table:
     elif dolphie.galera_cluster:
         host_type = "Galera Cluster"
     else:
-        if dolphie.connection_source_alt == ConnectionSource.mariadb:
-            host_type = "MariaDB"
-        else:
-            host_type = "MySQL"
+        host_type = "MariaDB" if dolphie.connection_source_alt == ConnectionSource.mariadb else "MySQL"
 
     replicas = (
         len(dolphie.replica_manager.available_replicas)
@@ -80,7 +77,7 @@ def create_panel(tab: Tab) -> Table:
         f"[highlight]/[/highlight][label]opened[/label] {format_number(global_status['Opened_tables'])}",
     )
     if not dolphie.replay_file:
-        runtime = str(datetime.now() - dolphie.dolphie_start_time).split(".")[0]
+        runtime = str(datetime.now().astimezone() - dolphie.dolphie_start_time).split(".")[0]
         table_information.add_row(
             "[label]Runtime",
             f"{runtime} [label]Latency[/label] {round(dolphie.worker_processing_time, 2)}s",
@@ -172,7 +169,7 @@ def create_panel(tab: Tab) -> Table:
         show_header=False, box=None, title="Binary Log", title_style=table_title_style
     )
 
-    if global_variables.get("log_bin") == "OFF" or not binlog_status.get("File"):
+    if global_variables.get("log_bin") == "OFF" or not binlog_status or not binlog_status.get("File"):
         tab.dashboard_section_3.display = False
     else:
         tab.dashboard_section_3.display = True

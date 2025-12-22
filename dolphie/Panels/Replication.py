@@ -216,10 +216,7 @@ def create_panel(tab: Tab):
                 last_error_time = row.get(
                     "applying_transaction_last_transient_error_timestamp", "N/A"
                 )
-                if last_error_time == "0000-00-00 00:00:00.000000":
-                    last_error_time = ""
-                else:
-                    last_error_time = str(last_error_time)
+                last_error_time = "" if last_error_time == "0000-00-00 00:00:00.000000" else str(last_error_time)
 
                 # Calculate the usage percentage for each worker for the current poll
                 usage_percentage = (
@@ -605,10 +602,7 @@ def create_replication_table(
                 table.add_row("[label]Errant TRX", errant_trx)
 
                 # If this replica has replicas, use its primary server UUID, else use its own server UUID
-                if replica_primary_server_uuid:
-                    primary_uuid = replica_primary_server_uuid
-                else:
-                    primary_uuid = dolphie.server_uuid
+                primary_uuid = replica_primary_server_uuid or dolphie.server_uuid
 
             def color_gtid_set(match):
                 source_id = match.group(1)
@@ -644,10 +638,7 @@ def create_replication_table(
                     replica_primary_server_id = dolphie.replication_status.get(
                         "Master_Server_Id"
                     )
-                    if replica_primary_server_id:
-                        primary_id = replica_primary_server_id
-                    else:
-                        primary_id = dolphie.global_variables.get("server_id")
+                    primary_id = replica_primary_server_id or dolphie.global_variables.get("server_id")
 
                 gtids = gtid_io_pos.split(",")
                 for idx, gtid in enumerate(gtids):
@@ -687,10 +678,7 @@ def create_group_replication_member_table(tab: Tab):
             member_role = f"[b][highlight]{member_role}[/highlight]"
 
         member_state = row.get("MEMBER_STATE", "N/A")
-        if member_state == "ONLINE":
-            member_state = f"[green]{member_state}[/green]"
-        else:
-            member_state = f"[red]{member_state}[/red]"
+        member_state = f"[green]{member_state}[/green]" if member_state == "ONLINE" else f"[red]{member_state}[/red]"
 
         table = Table(box=None, show_header=False)
         table.add_column()
@@ -845,7 +833,7 @@ def fetch_replicas(tab: Tab):
                             assigned_port = port
 
                             break
-                        except (socket.timeout, socket.error, ConnectionRefusedError):
+                        except (TimeoutError, OSError, ConnectionRefusedError):
                             continue  # Continue to the next available port
                         finally:
                             sock.close()

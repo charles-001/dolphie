@@ -51,8 +51,8 @@ def create_panel(tab: Tab) -> DataTable:
         if row_id in command_stats.rows:
             datatable_row = command_stats.get_row(row_id)
 
-            for column_id, (column_key, column_name, column_format) in enumerate(
-                zip(column_keys, column_names, column_formats)
+            for column_id, (column_key, _column_name, column_format) in enumerate(
+                zip(column_keys, column_names, column_formats, strict=False)
             ):
                 column_value = row.get(column_key)
 
@@ -87,8 +87,8 @@ def create_panel(tab: Tab) -> DataTable:
         else:
             row_values = []
 
-            for column_id, (column_key, column_name, column_format) in enumerate(
-                zip(column_keys, column_names, column_formats)
+            for column_id, (column_key, _column_name, column_format) in enumerate(
+                zip(column_keys, column_names, column_formats, strict=False)
             ):
                 column_value = row.get(column_key)
 

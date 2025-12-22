@@ -1,4 +1,3 @@
-from typing import Dict
 
 from rich.syntax import Syntax
 from textual.widgets import DataTable
@@ -58,7 +57,7 @@ def create_panel(tab: Tab) -> DataTable:
         column_names.append(column_data["name"])
         column_fields.append(column_data["field"])
 
-    threads_to_render: Dict[str, ProxySQLProcesslistThread] = {}
+    threads_to_render: dict[str, ProxySQLProcesslistThread] = {}
     if dolphie.replay_file:
         for thread_id, thread in dolphie.processlist_threads.items():
             thread: ProxySQLProcesslistThread
@@ -101,7 +100,7 @@ def create_panel(tab: Tab) -> DataTable:
             datatable_row = processlist_datatable.get_row(thread_id)
 
             for column_id, (column_name, column_field) in enumerate(
-                zip(column_names, column_fields)
+                zip(column_names, column_fields, strict=False)
             ):
                 column_value = getattr(thread, column_field)
 
@@ -137,7 +136,7 @@ def create_panel(tab: Tab) -> DataTable:
             row_values = []
 
             for column_id, (column_name, column_field) in enumerate(
-                zip(column_names, column_fields)
+                zip(column_names, column_fields, strict=False)
             ):
                 column_value = getattr(thread, column_field)
 
@@ -178,7 +177,7 @@ def create_panel(tab: Tab) -> DataTable:
     )
 
 
-def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
+def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
     dolphie = tab.dolphie
 
     ########################

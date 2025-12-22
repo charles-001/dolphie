@@ -156,7 +156,7 @@ class ThreadScreen(Screen):
         self.explain_json_text_area = TextArea(theme="dracula", show_line_numbers=True, read_only=True)
 
     def copy_to_clipboard(self, text: str, content_type: str = "content"):
-        """Copy text to clipboard and show notification"""
+        """Copy text to clipboard and show notification."""
         try:
             self.app.copy_to_clipboard(text)
             self.notify(f"Copied {content_type} to clipboard!", severity="information")
@@ -164,14 +164,14 @@ class ThreadScreen(Screen):
             self.notify(f"Failed to copy {content_type} to clipboard: {e}", severity="error")
 
     def action_copy_query(self) -> None:
-        """Action to copy the query via keyboard shortcut"""
+        """Action to copy the query via keyboard shortcut."""
         if self.formatted_query:
             self.copy_to_clipboard(self.formatted_query.code, "query")
         else:
             self.notify("No query to copy", severity="warning")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button press events"""
+        """Handle button press events."""
         if event.button.id == "copy_query_btn":
             if self.formatted_query:
                 self.copy_to_clipboard(self.formatted_query.code, "query")
@@ -263,8 +263,7 @@ class ThreadScreen(Screen):
             # Only create the horizontal container if there are buttons to show
             if copy_buttons:
                 with Horizontal(classes="button_container copy-buttons"):
-                    for button in copy_buttons:
-                        yield button
+                    yield from copy_buttons
 
             yield Label("Query", classes="title")
             yield Center(Static(id="query", shrink=True, classes="table"))

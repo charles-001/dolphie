@@ -1,6 +1,5 @@
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Union
 
 import pymysql
 from rich.table import Table
@@ -34,15 +33,15 @@ class Replica:
     connection: pymysql.Connection = None
     connection_source_alt: ConnectionSource = None
     table: Table = None
-    replication_status: Dict[str, Union[str, int]] = field(default_factory=dict)
+    replication_status: dict[str, str | int] = field(default_factory=dict)
     mysql_version: str = None
 
 
 class ReplicaManager:
     def __init__(self):
-        self.available_replicas: List[Dict[str, str]] = []
-        self.replicas: Dict[str, Replica] = {}
-        self.ports: Dict[str, Dict[str, Union[str, bool]]] = {}
+        self.available_replicas: list[dict[str, str]] = []
+        self.replicas: dict[str, Replica] = {}
+        self.ports: dict[str, dict[str, str | bool]] = {}
 
     # This is mainly for MariaDB since it doesn't have a way to map a replica in processlist to a specific port
     # Instead of using the thread_id as key, we use the host and port to create a unique row key
@@ -70,7 +69,7 @@ class ReplicaManager:
 
             self.replicas = {}
 
-    def get_sorted_replicas(self) -> List[Replica]:
+    def get_sorted_replicas(self) -> list[Replica]:
         return sorted(self.replicas.values(), key=lambda x: x.host)
 
 
@@ -99,7 +98,7 @@ class Panels:
         )
         self.proxysql_command_stats = Panel("proxysql_command_stats", "Command Stats", "⁶", daemon_supported=False)
 
-    def validate_panels(self, panel_list_str: Union[str, List[str]], valid_panel_names: List[str]) -> List[str]:
+    def validate_panels(self, panel_list_str: str | list[str], valid_panel_names: list[str]) -> list[str]:
         panels = panel_list_str.split(",") if isinstance(panel_list_str, str) else panel_list_str
 
         invalid_panels = [panel for panel in panels if panel not in valid_panel_names]
@@ -113,10 +112,10 @@ class Panels:
     def get_panel(self, panel_name: str) -> Panel:
         return self.__dict__.get(panel_name, None)
 
-    def get_all_daemon_panel_names(self) -> List[str]:
+    def get_all_daemon_panel_names(self) -> list[str]:
         return [panel.name for panel in self.__dict__.values() if isinstance(panel, Panel) and panel.daemon_supported]
 
-    def get_all_panels(self) -> List[Panel]:
+    def get_all_panels(self) -> list[Panel]:
         return [panel for panel in self.__dict__.values() if isinstance(panel, Panel)]
 
     def get_key(self, panel_name: str) -> str:
@@ -127,7 +126,7 @@ class Panels:
         panel = self.get_panel(panel_name)
         return f"[$b_highlight]{panel.key}[/$b_highlight]{panel.display_name}"
 
-    def all(self) -> List[str]:
+    def all(self) -> list[str]:
         return [
             panel.name
             for name, panel in self.__dict__.items()
@@ -136,7 +135,7 @@ class Panels:
 
 
 class ProcesslistThread:
-    def __init__(self, thread_data: Dict[str, str]):
+    def __init__(self, thread_data: dict[str, str]):
         self.thread_data = thread_data
 
         self.id = str(thread_data.get("id", ""))
@@ -198,7 +197,7 @@ class ProcesslistThread:
 
 
 class ProxySQLProcesslistThread:
-    def __init__(self, thread_data: Dict[str, str]):
+    def __init__(self, thread_data: dict[str, str]):
         self.thread_data = thread_data
 
         self.id = str(thread_data.get("id", ""))

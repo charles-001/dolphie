@@ -110,10 +110,10 @@ def create_panel(tab: Tab):
     ):
         datatable.display = False
         tab.statements_summary_title.update(
-            (
+
                 f"{tab.dolphie.panels.get_panel_title(tab.dolphie.panels.statements_summary.name)} "
                 f"([$highlight]0[/$highlight])"
-            )
+
         )
 
         return
@@ -169,7 +169,7 @@ def create_panel(tab: Tab):
                     column_name,
                     column_field,
                     column_format_number,
-                ) in enumerate(zip(column_names, column_fields, column_format_numbers)):
+                ) in enumerate(zip(column_names, column_fields, column_format_numbers, strict=False)):
                     column_value = metrics.get(column_field, {})
 
                     if isinstance(column_value, dict):
@@ -185,9 +185,7 @@ def create_panel(tab: Tab):
                         column_value = column_value or "[dark_gray]N/A"
                     elif column_format_number:
                         column_value = format_number(column_value)
-                    elif column_name in ("Latency", "Lock time", "CPU time"):
-                        column_value = format_picoseconds(column_value)
-                    elif column_name in ["95th %", "99th %"]:
+                    elif column_name in ("Latency", "Lock time", "CPU time") or column_name in ["95th %", "99th %"]:
                         column_value = format_picoseconds(column_value)
 
                     if column_name != "latency_total" and (
@@ -221,7 +219,7 @@ def create_panel(tab: Tab):
                     column_name,
                     column_field,
                     column_format_number,
-                ) in enumerate(zip(column_names, column_fields, column_format_numbers)):
+                ) in enumerate(zip(column_names, column_fields, column_format_numbers, strict=False)):
                     column_value = metrics.get(column_field, {})
 
                     if isinstance(column_value, dict):
@@ -237,9 +235,7 @@ def create_panel(tab: Tab):
                         column_value = column_value or "[dark_gray]N/A"
                     elif column_format_number:
                         column_value = format_number(column_value)
-                    elif column_name in ("Latency", "Lock time", "CPU time"):
-                        column_value = format_picoseconds(column_value)
-                    elif column_name in ["95th %", "99th %"]:
+                    elif column_name in ("Latency", "Lock time", "CPU time") or column_name in ["95th %", "99th %"]:
                         column_value = format_picoseconds(column_value)
 
                     if column_name != "latency_total" and (

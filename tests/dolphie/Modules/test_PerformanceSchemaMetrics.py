@@ -4,7 +4,7 @@ from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 
 
 @pytest.mark.parametrize(
-    "initial_data, new_data_1, new_data_2, expected_internal_data, expected_filtered_data",
+    ("initial_data", "new_data_1", "new_data_2", "expected_internal_data", "expected_filtered_data"),
     [
         (
                 [  # Initial data

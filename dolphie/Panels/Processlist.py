@@ -1,4 +1,3 @@
-from typing import Dict
 
 from rich.syntax import Syntax
 from textual.widgets import DataTable
@@ -144,7 +143,7 @@ def create_panel(tab: Tab) -> DataTable:
         column_fields.append(column_data["field"])
         column_format_numbers.append(column_data["format_number"])
 
-    threads_to_render: Dict[str, ProcesslistThread] = {}
+    threads_to_render: dict[str, ProcesslistThread] = {}
     # We use filter here for replays since the original way requires changing WHERE clause
     if dolphie.replay_file:
         for thread_id, thread in dolphie.processlist_threads.items():
@@ -194,7 +193,7 @@ def create_panel(tab: Tab) -> DataTable:
                 column_name,
                 column_field,
                 column_format_number,
-            ) in enumerate(zip(column_names, column_fields, column_format_numbers)):
+            ) in enumerate(zip(column_names, column_fields, column_format_numbers, strict=False)):
                 column_value = getattr(thread, column_field)
                 thread_value = (
                     format_number(column_value)
@@ -230,7 +229,7 @@ def create_panel(tab: Tab) -> DataTable:
         else:
             row_values = []
             for column_field, column_format_number in zip(
-                column_fields, column_format_numbers
+                column_fields, column_format_numbers, strict=False
             ):
                 column_value = getattr(thread, column_field)
                 thread_value = (
@@ -276,7 +275,7 @@ def create_panel(tab: Tab) -> DataTable:
     tab.processlist_title.update(title)
 
 
-def fetch_data(tab: Tab) -> Dict[str, ProcesslistThread]:
+def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
     dolphie = tab.dolphie
 
     # Determine query and column names based on whether performance_schema is used

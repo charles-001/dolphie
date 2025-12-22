@@ -4,12 +4,10 @@ import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any
 
 import orjson
 import zstandard as zstd
-from loguru import logger
-
 from dolphie.DataTypes import (
     ConnectionSource,
     ProcesslistThread,
@@ -19,6 +17,7 @@ from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
+from loguru import logger
 
 
 @dataclass
@@ -55,9 +54,7 @@ class ProxySQLReplayData:
 
 
 class ReplayManager:
-    """
-    ReplayManager class for capturing and replaying Dolphie instance states.
-    """
+    """ReplayManager class for capturing and replaying Dolphie instance states."""
 
     # Constants
     PURGE_CHECK_INTERVAL_HOURS = 1
@@ -66,8 +63,7 @@ class ReplayManager:
     COMPRESSION_DICT_SAMPLES = 10
 
     def __init__(self, dolphie: Dolphie):
-        """
-        Initializes the ReplayManager with Dolphie instance and SQLite database settings.
+        """Initializes the ReplayManager with Dolphie instance and SQLite database settings.
 
         Args:
             dolphie: The Dolphie instance.
@@ -79,22 +75,18 @@ class ReplayManager:
         self.current_replay_id: int = 0  # This is used to keep track of the last primary key read from the database
         self.min_replay_id: int = 0
         self.max_replay_id: int = 0
-        self.current_replay_timestamp: str = (
-            None  # Only used for dashboard replay section
-        )
+        self.current_replay_timestamp: str = None  # Only used for dashboard replay section
         self.min_replay_timestamp: str = None
         self.max_replay_timestamp: str = None
         self.total_replay_rows: int = 0
-        self.replay_metadata_cache_valid: bool = (
-            False  # Track if cached metadata needs updating
-        )
-        self.last_purge_time = datetime.now() - timedelta(
+        self.replay_metadata_cache_valid: bool = False  # Track if cached metadata needs updating
+        self.last_purge_time = datetime.now().astimezone() - timedelta(
             hours=self.PURGE_CHECK_INTERVAL_HOURS
         )  # Initialize to an hour ago
         self.replay_file_size: int = 0
         self.compression_dict: zstd.ZstdCompressionDict = None
-        self.dict_samples: List[bytes] = []
-        self.global_variable_change_ids: List[int] = []
+        self.dict_samples: list[bytes] = []
+        self.global_variable_change_ids: list[int] = []
 
         # Determine filename used for replay file
         hostname = f"{dolphie.host}_{dolphie.port}"
@@ -103,7 +95,8 @@ class ReplayManager:
         elif dolphie.daemon_mode:
             self.replay_file = f"{dolphie.replay_dir}/{hostname}/daemon.db"
         elif dolphie.record_for_replay:
-            self.replay_file = f"{dolphie.replay_dir}/{hostname}/{datetime.now().strftime('%Y_%m_%d_%H_%M_%S')}.db"
+            timestamp = datetime.now().astimezone().strftime("%Y_%m_%d_%H_%M_%S")
+            self.replay_file = f"{dolphie.replay_dir}/{hostname}/{timestamp}.db"
             dolphie.app.notify(
                 f"File: [$highlight]{self.replay_file}[/$highlight]",
                 title="Recording data",
@@ -114,39 +107,28 @@ class ReplayManager:
             return
 
         os.makedirs(os.path.dirname(self.replay_file), mode=0o770, exist_ok=True)
-        logger.info(
-            f"Replay SQLite file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)"
-        )
+        logger.info(f"Replay SQLite file: {self.replay_file} ({self.dolphie.replay_retention_hours} hours retention)")
 
         self._initialize_sqlite()
         self._manage_metadata()
 
     def _begin_transaction(self) -> None:
-        """
-        Begins an immediate transaction for write operations.
-        """
+        """Begins an immediate transaction for write operations."""
         with closing(self.connection.cursor()) as cursor:
             cursor.execute("BEGIN IMMEDIATE")
 
     def _commit_transaction(self) -> None:
-        """
-        Commits the current transaction.
-        """
+        """Commits the current transaction."""
         with closing(self.connection.cursor()) as cursor:
             cursor.execute("COMMIT")
 
     def _rollback_transaction(self) -> None:
-        """
-        Rolls back the current transaction.
-        """
+        """Rolls back the current transaction."""
         with closing(self.connection.cursor()) as cursor:
             cursor.execute("ROLLBACK")
 
-    def _execute_select_one(
-        self, query: str, params: Tuple[Any, ...] = ()
-    ) -> Optional[Tuple[Any, ...]]:
-        """
-        Executes a SELECT query and returns a single row.
+    def _execute_select_one(self, query: str, params: tuple[Any, ...] = ()) -> tuple[Any, ...] | None:
+        """Executes a SELECT query and returns a single row.
 
         Args:
             query: The SQL SELECT query to execute.
@@ -171,11 +153,8 @@ class ReplayManager:
             )
             raise
 
-    def _execute_select_all(
-        self, query: str, params: Tuple[Any, ...] = ()
-    ) -> List[Tuple[Any, ...]]:
-        """
-        Executes a SELECT query and returns all rows.
+    def _execute_select_all(self, query: str, params: tuple[Any, ...] = ()) -> list[tuple[Any, ...]]:
+        """Executes a SELECT query and returns all rows.
 
         Args:
             query: The SQL SELECT query to execute.
@@ -200,9 +179,8 @@ class ReplayManager:
             )
             raise
 
-    def _execute_insert(self, query: str, params: Tuple[Any, ...] = ()) -> int:
-        """
-        Executes an INSERT query and returns the last inserted row ID.
+    def _execute_insert(self, query: str, params: tuple[Any, ...] = ()) -> int:
+        """Executes an INSERT query and returns the last inserted row ID.
 
         Args:
             query: The SQL INSERT query to execute.
@@ -227,9 +205,8 @@ class ReplayManager:
             )
             raise
 
-    def _execute_modify(self, query: str, params: Tuple[Any, ...] = ()) -> int:
-        """
-        Executes an UPDATE or DELETE query and returns the number of affected rows.
+    def _execute_modify(self, query: str, params: tuple[Any, ...] = ()) -> int:
+        """Executes an UPDATE or DELETE query and returns the number of affected rows.
 
         Args:
             query: The SQL UPDATE or DELETE query to execute.
@@ -254,9 +231,8 @@ class ReplayManager:
             )
             raise
 
-    def _execute_many(self, query: str, params: List[Tuple[Any, ...]]) -> int:
-        """
-        Executes a batch of queries and returns the number of affected rows.
+    def _execute_many(self, query: str, params: list[tuple[Any, ...]]) -> int:
+        """Executes a batch of queries and returns the number of affected rows.
 
         Args:
             query: The SQL query to execute.
@@ -282,14 +258,10 @@ class ReplayManager:
             raise
 
     def _initialize_sqlite(self):
-        """
-        Initializes the SQLite database and creates the necessary tables.
-        """
-        database_exists = True if os.path.exists(self.replay_file) else False
+        """Initializes the SQLite database and creates the necessary tables."""
+        database_exists = bool(os.path.exists(self.replay_file))
 
-        self.connection = sqlite3.connect(
-            self.replay_file, isolation_level=None, check_same_thread=False
-        )
+        self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
 
         # Lock down the permissions of the replay file
         os.chmod(self.replay_file, 0o660)
@@ -308,9 +280,7 @@ class ReplayManager:
                 data BLOB
             )"""
         )
-        self._execute_modify(
-            "CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)"
-        )
+        self._execute_modify("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
 
         # Create metadata table if it doesn't exist
         self._execute_modify(
@@ -354,30 +324,23 @@ class ReplayManager:
         self.purge_old_data()
 
     def purge_old_data(self):
-        """
-        Purges data older than the retention period specified by hours_of_retention.
+        """Purges data older than the retention period specified by hours_of_retention.
         Only runs if at least an hour has passed since the last purge.
         """
         # Don't purge when not recording, or when loading a replay file (read-only mode)
         if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
-        current_time = datetime.now()
-        if (current_time - self.last_purge_time) < timedelta(
-            hours=self.PURGE_CHECK_INTERVAL_HOURS
-        ):
+        current_time = datetime.now().astimezone()
+        if (current_time - self.last_purge_time) < timedelta(hours=self.PURGE_CHECK_INTERVAL_HOURS):
             return  # Skip purging if less than an hour has passed
 
-        retention_date = (
-            current_time - timedelta(hours=self.dolphie.replay_retention_hours)
-        ).strftime("%Y-%m-%d %H:%M:%S")
+        retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
 
-        rows_deleted = self._execute_modify(
-            "DELETE FROM replay_data WHERE timestamp < ?", (retention_date,)
-        )
-        self._execute_modify(
-            "DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,)
-        )
+        rows_deleted = self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
+        self._execute_modify("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
 
         # Invalidate cache if rows were deleted
         if rows_deleted and rows_deleted > 0:
@@ -386,8 +349,7 @@ class ReplayManager:
         self.last_purge_time = current_time
 
     def seek_to_timestamp(self, timestamp: str):
-        """
-        Seeks to the specified timestamp in the SQLite database.
+        """Seeks to the specified timestamp in the SQLite database.
 
         Args:
             timestamp: The timestamp to seek to.
@@ -441,9 +403,7 @@ class ReplayManager:
         self._manage_metadata()
 
     def _manage_metadata(self):
-        """
-        Manages the metadata table with information we care about.
-        """
+        """Manages the metadata table with information we care about."""
         # Don't manage metadata when not recording, or when loading a replay file (read-only mode)
         if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
@@ -464,18 +424,17 @@ class ReplayManager:
             )
         else:
             schema_version = row[0]
-            if self.dolphie.daemon_mode:
-                if schema_version != self.schema_version:
-                    new_replay_file = f"{self.replay_file}_old_schema_v{schema_version}"
-                    logger.warning(
-                        f"The schema version of the replay file ({schema_version}) differs from this version "
-                        f"of Dolphie's schema version ({self.schema_version}). To avoid potential issues, the "
-                        f"replay file will be renamed and a new one will be created"
-                    )
+            if self.dolphie.daemon_mode and schema_version != self.schema_version:
+                new_replay_file = f"{self.replay_file}_old_schema_v{schema_version}"
+                logger.warning(
+                    f"The schema version of the replay file ({schema_version}) differs from this version "
+                    f"of Dolphie's schema version ({self.schema_version}). To avoid potential issues, the "
+                    f"replay file will be renamed and a new one will be created"
+                )
 
-                    self._create_new_replay_file(new_replay_file)
+                self._create_new_replay_file(new_replay_file)
 
-                    return
+                return
 
             connection_source = row[4]
             if self.dolphie.daemon_mode:
@@ -507,29 +466,21 @@ class ReplayManager:
                 )
 
     def verify_replay_file(self):
-        """
-        Verifies that the replay file has data to replay and that the schema version matches.
-        """
+        """Verifies that the replay file has data to replay and that the schema version matches."""
         if not self.dolphie.replay_file:
             return
 
-        if not self._get_replay_file_metadata() or not self._verify_replay_has_data():
-            return False
-
-        return True
+        return not (not self._get_replay_file_metadata() or not self._verify_replay_has_data())
 
     def _get_replay_file_metadata(self):
-        """
-        Retrieves the replay's metadata from the metadata table.
+        """Retrieves the replay's metadata from the metadata table.
 
         Returns:
             bool: True if metadata is found and schema matches; False otherwise.
         """
         row = self._execute_select_one("SELECT * FROM metadata")
         if not row:
-            self._notify_error(
-                "Metadata not found in replay file", "Error reading replay file"
-            )
+            self._notify_error("Metadata not found in replay file", "Error reading replay file")
             return False
 
         schema_version = row[0]
@@ -555,8 +506,7 @@ class ReplayManager:
         return True
 
     def _verify_replay_has_data(self):
-        """
-        Verifies that the replay file has data to replay.
+        """Verifies that the replay file has data to replay.
 
         Returns:
             bool: True if data is found, False if not.
@@ -569,9 +519,7 @@ class ReplayManager:
         return True
 
     def _notify_error(self, message, title):
-        """
-        Helper method to display error notifications.
-        """
+        """Helper method to display error notifications."""
         self.dolphie.app.notify(
             f"[b]Replay file[/b]: [$highlight]{self.replay_file}[/$highlight]\n{message}",
             title=title,
@@ -580,8 +528,7 @@ class ReplayManager:
         )
 
     def _train_compression_dict(self) -> bytes:
-        """
-        Creates a compression dictionary based on sample data to help with better compression.
+        """Creates a compression dictionary based on sample data to help with better compression.
 
         Returns:
             bytes: The created compression dictionary.
@@ -596,15 +543,12 @@ class ReplayManager:
         )
 
         # Store the compression dictionary in the metadata table to be used with decompression
-        self._execute_modify(
-            "UPDATE metadata SET compression_dict = ?", (compression_dict.as_bytes(),)
-        )
+        self._execute_modify("UPDATE metadata SET compression_dict = ?", (compression_dict.as_bytes(),))
 
         return compression_dict
 
     def _compress_data(self, data: str) -> bytes:
-        """
-        Compresses data using zstd with an optional compression dictionary.
+        """Compresses data using zstd with an optional compression dictionary.
 
         Args:
             data (str): Data to compress.
@@ -613,16 +557,12 @@ class ReplayManager:
         Returns:
             bytes: Compressed data.
         """
-
-        compressor = zstd.ZstdCompressor(
-            level=self.COMPRESSION_LEVEL, dict_data=self.compression_dict
-        )
+        compressor = zstd.ZstdCompressor(level=self.COMPRESSION_LEVEL, dict_data=self.compression_dict)
 
         return compressor.compress(data)
 
     def _decompress_data(self, compressed_data: bytes) -> bytes:
-        """
-        Decompresses data using zstd.
+        """Decompresses data using zstd.
 
         Args:
             compressed_data (bytes): Compressed data.
@@ -630,14 +570,12 @@ class ReplayManager:
         Returns:
             str: Decompressed data.
         """
-
         decompressor = zstd.ZstdDecompressor(dict_data=self.compression_dict)
 
         return decompressor.decompress(compressed_data)
 
     def _condition_metrics(self, metric_manager: MetricManager.MetricManager):
-        """
-        Captures the metrics from the metric manager and returns them in a structured format.
+        """Captures the metrics from the metric manager and returns them in a structured format.
 
         Args:
             metric_manager: The metric manager to capture metrics from.
@@ -660,8 +598,7 @@ class ReplayManager:
                     continue
             elif (
                 self.dolphie.connection_source == ConnectionSource.proxysql
-                and ConnectionSource.proxysql
-                not in metric_instance_data.connection_source
+                and ConnectionSource.proxysql not in metric_instance_data.connection_source
             ):
                 continue
 
@@ -677,24 +614,18 @@ class ReplayManager:
         return metrics
 
     def _prepare_processlist(self) -> list:
-        """
-        Prepares the processlist data by extracting thread data and minifying queries.
+        """Prepares the processlist data by extracting thread data and minifying queries.
 
         Returns:
             list: A list of processlist thread dictionaries with minified queries.
         """
         return [
-            {**thread_data, "query": minify_query(thread_data["query"])}
-            if "query" in thread_data
-            else thread_data
-            for thread_data in (
-                v.thread_data for v in self.dolphie.processlist_threads.values()
-            )
+            {**thread_data, "query": minify_query(thread_data["query"])} if "query" in thread_data else thread_data
+            for thread_data in (v.thread_data for v in self.dolphie.processlist_threads.values())
         ]
 
     def _build_base_data_dict(self, processlist: list) -> dict:
-        """
-        Builds the base data dictionary with common data for all connection sources.
+        """Builds the base data dictionary with common data for all connection sources.
 
         Args:
             processlist: The prepared processlist data.
@@ -709,9 +640,7 @@ class ReplayManager:
             "metric_manager": self._condition_metrics(self.dolphie.metric_manager),
         }
 
-        data_dict["global_status"]["replay_polling_latency"] = (
-            self.dolphie.worker_processing_time
-        )
+        data_dict["global_status"]["replay_polling_latency"] = self.dolphie.worker_processing_time
 
         if self.dolphie.system_utilization:
             data_dict["system_utilization"] = self.dolphie.system_utilization
@@ -719,8 +648,7 @@ class ReplayManager:
         return data_dict
 
     def _add_mysql_specific_data(self, data_dict: dict) -> None:
-        """
-        Adds MySQL-specific data to the data dictionary.
+        """Adds MySQL-specific data to the data dictionary.
 
         Args:
             data_dict: The data dictionary to update.
@@ -728,16 +656,9 @@ class ReplayManager:
         # Remove some global status variables that are not useful for replaying
         keys_to_remove = [
             var_name
-            for var_name in self.dolphie.global_status.keys()
+            for var_name in self.dolphie.global_status
             if any(
-                exclude_var in var_name.lower()
-                for exclude_var in [
-                    "performance_schema",
-                    "mysqlx",
-                    "ssl",
-                    "rsa",
-                    "tls",
-                ]
+                exclude_var in var_name.lower() for exclude_var in ["performance_schema", "mysqlx", "ssl", "rsa", "tls"]
             )
         ]
 
@@ -745,10 +666,12 @@ class ReplayManager:
             self.dolphie.global_status.pop(key)
 
         # Add the replay_pfs_metrics_last_reset_time to the global status dictionary
-        data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
-            datetime.now().timestamp()
-            - self.dolphie.pfs_metrics_last_reset_time.timestamp()
-        )
+        if self.dolphie.pfs_metrics_last_reset_time:
+            data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
+                datetime.now().astimezone().timestamp() - self.dolphie.pfs_metrics_last_reset_time.timestamp()
+            )
+        else:
+            data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = 0
 
         # Add MySQL specific data to the dictionary
         data_dict.update(
@@ -763,14 +686,10 @@ class ReplayManager:
             data_dict["replication_status"] = self.dolphie.replication_status
 
         if self.dolphie.replication_applier_status:
-            data_dict["replication_applier_status"] = (
-                self.dolphie.replication_applier_status
-            )
+            data_dict["replication_applier_status"] = self.dolphie.replication_applier_status
 
         if self.dolphie.replica_manager.available_replicas:
-            data_dict["replica_manager"] = (
-                self.dolphie.replica_manager.available_replicas
-            )
+            data_dict["replica_manager"] = self.dolphie.replica_manager.available_replicas
 
         if self.dolphie.group_replication or self.dolphie.innodb_cluster:
             data_dict.update(
@@ -783,25 +702,14 @@ class ReplayManager:
         if self.dolphie.file_io_data and self.dolphie.file_io_data.filtered_data:
             data_dict["file_io_data"] = self.dolphie.file_io_data.filtered_data
 
-        if (
-            self.dolphie.table_io_waits_data
-            and self.dolphie.table_io_waits_data.filtered_data
-        ):
-            data_dict["table_io_waits_data"] = (
-                self.dolphie.table_io_waits_data.filtered_data
-            )
+        if self.dolphie.table_io_waits_data and self.dolphie.table_io_waits_data.filtered_data:
+            data_dict["table_io_waits_data"] = self.dolphie.table_io_waits_data.filtered_data
 
-        if (
-            self.dolphie.statements_summary_data
-            and self.dolphie.statements_summary_data.filtered_data
-        ):
-            data_dict["statements_summary_data"] = (
-                self.dolphie.statements_summary_data.filtered_data
-            )
+        if self.dolphie.statements_summary_data and self.dolphie.statements_summary_data.filtered_data:
+            data_dict["statements_summary_data"] = self.dolphie.statements_summary_data.filtered_data
 
     def _add_proxysql_specific_data(self, data_dict: dict) -> None:
-        """
-        Adds ProxySQL-specific data to the data dictionary.
+        """Adds ProxySQL-specific data to the data dictionary.
 
         Args:
             data_dict: The data dictionary to update.
@@ -814,8 +722,7 @@ class ReplayManager:
         )
 
     def _serialize_data_dict(self, data_dict: dict) -> bytes:
-        """
-        Serializes the data dictionary to bytes using orjson or json as fallback.
+        """Serializes the data dictionary to bytes using orjson or json as fallback.
 
         Args:
             data_dict: The data dictionary to serialize.
@@ -835,8 +742,7 @@ class ReplayManager:
                 raise e
 
     def _handle_compression_training(self, data_dict_bytes: bytes) -> None:
-        """
-        Handles compression dictionary training by collecting samples and training when ready.
+        """Handles compression dictionary training by collecting samples and training when ready.
 
         Args:
             data_dict_bytes: The serialized data to use as a training sample.
@@ -850,8 +756,7 @@ class ReplayManager:
                 del self.dict_samples
 
     def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes) -> None:
-        """
-        Inserts the replay data into the database and handles variable change linkage.
+        """Inserts the replay data into the database and handles variable change linkage.
 
         Args:
             timestamp: The timestamp of the capture.
@@ -874,10 +779,7 @@ class ReplayManager:
             if self.global_variable_change_ids:
                 self._execute_many(
                     "UPDATE variable_changes SET replay_id = ?, timestamp = ? WHERE id = ?",
-                    [
-                        (self.current_replay_id, timestamp, id)
-                        for id in self.global_variable_change_ids
-                    ],
+                    [(self.current_replay_id, timestamp, id) for id in self.global_variable_change_ids],
                 )
 
                 # Clear the list of global variable change IDs now that they've been linked
@@ -898,16 +800,14 @@ class ReplayManager:
             self.replay_file_size = os.path.getsize(self.replay_file)
 
     def capture_state(self):
-        """
-        Captures the current state of the Dolphie instance and stores it in the SQLite database.
-        """
+        """Captures the current state of the Dolphie instance and stores it in the SQLite database."""
         # Don't capture when not recording, or when loading a replay file (read-only mode)
         if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
         # Prepare processlist data
         processlist = self._prepare_processlist()
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
         # Build base data dictionary
         data_dict = self._build_base_data_dict(processlist)
@@ -926,8 +826,7 @@ class ReplayManager:
         self._insert_replay_data(timestamp, data_dict_bytes)
 
     def _update_replay_metadata_cache(self) -> bool:
-        """
-        Updates the cached replay metadata (min/max timestamps and IDs, total rows).
+        """Updates the cached replay metadata (min/max timestamps and IDs, total rows).
         This should be called when the cache is invalid or needs refreshing.
 
         Returns:
@@ -946,9 +845,8 @@ class ReplayManager:
             return True
         return False
 
-    def _load_and_parse_replay_data(self) -> Optional[Tuple[str, dict]]:
-        """
-        Loads the next replay data row from the database and parses it.
+    def _load_and_parse_replay_data(self) -> tuple[str, dict] | None:
+        """Loads the next replay data row from the database and parses it.
 
         Returns:
             Optional[Tuple[str, dict]]: A tuple of (timestamp, data_dict) or None if no data available.
@@ -969,16 +867,11 @@ class ReplayManager:
             data = orjson.loads(self._decompress_data(row[2]))
             return row[1], data
         except Exception as e:
-            self.dolphie.app.notify(
-                str(e), title="Error parsing replay data", severity="error"
-            )
+            self.dolphie.app.notify(str(e), title="Error parsing replay data", severity="error")
             return None
 
-    def _build_processlist_from_data(
-        self, processlist_data: list, thread_class
-    ) -> dict:
-        """
-        Builds a processlist dictionary from raw data using the specified thread class.
+    def _build_processlist_from_data(self, processlist_data: list, thread_class) -> dict:
+        """Builds a processlist dictionary from raw data using the specified thread class.
 
         Args:
             processlist_data: List of thread data dictionaries.
@@ -987,14 +880,10 @@ class ReplayManager:
         Returns:
             dict: Dictionary mapping thread IDs to thread objects.
         """
-        return {
-            str(thread_data["id"]): thread_class(thread_data)
-            for thread_data in processlist_data
-        }
+        return {str(thread_data["id"]): thread_class(thread_data) for thread_data in processlist_data}
 
     def _create_mysql_replay_data(self, timestamp: str, data: dict) -> MySQLReplayData:
-        """
-        Creates a MySQLReplayData object from parsed replay data.
+        """Creates a MySQLReplayData object from parsed replay data.
 
         Args:
             timestamp: The timestamp of the replay data.
@@ -1003,9 +892,7 @@ class ReplayManager:
         Returns:
             MySQLReplayData: The constructed replay data object.
         """
-        processlist = self._build_processlist_from_data(
-            data["processlist"], ProcesslistThread
-        )
+        processlist = self._build_processlist_from_data(data["processlist"], ProcesslistThread)
 
         # Create Performance Schema metrics objects
         file_io_data = PerformanceSchemaMetrics({}, "file_io", "FILE_NAME")
@@ -1014,9 +901,7 @@ class ReplayManager:
         table_io_waits = PerformanceSchemaMetrics({}, "table_io", "OBJECT_TABLE")
         table_io_waits.filtered_data = data.get("table_io_waits_data", {})
 
-        statements_summary_data = PerformanceSchemaMetrics(
-            {}, "statements_summary", "digest"
-        )
+        statements_summary_data = PerformanceSchemaMetrics({}, "statements_summary", "digest")
         statements_summary_data.filtered_data = data.get("statements_summary_data", {})
 
         return MySQLReplayData(
@@ -1039,11 +924,8 @@ class ReplayManager:
             statements_summary_data=statements_summary_data,
         )
 
-    def _create_proxysql_replay_data(
-        self, timestamp: str, data: dict
-    ) -> ProxySQLReplayData:
-        """
-        Creates a ProxySQLReplayData object from parsed replay data.
+    def _create_proxysql_replay_data(self, timestamp: str, data: dict) -> ProxySQLReplayData:
+        """Creates a ProxySQLReplayData object from parsed replay data.
 
         Args:
             timestamp: The timestamp of the replay data.
@@ -1052,9 +934,7 @@ class ReplayManager:
         Returns:
             ProxySQLReplayData: The constructed replay data object.
         """
-        processlist = self._build_processlist_from_data(
-            data["processlist"], ProxySQLProcesslistThread
-        )
+        processlist = self._build_processlist_from_data(data["processlist"], ProxySQLProcesslistThread)
 
         return ProxySQLReplayData(
             timestamp=timestamp,
@@ -1069,17 +949,15 @@ class ReplayManager:
 
     def get_next_refresh_interval(
         self,
-    ) -> Union[MySQLReplayData, ProxySQLReplayData, None]:
-        """
-        Gets the next refresh interval's data from the SQLite database and returns it as a ReplayData object.
+    ) -> MySQLReplayData | ProxySQLReplayData | None:
+        """Gets the next refresh interval's data from the SQLite database and returns it as a ReplayData object.
 
         Returns:
             ReplayData: The next replay data.
         """
         # Update metadata cache if it's not valid or this is the first call
-        if not self.replay_metadata_cache_valid:
-            if not self._update_replay_metadata_cache():
-                return None
+        if not self.replay_metadata_cache_valid and not self._update_replay_metadata_cache():
+            return None
 
         # Load and parse the next replay data
         result = self._load_and_parse_replay_data()
@@ -1094,15 +972,11 @@ class ReplayManager:
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             return self._create_proxysql_replay_data(timestamp, data)
         else:
-            self.dolphie.app.notify(
-                "Invalid connection source for replay data", severity="error"
-            )
+            self.dolphie.app.notify("Invalid connection source for replay data", severity="error")
             return None
 
     def fetch_global_variable_changes_for_current_replay_id(self):
-        """
-        Fetches global variable changes for the current replay ID.
-        """
+        """Fetches global variable changes for the current replay ID."""
         rows = self._execute_select_all(
             "SELECT timestamp, variable_name, old_value, new_value FROM variable_changes WHERE replay_id = ?",
             (self.current_replay_id,),
@@ -1124,20 +998,15 @@ class ReplayManager:
             )
 
     def fetch_all_global_variable_changes(self) -> list:
-        """
-        Fetches all global variable changes for command 'V'
-        """
+        """Fetches all global variable changes for command 'V'."""
         rows = self._execute_select_all(
             "SELECT timestamp, variable_name, old_value, new_value FROM variable_changes ORDER BY timestamp"
         )
 
         return rows
 
-    def capture_global_variable_change(
-        self, variable_name: str, old_value: str, new_value: str
-    ):
-        """
-        Captures a global variable change and stores it in the SQLite database.
+    def capture_global_variable_change(self, variable_name: str, old_value: str, new_value: str):
+        """Captures a global variable change and stores it in the SQLite database.
 
         Args:
             variable_name: The name of the variable that changed.
@@ -1148,7 +1017,7 @@ class ReplayManager:
         if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
         last_row_id = self._execute_insert(
             "INSERT INTO variable_changes (timestamp, variable_name, old_value, new_value) VALUES (?, ?, ?, ?)",

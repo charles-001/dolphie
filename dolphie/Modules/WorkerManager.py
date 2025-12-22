@@ -2,28 +2,26 @@ from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING
 
-from textual.worker import Worker, WorkerState, get_current_worker
-
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie.DataTypes import ConnectionSource, ConnectionStatus
 from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Panels import Replication as ReplicationPanel
+from textual.worker import Worker, WorkerState, get_current_worker
 
 if TYPE_CHECKING:
     from dolphie.App import DolphieApp
 
 
 class WorkerManager:
-    """
-    This module handles all worker management operations.
+    """This module handles all worker management operations.
 
     This includes main refresh worker, replicas worker, and replay worker, along with
     their state change handlers.
     """
 
     def __init__(self, app: "DolphieApp"):
-        """
-        Initialize the WorkerManager.
+        """Initialize the WorkerManager.
 
         Args:
             app: Reference to the main DolphieApp instance
@@ -70,36 +68,24 @@ class WorkerManager:
                 "global_status": dolphie.global_status,
             }
 
-            dolphie.worker_processing_time = dolphie.global_status.get(
-                "replay_polling_latency", 0
-            )
+            dolphie.worker_processing_time = dolphie.global_status.get("replay_polling_latency", 0)
 
             if dolphie.connection_source == ConnectionSource.mysql:
-                dolphie.host_version = dolphie.parse_server_version(
-                    dolphie.global_variables.get("version")
-                )
+                dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("version"))
                 dolphie.binlog_status = replay_event_data.binlog_status
                 dolphie.innodb_metrics = replay_event_data.innodb_metrics
-                dolphie.replica_manager.available_replicas = (
-                    replay_event_data.replica_manager
-                )
+                dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
                 dolphie.processlist_threads = replay_event_data.processlist
                 dolphie.replication_status = replay_event_data.replication_status
-                dolphie.replication_applier_status = (
-                    replay_event_data.replication_applier_status
-                )
+                dolphie.replication_applier_status = replay_event_data.replication_applier_status
                 dolphie.metadata_locks = replay_event_data.metadata_locks
-                dolphie.group_replication_members = (
-                    replay_event_data.group_replication_members
-                )
+                dolphie.group_replication_members = replay_event_data.group_replication_members
                 dolphie.group_replication_data = replay_event_data.group_replication_data
                 dolphie.file_io_data = replay_event_data.file_io_data
                 dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
                 dolphie.statements_summary_data = replay_event_data.statements_summary_data
 
-                dolphie.pfs_metrics_last_reset_time = dolphie.global_status.get(
-                    "pfs_metrics_last_reset_time", 0
-                )
+                dolphie.pfs_metrics_last_reset_time = dolphie.global_status.get("pfs_metrics_last_reset_time", 0)
 
                 connection_source_metrics = {
                     "innodb_metrics": dolphie.innodb_metrics,
@@ -109,35 +95,27 @@ class WorkerManager:
                 if not dolphie.server_uuid:
                     dolphie.configure_mysql_variables()
             elif dolphie.connection_source == ConnectionSource.proxysql:
-                dolphie.host_version = dolphie.parse_server_version(
-                    dolphie.global_variables.get("admin-version")
-                )
+                dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("admin-version"))
                 dolphie.proxysql_command_stats = replay_event_data.command_stats
                 dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
                 dolphie.processlist_threads = replay_event_data.processlist
 
-                connection_source_metrics = {
-                    "proxysql_command_stats": dolphie.proxysql_command_stats
-                }
+                connection_source_metrics = {"proxysql_command_stats": dolphie.proxysql_command_stats}
 
             # Refresh the metric manager metrics to the state of the replay event
             dolphie.metric_manager.refresh_data(
-                worker_start_time=datetime.now(),
+                worker_start_time=datetime.now().astimezone(),
                 **common_metrics,
                 **connection_source_metrics,
             )
 
             # Metrics data is already calculated in the replay event data so we just need to update the values
-            dolphie.metric_manager.datetimes = replay_event_data.metric_manager.get(
-                "datetimes"
-            )
+            dolphie.metric_manager.datetimes = replay_event_data.metric_manager.get("datetimes")
             for metric_name, metric_data in replay_event_data.metric_manager.items():
                 metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
                 if metric_instance:
                     for metric_name, metric_values in metric_data.items():
-                        metric: MetricManager.MetricData = metric_instance.__dict__.get(
-                            metric_name
-                        )
+                        metric: MetricManager.MetricData = metric_instance.__dict__.get(metric_name)
                         if metric:
                             metric.values = metric_values
                             metric.last_value = metric_values[-1]
@@ -164,9 +142,7 @@ class WorkerManager:
         dolphie = tab.dolphie
         try:
             if not dolphie.main_db_connection.is_connected():
-                self.app.tab_manager.update_connection_status(
-                    tab=tab, connection_status=ConnectionStatus.connecting
-                )
+                self.app.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connecting)
 
                 tab.replay_manager = None
                 if not dolphie.daemon_mode and tab == self.app.tab_manager.active_tab:
@@ -174,10 +150,8 @@ class WorkerManager:
 
                 dolphie.db_connect()
 
-            worker_start_time = datetime.now()
-            dolphie.polling_latency = (
-                worker_start_time - dolphie.worker_previous_start_time
-            ).total_seconds()
+            worker_start_time = datetime.now().astimezone()
+            dolphie.polling_latency = (worker_start_time - dolphie.worker_previous_start_time).total_seconds()
             dolphie.worker_previous_start_time = worker_start_time
 
             dolphie.collect_system_utilization()
@@ -186,9 +160,7 @@ class WorkerManager:
             elif dolphie.connection_source == ConnectionSource.proxysql:
                 self.app.worker_data_processor.process_proxysql_data(tab)
 
-            dolphie.worker_processing_time = (
-                datetime.now() - worker_start_time
-            ).total_seconds()
+            dolphie.worker_processing_time = (datetime.now().astimezone() - worker_start_time).total_seconds()
 
             dolphie.metric_manager.refresh_data(
                 worker_start_time=worker_start_time,
@@ -205,8 +177,6 @@ class WorkerManager:
 
             # We initalize this here so we have the host version from process_{mysql,proxysql}_data
             if not tab.replay_manager:
-                from dolphie.Modules.ReplayManager import ReplayManager
-
                 tab.replay_manager = ReplayManager(dolphie)
 
             tab.replay_manager.capture_state()
@@ -274,9 +244,7 @@ class WorkerManager:
                     or dolphie.daemon_mode
                     or tab.id != self.app.tab_manager.active_tab.id
                 ):
-                    tab.worker_timer = self.app.set_timer(
-                        refresh_interval, partial(self.app.run_worker_main, tab.id)
-                    )
+                    tab.worker_timer = self.app.set_timer(refresh_interval, partial(self.app.run_worker_main, tab.id))
 
                     return
 
@@ -295,9 +263,7 @@ class WorkerManager:
 
                 tab.toggle_entities_displays()
 
-                tab.worker_timer = self.app.set_timer(
-                    refresh_interval, partial(self.app.run_worker_main, tab.id)
-                )
+                tab.worker_timer = self.app.set_timer(refresh_interval, partial(self.app.run_worker_main, tab.id))
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
@@ -305,10 +271,7 @@ class WorkerManager:
 
                     logger.critical(tab.worker_cancel_error)
 
-                    if (
-                        self.app.tab_manager.active_tab.id != tab.id
-                        or self.app.tab_manager.loading_hostgroups
-                    ):
+                    if self.app.tab_manager.active_tab.id != tab.id or self.app.tab_manager.loading_hostgroups:
                         self.app.notify(
                             (
                                 f"[$b_light_blue]{dolphie.host}:{dolphie.port}[/$b_light_blue]: "
@@ -338,47 +301,41 @@ class WorkerManager:
                     )
                     return
 
-                if (
-                    dolphie.panels.replication.visible
-                    and dolphie.replica_manager.available_replicas
-                ):
+                if dolphie.panels.replication.visible and dolphie.replica_manager.available_replicas:
                     ReplicationPanel.create_replica_panel(tab)
 
                 tab.replicas_worker_timer = self.app.set_timer(
                     dolphie.refresh_interval,
                     partial(self.app.run_worker_replicas, tab.id),
                 )
-        elif event.worker.group == "replay":
-            if event.state == WorkerState.SUCCESS:
-                if tab.id == self.app.tab_manager.active_tab.id:
-                    if len(self.app.screen_stack) > 1 or (
-                        dolphie.pause_refresh and not tab.replay_manual_control
-                    ):
-                        tab.worker_timer = self.app.set_timer(
-                            dolphie.refresh_interval,
-                            partial(self.app.run_worker_replay, tab.id),
-                        )
+        elif event.worker.group == "replay" and event.state == WorkerState.SUCCESS:
+            if tab.id == self.app.tab_manager.active_tab.id:
+                if len(self.app.screen_stack) > 1 or (dolphie.pause_refresh and not tab.replay_manual_control):
+                    tab.worker_timer = self.app.set_timer(
+                        dolphie.refresh_interval,
+                        partial(self.app.run_worker_replay, tab.id),
+                    )
 
-                        return
-                else:
-                    # If the tab isn't active, stop the loop
                     return
+            else:
+                # If the tab isn't active, stop the loop
+                return
 
-                self.app.worker_data_processor.monitor_read_only_change(tab)
+            self.app.worker_data_processor.monitor_read_only_change(tab)
 
-                if not tab.main_container.display:
-                    tab.toggle_metric_graph_tabs_display()
-                    tab.layout_graphs()
+            if not tab.main_container.display:
+                tab.toggle_metric_graph_tabs_display()
+                tab.layout_graphs()
 
-                if dolphie.connection_source == ConnectionSource.mysql:
-                    self.app.worker_data_processor.refresh_screen_mysql(tab)
-                    ReplicationPanel.create_replica_panel(tab)
-                elif dolphie.connection_source == ConnectionSource.proxysql:
-                    self.app.worker_data_processor.refresh_screen_proxysql(tab)
+            if dolphie.connection_source == ConnectionSource.mysql:
+                self.app.worker_data_processor.refresh_screen_mysql(tab)
+                ReplicationPanel.create_replica_panel(tab)
+            elif dolphie.connection_source == ConnectionSource.proxysql:
+                self.app.worker_data_processor.refresh_screen_proxysql(tab)
 
-                tab.toggle_entities_displays()
+            tab.toggle_entities_displays()
 
-                tab.worker_timer = self.app.set_timer(
-                    dolphie.refresh_interval,
-                    partial(self.app.run_worker_replay, tab.id),
-                )
+            tab.worker_timer = self.app.set_timer(
+                dolphie.refresh_interval,
+                partial(self.app.run_worker_replay, tab.id),
+            )

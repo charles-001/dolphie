@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Dolphie - Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL.
+"""Dolphie - Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL.
 
 Author: Charles Thompson
 License: GPL-3.0
@@ -29,10 +28,10 @@ from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.CommandManager import CommandManager
 from dolphie.Modules.CommandPalette import CommandPaletteCommands
 from dolphie.Modules.KeyEventManager import KeyEventManager
-from dolphie.Modules.WorkerDataProcessor import WorkerDataProcessor
-from dolphie.Modules.WorkerManager import WorkerManager
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Modules.TabManager import Tab, TabManager
+from dolphie.Modules.WorkerDataProcessor import WorkerDataProcessor
+from dolphie.Modules.WorkerManager import WorkerManager
 from dolphie.Panels import DDL as DDLPanel
 from dolphie.Panels import Dashboard as DashboardPanel
 from dolphie.Panels import MetadataLocks as MetadataLocksPanel
@@ -136,8 +135,7 @@ class DolphieApp(App):
 
     @work(thread=True, group="replay", exclusive=True)
     async def run_worker_replay(self, tab_id: str, manual_control: bool = False):
-        """
-        Execute replay worker in a worker thread.
+        """Execute replay worker in a worker thread.
 
         This is a wrapper that uses the @work decorator (which requires a DOMNode)
         and delegates to WorkerManager for actual worker execution.
@@ -150,8 +148,7 @@ class DolphieApp(App):
 
     @work(thread=True, group="main")
     async def run_worker_main(self, tab_id: str):
-        """
-        Execute main worker in a worker thread.
+        """Execute main worker in a worker thread.
 
         This is a wrapper that uses the @work decorator (which requires a DOMNode)
         and delegates to WorkerManager for actual worker execution.
@@ -163,8 +160,7 @@ class DolphieApp(App):
 
     @work(thread=True, group="replicas")
     def run_worker_replicas(self, tab_id: str):
-        """
-        Execute replicas worker in a worker thread.
+        """Execute replicas worker in a worker thread.
 
         This is a wrapper that uses the @work decorator (which requires a DOMNode)
         and delegates to WorkerManager for actual worker execution.
@@ -175,8 +171,7 @@ class DolphieApp(App):
         self.worker_manager.run_worker_replicas(tab_id)
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
-        """
-        Delegate worker state changes to the WorkerManager.
+        """Delegate worker state changes to the WorkerManager.
 
         This method was extracted into a separate handler class for better
         code organization and maintainability.
@@ -187,8 +182,7 @@ class DolphieApp(App):
         self.worker_manager.on_worker_state_changed(event)
 
     async def on_key(self, event: events.Key):
-        """
-        Handle key events and delegate to KeyEventManager.
+        """Handle key events and delegate to KeyEventManager.
 
         Args:
             event: The key event
@@ -208,11 +202,9 @@ class DolphieApp(App):
 
         for hostgroup_member in self.config.hostgroup_hosts.get(hostgroup, []):
             # We only want to switch if it's the first tab created
-            switch_tab = True if not self.tab_manager.active_tab else False
+            switch_tab = bool(not self.tab_manager.active_tab)
 
-            tab = await self.tab_manager.create_tab(
-                hostgroup_member=hostgroup_member, switch_tab=switch_tab
-            )
+            tab = await self.tab_manager.create_tab(hostgroup_member=hostgroup_member, switch_tab=switch_tab)
 
             self.run_worker_main(tab.id)
             self.run_worker_replicas(tab.id)
@@ -255,11 +247,7 @@ class DolphieApp(App):
     def replay_seek(self):
         def command_get_input(timestamp: str):
             if timestamp:
-                found_timestamp = (
-                    self.tab_manager.active_tab.replay_manager.seek_to_timestamp(
-                        timestamp
-                    )
-                )
+                found_timestamp = self.tab_manager.active_tab.replay_manager.seek_to_timestamp(timestamp)
 
                 if found_timestamp:
                     self.force_refresh_for_replay()
@@ -301,10 +289,7 @@ class DolphieApp(App):
             tab
             and tab.worker
             and (
-                (
-                    tab.dolphie.main_db_connection.is_connected()
-                    and tab.dolphie.worker_processing_time
-                )
+                (tab.dolphie.main_db_connection.is_connected() and tab.dolphie.worker_processing_time)
                 or tab.dolphie.replay_file
             )
         ):
@@ -342,41 +327,26 @@ class DolphieApp(App):
                 # Batch all graph and stats label updates into a single rendering cycle
                 with self.batch_update():
                     for graph_name in metric_instance.graphs:
-                        getattr(tab, graph_name).render_graph(
-                            metric_instance, tab.dolphie.metric_manager.datetimes
-                        )
+                        getattr(tab, graph_name).render_graph(metric_instance, tab.dolphie.metric_manager.datetimes)
                     self.update_stats_label(metric_tab_name)
 
     def update_stats_label(self, metric_tab_name: str):
         stat_data = {}
 
-        for metric_instance in (
-            self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values()
-        ):
+        for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
             if metric_tab_name == metric_instance.tab_name:
-                number_format_func = MetricManager.get_number_format_function(
-                    metric_instance, color=True
-                )
+                number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
                 for metric_name, metric_data in metric_instance.__dict__.items():
-                    if (
-                        isinstance(metric_data, MetricManager.MetricData)
-                        and metric_data.values
-                        and metric_data.visible
-                    ):
+                    if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
                         if f"graph_{metric_name}" in metric_instance.graphs:
                             stat_data[metric_data.label] = round(metric_data.values[-1])
                         else:
-                            stat_data[metric_data.label] = number_format_func(
-                                metric_data.values[-1]
-                            )
+                            stat_data[metric_data.label] = number_format_func(metric_data.values[-1])
 
         formatted_stat_data = "  ".join(
-            f"[$b_light_blue]{label}[/$b_light_blue] {value}"
-            for label, value in stat_data.items()
+            f"[$b_light_blue]{label}[/$b_light_blue] {value}" for label, value in stat_data.items()
         )
-        getattr(self.tab_manager.active_tab, metric_tab_name).update(
-            formatted_stat_data
-        )
+        getattr(self.tab_manager.active_tab, metric_tab_name).update(formatted_stat_data)
 
     def toggle_panel(self, panel_name: str):
         # We store the panel objects in the tab object (i.e. tab.panel_dashboard, tab.panel_processlist, etc.)
@@ -384,11 +354,7 @@ class DolphieApp(App):
 
         new_display_status = not panel.display
 
-        setattr(
-            getattr(self.tab_manager.active_tab.dolphie.panels, panel_name),
-            "visible",
-            new_display_status,
-        )
+        getattr(self.tab_manager.active_tab.dolphie.panels, panel_name).visible = new_display_status
 
         if panel_name not in [self.tab_manager.active_tab.dolphie.panels.graphs.name]:
             self.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
@@ -415,9 +381,7 @@ class DolphieApp(App):
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
         panel_mapping = {
-            tab.dolphie.panels.replication.name: {
-                ConnectionSource.mysql: ReplicationPanel
-            },
+            tab.dolphie.panels.replication.name: {ConnectionSource.mysql: ReplicationPanel},
             tab.dolphie.panels.dashboard.name: {
                 ConnectionSource.mysql: DashboardPanel,
                 ConnectionSource.proxysql: ProxySQLDashboardPanel,
@@ -426,31 +390,19 @@ class DolphieApp(App):
                 ConnectionSource.mysql: ProcesslistPanel,
                 ConnectionSource.proxysql: ProxySQLProcesslistPanel,
             },
-            tab.dolphie.panels.metadata_locks.name: {
-                ConnectionSource.mysql: MetadataLocksPanel
-            },
+            tab.dolphie.panels.metadata_locks.name: {ConnectionSource.mysql: MetadataLocksPanel},
             tab.dolphie.panels.ddl.name: {ConnectionSource.mysql: DDLPanel},
-            tab.dolphie.panels.pfs_metrics.name: {
-                ConnectionSource.mysql: PerformanceSchemaMetricsPanel
-            },
-            tab.dolphie.panels.statements_summary.name: {
-                ConnectionSource.mysql: StatementsSummaryPanel
-            },
+            tab.dolphie.panels.pfs_metrics.name: {ConnectionSource.mysql: PerformanceSchemaMetricsPanel},
+            tab.dolphie.panels.statements_summary.name: {ConnectionSource.mysql: StatementsSummaryPanel},
             tab.dolphie.panels.proxysql_hostgroup_summary.name: {
                 ConnectionSource.proxysql: ProxySQLHostgroupSummaryPanel
             },
-            tab.dolphie.panels.proxysql_mysql_query_rules.name: {
-                ConnectionSource.proxysql: ProxySQLQueryRulesPanel
-            },
-            tab.dolphie.panels.proxysql_command_stats.name: {
-                ConnectionSource.proxysql: ProxySQLCommandStatsPanel
-            },
+            tab.dolphie.panels.proxysql_mysql_query_rules.name: {ConnectionSource.proxysql: ProxySQLQueryRulesPanel},
+            tab.dolphie.panels.proxysql_command_stats.name: {ConnectionSource.proxysql: ProxySQLCommandStatsPanel},
         }
 
         for panel_map_name, panel_map_connection_sources in panel_mapping.items():
-            panel_map_obj = panel_map_connection_sources.get(
-                tab.dolphie.connection_source
-            )
+            panel_map_obj = panel_map_connection_sources.get(tab.dolphie.connection_source)
 
             if not panel_map_obj:
                 tab.get_panel_widget(panel_map_name).display = False
@@ -459,11 +411,7 @@ class DolphieApp(App):
             if panel_name == panel_map_name:
                 panel_map_obj.create_panel(tab)
 
-            if (
-                panel_name == tab.dolphie.panels.replication.name
-                and toggled
-                and tab.dolphie.replication_status
-            ):
+            if panel_name == tab.dolphie.panels.replication.name and toggled and tab.dolphie.replication_status:
                 # When replication panel status is changed, we need to refresh the dashboard panel as well since
                 # it adds/removes it from there
                 DashboardPanel.create_panel(tab)
@@ -521,8 +469,7 @@ class DolphieApp(App):
             pass
 
     def _monitor_terminal_disconnect(self):
-        """
-        Periodically check if we still have a valid TTY connection.
+        """Periodically check if we still have a valid TTY connection.
         If TTY is lost, gracefully shut down to prevent CPU spikes.
         """
         if not self._has_tty or self.config.daemon_mode:
@@ -567,9 +514,7 @@ class DolphieApp(App):
                     return
 
                 self.tab_manager.rename_tab(tab)
-                self.tab_manager.update_connection_status(
-                    tab=tab, connection_status=ConnectionStatus.connected
-                )
+                self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
                 self.run_worker_replay(self.tab_manager.active_tab.id)
             else:
                 self.run_worker_main(self.tab_manager.active_tab.id)
@@ -610,12 +555,8 @@ def setup_logger(config: Config):
     log_level = "INFO"
 
     # Add terminal & file logging
-    logger.add(
-        sys.stdout, format=log_format, backtrace=True, colorize=True, level=log_level
-    )
-    logger.add(
-        config.daemon_mode_log_file, format=log_format, backtrace=True, level=log_level
-    )
+    logger.add(sys.stdout, format=log_format, backtrace=True, colorize=True, level=log_level)
+    logger.add(config.daemon_mode_log_file, format=log_format, backtrace=True, level=log_level)
 
     # Exit when critical is used
     logger.add(lambda _: sys.exit(1), level="CRITICAL")
