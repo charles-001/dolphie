@@ -1,14 +1,13 @@
 import re
 
+from dolphie.DataTypes import ConnectionSource, HotkeyCommands
+from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Rule, Select, Static
-
-from dolphie.DataTypes import ConnectionSource, HotkeyCommands
-from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem
 
 
 class CommandModal(ModalScreen):
@@ -114,9 +113,7 @@ class CommandModal(ModalScreen):
                 kill_by_host_input = Input(id="kill_by_host_input")
 
                 with Vertical(id="maximize_panel_container", classes="command_container"):
-                    yield Select(
-                        options=self.maximize_panel_select_options, id="maximize_panel_select", prompt="Select a Panel"
-                    )
+                    yield Select(options=self.maximize_panel_select_options, id="maximize_panel_select")
                     yield Label("[b]Note[/b]: Press [b][$yellow]ESC[/b][/$yellow] to exit maximized panel")
                 with Vertical(id="filter_container", classes="command_container"):
                     yield filter_by_username_input
@@ -164,6 +161,7 @@ class CommandModal(ModalScreen):
     def on_mount(self):
         input = self.query_one("#modal_input", Input)
         maximize_panel_container = self.query_one("#maximize_panel_container", Vertical)
+        maximize_panel_select = self.query_one("#maximize_panel_select", Select)
         filter_container = self.query_one("#filter_container", Vertical)
         kill_container = self.query_one("#kill_container", Vertical)
         self.query_one("#error_response", Static).display = False
@@ -227,22 +225,25 @@ class CommandModal(ModalScreen):
         elif self.command == HotkeyCommands.maximize_panel:
             input.display = False
             maximize_panel_container.display = True
+            maximize_panel_select.border_title = "Select a Panel"
         elif self.command == HotkeyCommands.rename_tab:
-            input.placeholder = "Colors can be added by wrapping them in []"
+            input.border_title = "Tab Name"
             input.styles.width = 50
             input.focus()
         elif self.command == HotkeyCommands.variable_search:
+            input.border_title = "Variable Name"
             input.placeholder = "Input 'all' to show everything"
             input.focus()
         elif self.command in [HotkeyCommands.show_thread]:
-            input.placeholder = "Input a Thread ID"
+            input.border_title = "Thread ID"
             input.focus()
         elif self.command == HotkeyCommands.refresh_interval:
-            input.placeholder = "Input a refresh interval"
+            input.border_title = "Refresh Interval [$dark_gray](seconds)"
             input.focus()
         elif self.command == HotkeyCommands.replay_seek:
             if self.max_replay_timestamp:
                 input.value = self.max_replay_timestamp
+            input.border_title = "Timestamp"
             input.placeholder = "Format: 2024-07-25 13:00:00"
             input.focus()
         else:
