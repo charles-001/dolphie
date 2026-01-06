@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import os
 import sqlite3
@@ -8,6 +10,8 @@ from typing import Any
 
 import orjson
 import zstandard as zstd
+from loguru import logger
+
 from dolphie.DataTypes import (
     ConnectionSource,
     ProcesslistThread,
@@ -17,7 +21,6 @@ from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
-from loguru import logger
 
 
 @dataclass

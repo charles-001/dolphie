@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from loguru import logger
+
 from dolphie.DataTypes import ConnectionSource, ConnectionStatus
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
@@ -8,7 +10,6 @@ from dolphie.Panels import MetadataLocks as MetadataLocksPanel
 from dolphie.Panels import Processlist as ProcesslistPanel
 from dolphie.Panels import ProxySQLProcesslist as ProxySQLProcesslistPanel
 from dolphie.Panels import Replication as ReplicationPanel
-from loguru import logger
 
 if TYPE_CHECKING:
     from dolphie.App import DolphieApp

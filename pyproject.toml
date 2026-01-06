@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "dolphie"
-version = "6.11.2"
+version = "6.11.3"
 license = "GPL-3.0-or-later"
 description = "Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL"
 authors = ["Charles Thompson <01charles.t@gmail.com>"]
@@ -55,6 +55,7 @@ select = [
     "SIM",    # flake8-simplify - simplification suggestions
     "PT",     # flake8-pytest-style - pytest best practices
     "ARG",    # flake8-unused-arguments - catch unused function arguments
+    "FA",     # flake8-future-annotations - require `from __future__ import annotations`
 
     # --- New Rules ---
     "D",      # pydocstyle - docstring conventions
@@ -82,6 +83,7 @@ ignore = [
     "SIM115",    # Use context manager (minor improvement)
     "SIM117",    # Combine with statements (sometimes nested is clearer)
     "UP017",     # Use datetime.UTC alias (only available in Python 3.11+, we support 3.9+)
+    "UP007",     # Use X | Y for type unions (runtime type aliases need Union[] for Python 3.9)
 
     # --- Async patterns ---
     "ASYNC110",  # Async busy wait (1 violation - intentional polling pattern)

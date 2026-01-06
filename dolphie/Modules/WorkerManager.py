@@ -2,12 +2,13 @@ from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING
 
+from textual.worker import Worker, WorkerState, get_current_worker
+
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie.DataTypes import ConnectionSource, ConnectionStatus
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Panels import Replication as ReplicationPanel
-from textual.worker import Worker, WorkerState, get_current_worker
 
 if TYPE_CHECKING:
     from dolphie.App import DolphieApp

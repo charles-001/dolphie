@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
+from typing import Union
 
 import plotext as plt
 from rich.text import Text
@@ -649,33 +650,33 @@ class ProxySQLTotalCommandStats:
 
 
 # Type alias for all metric types
-MetricInstance = (
-    SystemCPUMetrics
-    | SystemMemoryMetrics
-    | SystemNetworkMetrics
-    | SystemDiskIOMetrics
-    | DMLMetrics
-    | ReplicationLagMetrics
-    | CheckpointMetrics
-    | BufferPoolRequestsMetrics
-    | AdaptiveHashIndexMetrics
-    | AdaptiveHashIndexHitRatio
-    | RedoLogMetrics
-    | RedoLogActiveCountMetrics
-    | TableCacheMetrics
-    | ThreadMetrics
-    | TemporaryObjectMetrics
-    | AbortedConnectionsMetrics
-    | DiskIOMetrics
-    | LocksMetrics
-    | HistoryListLength
-    | ProxySQLConnectionsMetrics
-    | ProxySQLQueriesDataNetwork
-    | ProxySQLActiveTRX
-    | ProxySQLMultiplexEfficiency
-    | ProxySQLSELECTCommandStats
-    | ProxySQLTotalCommandStats
-)
+MetricInstance = Union[
+    SystemCPUMetrics,
+    SystemMemoryMetrics,
+    SystemNetworkMetrics,
+    SystemDiskIOMetrics,
+    DMLMetrics,
+    ReplicationLagMetrics,
+    CheckpointMetrics,
+    BufferPoolRequestsMetrics,
+    AdaptiveHashIndexMetrics,
+    AdaptiveHashIndexHitRatio,
+    RedoLogMetrics,
+    RedoLogActiveCountMetrics,
+    TableCacheMetrics,
+    ThreadMetrics,
+    TemporaryObjectMetrics,
+    AbortedConnectionsMetrics,
+    DiskIOMetrics,
+    LocksMetrics,
+    HistoryListLength,
+    ProxySQLConnectionsMetrics,
+    ProxySQLQueriesDataNetwork,
+    ProxySQLActiveTRX,
+    ProxySQLMultiplexEfficiency,
+    ProxySQLSELECTCommandStats,
+    ProxySQLTotalCommandStats,
+]
 
 
 @dataclass

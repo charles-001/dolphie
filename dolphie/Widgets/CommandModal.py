@@ -1,13 +1,14 @@
 import re
 
-from dolphie.DataTypes import ConnectionSource, HotkeyCommands
-from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Rule, Select, Static
+
+from dolphie.DataTypes import ConnectionSource, HotkeyCommands
+from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem
 
 
 class CommandModal(ModalScreen):

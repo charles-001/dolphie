@@ -8,12 +8,13 @@ from dataclasses import dataclass, field, fields
 from urllib.parse import ParseResult, urlparse
 
 import myloginpath
-from dolphie.DataTypes import Panels
-from dolphie.Modules.Queries import MySQLQueries
 from rich import box
 from rich.console import Console
 from rich.table import Table
 from rich.theme import Theme
+
+from dolphie.DataTypes import Panels
+from dolphie.Modules.Queries import MySQLQueries
 
 
 @dataclass

@@ -1,3 +1,4 @@
+from __future__ import annotations
 
 from rich.syntax import Syntax
 from textual.widgets import DataTable
