@@ -35,7 +35,7 @@ def create_panel(tab: Tab) -> DataTable:
     for ddl in dolphie.ddl:
         row_values = []
 
-        for column_key, column_format in zip(column_keys, column_formats, strict=False):
+        for column_key, column_format in zip(column_keys, column_formats):
             if column_format == "time":
                 value = format_time(ddl[column_key], picoseconds=True)
             elif column_format == "bytes":

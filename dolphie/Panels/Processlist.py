@@ -193,7 +193,7 @@ def create_panel(tab: Tab) -> DataTable:
                 column_name,
                 column_field,
                 column_format_number,
-            ) in enumerate(zip(column_names, column_fields, column_format_numbers, strict=False)):
+            ) in enumerate(zip(column_names, column_fields, column_format_numbers)):
                 column_value = getattr(thread, column_field)
                 thread_value = (
                     format_number(column_value)
@@ -229,7 +229,7 @@ def create_panel(tab: Tab) -> DataTable:
         else:
             row_values = []
             for column_field, column_format_number in zip(
-                column_fields, column_format_numbers, strict=False
+                column_fields, column_format_numbers
             ):
                 column_value = getattr(thread, column_field)
                 thread_value = (

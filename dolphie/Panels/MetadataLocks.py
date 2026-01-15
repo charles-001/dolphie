@@ -52,7 +52,7 @@ def create_panel(tab: Tab) -> DataTable:
             datatable_row = metadata_locks_datatable.get_row(lock_id)
 
             for column_id, (column_key, column_name, column_width) in enumerate(
-                zip(column_keys, column_names, column_widths, strict=False)
+                zip(column_keys, column_names, column_widths)
             ):
                 column_value = lock[column_key]
 
@@ -97,7 +97,7 @@ def create_panel(tab: Tab) -> DataTable:
             row_values = []
 
             for column_id, (column_key, column_name, column_width) in enumerate(
-                zip(column_keys, column_names, column_widths, strict=False)
+                zip(column_keys, column_names, column_widths)
             ):
                 column_value = lock[column_key]
 

@@ -100,7 +100,7 @@ def create_panel(tab: Tab) -> DataTable:
             datatable_row = processlist_datatable.get_row(thread_id)
 
             for column_id, (column_name, column_field) in enumerate(
-                zip(column_names, column_fields, strict=False)
+                zip(column_names, column_fields)
             ):
                 column_value = getattr(thread, column_field)
 
@@ -136,7 +136,7 @@ def create_panel(tab: Tab) -> DataTable:
             row_values = []
 
             for column_id, (column_name, column_field) in enumerate(
-                zip(column_names, column_fields, strict=False)
+                zip(column_names, column_fields)
             ):
                 column_value = getattr(thread, column_field)
 

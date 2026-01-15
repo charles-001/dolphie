@@ -74,7 +74,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
             datatable_row = datatable.get_row(row_id)
 
             for column_id, (column_name, field) in enumerate(
-                zip(column_names, column_fields, strict=False)
+                zip(column_names, column_fields)
             ):
                 if column_name == "Table":
                     continue
@@ -115,7 +115,7 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
             row_values.append(file_name)
 
             for column_id, (column_name, field) in enumerate(
-                zip(column_names, column_fields, strict=False)
+                zip(column_names, column_fields)
             ):
                 if column_name == "Table":
                     continue
@@ -244,7 +244,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
             datatable_row = datatable.get_row(row_id)
 
             for column_id, (column_name, field, column_format) in enumerate(
-                zip(column_names, column_fields, column_formats, strict=False)
+                zip(column_names, column_fields, column_formats)
             ):
                 if field == "FILE_NAME":
                     continue
@@ -271,7 +271,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
             row_values.append(file_name)
 
             for column_id, (column_name, field, column_format) in enumerate(
-                zip(column_names, column_fields, column_formats, strict=False)
+                zip(column_names, column_fields, column_formats)
             ):
                 if field == "FILE_NAME":
                     continue

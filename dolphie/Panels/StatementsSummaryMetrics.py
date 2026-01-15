@@ -169,7 +169,7 @@ def create_panel(tab: Tab):
                     column_name,
                     column_field,
                     column_format_number,
-                ) in enumerate(zip(column_names, column_fields, column_format_numbers, strict=False)):
+                ) in enumerate(zip(column_names, column_fields, column_format_numbers)):
                     column_value = metrics.get(column_field, {})
 
                     if isinstance(column_value, dict):
@@ -219,7 +219,7 @@ def create_panel(tab: Tab):
                     column_name,
                     column_field,
                     column_format_number,
-                ) in enumerate(zip(column_names, column_fields, column_format_numbers, strict=False)):
+                ) in enumerate(zip(column_names, column_fields, column_format_numbers)):
                     column_value = metrics.get(column_field, {})
 
                     if isinstance(column_value, dict):

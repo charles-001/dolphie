@@ -60,7 +60,7 @@ def create_panel(tab: Tab) -> DataTable:
             datatable_row = hostgroup_summary_datatable.get_row(row_id)
 
             for column_id, (column_key, _column_name, column_format) in enumerate(
-                zip(column_keys, column_names, column_formats, strict=False)
+                zip(column_keys, column_names, column_formats)
             ):
                 column_value = row.get(column_key, 0)
 
@@ -100,7 +100,7 @@ def create_panel(tab: Tab) -> DataTable:
             row_values = []
 
             for column_id, (column_key, _column_name, column_format) in enumerate(
-                zip(column_keys, column_names, column_formats, strict=False)
+                zip(column_keys, column_names, column_formats)
             ):
                 column_value = row.get(column_key, 0)
 

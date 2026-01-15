@@ -394,7 +394,7 @@ class KeyEventManager:
                     "Partial Query Text": "query_filter",
                 }
 
-                filters = dict(zip(filters_mapping.keys(), filter_data, strict=False))
+                filters = dict(zip(filters_mapping.keys(), filter_data))
 
                 # Apply filters and notify the user for each valid input
                 for filter_name, filter_value in filters.items():
