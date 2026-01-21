@@ -143,11 +143,19 @@ class WorkerManager:
         dolphie = tab.dolphie
         try:
             if not dolphie.main_db_connection.is_connected():
-                self.app.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connecting)
+                # Update connection status from worker thread
+                self.app.call_from_thread(
+                    self.app.tab_manager.update_connection_status,
+                    tab=tab,
+                    connection_status=ConnectionStatus.connecting
+                )
 
                 tab.replay_manager = None
                 if not dolphie.daemon_mode and tab == self.app.tab_manager.active_tab:
-                    tab.loading_indicator.display = True
+                    # Display property triggers UI updates, must be called from main thread
+                    def show_loading():
+                        tab.loading_indicator.display = True
+                    self.app.call_from_thread(show_loading)
 
                 dolphie.db_connect()
 
@@ -186,7 +194,8 @@ class WorkerManager:
             # tab setup modal with the error
             tab.worker_cancel_error = exception
 
-            await self.app.tab_manager.disconnect_tab(tab)
+            # Disconnect from worker thread - call_from_thread handles async functions
+            self.app.call_from_thread(self.app.tab_manager.disconnect_tab, tab)
 
     def run_worker_replicas(self, tab_id: str):
         tab = self.app.tab_manager.get_tab(tab_id)
@@ -205,16 +214,21 @@ class WorkerManager:
 
             if dolphie.replica_manager.available_replicas:
                 if not dolphie.replica_manager.replicas:
-                    tab.replicas_container.display = True
-                    tab.replicas_loading_indicator.display = True
-                    tab.replicas_title.update(
-                        f"[$white][b]Loading [$highlight]{len(dolphie.replica_manager.available_replicas)}"
-                        "[/$highlight] replicas...\n"
-                    )
+                    def update_replicas_ui():
+                        tab.replicas_container.display = True
+                        tab.replicas_loading_indicator.display = True
+                        tab.replicas_title.update(
+                            f"[$white][b]Loading [$highlight]{len(dolphie.replica_manager.available_replicas)}"
+                            "[/$highlight] replicas...\n"
+                        )
+                    self.app.call_from_thread(update_replicas_ui)
 
                 ReplicationPanel.fetch_replicas(tab)
             else:
-                tab.replicas_container.display = False
+                # Display property triggers UI updates, must be called from main thread
+                def hide_replicas():
+                    tab.replicas_container.display = False
+                self.app.call_from_thread(hide_replicas)
         else:
             # If we're not displaying the replication panel, remove all replica connections
             dolphie.replica_manager.remove_all_replicas()

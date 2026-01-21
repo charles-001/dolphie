@@ -327,7 +327,6 @@ class TabManager:
 
     def update_connection_status(self, tab: Tab, connection_status: ConnectionStatus):
         tab.dolphie.connection_status = connection_status
-
         self.update_topbar(tab=tab)
         self.rename_tab(tab)
 
@@ -806,7 +805,6 @@ class TabManager:
             tab.loading_indicator.display = False
 
         tab.sparkline.data = [0]
-
         tab.remove_replication_panel_components()
 
         if update_topbar:

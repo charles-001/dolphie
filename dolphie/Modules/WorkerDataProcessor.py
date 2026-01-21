@@ -41,7 +41,12 @@ class WorkerDataProcessor:
 
         # At this point, we're connected so we need to do a few things
         if dolphie.connection_status == ConnectionStatus.connecting:
-            self.app.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+            # Called from worker thread, use call_from_thread
+            self.app.call_from_thread(
+                self.app.tab_manager.update_connection_status,
+                tab=tab,
+                connection_status=ConnectionStatus.connected
+            )
             dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("version"))
             dolphie.get_group_replication_metadata()
             dolphie.configure_mysql_variables()
@@ -249,7 +254,12 @@ class WorkerDataProcessor:
         dolphie.global_variables = global_variables
 
         if dolphie.connection_status == ConnectionStatus.connecting:
-            self.app.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+            # Called from worker thread, use call_from_thread
+            self.app.call_from_thread(
+                self.app.tab_manager.update_connection_status,
+                tab=tab,
+                connection_status=ConnectionStatus.connected
+            )
             dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("admin-version"))
 
         global_status = dolphie.main_db_connection.fetch_status_and_variables("mysql_stats")
