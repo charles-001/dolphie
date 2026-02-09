@@ -66,6 +66,11 @@ class Tab:
         self.replicas_worker: Worker = None
         self.replicas_worker_timer: Timer = None
 
+        # Track mounted grid widgets to avoid DOM queries each refresh cycle
+        self.clusterset_widgets: dict[str, Static] = {}
+        self.member_widgets: dict[str, Static] = {}
+        self.replica_widgets: dict[str, Static] = {}
+
     def save_references_to_components(self):
         app = self.dolphie.app
 
@@ -256,32 +261,26 @@ class Tab:
                     switch.value = metric_data.visible
 
     def toggle_replication_panel_components(self):
-        app = self.dolphie.app
-
-        def toggle_container_display(selector: str, container: Container, items):
+        def toggle_container_display(container: Container, items, tracked: dict):
             container.display = bool(items)
-            for component in app.query(selector):
-                component.display = self.id in component.id
+            for widget in tracked.values():
+                widget.parent.display = True
 
         toggle_container_display(
-            ".replica_container", self.replicas_container, self.dolphie.replica_manager.available_replicas
+            self.replicas_container, self.dolphie.replica_manager.available_replicas, self.replica_widgets
         )
         toggle_container_display(
-            ".member_container", self.group_replication_container, self.dolphie.group_replication_members
+            self.group_replication_container, self.dolphie.group_replication_members, self.member_widgets
         )
         toggle_container_display(
-            ".clusterset_container", self.clusterset_container, self.dolphie.innodb_cluster_clustersets
+            self.clusterset_container, self.dolphie.innodb_cluster_clustersets, self.clusterset_widgets
         )
 
     def remove_replication_panel_components(self):
-        components = [
-            f".replica_container_{self.id}",
-            f".member_container_{self.id}",
-            f".clusterset_container_{self.id}",
-        ]
-        for component in components:
-            for container in self.dolphie.app.query(component):
-                container.remove()
+        for tracked in (self.replica_widgets, self.member_widgets, self.clusterset_widgets):
+            for widget in tracked.values():
+                widget.parent.remove()
+            tracked.clear()
 
     def layout_graphs(self):
         # These variables are dynamically created

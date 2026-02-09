@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 
 import pymysql
-from rich.table import Table
-
 from dolphie.Modules.Functions import format_query, format_time
+from rich.table import Table
 
 
 @dataclass
@@ -48,9 +46,12 @@ class ReplicaManager:
     # This is mainly for MariaDB since it doesn't have a way to map a replica in processlist to a specific port
     # Instead of using the thread_id as key, we use the host and port to create a unique row key
     # for the replica sections
+
+    # Dots/colons are invalid in Textual widget IDs - translate to hyphens in one pass
+    _widget_id_sanitize = str.maketrans({".": "-", ":": "-"})
+
     def create_replica_row_key(self, host: str, port: int) -> str:
-        input_string = f"{host}:{port}"
-        return hashlib.sha256(input_string.encode()).hexdigest()
+        return f"{host}-{port}".translate(self._widget_id_sanitize)
 
     def add_replica(self, row_key: str, thread_id: int, host: str, port: int) -> Replica:
         self.replicas[row_key] = Replica(row_key=row_key, thread_id=thread_id, host=host, port=port)
@@ -58,7 +59,9 @@ class ReplicaManager:
         return self.replicas[row_key]
 
     def remove_replica(self, row_key: str):
-        del self.replicas[row_key]
+        replica = self.replicas.pop(row_key, None)
+        if replica and replica.connection:
+            replica.connection.close()
 
     def get_replica(self, row_key: str) -> Replica:
         return self.replicas.get(row_key)

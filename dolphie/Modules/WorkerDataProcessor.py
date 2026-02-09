@@ -98,10 +98,11 @@ class WorkerDataProcessor:
                     else:
                         key = "Replica_UUID" if dolphie.is_mysql_version_at_least("8.0.22") else "Slave_UUID"
 
-                    dolphie.replica_manager.ports[row.get(key)] = {
-                        "port": row.get("Port"),
-                        "in_use": False,
-                    }
+                    port_entry = {"port": row.get("Port"), "in_use": False}
+                    if dolphie.connection_source_alt == ConnectionSource.mariadb:
+                        port_entry["host"] = row.get("Host")
+
+                    dolphie.replica_manager.ports[row.get(key)] = port_entry
 
                 # Update the port value for each replica from an existing replica so our row_key can be properly used
                 # to manage replica_manager.replicas
