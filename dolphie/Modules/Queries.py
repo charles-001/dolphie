@@ -649,7 +649,25 @@ class MySQLQueries:
         LIMIT
             1
     """
-    status: str = "SHOW GLOBAL STATUS"
+    status: str = """
+        SHOW GLOBAL STATUS
+        WHERE Variable_name IN (
+            'Aborted_clients', 'Aborted_connects',
+            'Binlog_cache_disk_use', 'Binlog_cache_use',
+            'Com_commit', 'Com_delete', 'Com_insert', 'Com_replace',
+            'Com_rollback', 'Com_select', 'Com_update',
+            'Created_tmp_disk_tables', 'Created_tmp_files', 'Created_tmp_tables',
+            'Innodb_buffer_pool_bytes_data', 'Innodb_buffer_pool_bytes_dirty',
+            'Innodb_buffer_pool_read_requests', 'Innodb_buffer_pool_reads',
+            'Innodb_buffer_pool_write_requests',
+            'Innodb_checkpoint_age', 'Innodb_lsn_current', 'Innodb_os_log_written',
+            'Open_tables', 'Opened_tables',
+            'Queries',
+            'Table_open_cache_hits', 'Table_open_cache_misses', 'Table_open_cache_overflows',
+            'Threads_cached', 'Threads_connected', 'Threads_running',
+            'Uptime'
+        )
+    """
     variables: str = "SHOW GLOBAL VARIABLES"
     show_master_status: str = "SHOW MASTER STATUS"
     show_binary_log_status: str = "SHOW BINARY LOG STATUS"

@@ -144,6 +144,10 @@ class Database:
                     # Fallback: Hex representation
                     return f"/* Failed to decode query, returning hex: {value.hex()} */"
 
+            # Skip regex substitution for pure ASCII values (vast majority of MySQL system data)
+            if decoded_value.isascii():
+                return decoded_value
+
             return self.non_printable_regex.sub("?", decoded_value)
 
         return value

@@ -445,6 +445,10 @@ class WorkerDataProcessor:
 
                 logger.info(f"Global variable {variable} changed: {old_value} -> {new_value}")
 
+                # Skip UI notifications in daemon mode since the TUI is headless
+                if dolphie.daemon_mode:
+                    continue
+
                 # If the tab is not active, include the host in the notification
                 include_host = ""
                 if self.app.tab_manager.active_tab.id != tab.id:

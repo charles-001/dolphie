@@ -10,8 +10,6 @@ from typing import Any
 
 import orjson
 import zstandard as zstd
-from loguru import logger
-
 from dolphie.DataTypes import (
     ConnectionSource,
     ProcesslistThread,
@@ -21,6 +19,7 @@ from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
 from dolphie.Modules.Functions import format_bytes, minify_query
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
+from loguru import logger
 
 
 @dataclass
@@ -86,9 +85,15 @@ class ReplayManager:
             hours=self.PURGE_CHECK_INTERVAL_HOURS
         )  # Initialize to an hour ago
         self.replay_file_size: int = 0
-        self.compression_dict: zstd.ZstdCompressionDict = None
         self.dict_samples: list[bytes] = []
         self.global_variable_change_ids: list[int] = []
+
+        self._compression_dict: zstd.ZstdCompressionDict = None
+        self._compressor: zstd.ZstdCompressor = None
+        self._decompressor: zstd.ZstdDecompressor = None
+
+        # Initialize compressor/decompressor without a dictionary
+        self._rebuild_compressor_decompressor()
 
         # Determine filename used for replay file
         hostname = f"{dolphie.host}_{dolphie.port}"
@@ -113,6 +118,20 @@ class ReplayManager:
 
         self._initialize_sqlite()
         self._manage_metadata()
+
+    @property
+    def compression_dict(self) -> zstd.ZstdCompressionDict | None:
+        return self._compression_dict
+
+    @compression_dict.setter
+    def compression_dict(self, value: zstd.ZstdCompressionDict | None):
+        self._compression_dict = value
+        self._rebuild_compressor_decompressor()
+
+    def _rebuild_compressor_decompressor(self):
+        """Rebuilds the cached compressor and decompressor with the current compression dictionary."""
+        self._compressor = zstd.ZstdCompressor(level=self.COMPRESSION_LEVEL, dict_data=self._compression_dict)
+        self._decompressor = zstd.ZstdDecompressor(dict_data=self._compression_dict)
 
     def _begin_transaction(self) -> None:
         """Begins an immediate transaction for write operations."""
@@ -346,6 +365,24 @@ class ReplayManager:
 
         self.last_purge_time = current_time
 
+    def seek_to_previous_id(self) -> bool:
+        """Moves current_replay_id back so the next fetch returns the previous row. Gap-safe.
+
+        Returns:
+            bool: True if a previous row exists, False if already at the start.
+        """
+        row = self._execute_select_one(
+            "SELECT id, timestamp FROM replay_data WHERE id < ? ORDER BY id DESC LIMIT 1",
+            (self.current_replay_id,),
+        )
+        if row:
+            # Set to one before the target so _load_and_parse_replay_data (WHERE id > ?) picks it up
+            self.current_replay_id = row[0] - 1
+            self.current_replay_timestamp = row[1]
+            return True
+
+        return False
+
     def seek_to_timestamp(self, timestamp: str):
         """Seeks to the specified timestamp in the SQLite database.
 
@@ -353,41 +390,34 @@ class ReplayManager:
             timestamp: The timestamp to seek to.
         """
         row = self._execute_select_one(
-            "SELECT id FROM replay_data WHERE timestamp = ?",
+            "SELECT id, timestamp FROM replay_data WHERE timestamp <= ? ORDER BY timestamp DESC LIMIT 1",
             (timestamp,),
         )
-        if row:
-            # We subtract 1 because get_next_refresh_interval naturally increments the index
-            self.current_replay_id = row[0] - 1
+        if not row:
+            self.dolphie.app.notify(
+                f"No timestamps found on or before [$light_blue]{timestamp}[/$light_blue]",
+                severity="error",
+                timeout=10,
+            )
+            return False
+
+        # Set to one before the target so _load_and_parse_replay_data (WHERE id > ?) picks it up
+        self.current_replay_id = row[0] - 1
+        found_timestamp = row[1]
+
+        if found_timestamp == timestamp:
             self.dolphie.app.notify(
                 f"Seeking to timestamp [$light_blue]{timestamp}[/$light_blue]",
                 severity="success",
                 timeout=10,
             )
-
-            return True
         else:
-            # Try to find a timestamp before the specified timestamp
-            row = self._execute_select_one(
-                "SELECT id, timestamp FROM replay_data WHERE timestamp < ? ORDER BY timestamp DESC LIMIT 1",
-                (timestamp,),
+            self.dolphie.app.notify(
+                f"Timestamp not found, seeking to closest timestamp [$light_blue]{found_timestamp}[/$light_blue]",
+                timeout=10,
             )
-            if row:
-                # We subtract 1 because get_next_refresh_interval naturally increments the index
-                self.current_replay_id = row[0] - 1
-                self.dolphie.app.notify(
-                    f"Timestamp not found, seeking to closest timestamp [$light_blue]{row[1]}[/$light_blue]",
-                    timeout=10,
-                )
 
-                return True
-            else:
-                self.dolphie.app.notify(
-                    f"No timestamps found on or before [$light_blue]{timestamp}[/$light_blue]",
-                    severity="error",
-                    timeout=10,
-                )
-                return False
+        return True
 
     def _create_new_replay_file(self, new_replay_file: str):
         logger.info(f"Renaming replay file to: {new_replay_file}")
@@ -468,7 +498,7 @@ class ReplayManager:
         if not self.dolphie.replay_file:
             return
 
-        return not (not self._get_replay_file_metadata() or not self._verify_replay_has_data())
+        return self._get_replay_file_metadata() and self._verify_replay_has_data()
 
     def _get_replay_file_metadata(self):
         """Retrieves the replay's metadata from the metadata table.
@@ -545,35 +575,12 @@ class ReplayManager:
 
         return compression_dict
 
-    def _compress_data(self, data: str) -> bytes:
-        """Compresses data using zstd with an optional compression dictionary.
-
-        Args:
-            data (str): Data to compress.
-            dict_bytes (bytes, optional): The compression dictionary.
-
-        Returns:
-            bytes: Compressed data.
-        """
-        compressor = zstd.ZstdCompressor(level=self.COMPRESSION_LEVEL, dict_data=self.compression_dict)
-
-        return compressor.compress(data)
-
-    def _decompress_data(self, compressed_data: bytes) -> bytes:
-        """Decompresses data using zstd.
-
-        Args:
-            compressed_data (bytes): Compressed data.
-
-        Returns:
-            str: Decompressed data.
-        """
-        decompressor = zstd.ZstdDecompressor(dict_data=self.compression_dict)
-
-        return decompressor.decompress(compressed_data)
-
     def _condition_metrics(self, metric_manager: MetricManager.MetricManager):
         """Captures the metrics from the metric manager and returns them in a structured format.
+
+        In daemon mode, only the latest value per metric is stored (delta format) to avoid
+        serializing the full 10-minute history on every cycle. The replay player detects the
+        _delta flag and accumulates values during playback.
 
         Args:
             metric_manager: The metric manager to capture metrics from.
@@ -581,23 +588,24 @@ class ReplayManager:
         Returns:
             dict: A dictionary of captured metrics.
         """
-        metrics = {"datetimes": list(metric_manager.datetimes)}
+        daemon_mode = self.dolphie.daemon_mode
+        connection_source = self.dolphie.connection_source
+
+        if daemon_mode:
+            metrics = {
+                "datetimes": [metric_manager.datetimes[-1]] if metric_manager.datetimes else [],
+                "_delta": True,
+            }
+        else:
+            metrics = {"datetimes": list(metric_manager.datetimes)}
 
         for (
             metric_instance_name,
             metric_instance_data,
         ) in metric_manager.metrics.__dict__.items():
-            # Skip if the metric instance is not for the current connection source
-            if self.dolphie.connection_source == ConnectionSource.mysql:
-                if (
-                    ConnectionSource.mysql not in metric_instance_data.connection_source
-                    or not metric_instance_data.use_with_replay
-                ):
-                    continue
-            elif (
-                self.dolphie.connection_source == ConnectionSource.proxysql
-                and ConnectionSource.proxysql not in metric_instance_data.connection_source
-            ):
+            if connection_source not in metric_instance_data.connection_source:
+                continue
+            if connection_source == ConnectionSource.mysql and not metric_instance_data.use_with_replay:
                 continue
 
             metric_entry = metrics.setdefault(metric_instance_name, {})
@@ -605,8 +613,9 @@ class ReplayManager:
                 if not hasattr(v, "values") or not v.values:
                     continue
 
-                metric_entry.setdefault(k, [])
-                if v.values:
+                if daemon_mode:
+                    metric_entry[k] = [v.values[-1]]
+                else:
                     metric_entry[k] = list(v.values)
 
         return metrics
@@ -651,18 +660,6 @@ class ReplayManager:
         Args:
             data_dict: The data dictionary to update.
         """
-        # Remove some global status variables that are not useful for replaying
-        keys_to_remove = [
-            var_name
-            for var_name in self.dolphie.global_status
-            if any(
-                exclude_var in var_name.lower() for exclude_var in ["performance_schema", "mysqlx", "ssl", "rsa", "tls"]
-            )
-        ]
-
-        for key in keys_to_remove:
-            self.dolphie.global_status.pop(key)
-
         # Add the replay_pfs_metrics_last_reset_time to the global status dictionary
         if self.dolphie.pfs_metrics_last_reset_time:
             data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = (
@@ -705,19 +702,6 @@ class ReplayManager:
 
         if self.dolphie.statements_summary_data and self.dolphie.statements_summary_data.filtered_data:
             data_dict["statements_summary_data"] = self.dolphie.statements_summary_data.filtered_data
-
-    def _add_proxysql_specific_data(self, data_dict: dict) -> None:
-        """Adds ProxySQL-specific data to the data dictionary.
-
-        Args:
-            data_dict: The data dictionary to update.
-        """
-        data_dict.update(
-            {
-                "command_stats": self.dolphie.proxysql_command_stats,
-                "hostgroup_summary": self.dolphie.proxysql_hostgroup_summary,
-            }
-        )
 
     def _serialize_data_dict(self, data_dict: dict) -> bytes:
         """Serializes the data dictionary to bytes using orjson or json as fallback.
@@ -769,7 +753,7 @@ class ReplayManager:
                 "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
                 (
                     timestamp,
-                    self._compress_data(data_dict_bytes),
+                    self._compressor.compress(data_dict_bytes),
                 ),
             )
 
@@ -814,7 +798,12 @@ class ReplayManager:
         if self.dolphie.connection_source == ConnectionSource.mysql:
             self._add_mysql_specific_data(data_dict)
         else:
-            self._add_proxysql_specific_data(data_dict)
+            data_dict.update(
+                {
+                    "command_stats": self.dolphie.proxysql_command_stats,
+                    "hostgroup_summary": self.dolphie.proxysql_hostgroup_summary,
+                }
+            )
 
         # Serialize and compress the data
         data_dict_bytes = self._serialize_data_dict(data_dict)
@@ -826,20 +815,26 @@ class ReplayManager:
     def _update_replay_metadata_cache(self) -> bool:
         """Updates the replay metadata (min/max timestamps and IDs, total rows).
 
+        Uses two O(1) primary key lookups instead of a full table scan.
+        total_replay_rows is derived from the ID range since IDs are contiguous
+        (rows are only ever purged from the beginning).
+
         Returns:
             bool: True if metadata was successfully updated, False otherwise.
         """
-        row = self._execute_select_one(
-            "SELECT MIN(timestamp), MAX(timestamp), MIN(id), MAX(id), COUNT(*) FROM replay_data"
-        )
-        if row:
-            self.min_replay_timestamp = row[0]
-            self.max_replay_timestamp = row[1]
-            self.min_replay_id = row[2]
-            self.max_replay_id = row[3]
-            self.total_replay_rows = row[4]
-            return True
-        return False
+        min_row = self._execute_select_one("SELECT id, timestamp FROM replay_data ORDER BY id LIMIT 1")
+        if not min_row:
+            return False
+
+        max_row = self._execute_select_one("SELECT id, timestamp FROM replay_data ORDER BY id DESC LIMIT 1")
+
+        self.min_replay_id = min_row[0]
+        self.min_replay_timestamp = min_row[1]
+        self.max_replay_id = max_row[0]
+        self.max_replay_timestamp = max_row[1]
+        self.total_replay_rows = self.max_replay_id - self.min_replay_id + 1
+
+        return True
 
     def _load_and_parse_replay_data(self) -> tuple[str, dict] | None:
         """Loads the next replay data row from the database and parses it.
@@ -860,7 +855,7 @@ class ReplayManager:
 
         # Decompress and parse the JSON data
         try:
-            data = orjson.loads(self._decompress_data(row[2]))
+            data = orjson.loads(self._decompressor.decompress(row[2]))
             return row[1], data
         except Exception as e:
             self.dolphie.app.notify(str(e), title="Error parsing replay data", severity="error")
@@ -971,6 +966,47 @@ class ReplayManager:
         else:
             self.dolphie.app.notify("Invalid connection source for replay data", severity="error")
             return None
+
+    def fetch_delta_metrics_for_window(
+        self, target_id: int, window_minutes: int = MetricManager.MetricManager.ROLLING_WINDOW_MINUTES
+    ) -> list[dict]:
+        """Fetches metric_manager deltas for the time window ending at the target replay ID.
+
+        This is used during replay seek/backward navigation in delta mode to rebuild
+        the 10-minute rolling metric window up to the target position.
+
+        Args:
+            target_id: The replay ID to build the window up to.
+            window_minutes: The size of the rolling window in minutes.
+
+        Returns:
+            list[dict]: A list of metric_manager dicts from oldest to newest within the window.
+        """
+        if not self.current_replay_timestamp:
+            return []
+
+        # Calculate the window start timestamp
+        target_dt = datetime.fromisoformat(self.current_replay_timestamp)
+        window_start = (target_dt - timedelta(minutes=window_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+
+        # Fetch all rows in the window up to and including the target
+        rows = self._execute_select_all(
+            "SELECT data FROM replay_data WHERE timestamp >= ? AND id <= ? ORDER BY id",
+            (window_start, target_id),
+        )
+
+        # Extract just the metric_manager data from each row
+        metrics_list = []
+        for row in rows:
+            try:
+                data = orjson.loads(self._decompressor.decompress(row[0]))
+                metric_manager = data.get("metric_manager", {})
+                if metric_manager:
+                    metrics_list.append(metric_manager)
+            except Exception:
+                continue
+
+        return metrics_list
 
     def fetch_global_variable_changes_for_current_replay_id(self):
         """Fetches global variable changes for the current replay ID."""

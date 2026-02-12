@@ -443,17 +443,13 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             table.add_row("[label]GTID", gtid_status)
 
             if replica:
-                replica_primary_server_uuid = (
-                    dolphie.replication_status.get(uuid_key) if dolphie.replication_status else None
-                )
-
-                # Build UUID exclusion set once for both calls
-                exclude_uuids = {dolphie.server_uuid}
-                if replica_primary_server_uuid:
-                    exclude_uuids.add(replica_primary_server_uuid)
+                # Exclude the primary's own UUID and all its replication source UUIDs to avoid
+                # false positives from stale gtid_executed snapshots. The primary actively receives
+                # GTIDs from its sources, so by the time replicas are checked the snapshot is behind.
+                exclude_uuids = {dolphie.server_uuid} | dolphie.replication_source_uuids
 
                 replica_gtid_set = _filter_gtid_sets(executed_gtid_set, exclude_uuids)
-                primary_gtid_set = _filter_gtid_sets(dolphie.global_variables.get("gtid_executed"), exclude_uuids)
+                primary_gtid_set = _filter_gtid_sets(dolphie.global_variables.get("gtid_executed", ""), exclude_uuids)
 
                 replica.connection.execute(
                     "SELECT GTID_SUBTRACT(%s, %s) AS errant_trxs",
@@ -468,7 +464,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
                 table.add_row("[label]Errant TRX", errant_trx)
 
                 # If this replica has replicas, use its primary server UUID, else use its own
-                primary_uuid = replica_primary_server_uuid or dolphie.server_uuid
+                primary_uuid = primary_uuid or dolphie.server_uuid
 
             retrieved_gtid_set = _color_gtid_sets(retrieved_gtid_set, primary_uuid)
             executed_gtid_set = _color_gtid_sets(executed_gtid_set, primary_uuid)
@@ -584,7 +580,13 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
 
     # Fetch replication status
     connection.execute(replication_status_query)
-    replication_status = connection.fetchone() or {}
+    all_rows = connection.fetchall()
+    replication_status = all_rows[0] if all_rows else {}
+
+    # Collect all source UUIDs for multi-source replication errant TRX detection
+    if not replica and all_rows:
+        uuid_field = "Source_UUID" if use_show_replica_status else "Master_UUID"
+        dolphie.replication_source_uuids = {row.get(uuid_field) for row in all_rows if row.get(uuid_field)}
 
     # Fetch replica lag using alternative method if applicable
     if replica_lag_source:

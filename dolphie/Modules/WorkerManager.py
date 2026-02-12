@@ -111,15 +111,76 @@ class WorkerManager:
             )
 
             # Metrics data is already calculated in the replay event data so we just need to update the values
-            dolphie.metric_manager.datetimes = replay_event_data.metric_manager.get("datetimes")
-            for metric_name, metric_data in replay_event_data.metric_manager.items():
-                metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
-                if metric_instance:
-                    for metric_name, metric_values in metric_data.items():
-                        metric: MetricManager.MetricData = metric_instance.__dict__.get(metric_name)
-                        if metric:
-                            metric.values = metric_values
-                            metric.last_value = metric_values[-1]
+            is_delta_metrics = replay_event_data.metric_manager.get("_delta", False)
+            new_datetimes = replay_event_data.metric_manager.get("datetimes", [])
+
+            if is_delta_metrics:
+                # Delta format from daemon mode
+                new_dt = new_datetimes[0] if new_datetimes else None
+                last_dt = dolphie.metric_manager.datetimes[-1] if dolphie.metric_manager.datetimes else None
+
+                is_sequential = False
+                if last_dt is not None and new_dt is not None and new_dt > last_dt:
+                    # Verify the gap isn't too large (e.g. daemon restart after downtime)
+                    try:
+                        dt_fmt = MetricManager.MetricManager.DATETIME_FORMAT
+                        new_dt_parsed = datetime.strptime(new_dt, dt_fmt)
+                        gap = (new_dt_parsed - datetime.strptime(last_dt, dt_fmt)).total_seconds()
+                        is_sequential = gap <= dolphie.refresh_interval * 10
+                    except ValueError:
+                        new_dt_parsed = None
+
+                if is_sequential:
+                    # Normal forward step: append new delta value
+                    dolphie.metric_manager.datetimes.append(new_dt)
+                    for metric_name, metric_data in replay_event_data.metric_manager.items():
+                        metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
+                        if metric_instance:
+                            for field_name, metric_values in metric_data.items():
+                                metric: MetricManager.MetricData = metric_instance.__dict__.get(field_name)
+                                if metric and metric_values:
+                                    metric.values.append(metric_values[0])
+                                    metric.last_value = metric_values[0]
+
+                    # Trim to rolling window
+                    if new_dt_parsed:
+                        dolphie.metric_manager.trim_datetimes_to_window(new_dt_parsed)
+                else:
+                    # Non-sequential (backward, seek, or first event): rebuild the rolling window
+                    metrics_list = tab.replay_manager.fetch_delta_metrics_for_window(
+                        tab.replay_manager.current_replay_id
+                    )
+
+                    # Clear existing metrics
+                    dolphie.metric_manager.datetimes.clear()
+                    for metric_data_obj in dolphie.metric_manager._all_metrics_data_history:
+                        metric_data_obj.values.clear()
+
+                    # Accumulate all deltas in the window
+                    for delta in metrics_list:
+                        delta_datetimes = delta.get("datetimes", [])
+                        if delta_datetimes:
+                            dolphie.metric_manager.datetimes.extend(delta_datetimes)
+
+                        for metric_name, metric_data in delta.items():
+                            metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
+                            if metric_instance:
+                                for field_name, metric_values in metric_data.items():
+                                    metric: MetricManager.MetricData = metric_instance.__dict__.get(field_name)
+                                    if metric and metric_values:
+                                        metric.values.append(metric_values[0])
+                                        metric.last_value = metric_values[0]
+            else:
+                # Full format: replace values entirely
+                dolphie.metric_manager.datetimes = new_datetimes
+                for metric_name, metric_data in replay_event_data.metric_manager.items():
+                    metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
+                    if metric_instance:
+                        for field_name, metric_values in metric_data.items():
+                            metric: MetricManager.MetricData = metric_instance.__dict__.get(field_name)
+                            if metric:
+                                metric.values = metric_values
+                                metric.last_value = metric_values[-1]
 
         except Exception as e:
             # Catch any errors during replay and log them without crashing the app

@@ -223,8 +223,8 @@ class DolphieApp(App):
 
     @on(Button.Pressed, "#back_button")
     def replay_back(self):
-        self.tab_manager.active_tab.replay_manager.current_replay_id -= 2
-        self.force_refresh_for_replay()
+        if self.tab_manager.active_tab.replay_manager.seek_to_previous_id():
+            self.force_refresh_for_replay()
 
     @on(Button.Pressed, "#forward_button")
     def replay_forward(self):
@@ -374,7 +374,6 @@ class DolphieApp(App):
                 tab.worker_timer.stop()
 
             if need_current_data:
-                # We subtract 1 because get_next_refresh_interval will increment the index
                 tab.replay_manager.current_replay_id -= 1
 
             self.run_worker_replay(tab.id, manual_control=True)

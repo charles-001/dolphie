@@ -713,6 +713,9 @@ class MetricInstances:
 class MetricManager:
     """Manages the state, collection, and processing of all metrics."""
 
+    DATETIME_FORMAT = "%d/%m/%y %H:%M:%S"
+    ROLLING_WINDOW_MINUTES = 10
+
     def __init__(self, replay_file: str, daemon_mode: bool = False):
         """Initialize the MetricManager.
 
@@ -1123,7 +1126,9 @@ class MetricManager:
         self.metrics.redo_log.redo_log_size = self.redo_log_size
 
         self.add_metric_datetime()
-        self.daemon_cleanup_data()
+
+        if self.daemon_mode:
+            self.trim_datetimes_to_window(worker_start_time)
 
         self.initialized = True
 
@@ -1142,7 +1147,7 @@ class MetricManager:
     def add_metric_datetime(self):
         """Adds the current worker timestamp to the global datetime list."""
         if self.initialized and not self.replay_file and self.worker_start_time:
-            self.datetimes.append(self.worker_start_time.strftime("%d/%m/%y %H:%M:%S"))
+            self.datetimes.append(self.worker_start_time.strftime(self.DATETIME_FORMAT))
 
     def get_metric_source_data(self, metric_source: MetricSource) -> dict[str, int] | None:
         """Retrieves the raw data dictionary for a given MetricSource."""
@@ -1309,34 +1314,40 @@ class MetricManager:
         color_code = "green" if smoothed_hit_ratio > 70 else "yellow" if smoothed_hit_ratio > 50 else "red"
         return f"[{color_code}]{smoothed_hit_ratio:.2f}%[/{color_code}]"
 
-    def daemon_cleanup_data(self):
-        """Cleanup data for daemon mode to keep the metrics data small."""
-        if not self.daemon_mode or not self.datetimes:
-            return
+    def trim_datetimes_to_window(self, reference_time: datetime) -> bool:
+        """Trims datetimes and metric values to the rolling window ending at reference_time.
 
-        time_threshold = datetime.now().astimezone() - timedelta(minutes=10)
+        Args:
+            reference_time: The reference time to calculate the window from.
 
-        # Efficiently pop from the left (O(1) per item)
+        Returns:
+            bool: True if any entries were trimmed, False otherwise.
+        """
+        if not self.datetimes:
+            return False
+
+        threshold = reference_time - timedelta(minutes=self.ROLLING_WINDOW_MINUTES)
+        trimmed = False
+
         while self.datetimes:
             try:
-                # Peek at the leftmost datetime
-                first_dt = datetime.strptime(self.datetimes[0], "%d/%m/%y %H:%M:%S").astimezone()
-                if first_dt < time_threshold:
-                    # If it's too old, pop it
+                first_dt = datetime.strptime(self.datetimes[0], self.DATETIME_FORMAT)
+                if first_dt < threshold:
                     self.datetimes.popleft()
-                    # And pop the corresponding value from all metrics
                     for metric_data in self._all_metrics_data_history:
                         if metric_data.values:
                             metric_data.values.popleft()
+                    trimmed = True
                 else:
-                    # The first item is new enough, so all others are too
                     break
             except (ValueError, IndexError):
-                # Handle malformed date or empty deque during check
                 try:
-                    self.datetimes.popleft()  # Discard bad data
+                    self.datetimes.popleft()
                     for metric_data in self._all_metrics_data_history:
                         if metric_data.values:
                             metric_data.values.popleft()
                 except IndexError:
-                    break  # Deque is empty
+                    break
+
+        return trimmed
+
