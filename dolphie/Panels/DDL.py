@@ -1,7 +1,6 @@
-from textual.widgets import DataTable
-
 from dolphie.Modules.Functions import format_bytes, format_time
 from dolphie.Modules.TabManager import Tab
+from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -21,33 +20,30 @@ def create_panel(tab: Tab) -> DataTable:
     }
 
     ddl_datatable = tab.ddl_datatable
-    ddl_datatable.clear(columns=True)
 
-    column_keys = []
-    column_formats = []
-    for column_key, column_data in columns.items():
-        ddl_datatable.add_column(
-            column_data["name"], key=column_key, width=column_data["width"]
-        )
-        column_keys.append(column_key)
-        column_formats.append(column_data["format"])
+    with dolphie.app.batch_update():
+        ddl_datatable.clear(columns=True)
 
-    for ddl in dolphie.ddl:
-        row_values = []
+        column_keys = []
+        column_formats = []
+        for column_key, column_data in columns.items():
+            ddl_datatable.add_column(column_data["name"], key=column_key, width=column_data["width"])
+            column_keys.append(column_key)
+            column_formats.append(column_data["format"])
 
-        for column_key, column_format in zip(column_keys, column_formats):
-            if column_format == "time":
-                value = format_time(ddl[column_key], picoseconds=True)
-            elif column_format == "bytes":
-                value = format_bytes(ddl[column_key])
-            else:
-                value = ddl[column_key]
+        for ddl in dolphie.ddl:
+            row_values = []
 
-            row_values.append(value)
+            for column_key, column_format in zip(column_keys, column_formats):
+                if column_format == "time":
+                    value = format_time(ddl[column_key], picoseconds=True)
+                elif column_format == "bytes":
+                    value = format_bytes(ddl[column_key])
+                else:
+                    value = ddl[column_key]
 
-        ddl_datatable.add_row(*row_values, key=ddl["processlist_id"])
+                row_values.append(value)
 
-    tab.ddl_title.update(
-        f"{dolphie.panels.get_panel_title(dolphie.panels.ddl.name)} "
-        f"([$highlight]{ddl_datatable.row_count}[/$highlight])"
-    )
+            ddl_datatable.add_row(*row_values, key=ddl["processlist_id"])
+
+    tab.ddl_title.update(f"{dolphie.panels.ddl.title} " f"([$highlight]{ddl_datatable.row_count}[/$highlight])")

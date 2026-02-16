@@ -1,13 +1,12 @@
 from datetime import datetime, timedelta
 
-from rich.style import Style
-from rich.table import Table
-
 from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.MetricManager import MetricData
 from dolphie.Modules.MySQL import ConnectionSource
 from dolphie.Modules.TabManager import Tab
 from dolphie.Panels import Replication as ReplicationPanel
+from rich.style import Style
+from rich.table import Table
 
 
 def create_panel(tab: Tab) -> Table:
@@ -25,7 +24,7 @@ def create_panel(tab: Tab) -> Table:
     table_information = Table(
         show_header=False,
         box=None,
-        title=f"{dolphie.panels.get_key(dolphie.panels.dashboard.name)}Host Information",
+        title=f"{dolphie.panels.dashboard.formatted_key}Host Information",
         title_style=table_title_style,
     )
 
@@ -42,28 +41,18 @@ def create_panel(tab: Tab) -> Table:
     else:
         host_type = "MariaDB" if dolphie.connection_source_alt == ConnectionSource.mariadb else "MySQL"
 
-    replicas = (
-        len(dolphie.replica_manager.available_replicas)
-        if dolphie.replica_manager.available_replicas
-        else 0
-    )
+    replicas = len(dolphie.replica_manager.available_replicas) if dolphie.replica_manager.available_replicas else 0
 
     table_information.add_column()
     table_information.add_column(min_width=25, max_width=35)
-    table_information.add_row(
-        "[label]Version", f"{dolphie.host_distro} {dolphie.host_version}"
-    )
-    if global_variables.get("version_compile_os") and global_variables.get(
-        "version_compile_machine"
-    ):
+    table_information.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
+    if global_variables.get("version_compile_os") and global_variables.get("version_compile_machine"):
         table_information.add_row(
             "[label]",
             f"{global_variables['version_compile_os']} ({global_variables['version_compile_machine']})",
         )
     table_information.add_row("[label]Type", host_type)
-    table_information.add_row(
-        "[label]Uptime", str(timedelta(seconds=global_status["Uptime"]))
-    )
+    table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
     table_information.add_row("[label]Replicas", str(replicas))
     table_information.add_row(
         "[label]Threads",
@@ -84,9 +73,7 @@ def create_panel(tab: Tab) -> Table:
         )
     else:
         if dolphie.worker_processing_time:
-            table_information.add_row(
-                "[label]Latency", f"{round(dolphie.worker_processing_time, 2)}s"
-            )
+            table_information.add_row("[label]Latency", f"{round(dolphie.worker_processing_time, 2)}s")
 
     tab.dashboard_section_1.update(table_information)
 
@@ -101,9 +88,7 @@ def create_panel(tab: Tab) -> Table:
     ###########
     # InnoDB  #
     ###########
-    table_innodb = Table(
-        show_header=False, box=None, title="InnoDB", title_style=table_title_style
-    )
+    table_innodb = Table(show_header=False, box=None, title="InnoDB", title_style=table_title_style)
 
     table_innodb.add_column()
     table_innodb.add_column(width=9)
@@ -134,27 +119,18 @@ def create_panel(tab: Tab) -> Table:
         "[label]Chkpt Age",
         dolphie.metric_manager.get_formatted_checkpoint_age(),
     )
-    table_innodb.add_row(
-        "[label]AHI Hit", dolphie.metric_manager.get_formatted_ahi_status()
-    )
+    table_innodb.add_row("[label]AHI Hit", dolphie.metric_manager.get_formatted_ahi_status())
 
     bp_instances = global_variables.get("innodb_buffer_pool_instances", 1)
     plural = "s" if bp_instances > 1 else ""
     table_innodb.add_row(f"[label]BP Instance{plural}", format_number(bp_instances))
 
-    table_innodb.add_row(
-        "[label]BP Size", format_bytes(global_variables["innodb_buffer_pool_size"])
-    )
+    table_innodb.add_row("[label]BP Size", format_bytes(global_variables["innodb_buffer_pool_size"]))
     table_innodb.add_row(
         "[label]BP Available",
-        format_bytes(
-            global_variables["innodb_buffer_pool_size"]
-            - global_status["Innodb_buffer_pool_bytes_data"]
-        ),
+        format_bytes(global_variables["innodb_buffer_pool_size"] - global_status["Innodb_buffer_pool_bytes_data"]),
     )
-    table_innodb.add_row(
-        "[label]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"])
-    )
+    table_innodb.add_row("[label]BP Dirty", format_bytes(global_status["Innodb_buffer_pool_bytes_dirty"]))
     table_innodb.add_row(
         "[label]History List",
         format_number(dolphie.innodb_metrics.get("trx_rseg_history_len", "N/A")),
@@ -165,9 +141,7 @@ def create_panel(tab: Tab) -> Table:
     ##############
     # Binary Log #
     ##############
-    table_primary = Table(
-        show_header=False, box=None, title="Binary Log", title_style=table_title_style
-    )
+    table_primary = Table(show_header=False, box=None, title="Binary Log", title_style=table_title_style)
 
     if global_variables.get("log_bin") == "OFF" or not binlog_status or not binlog_status.get("File"):
         tab.dashboard_section_3.display = False
@@ -183,9 +157,7 @@ def create_panel(tab: Tab) -> Table:
             if binlog_cache_disk >= binlog_cache_mem:
                 binlog_cache = 0
             else:
-                binlog_cache = round(
-                    100 - (binlog_cache_disk / binlog_cache_mem * 100), 2
-                )
+                binlog_cache = round(100 - (binlog_cache_disk / binlog_cache_mem * 100), 2)
 
         table_primary.add_row("[label]File name", binlog_status["File"])
         table_primary.add_row(
@@ -196,28 +168,20 @@ def create_panel(tab: Tab) -> Table:
             "[label]Size",
             format_bytes(binlog_status["Position"]),
         )
-        table_primary.add_row(
-            "[label]Diff", format_bytes(binlog_status["Diff_Position"])
-        )
+        table_primary.add_row("[label]Diff", format_bytes(binlog_status["Diff_Position"]))
         table_primary.add_row("[label]Cache Hit", f"{binlog_cache}%")
 
         binlog_format = global_variables.get("binlog_format", "N/A")
         if binlog_format == "ROW":
             binlog_row_image = global_variables.get("binlog_row_image", "N/A")
-            table_primary.add_row(
-                "[label]Format", f"{binlog_format} ({binlog_row_image})"
-            )
+            table_primary.add_row("[label]Format", f"{binlog_format} ({binlog_row_image})")
         else:
             table_primary.add_row("[label]Format", binlog_format)
 
         if dolphie.connection_source_alt == ConnectionSource.mariadb:
-            table_primary.add_row(
-                "[label]Encrypt", global_variables.get("encrypt_binlog", "N/A")
-            )
+            table_primary.add_row("[label]Encrypt", global_variables.get("encrypt_binlog", "N/A"))
         else:
-            table_primary.add_row(
-                "[label]GTID", global_variables.get("gtid_mode", "N/A")
-            )
+            table_primary.add_row("[label]GTID", global_variables.get("gtid_mode", "N/A"))
             table_primary.add_row(
                 "[label]Compression",
                 global_variables.get("binlog_transaction_compression", "N/A"),
@@ -230,17 +194,13 @@ def create_panel(tab: Tab) -> Table:
     ###############
     if dolphie.replication_status and not dolphie.panels.replication.visible:
         tab.dashboard_section_5.display = True
-        tab.dashboard_section_5.update(
-            ReplicationPanel.create_replication_table(tab, dashboard_table=True)
-        )
+        tab.dashboard_section_5.update(ReplicationPanel.create_replication_table(tab, dashboard_table=True))
     else:
         tab.dashboard_section_5.display = False
     ###############
     # Statistics #
     ###############
-    table_stats = Table(
-        show_header=False, box=None, title="Statistics/s", title_style=table_title_style
-    )
+    table_stats = Table(show_header=False, box=None, title="Statistics/s", title_style=table_title_style)
 
     table_stats.add_column()
     table_stats.add_column(min_width=6)
@@ -262,9 +222,7 @@ def create_panel(tab: Tab) -> Table:
         metric_data: MetricData = getattr(metrics, metric_name)
 
         if metric_data.values:
-            table_stats.add_row(
-                f"[label]{label}", format_number(metric_data.values[-1])
-            )
+            table_stats.add_row(f"[label]{label}", format_number(metric_data.values[-1]))
         else:
             table_stats.add_row(f"[label]{label}", "0")
 
@@ -296,9 +254,7 @@ def create_system_utilization_table(tab: Tab) -> Table:
 
     # Uptime
     uptime = system_utilization.get("Uptime", "N/A")
-    table.add_row(
-        "[label]Uptime", str(timedelta(seconds=uptime)) if uptime != "N/A" else "N/A"
-    )
+    table.add_row("[label]Uptime", str(timedelta(seconds=uptime)) if uptime != "N/A" else "N/A")
 
     # CPU
     cpu_percent_values = dolphie.metric_manager.metrics.system_cpu.CPU_Percent.values
@@ -306,9 +262,7 @@ def create_system_utilization_table(tab: Tab) -> Table:
         cpu_percent = round(cpu_percent_values[-1], 2)
         formatted_cpu_percent = format_percent(cpu_percent)
         cpu_cores = system_utilization.get("CPU_Count", "N/A")
-        table.add_row(
-            "[label]CPU", f"{formatted_cpu_percent} [label]cores[/label] {cpu_cores}"
-        )
+        table.add_row("[label]CPU", f"{formatted_cpu_percent} [label]cores[/label] {cpu_cores}")
     else:
         table.add_row("[label]CPU", "N/A")
 
@@ -350,8 +304,6 @@ def create_system_utilization_table(tab: Tab) -> Table:
             f"[label]IOPS R[/label] {last_disk_read}\n[label]IOPS W[/label] {last_disk_write}",
         )
     else:
-        table.add_row(
-            "[label]Disk", "[label]IOPS R[/label] N/A\n[label]IOPS W[/label] N/A"
-        )
+        table.add_row("[label]Disk", "[label]IOPS R[/label] N/A\n[label]IOPS W[/label] N/A")
 
     return table

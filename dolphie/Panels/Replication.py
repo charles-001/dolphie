@@ -55,9 +55,7 @@ def _sync_grid(grid, items: dict[str, Table], item_type: str, tab_id: str, app, 
         else:
             try:
                 static = Static(table, id=f"{item_type}_{key}_{tab_id}")
-                grid.mount(
-                    ScrollableContainer(static, id=f"{item_type}_container_{key}_{tab_id}")
-                )
+                grid.mount(ScrollableContainer(static, id=f"{item_type}_container_{key}_{tab_id}"))
                 tracked[key] = static
             except Exception:
                 app.notify(
@@ -187,7 +185,7 @@ def create_panel(tab: Tab):
             f"[$label]{label}[/$label] {source.get(var, 'N/A')}" for var, (label, source) in available_variables.items()
         )
 
-        title_prefix = panels.get_key(panels.replication.name)
+        title_prefix = panels.replication.formatted_key
         cluster_title = "InnoDB Cluster" if dolphie.innodb_cluster else "Group Replication"
         cluster_name = group_replication_data.get("cluster_name")
         final_cluster_name = (
@@ -215,7 +213,7 @@ def create_panel(tab: Tab):
         tab.clusterset_container.display = True
 
         tab.clusterset_title.update(
-            f"[b]{panels.get_key(panels.replication.name)}ClusterSets "
+            f"[b]{panels.replication.formatted_key}ClusterSets "
             f"([$highlight]{len(innodb_cluster_clustersets)}[/$highlight])"
         )
 
@@ -256,7 +254,7 @@ def create_replica_panel(tab: Tab):
 
     # Update replicas title
     num_replicas = len(replica_manager.available_replicas)
-    title_prefix = panels.get_key(panels.replication.name)
+    title_prefix = panels.replication.formatted_key
     tab.replicas_title.update(f"[b]{title_prefix}Replicas ([$highlight]{num_replicas}[/$highlight])")
 
     # Sync replica grid widgets with current replica data
@@ -610,7 +608,7 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
         replication_status["Seconds_Behind"] = replica_lag
         replication_status["Replica_Speed"] = (
             round((previous_lag - replica_lag) / dolphie.polling_latency)
-            if previous_lag and replica_lag < previous_lag
+            if previous_lag and replica_lag < previous_lag and dolphie.polling_latency > 0
             else 0
         )
 

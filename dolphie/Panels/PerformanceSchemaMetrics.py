@@ -1,10 +1,9 @@
 import os
 from datetime import datetime
 
-from textual.widgets import DataTable
-
 from dolphie.Modules.Functions import format_bytes, format_number, format_time
 from dolphie.Modules.TabManager import Tab
+from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab):
@@ -21,9 +20,7 @@ def create_panel(tab: Tab):
             if dolphie.pfs_metrics_last_reset_time
             else 0
         )
-    tab.pfs_metrics_delta.label = (
-        f"Delta since last reset ([$light_blue]{format_time(time)}[/$light_blue])"
-    )
+    tab.pfs_metrics_delta.label = f"Delta since last reset ([$light_blue]{format_time(time)}[/$light_blue])"
 
 
 def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
@@ -32,9 +29,9 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
 
     if not dolphie.table_io_waits_data or not dolphie.table_io_waits_data.filtered_data:
         datatable.display = False
-        tab.pfs_metrics_tabs.get_tab(
-            "pfs_metrics_table_io_waits_tab"
-        ).label = "Table I/O Waits ([$highlight]0[/$highlight])"
+        tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
+            "Table I/O Waits ([$highlight]0[/$highlight])"
+        )
 
         return
 
@@ -66,77 +63,41 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
     data = dolphie.table_io_waits_data.filtered_data
     use_total = tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total"
 
-    for file_name, metrics in data.items():
-        row_id = file_name
+    changed = False
 
-        if row_id in datatable.rows:
-            # Get the existing row data ONCE before the column loop
-            datatable_row = datatable.get_row(row_id)
+    with dolphie.app.batch_update():
+        # Remove stale rows first
+        if data:
+            current_rows = set(data.keys())
+            existing_rows = set(datatable.rows.keys())
 
-            for column_id, (column_name, field) in enumerate(
-                zip(column_names, column_fields)
-            ):
-                if column_name == "Table":
-                    continue
-
-                column_value = None
-
-                # Handle fields that may contain arrays
-                if isinstance(field, list):
-                    # If the field is an array, it contains two fields to be combined
-                    count_field, wait_time_field = field
-
-                    # Get the count and wait_time values from the combined fields
-                    count_value = metrics.get(count_field, {})
-                    wait_time_value = metrics.get(wait_time_field, {})
-
-                    if use_total:
-                        count_value = count_value.get("t", 0)
-                        wait_time_value = wait_time_value.get("t", 0)
-                    else:
-                        count_value = count_value.get("d", 0)
-                        wait_time_value = wait_time_value.get("d", 0)
-
-                    if count_value and wait_time_value:
-                        formatted_time = format_time(wait_time_value, picoseconds=True)
-                        column_value = f"{formatted_time} ({format_number(count_value)})"
-                    else:
-                        column_value = "[dark_gray]N/A"
+            rows_to_remove = existing_rows - current_rows
+            if rows_to_remove:
+                changed = True
+                if len(rows_to_remove) > len(data):
+                    datatable.clear()
                 else:
-                    column_value = metrics.get(field, {})
-                    column_value = column_value.get("t", 0) if use_total else column_value.get("d", 0)
-
-                # Use the cached row data
-                current_value = datatable_row[column_id]
-                if column_value != current_value:
-                    datatable.update_cell(row_id, column_name, column_value)
+                    for row_id in rows_to_remove:
+                        datatable.remove_row(row_id)
         else:
-            row_values = []
-            row_values.append(file_name)
+            if datatable.row_count:
+                changed = True
+                datatable.clear()
 
-            for column_id, (column_name, field) in enumerate(
-                zip(column_names, column_fields)
-            ):
+        mode = "t" if use_total else "d"
+
+        for file_name, metrics in data.items():
+            row_id = file_name
+
+            row_values = [file_name]
+            for column_name, field in zip(column_names, column_fields):
                 if column_name == "Table":
                     continue
 
-                column_value = None
-
-                # Handle fields that may contain arrays
                 if isinstance(field, list):
-                    # If the field is an array, it contains two fields to be combined
                     count_field, wait_time_field = field
-
-                    # Get the count and wait_time values from the combined fields
-                    count_value = metrics.get(count_field, {})
-                    wait_time_value = metrics.get(wait_time_field, {})
-
-                    if use_total:
-                        count_value = count_value.get("t", 0)
-                        wait_time_value = wait_time_value.get("t", 0)
-                    else:
-                        count_value = count_value.get("d", 0)
-                        wait_time_value = wait_time_value.get("d", 0)
+                    count_value = metrics.get(count_field, {}).get(mode, 0)
+                    wait_time_value = metrics.get(wait_time_field, {}).get(mode, 0)
 
                     if count_value and wait_time_value:
                         formatted_time = format_time(wait_time_value, picoseconds=True)
@@ -144,33 +105,28 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
                     else:
                         column_value = "[dark_gray]N/A"
                 else:
-                    column_value = metrics.get(field, {})
-                    column_value = column_value.get("t", 0) if use_total else column_value.get("d", 0)
+                    column_value = metrics.get(field, {}).get(mode, 0)
 
                 row_values.append(column_value)
 
-            # Add the row if it's new
-            if row_values:
+            if row_id in datatable.rows:
+                datatable_row = datatable.get_row(row_id)
+
+                for column_id, column_name in enumerate(column_names):
+                    if row_values[column_id] != datatable_row[column_id]:
+                        changed = True
+                        datatable.update_cell(row_id, column_name, row_values[column_id])
+            else:
+                changed = True
                 datatable.add_row(*row_values, key=row_id)
 
-    # Clean up rows that no longer exist in the data
-    if data:
-        current_rows = set(data.keys())
-        existing_rows = set(datatable.rows.keys())
-
-        rows_to_remove = existing_rows - current_rows
-        for row_id in rows_to_remove:
-            datatable.remove_row(row_id)
-    else:
-        if datatable.row_count:
-            datatable.clear()
-
-    datatable.sort("wait_time_ps", reverse=True)
+        if changed:
+            datatable.sort("wait_time_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.pfs_metrics_tabs.get_tab(
-        "pfs_metrics_table_io_waits_tab"
-    ).label = f"Table I/O Waits ([$highlight]{datatable.row_count}[/$highlight])"
+    tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
+        f"Table I/O Waits ([$highlight]{datatable.row_count}[/$highlight])"
+    )
 
 
 def update_file_io_by_instance(tab: Tab) -> DataTable:
@@ -179,9 +135,7 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
 
     if not dolphie.file_io_data or not dolphie.file_io_data.filtered_data:
         datatable.display = False
-        tab.pfs_metrics_tabs.get_tab(
-            "pfs_metrics_file_io_tab"
-        ).label = "File I/O ([$highlight]0[/$highlight])"
+        tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = "File I/O ([$highlight]0[/$highlight])"
 
         return
 
@@ -225,34 +179,49 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
     data = dolphie.file_io_data.filtered_data
     use_total = tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total"
 
-    for file_name, metrics in data.items():
-        row_id = file_name
-        row_exists = row_id in datatable.rows
+    changed = False
 
-        table_match = dolphie.file_io_data.table_pattern.search(file_name)
-        if file_name.endswith("/mysql.ibd"):
-            file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
-        elif table_match:
-            file_name = f"{table_match.group(1)}.{table_match.group(2)}"
-        elif "/" in file_name:
-            file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
+    with dolphie.app.batch_update():
+        # Remove stale rows first
+        if data:
+            current_rows = set(data.keys())
+            existing_rows = set(datatable.rows.keys())
+
+            rows_to_remove = existing_rows - current_rows
+            if rows_to_remove:
+                changed = True
+                if len(rows_to_remove) > len(data):
+                    datatable.clear()
+                else:
+                    for row_id in rows_to_remove:
+                        datatable.remove_row(row_id)
         else:
-            file_name = f"[b][light_blue][[/light_blue][/b][highlight]{file_name}[b][light_blue]][/light_blue][/b]"
+            if datatable.row_count:
+                changed = True
+                datatable.clear()
 
-        if row_exists:
-            # Get the existing row data ONCE before the column loop
-            datatable_row = datatable.get_row(row_id)
+        mode = "t" if use_total else "d"
 
-            for column_id, (column_name, field, column_format) in enumerate(
-                zip(column_names, column_fields, column_formats)
-            ):
+        for file_name, metrics in data.items():
+            row_id = file_name
+
+            table_match = dolphie.file_io_data.table_pattern.search(file_name)
+            if file_name.endswith("/mysql.ibd"):
+                file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
+            elif table_match:
+                file_name = f"{table_match.group(1)}.{table_match.group(2)}"
+            elif "/" in file_name:
+                file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
+            else:
+                file_name = f"[b][light_blue][[/light_blue][/b][highlight]{file_name}[b][light_blue]][/light_blue][/b]"
+
+            row_values = [file_name]
+            for column_name, field, column_format in zip(column_names, column_fields, column_formats):
                 if field == "FILE_NAME":
                     continue
 
-                column_value = metrics.get(field, {})
-                column_value = column_value.get("t", 0) if use_total else column_value.get("d", 0)
+                column_value = metrics.get(field, {}).get(mode, 0)
 
-                # Handle special formatting
                 if column_format == "time":
                     column_value = format_time(column_value, picoseconds=True)
                 elif column_value == 0 or column_value is None:
@@ -262,55 +231,23 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
                 elif column_format == "bytes":
                     column_value = format_bytes(column_value)
 
-                # Use the cached row data
-                current_value = datatable_row[column_id]
-                if column_value != current_value:
-                    datatable.update_cell(row_id, column_name, column_value)
-        else:
-            row_values = []
-            row_values.append(file_name)
-
-            for column_id, (column_name, field, column_format) in enumerate(
-                zip(column_names, column_fields, column_formats)
-            ):
-                if field == "FILE_NAME":
-                    continue
-
-                column_value = metrics.get(field, {})
-                column_value = column_value.get("t", 0) if use_total else column_value.get("d", 0)
-
-                # Handle special formatting
-                if column_format == "time":
-                    column_value = format_time(column_value, picoseconds=True)
-                elif column_value == 0 or column_value is None:
-                    column_value = 0 if column_name == "wait_time_ps" else "[dark_gray]0"
-                elif column_format == "number":
-                    column_value = format_number(column_value)
-                elif column_format == "bytes":
-                    column_value = format_bytes(column_value)
-
-                # Add new row values
                 row_values.append(column_value)
 
-            # Add the row if it's new
-            if row_values:
+            if row_id in datatable.rows:
+                datatable_row = datatable.get_row(row_id)
+
+                for column_id, column_name in enumerate(column_names):
+                    if row_values[column_id] != datatable_row[column_id]:
+                        changed = True
+                        datatable.update_cell(row_id, column_name, row_values[column_id])
+            else:
+                changed = True
                 datatable.add_row(*row_values, key=row_id)
 
-    # Clean up rows that no longer exist in the data
-    if data:
-        current_rows = set(data.keys())
-        existing_rows = set(datatable.rows.keys())
-
-        rows_to_remove = existing_rows - current_rows
-        for row_id in rows_to_remove:
-            datatable.remove_row(row_id)
-    else:
-        if datatable.row_count:
-            datatable.clear()
-
-    datatable.sort("wait_time_ps", reverse=True)
+        if changed:
+            datatable.sort("wait_time_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.pfs_metrics_tabs.get_tab(
-        "pfs_metrics_file_io_tab"
-    ).label = f"File I/O ([$highlight]{datatable.row_count}[/$highlight])"
+    tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = (
+        f"File I/O ([$highlight]{datatable.row_count}[/$highlight])"
+    )

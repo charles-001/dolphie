@@ -529,12 +529,10 @@ class TabManager:
         self.app.query_one("#loading_indicator").display = False
 
         panels = Panels()
-        self.app.query_one("#metric_graphs_title", Label).update(panels.get_panel_title(panels.graphs.name))
-        self.app.query_one("#replication_title", Label).update(panels.get_panel_title(panels.replication.name))
-        self.app.query_one("#pfs_metrics_title", Label).update(panels.get_panel_title(panels.pfs_metrics.name))
-        self.app.query_one("#statements_summary_title", Label).update(
-            panels.get_panel_title(panels.statements_summary.name)
-        )
+        self.app.query_one("#metric_graphs_title", Label).update(panels.graphs.title)
+        self.app.query_one("#replication_title", Label).update(panels.replication.title)
+        self.app.query_one("#pfs_metrics_title", Label).update(panels.pfs_metrics.title)
+        self.app.query_one("#statements_summary_title", Label).update(panels.statements_summary.title)
 
         # Loop the metric instances and create the graph tabs
         metric_manager = MetricManager.MetricManager(None)
@@ -817,52 +815,46 @@ class TabManager:
             if self.config.tab_setup:
                 self.config.tab_setup = False
 
-            # Universally set record_for_replay
-            self.config.record_for_replay = data.get("record_for_replay")
-
             hostgroup = data.get("hostgroup")
             if hostgroup:
+                self.config.record_for_replay = data.get("record_for_replay")
                 dolphie.app.connect_as_hostgroup(hostgroup)
             else:
-                # Create a new tab since it's easier to manage the worker threads this way
-                new_tab = await self.create_tab(tab_name=tab.name)
-                new_tab.manual_tab_name = tab.manual_tab_name
-                new_dolphie = new_tab.dolphie
-
-                host_port = data["host"].split(":")
-                new_dolphie.host = host_port[0]
-                new_dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
-                new_dolphie.credential_profile = data.get("credential_profile")
-                new_dolphie.user = data.get("username")
-                new_dolphie.password = data.get("password")
-                new_dolphie.socket = data.get("socket_file")
-                new_dolphie.ssl = data.get("ssl")
-                new_dolphie.record_for_replay = data.get("record_for_replay")
-                new_dolphie.replay_file = data.get("replay_file")
-
-                # Init the new variables above
-                new_dolphie.reset_runtime_variables()
-
-                # Remove the old tab and disconnect it
-                await self.remove_tab(tab)
+                # Disconnect the existing tab (cancel workers, close connections, cleanup UI)
                 await self.disconnect_tab(tab, update_topbar=False)
-                self.tabs.pop(tab.id, None)
 
-                new_tab.loading_indicator.display = True
+                # Update connection details on the existing Dolphie instance
+                host_port = data["host"].split(":")
+                dolphie.host = host_port[0]
+                dolphie.port = int(host_port[1]) if len(host_port) > 1 else 3306
+                dolphie.credential_profile = data.get("credential_profile")
+                dolphie.user = data.get("username")
+                dolphie.password = data.get("password")
+                dolphie.socket = data.get("socket_file")
+                dolphie.ssl = data.get("ssl")
+                dolphie.record_for_replay = data.get("record_for_replay")
+                dolphie.replay_file = data.get("replay_file")
 
-                new_tab.dashboard_replay_container.display = False
-                if new_dolphie.replay_file:
-                    new_tab.replay_manager = ReplayManager(new_dolphie)
-                    if not new_tab.replay_manager.verify_replay_file():
-                        new_tab.loading_indicator.display = False
-                        self.setup_host_tab(new_tab)
+                # Reset all runtime state with the new connection details
+                dolphie.reset_runtime_variables()
+                tab.worker_cancel_error = None
+                tab.replay_manager = None
+
+                tab.loading_indicator.display = True
+                tab.dashboard_replay_container.display = False
+
+                if dolphie.replay_file:
+                    tab.replay_manager = ReplayManager(dolphie)
+                    if not tab.replay_manager.verify_replay_file():
+                        tab.loading_indicator.display = False
+                        self.setup_host_tab(tab)
                         return
 
-                    self.update_connection_status(tab=new_tab, connection_status=ConnectionStatus.connected)
-                    new_dolphie.app.run_worker_replay(new_tab.id)
+                    self.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
+                    dolphie.app.run_worker_replay(tab.id)
                 else:
-                    new_dolphie.app.run_worker_main(new_tab.id)
-                    new_dolphie.app.run_worker_replicas(new_tab.id)
+                    dolphie.app.run_worker_main(tab.id)
+                    dolphie.app.run_worker_replicas(tab.id)
 
         # If we're here because of a worker cancel error or manually disconnected,
         # we want to pre-populate the host/port

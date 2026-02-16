@@ -54,10 +54,6 @@ class Graph(Static):
         # This will be a deque, but we treat it as an iterable
         self.datetimes: deque[str] | None = None
 
-    def on_show(self) -> None:
-        """Render the graph when the widget is shown."""
-        self.render_graph(self.metric_instance, self.datetimes)
-
     def on_resize(self) -> None:
         """Re-render the graph when the widget is resized."""
         self.render_graph(self.metric_instance, self.datetimes)
@@ -1326,7 +1322,7 @@ class MetricManager:
         if not self.datetimes:
             return False
 
-        threshold = reference_time - timedelta(minutes=self.ROLLING_WINDOW_MINUTES)
+        threshold = reference_time.replace(tzinfo=None) - timedelta(minutes=self.ROLLING_WINDOW_MINUTES)
         trimmed = False
 
         while self.datetimes:

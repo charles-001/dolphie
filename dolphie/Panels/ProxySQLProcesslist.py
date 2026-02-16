@@ -1,11 +1,9 @@
-
-from rich.syntax import Syntax
-from textual.widgets import DataTable
-
 from dolphie.DataTypes import ProcesslistThread, ProxySQLProcesslistThread
 from dolphie.Modules.Functions import format_query
 from dolphie.Modules.Queries import ProxySQLQueries
 from dolphie.Modules.TabManager import Tab
+from rich.syntax import Syntax
+from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -49,9 +47,7 @@ def create_panel(tab: Tab) -> DataTable:
     # Add columns to the datatable if it is empty
     if not processlist_datatable.columns:
         for column_data in columns:
-            processlist_datatable.add_column(
-                column_data["name"], key=column_data["name"], width=column_data["width"]
-            )
+            processlist_datatable.add_column(column_data["name"], key=column_data["name"], width=column_data["width"])
 
     for column_data in columns:
         column_names.append(column_data["name"])
@@ -75,16 +71,10 @@ def create_panel(tab: Tab) -> DataTable:
             if dolphie.query_time_filter and thread.time < dolphie.query_time_filter:
                 continue
 
-            if (
-                dolphie.query_filter
-                and dolphie.query_filter not in thread.formatted_query.code
-            ):
+            if dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
                 continue
 
-            if (
-                dolphie.hostgroup_filter
-                and dolphie.hostgroup_filter != thread.hostgroup
-            ):
+            if dolphie.hostgroup_filter and dolphie.hostgroup_filter != thread.hostgroup:
                 continue
 
             # If all checks passed, add it to the visible list
@@ -93,87 +83,65 @@ def create_panel(tab: Tab) -> DataTable:
         # Not a replay file, so fetch_data() already filtered.
         threads_to_render = dolphie.processlist_threads
 
-    for thread_id, thread in threads_to_render.items():
-        thread: ProxySQLProcesslistThread
+    changed = False
 
-        if thread_id in processlist_datatable.rows:
-            datatable_row = processlist_datatable.get_row(thread_id)
-
-            for column_id, (column_name, column_field) in enumerate(
-                zip(column_names, column_fields)
-            ):
-                column_value = getattr(thread, column_field)
-
-                thread_value = column_value
-
-                # Use the cached row data
-                datatable_value = datatable_row[column_id]
-
-                # Initialize temp values for possible Syntax object comparison below
-                temp_thread_value = thread_value
-                temp_datatable_value = datatable_value
-
-                # If the column is the query, we need to compare the code of the Syntax object
-                update_width = False
-                if column_field == "formatted_query":
-                    update_width = True
-                    if isinstance(thread_value, Syntax):
-                        temp_thread_value = thread_value.code[:query_length_max]
-                        thread_value = format_query(temp_thread_value)
-                    if isinstance(datatable_value, Syntax):
-                        temp_datatable_value = datatable_value.code
-
-                # Update the datatable if values differ
-                if (
-                    temp_thread_value != temp_datatable_value
-                    or column_field == "formatted_time"
-                    or column_field == "time"
-                ):
-                    processlist_datatable.update_cell(
-                        thread_id, column_name, thread_value, update_width=update_width
-                    )
+    with dolphie.app.batch_update():
+        # Remove stale rows first
+        if threads_to_render:
+            rows_to_remove = set(processlist_datatable.rows.keys()) - set(threads_to_render.keys())
+            if rows_to_remove:
+                changed = True
+                if len(rows_to_remove) > len(threads_to_render):
+                    processlist_datatable.clear()
+                else:
+                    for id in rows_to_remove:
+                        processlist_datatable.remove_row(id)
         else:
+            if processlist_datatable.row_count:
+                changed = True
+                processlist_datatable.clear()
+
+        for thread_id, thread in threads_to_render.items():
+            thread: ProxySQLProcesslistThread
+
             row_values = []
+            for column_field in column_fields:
+                value = getattr(thread, column_field)
+                if column_field == "formatted_query" and isinstance(value, Syntax):
+                    value = format_query(value.code[:query_length_max])
+                row_values.append(value)
 
-            for column_id, (column_name, column_field) in enumerate(
-                zip(column_names, column_fields)
-            ):
-                column_value = getattr(thread, column_field)
+            if thread_id in processlist_datatable.rows:
+                datatable_row = processlist_datatable.get_row(thread_id)
 
-                thread_value = column_value
+                for column_id, (column_name, column_field) in enumerate(zip(column_names, column_fields)):
+                    new_val = row_values[column_id]
+                    old_val = datatable_row[column_id]
 
-                # Only show the first {query_length_max} characters of the query
-                if column_field == "formatted_query" and isinstance(
-                    thread_value, Syntax
-                ):
-                    thread_value = format_query(thread_value.code[:query_length_max])
+                    # Compare text content for Syntax objects
+                    cmp_new = new_val.code if isinstance(new_val, Syntax) else new_val
+                    cmp_old = old_val.code if isinstance(old_val, Syntax) else old_val
 
-                # Create an array of values to append to the datatable
-                row_values.append(thread_value)
-
-            # Add a new row to the datatable
-            if row_values:
+                    if cmp_new != cmp_old or column_field == "formatted_time" or column_field == "time":
+                        changed = True
+                        processlist_datatable.update_cell(
+                            thread_id,
+                            column_name,
+                            new_val,
+                            update_width=(column_field == "formatted_query"),
+                        )
+            else:
+                changed = True
                 processlist_datatable.add_row(*row_values, key=thread_id)
+
+        if changed:
+            processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 
     if dolphie.replay_file:
         dolphie.processlist_threads = threads_to_render
 
-    # Remove rows from datatable that are no longer in our render list
-    if threads_to_render:
-        rows_to_remove = set(processlist_datatable.rows.keys()) - set(
-            threads_to_render.keys()
-        )
-        for id in rows_to_remove:
-            processlist_datatable.remove_row(id)
-    else:
-        if processlist_datatable.row_count:
-            processlist_datatable.clear()
-
-    processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
-
     tab.processlist_title.update(
-        f"{dolphie.panels.get_panel_title(dolphie.panels.processlist.name)} "
-        f"([$highlight]{processlist_datatable.row_count}[/$highlight])"
+        f"{dolphie.panels.processlist.title} " f"([$highlight]{processlist_datatable.row_count}[/$highlight])"
     )
 
 
@@ -216,9 +184,7 @@ def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
 
     # Add in our dynamic WHERE clause for filtering
     if where_clause:
-        processlist_query = ProxySQLQueries.processlist.replace(
-            "$1", " AND ".join(where_clause)
-        )
+        processlist_query = ProxySQLQueries.processlist.replace("$1", " AND ".join(where_clause))
     else:
         processlist_query = ProxySQLQueries.processlist.replace("$1", "1=1")
 

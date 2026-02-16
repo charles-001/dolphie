@@ -1,11 +1,9 @@
-
-from rich.syntax import Syntax
-from textual.widgets import DataTable
-
 from dolphie.DataTypes import ProcesslistThread
 from dolphie.Modules.Functions import format_number, format_query
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
+from rich.syntax import Syntax
+from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -77,8 +75,7 @@ def create_panel(tab: Tab) -> DataTable:
     )
 
     if (
-        dolphie.show_additional_query_columns
-        and dolphie.global_variables.get("innodb_thread_concurrency")
+        dolphie.show_additional_query_columns and dolphie.global_variables.get("innodb_thread_concurrency")
     ) or dolphie.show_threads_with_concurrency_tickets:
         columns.append(
             {
@@ -134,9 +131,7 @@ def create_panel(tab: Tab) -> DataTable:
 
     if not processlist_datatable.columns:
         for column_data in columns:
-            processlist_datatable.add_column(
-                column_data["name"], key=column_data["name"], width=column_data["width"]
-            )
+            processlist_datatable.add_column(column_data["name"], key=column_data["name"], width=column_data["width"])
 
     for column_data in columns:
         column_names.append(column_data["name"])
@@ -165,16 +160,10 @@ def create_panel(tab: Tab) -> DataTable:
             if dolphie.query_time_filter and thread.time < dolphie.query_time_filter:
                 continue
 
-            if (
-                dolphie.query_filter
-                and dolphie.query_filter not in thread.formatted_query.code
-            ):
+            if dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
                 continue
 
-            if (
-                dolphie.show_threads_with_concurrency_tickets
-                and thread.trx_concurrency_tickets == "[dark_gray]0"
-            ):
+            if dolphie.show_threads_with_concurrency_tickets and thread.trx_concurrency_tickets == "[dark_gray]0":
                 continue
 
             # If all checks passed, add it to the visible list
@@ -183,92 +172,68 @@ def create_panel(tab: Tab) -> DataTable:
         # Not a replay file, so fetch_data() already filtered.
         threads_to_render = dolphie.processlist_threads
 
-    for thread_id, thread in threads_to_render.items():
-        thread: ProcesslistThread
+    changed = False
 
-        if thread_id in processlist_datatable.rows:
-            datatable_row = processlist_datatable.get_row(thread_id)
-
-            for column_id, (
-                column_name,
-                column_field,
-                column_format_number,
-            ) in enumerate(zip(column_names, column_fields, column_format_numbers)):
-                column_value = getattr(thread, column_field)
-                thread_value = (
-                    format_number(column_value)
-                    if column_format_number
-                    else column_value
-                )
-
-                # Use the cached row data
-                datatable_value = datatable_row[column_id]
-
-                # Cell comparison logic
-                temp_thread_value = thread_value
-                temp_datatable_value = datatable_value
-                update_width = False
-
-                if column_field == "formatted_query":
-                    update_width = True
-                    if isinstance(thread_value, Syntax):
-                        temp_thread_value = thread_value.code[:query_length_max]
-                        thread_value = format_query(temp_thread_value)
-                    if isinstance(datatable_value, Syntax):
-                        temp_datatable_value = datatable_value.code
-
-                if (
-                    temp_thread_value != temp_datatable_value
-                    or column_field == "formatted_time"
-                    or column_field == "time"
-                ):
-                    processlist_datatable.update_cell(
-                        thread_id, column_name, thread_value, update_width=update_width
-                    )
-
+    with dolphie.app.batch_update():
+        # Remove stale rows first so updates/adds operate on a cleaner table
+        if threads_to_render:
+            rows_to_remove = set(processlist_datatable.rows.keys()) - set(threads_to_render.keys())
+            if rows_to_remove:
+                changed = True
+                # Bulk-clear and re-add when most rows are stale
+                if len(rows_to_remove) > len(threads_to_render):
+                    processlist_datatable.clear()
+                else:
+                    for id in rows_to_remove:
+                        processlist_datatable.remove_row(id)
         else:
+            # No threads to show, clear the table
+            if processlist_datatable.row_count:
+                changed = True
+                processlist_datatable.clear()
+
+        for thread_id, thread in threads_to_render.items():
+            thread: ProcesslistThread
+
             row_values = []
-            for column_field, column_format_number in zip(
-                column_fields, column_format_numbers
-            ):
-                column_value = getattr(thread, column_field)
-                thread_value = (
-                    format_number(column_value)
-                    if column_format_number
-                    else column_value
-                )
+            for column_field, column_format_number in zip(column_fields, column_format_numbers):
+                value = getattr(thread, column_field)
+                if column_format_number:
+                    value = format_number(value)
+                if column_field == "formatted_query" and isinstance(value, Syntax):
+                    value = format_query(value.code[:query_length_max])
+                row_values.append(value)
 
-                if column_field == "formatted_query" and isinstance(
-                    thread_value, Syntax
-                ):
-                    thread_value = format_query(thread_value.code[:query_length_max])
+            if thread_id in processlist_datatable.rows:
+                datatable_row = processlist_datatable.get_row(thread_id)
 
-                row_values.append(thread_value)
+                for column_id, (column_name, column_field) in enumerate(zip(column_names, column_fields)):
+                    new_val = row_values[column_id]
+                    old_val = datatable_row[column_id]
 
-            if row_values:
+                    # Compare text content for Syntax objects
+                    cmp_new = new_val.code if isinstance(new_val, Syntax) else new_val
+                    cmp_old = old_val.code if isinstance(old_val, Syntax) else old_val
+
+                    if cmp_new != cmp_old or column_field == "formatted_time" or column_field == "time":
+                        changed = True
+                        processlist_datatable.update_cell(
+                            thread_id,
+                            column_name,
+                            new_val,
+                            update_width=(column_field == "formatted_query"),
+                        )
+            else:
+                changed = True
                 processlist_datatable.add_row(*row_values, key=thread_id)
+
+        if changed:
+            processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
 
     if dolphie.replay_file:
         dolphie.processlist_threads = threads_to_render
 
-    # Remove rows from datatable that are no longer in our render list
-    if threads_to_render:
-        rows_to_remove = set(processlist_datatable.rows.keys()) - set(
-            threads_to_render.keys()
-        )
-        for id in rows_to_remove:
-            processlist_datatable.remove_row(id)
-    else:
-        # No threads to show, clear the table
-        if processlist_datatable.row_count:
-            processlist_datatable.clear()
-
-    processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
-
-    title = (
-        f"{dolphie.panels.get_panel_title(dolphie.panels.processlist.name)} "
-        f"([$highlight]{processlist_datatable.row_count}[/$highlight]"
-    )
+    title = f"{dolphie.panels.processlist.title} " f"([$highlight]{processlist_datatable.row_count}[/$highlight]"
     if dolphie.show_threads_with_concurrency_tickets:
         title += f"/[$highlight]{dolphie.global_variables.get('innodb_thread_concurrency')}[/$highlight]"
     title += ")"
@@ -279,10 +244,7 @@ def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
     dolphie = tab.dolphie
 
     # Determine query and column names based on whether performance_schema is used
-    if (
-        dolphie.performance_schema_enabled
-        and dolphie.use_performance_schema_for_processlist
-    ):
+    if dolphie.performance_schema_enabled and dolphie.use_performance_schema_for_processlist:
         processlist_query = MySQLQueries.ps_query
         if not dolphie.is_mysql_version_at_least("5.7"):
             processlist_query = processlist_query.replace("connection_type", '""')
@@ -337,9 +299,7 @@ def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
 
     # Add the WHERE clause to the query
     if where_clause:
-        processlist_query = processlist_query.replace(
-            "$1", "AND " + " AND ".join(where_clause)
-        )
+        processlist_query = processlist_query.replace("$1", "AND " + " AND ".join(where_clause))
     else:
         processlist_query = processlist_query.replace("$1", "")
 
@@ -351,8 +311,7 @@ def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
     for thread in threads:
         # Don't include Dolphie's own threads
         if dolphie.main_db_connection.connection_id == thread["id"] or (
-            dolphie.secondary_db_connection
-            and dolphie.secondary_db_connection.connection_id == thread["id"]
+            dolphie.secondary_db_connection and dolphie.secondary_db_connection.connection_id == thread["id"]
         ):
             continue
 

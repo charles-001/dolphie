@@ -1,7 +1,6 @@
-from textual.widgets import DataTable
-
 from dolphie.Modules.Functions import format_number
 from dolphie.Modules.TabManager import Tab
+from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -114,9 +113,7 @@ def create_panel(tab: Tab) -> DataTable:
     # Add columns to the datatable if it is empty
     if not mysql_query_rules.columns:
         for column_key, column_data in columns_filtered.items():
-            mysql_query_rules.add_column(
-                column_data["name"], key=column_key, width=column_data["width"]
-            )
+            mysql_query_rules.add_column(column_data["name"], key=column_key, width=column_data["width"])
 
     for column_key, column_data in columns_filtered.items():
         column_keys.append(column_key)
@@ -125,73 +122,41 @@ def create_panel(tab: Tab) -> DataTable:
 
     polling_latency = dolphie.polling_latency
 
-    for row in dolphie.proxysql_mysql_query_rules:
-        row_id = row["rule_id"]
+    with dolphie.app.batch_update():
+        # Remove stale rows first
+        if dolphie.proxysql_mysql_query_rules:
+            current_rows = {row["rule_id"] for row in dolphie.proxysql_mysql_query_rules}
+            existing_rows = set(mysql_query_rules.rows.keys())
 
-        if row_id in mysql_query_rules.rows:
-            datatable_row = mysql_query_rules.get_row(row_id)
-
-            for column_id, (column_key, _column_name, column_format) in enumerate(
-                zip(column_keys, column_names, column_formats)
-            ):
-                column_value = row.get(column_key)
-
-                # Calculate the values per second for the following columns
-                if column_key in ["hits_s"]:
-                    previous_value = dolphie.proxysql_per_second_data.get(
-                        row_id, {}
-                    ).get(column_key, 0)
-                    if not previous_value:
-                        column_value = "[dark_gray]0"
-                    else:
-                        current_value = int(column_value or 0)
-                        value_diff = current_value - previous_value
-                        column_value = round(value_diff / polling_latency)
-
-                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[
-                        column_key
-                    ] = int(row.get(column_key, 0))
-
-                if column_key in ["apply", "log"]:
-                    column_value = "Yes" if column_value == "1" else "No"
-
-                if column_format == "number":
-                    column_value = format_number(column_value)
-
-                if column_value is None:
-                    column_value = "[dark_gray]N/A"
-                elif column_value == "0":
-                    column_value = "[dark_gray]0"
-
-                # Use the cached row data
-                datatable_value = datatable_row[column_id]
-
-                # Update the datatable if values differ
-                if column_value != datatable_value:
-                    mysql_query_rules.update_cell(row_id, column_key, column_value)
+            rows_to_remove = existing_rows - current_rows
+            if rows_to_remove:
+                if len(rows_to_remove) > len(dolphie.proxysql_mysql_query_rules):
+                    mysql_query_rules.clear()
+                else:
+                    for row_id in rows_to_remove:
+                        mysql_query_rules.remove_row(row_id)
         else:
-            row_values = []
+            if mysql_query_rules.row_count:
+                mysql_query_rules.clear()
 
-            for column_id, (column_key, _column_name, column_format) in enumerate(
-                zip(column_keys, column_names, column_formats)
-            ):
+        for row in dolphie.proxysql_mysql_query_rules:
+            row_id = row["rule_id"]
+
+            row_values = []
+            for column_key, column_format in zip(column_keys, column_formats):
                 column_value = row.get(column_key)
 
                 # Calculate the values per second for the following columns
                 if column_key in ["hits_s"]:
-                    previous_value = dolphie.proxysql_per_second_data.get(
-                        row_id, {}
-                    ).get(column_key, 0)
+                    previous_value = dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0)
                     if not previous_value:
                         column_value = "[dark_gray]0"
                     else:
                         current_value = int(column_value or 0)
                         value_diff = current_value - previous_value
-                        column_value = round(value_diff / polling_latency)
+                        column_value = round(value_diff / polling_latency) if polling_latency > 0 else 0
 
-                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[
-                        column_key
-                    ] = int(row.get(column_key, 0))
+                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = int(row.get(column_key, 0))
 
                 if column_key in ["apply", "log"]:
                     column_value = "Yes" if column_value == "1" else "No"
@@ -204,26 +169,18 @@ def create_panel(tab: Tab) -> DataTable:
                 elif column_value == "0":
                     column_value = "[dark_gray]0"
 
-                # Create an array of values to append to the datatable
                 row_values.append(column_value)
 
-            # Add a new row to the datatable
-            if row_values:
+            if row_id in mysql_query_rules.rows:
+                datatable_row = mysql_query_rules.get_row(row_id)
+
+                for column_id, column_key in enumerate(column_keys):
+                    if row_values[column_id] != datatable_row[column_id]:
+                        mysql_query_rules.update_cell(row_id, column_key, row_values[column_id])
+            else:
                 mysql_query_rules.add_row(*row_values, key=row_id)
 
-    # Remove rows from datatable that no longer exist in the data
-    if dolphie.proxysql_mysql_query_rules:
-        current_rows = {row["rule_id"] for row in dolphie.proxysql_mysql_query_rules}
-        existing_rows = set(mysql_query_rules.rows.keys())
-
-        rows_to_remove = existing_rows - current_rows
-        for row_id in rows_to_remove:
-            mysql_query_rules.remove_row(row_id)
-    else:
-        if mysql_query_rules.row_count:
-            mysql_query_rules.clear()
-
     tab.proxysql_mysql_query_rules_title.update(
-        f"{dolphie.panels.get_panel_title(dolphie.panels.proxysql_mysql_query_rules.name)} "
+        f"{dolphie.panels.proxysql_mysql_query_rules.title} "
         f"([$highlight]{mysql_query_rules.row_count}[/$highlight])"
     )

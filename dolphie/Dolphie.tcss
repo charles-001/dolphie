@@ -625,7 +625,7 @@ ToggleButton {
 }
 /* Sparklines */
 Sparkline {
-    margin: 1 0;
+    margin: 0 1 1 1;
     & > .sparkline--max-color { color: #869fd9; }
     & > .sparkline--min-color { color: #384c7a; }
 }

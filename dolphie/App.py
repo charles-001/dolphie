@@ -10,19 +10,8 @@ import os
 import sys
 from importlib import metadata
 
-import requests
-from loguru import logger
-from packaging.version import parse as parse_version
-from rich.emoji import Emoji
-from rich.theme import Theme as RichTheme
-from rich.traceback import Traceback
-from textual import events, on, work
-from textual.app import App
-from textual.theme import Theme as TextualTheme
-from textual.widgets import Button, RadioSet, Switch, TabbedContent, Tabs
-from textual.worker import Worker
-
 import dolphie.Modules.MetricManager as MetricManager
+import requests
 from dolphie.DataTypes import ConnectionSource, ConnectionStatus, HotkeyCommands
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.CommandManager import CommandManager
@@ -46,6 +35,16 @@ from dolphie.Panels import Replication as ReplicationPanel
 from dolphie.Panels import StatementsSummaryMetrics as StatementsSummaryPanel
 from dolphie.Widgets.CommandModal import CommandModal
 from dolphie.Widgets.TopBar import TopBar
+from loguru import logger
+from packaging.version import parse as parse_version
+from rich.emoji import Emoji
+from rich.theme import Theme as RichTheme
+from rich.traceback import Traceback
+from textual import events, on, work
+from textual.app import App
+from textual.theme import Theme as TextualTheme
+from textual.widgets import Button, RadioSet, Switch, TabbedContent, Tabs
+from textual.worker import Worker
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -60,6 +59,24 @@ class DolphieApp(App):
     CSS_PATH = "Dolphie.tcss"
     COMMANDS = {CommandPaletteCommands}
     COMMAND_PALETTE_BINDING = "question_mark"
+    PANEL_MAPPING = {
+        "replication": {ConnectionSource.mysql: ReplicationPanel},
+        "dashboard": {
+            ConnectionSource.mysql: DashboardPanel,
+            ConnectionSource.proxysql: ProxySQLDashboardPanel,
+        },
+        "processlist": {
+            ConnectionSource.mysql: ProcesslistPanel,
+            ConnectionSource.proxysql: ProxySQLProcesslistPanel,
+        },
+        "metadata_locks": {ConnectionSource.mysql: MetadataLocksPanel},
+        "ddl": {ConnectionSource.mysql: DDLPanel},
+        "pfs_metrics": {ConnectionSource.mysql: PerformanceSchemaMetricsPanel},
+        "statements_summary": {ConnectionSource.mysql: StatementsSummaryPanel},
+        "proxysql_hostgroup_summary": {ConnectionSource.proxysql: ProxySQLHostgroupSummaryPanel},
+        "proxysql_mysql_query_rules": {ConnectionSource.proxysql: ProxySQLQueryRulesPanel},
+        "proxysql_command_stats": {ConnectionSource.proxysql: ProxySQLCommandStatsPanel},
+    }
 
     def __init__(self, config: Config):
         super().__init__()
@@ -379,41 +396,21 @@ class DolphieApp(App):
             self.run_worker_replay(tab.id, manual_control=True)
 
     def refresh_panel(self, tab: Tab, panel_name: str, toggled: bool = False):
-        panel_mapping = {
-            tab.dolphie.panels.replication.name: {ConnectionSource.mysql: ReplicationPanel},
-            tab.dolphie.panels.dashboard.name: {
-                ConnectionSource.mysql: DashboardPanel,
-                ConnectionSource.proxysql: ProxySQLDashboardPanel,
-            },
-            tab.dolphie.panels.processlist.name: {
-                ConnectionSource.mysql: ProcesslistPanel,
-                ConnectionSource.proxysql: ProxySQLProcesslistPanel,
-            },
-            tab.dolphie.panels.metadata_locks.name: {ConnectionSource.mysql: MetadataLocksPanel},
-            tab.dolphie.panels.ddl.name: {ConnectionSource.mysql: DDLPanel},
-            tab.dolphie.panels.pfs_metrics.name: {ConnectionSource.mysql: PerformanceSchemaMetricsPanel},
-            tab.dolphie.panels.statements_summary.name: {ConnectionSource.mysql: StatementsSummaryPanel},
-            tab.dolphie.panels.proxysql_hostgroup_summary.name: {
-                ConnectionSource.proxysql: ProxySQLHostgroupSummaryPanel
-            },
-            tab.dolphie.panels.proxysql_mysql_query_rules.name: {ConnectionSource.proxysql: ProxySQLQueryRulesPanel},
-            tab.dolphie.panels.proxysql_command_stats.name: {ConnectionSource.proxysql: ProxySQLCommandStatsPanel},
-        }
+        connection_sources = self.PANEL_MAPPING.get(panel_name)
+        if not connection_sources:
+            return
 
-        for panel_map_name, panel_map_connection_sources in panel_mapping.items():
-            panel_map_obj = panel_map_connection_sources.get(tab.dolphie.connection_source)
+        panel_module = connection_sources.get(tab.dolphie.connection_source)
+        if not panel_module:
+            tab.get_panel_widget(panel_name).display = False
+            return
 
-            if not panel_map_obj:
-                tab.get_panel_widget(panel_map_name).display = False
-                continue
+        panel_module.create_panel(tab)
 
-            if panel_name == panel_map_name:
-                panel_map_obj.create_panel(tab)
-
-            if panel_name == tab.dolphie.panels.replication.name and toggled and tab.dolphie.replication_status:
-                # When replication panel status is changed, we need to refresh the dashboard panel as well since
-                # it adds/removes it from there
-                DashboardPanel.create_panel(tab)
+        if panel_name == tab.dolphie.panels.replication.name and toggled and tab.dolphie.replication_status:
+            # When replication panel status is changed, we need to refresh the dashboard panel as well since
+            # it adds/removes it from there
+            DashboardPanel.create_panel(tab)
 
     @on(Switch.Changed)
     def switch_changed(self, event: Switch.Changed):

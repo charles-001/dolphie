@@ -344,7 +344,7 @@ class WorkerDataProcessor:
                         previous_value = previous_values[row_id].get(column_key, 0)
                         current_value = int(row.get(column_key, 0))
 
-                        value_per_sec = (current_value - previous_value) / dolphie.polling_latency
+                        value_per_sec = (current_value - previous_value) / dolphie.polling_latency if dolphie.polling_latency > 0 else 0
                         row[f"{column_key}_per_sec"] = round(value_per_sec)
 
         if dolphie.panels.processlist.visible:

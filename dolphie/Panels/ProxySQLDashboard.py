@@ -1,12 +1,11 @@
 from datetime import datetime, timedelta
 
-from rich.style import Style
-from rich.table import Table
-
 from dolphie.Modules.Functions import format_bytes, format_number
 from dolphie.Modules.MetricManager import MetricData
 from dolphie.Modules.TabManager import Tab
 from dolphie.Panels.Dashboard import create_system_utilization_table
+from rich.style import Style
+from rich.table import Table
 
 
 def create_panel(tab: Tab) -> Table:
@@ -25,16 +24,14 @@ def create_panel(tab: Tab) -> Table:
     table = Table(
         show_header=False,
         box=None,
-        title=f"{dolphie.panels.get_key(dolphie.panels.dashboard.name)}Host Information",
+        title=f"{dolphie.panels.dashboard.formatted_key}Host Information",
         title_style=table_title_style,
     )
 
     table.add_column()
     table.add_column(min_width=15)
     table.add_row("[label]Version", f"{dolphie.host_distro} {dolphie.host_version}")
-    table.add_row(
-        "[label]Uptime", str(timedelta(seconds=global_status["ProxySQL_Uptime"]))
-    )
+    table.add_row("[label]Uptime", str(timedelta(seconds=global_status["ProxySQL_Uptime"])))
     table.add_row(
         "[label]MySQL",
         (
@@ -63,9 +60,7 @@ def create_panel(tab: Tab) -> Table:
     ##########################
     proxysql_connections = metric_manager.metrics.proxysql_connections
 
-    table = Table(
-        show_header=False, box=None, title="Connections", title_style=table_title_style
-    )
+    table = Table(show_header=False, box=None, title="Connections", title_style=table_title_style)
 
     table.add_column()
     table.add_column(min_width=6)
@@ -78,11 +73,7 @@ def create_panel(tab: Tab) -> Table:
     }
 
     fe_usage = round(
-        (
-            global_status["Client_Connections_connected"]
-            / global_variables["mysql-max_connections"]
-        )
-        * 100,
+        (global_status["Client_Connections_connected"] / global_variables["mysql-max_connections"]) * 100,
         2,
     )
 
@@ -155,9 +146,7 @@ def create_panel(tab: Tab) -> Table:
     ###############
     # Statistics #
     ###############
-    table = Table(
-        show_header=False, box=None, title="Statistics/s", title_style=table_title_style
-    )
+    table = Table(show_header=False, box=None, title="Statistics/s", title_style=table_title_style)
 
     table.add_column()
     table.add_column(min_width=7)

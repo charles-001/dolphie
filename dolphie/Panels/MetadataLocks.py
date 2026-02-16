@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from rich.syntax import Syntax
-from textual.widgets import DataTable
-
 from dolphie.Modules.Functions import format_query, format_time
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
+from rich.syntax import Syntax
+from textual.widgets import DataTable
 
 
 def create_panel(tab: Tab) -> DataTable:
@@ -44,61 +43,32 @@ def create_panel(tab: Tab) -> DataTable:
         column_names.append(column_data["name"])
         column_widths.append(column_data["width"])
 
-    for lock in dolphie.metadata_locks:
-        lock_id = str(lock["id"])
-        row_height = 1
+    changed = False
 
-        if lock_id in metadata_locks_datatable.rows:
-            datatable_row = metadata_locks_datatable.get_row(lock_id)
-
-            for column_id, (column_key, column_name, column_width) in enumerate(
-                zip(column_keys, column_names, column_widths)
-            ):
-                column_value = lock[column_key]
-
-                # Get height of row based on the how many objects are in the OBJECT_NAME field
-                if (
-                    column_key == "OBJECT_NAME"
-                    and column_value
-                    and len(column_value) > column_width
-                    and "," in column_value
-                ):
-                    # Truncate the object names to the width of the column
-                    object_names = [
-                        object_name[:column_width]
-                        for object_name in column_value.split(",")
-                    ]
-                    thread_value = "\n".join(object_names)
-
-                    row_height = len(object_names)
+    with dolphie.app.batch_update():
+        # Remove stale rows first
+        if dolphie.metadata_locks:
+            rows_to_remove = set(metadata_locks_datatable.rows.keys()) - {
+                str(lock["id"]) for lock in dolphie.metadata_locks
+            }
+            if rows_to_remove:
+                changed = True
+                if len(rows_to_remove) > len(dolphie.metadata_locks):
+                    metadata_locks_datatable.clear()
                 else:
-                    thread_value = format_value(lock, column_key, column_value)
-
-                # Use the cached row data
-                datatable_value = datatable_row[column_id]
-
-                temp_thread_value = thread_value
-                temp_datatable_value = datatable_value
-
-                # If the column is the query, we need to compare the code of the Syntax object
-                if column_key == "PROCESSLIST_INFO":
-                    if isinstance(thread_value, Syntax):
-                        temp_thread_value = thread_value.code[:query_length_max]
-                        thread_value = format_query(temp_thread_value)
-                    if isinstance(datatable_value, Syntax):
-                        temp_datatable_value = datatable_value.code
-
-                # Update the datatable if values differ
-                if temp_thread_value != temp_datatable_value:
-                    metadata_locks_datatable.update_cell(
-                        lock_id, column_name, thread_value
-                    )
+                    for id in rows_to_remove:
+                        metadata_locks_datatable.remove_row(id)
         else:
-            row_values = []
+            if metadata_locks_datatable.row_count:
+                changed = True
+                metadata_locks_datatable.clear()
 
-            for column_id, (column_key, column_name, column_width) in enumerate(
-                zip(column_keys, column_names, column_widths)
-            ):
+        for lock in dolphie.metadata_locks:
+            lock_id = str(lock["id"])
+            row_height = 1
+
+            row_values = []
+            for column_key, column_name, column_width in zip(column_keys, column_names, column_widths):
                 column_value = lock[column_key]
 
                 # Get height of row based on the how many objects are in the OBJECT_NAME field
@@ -108,46 +78,41 @@ def create_panel(tab: Tab) -> DataTable:
                     and len(column_value) > column_width
                     and "," in column_value
                 ):
-                    # Truncate the object names to the width of the column
-                    object_names = [
-                        object_name[:column_width]
-                        for object_name in column_value.split(",")
-                    ]
-                    thread_value = "\n".join(object_names)
-
+                    object_names = [object_name[:column_width] for object_name in column_value.split(",")]
+                    value = "\n".join(object_names)
                     row_height = len(object_names)
                 else:
-                    thread_value = format_value(lock, column_key, column_value)
+                    value = format_value(lock, column_key, column_value)
 
-                # Only show the first {query_length_max} characters of the query
-                if column_name == "Query" and isinstance(thread_value, Syntax):
-                    thread_value = format_query(thread_value.code[:query_length_max])
+                # Truncate query Syntax objects
+                if column_key == "PROCESSLIST_INFO" and isinstance(value, Syntax):
+                    value = format_query(value.code[:query_length_max])
 
-                # Create an array of values to append to the datatable
-                row_values.append(thread_value)
+                row_values.append(value)
 
-            # Add a new row to the datatable
-            if row_values:
-                metadata_locks_datatable.add_row(
-                    *row_values, key=lock_id, height=row_height
-                )
+            if lock_id in metadata_locks_datatable.rows:
+                datatable_row = metadata_locks_datatable.get_row(lock_id)
 
-    # Find the ids that exist in datatable but not in metadata_locks
-    if dolphie.metadata_locks:
-        rows_to_remove = set(metadata_locks_datatable.rows.keys()) - {
-            str(lock["id"]) for lock in dolphie.metadata_locks
-        }
-        for id in rows_to_remove:
-            metadata_locks_datatable.remove_row(id)
-    else:
-        if metadata_locks_datatable.row_count:
-            metadata_locks_datatable.clear()
+                for column_id, column_name in enumerate(column_names):
+                    new_val = row_values[column_id]
+                    old_val = datatable_row[column_id]
 
-    metadata_locks_datatable.sort("Age", reverse=dolphie.sort_by_time_descending)
+                    # Compare text content for Syntax objects
+                    cmp_new = new_val.code if isinstance(new_val, Syntax) else new_val
+                    cmp_old = old_val.code if isinstance(old_val, Syntax) else old_val
+
+                    if cmp_new != cmp_old:
+                        changed = True
+                        metadata_locks_datatable.update_cell(lock_id, column_name, new_val)
+            else:
+                changed = True
+                metadata_locks_datatable.add_row(*row_values, key=lock_id, height=row_height)
+
+        if changed:
+            metadata_locks_datatable.sort("Age", reverse=dolphie.sort_by_time_descending)
 
     tab.metadata_locks_title.update(
-        f"{dolphie.panels.get_panel_title(dolphie.panels.metadata_locks.name)} "
-        f"([$highlight]{metadata_locks_datatable.row_count}[/$highlight])"
+        f"{dolphie.panels.metadata_locks.title} " f"([$highlight]{metadata_locks_datatable.row_count}[/$highlight])"
     )
 
 
@@ -182,9 +147,7 @@ def fetch_data(tab: Tab) -> list[dict[str, int | str]]:
 
     if where_clause:
         # Add in our dynamic WHERE clause for filtering
-        query = MySQLQueries.metadata_locks.replace(
-            "$1", "AND " + " AND ".join(where_clause)
-        )
+        query = MySQLQueries.metadata_locks.replace("$1", "AND " + " AND ".join(where_clause))
     else:
         query = MySQLQueries.metadata_locks.replace("$1", "")
 
@@ -199,12 +162,7 @@ def format_value(lock: dict, column_key: str, value: str) -> str:
 
     # OBJECT_NAME is in the format "schema/table" sometimes where OBJECT_SCHEMA is empty,
     # so I want to split OBJECT_NAME and correct it if necessary
-    if (
-        column_key == "OBJECT_SCHEMA"
-        and not value
-        and lock["OBJECT_NAME"]
-        and "/" in lock["OBJECT_NAME"]
-    ):
+    if column_key == "OBJECT_SCHEMA" and not value and lock["OBJECT_NAME"] and "/" in lock["OBJECT_NAME"]:
         formatted_value = lock["OBJECT_NAME"].split("/")[0]
     elif column_key == "OBJECT_NAME" and value and "/" in value:
         formatted_value = value.split("/")[1]
