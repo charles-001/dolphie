@@ -1240,8 +1240,8 @@ class MetricManager:
         current_age = round(self.global_status.get("Innodb_checkpoint_age", 0))
         max_age = self.redo_log_size
 
-        if current_age == 0 or max_age == 0:
-            return self.redo_log_size, 0, 0
+        if max_age == 0:
+            return 0, 0, 0
 
         sync_flush_age = round(max_age * 0.825)
         return max_age, sync_flush_age, current_age

@@ -152,25 +152,36 @@ class WorkerManager:
                         tab.replay_manager.current_replay_id
                     )
 
+                    # Old format entries contain complete snapshots so skip to the last one
+                    # and only accumulate delta entries after it
+                    last_full_idx = -1
+                    for i, entry in enumerate(metrics_list):
+                        if not entry.get("_delta", False):
+                            last_full_idx = i
+                    if last_full_idx >= 0:
+                        metrics_list = metrics_list[last_full_idx:]
+
                     # Clear existing metrics
                     dolphie.metric_manager.datetimes.clear()
                     for metric_data_obj in dolphie.metric_manager._all_metrics_data_history:
                         metric_data_obj.values.clear()
 
-                    # Accumulate all deltas in the window
-                    for delta in metrics_list:
-                        delta_datetimes = delta.get("datetimes", [])
-                        if delta_datetimes:
-                            dolphie.metric_manager.datetimes.extend(delta_datetimes)
+                    # Rebuild from the window entries
+                    for entry in metrics_list:
+                        entry_datetimes = entry.get("datetimes", [])
+                        if entry_datetimes:
+                            dolphie.metric_manager.datetimes.extend(entry_datetimes)
 
-                        for metric_name, metric_data in delta.items():
+                        for metric_name, metric_data in entry.items():
+                            if metric_name in ("datetimes", "_delta"):
+                                continue
                             metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
                             if metric_instance:
                                 for field_name, metric_values in metric_data.items():
                                     metric: MetricManager.MetricData = metric_instance.__dict__.get(field_name)
                                     if metric and metric_values:
-                                        metric.values.append(metric_values[0])
-                                        metric.last_value = metric_values[0]
+                                        metric.values.extend(metric_values)
+                                        metric.last_value = metric_values[-1]
             else:
                 # Full format: replace values entirely
                 dolphie.metric_manager.datetimes = deque(new_datetimes)
