@@ -40,6 +40,66 @@ def _color_gtid_sets(gtid_sets: str, primary_uuid: str) -> str:
     return _GTID_PATTERN.sub(_colorize, gtid_sets.replace(",", ""))
 
 
+# MariaDB GTID format: domain_id-server_id-sequence_number (e.g., 0-1-10)
+def _color_mariadb_gtid_sets(gtid_sets: str, primary_server_id) -> str:
+    """Apply Rich markup to MariaDB GTID sets, highlighting the primary server_id."""
+    primary_server_id = str(primary_server_id)
+    colored = []
+    for gtid in gtid_sets.split(","):
+        gtid = gtid.strip()
+        if not gtid:
+            continue
+        parts = gtid.split("-")
+        if len(parts) >= 3 and parts[1] == primary_server_id:
+            colored.append(f"[highlight]{gtid}[/highlight]")
+        else:
+            colored.append(f"[dark_gray]{gtid}[/dark_gray]")
+    return "\n".join(colored)
+
+
+def _detect_mariadb_errant_trx(replica_gtid_current_pos: str, replica_server_id, primary_gtid_current_pos: str):
+    """Detect errant transactions on a MariaDB replica.
+
+    MariaDB GTIDs encode the originating server: domain_id-server_id-sequence.
+    In normal replication a replica only executes transactions from its primary, so
+    its gtid_current_pos should not contain GTIDs with its own server_id
+    unless someone wrote directly to it.
+
+    We scan the replica's gtid_current_pos for entries whose server_id
+    matches the replica itself, then compare against the primary's
+    gtid_current_pos. A GTID is errant when:
+      - The primary has no entry for that (domain_id, server_id) pair, or
+      - The replica's sequence exceeds the primary's sequence.
+
+    Returns a comma-separated string of errant GTIDs, or None if clean.
+    """
+    replica_server_id = str(replica_server_id)
+
+    def _parse_gtids(gtid_str: str) -> dict:
+        result = {}
+        for gtid in gtid_str.split(","):
+            gtid = gtid.strip()
+            if not gtid:
+                continue
+            parts = gtid.split("-")
+            if len(parts) >= 3:
+                result[(parts[0], parts[1])] = int(parts[2])
+        return result
+
+    replica_gtids = _parse_gtids(replica_gtid_current_pos)
+    primary_gtids = _parse_gtids(primary_gtid_current_pos)
+
+    errant = []
+    for (domain_id, server_id), seq in replica_gtids.items():
+        if server_id != replica_server_id:
+            continue
+        primary_seq = primary_gtids.get((domain_id, server_id))
+        if primary_seq is None or seq > primary_seq:
+            errant.append(f"{domain_id}-{server_id}-{seq}")
+
+    return ",".join(errant) if errant else None
+
+
 def _sync_grid(grid, items: dict[str, Table], item_type: str, tab_id: str, app, tracked: dict[str, Static]):
     """Synchronize grid child widgets with the current set of items.
 
@@ -474,27 +534,49 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
 
             table.add_row("[label]GTID", gtid_status)
 
-            # Check if GTID IO position exists
-            gtid_io_pos = data.get("Gtid_IO_Pos")
-            # gtid_io_pos = "1-1-3323,1-2-32,1-3-5543,1-4-554454"
-            if gtid_io_pos:
-                # If this is a replica, use its primary server ID, else use its own server ID
-                if replica:
-                    replica_primary_server_id = dolphie.replication_status.get("Master_Server_Id")
-                    primary_id = replica_primary_server_id or dolphie.global_variables.get("server_id")
+            if replica:
+                # Determine the primary server ID for coloring
+                replica_primary_server_id = dolphie.replication_status.get("Master_Server_Id")
+                primary_id = replica_primary_server_id or dolphie.global_variables.get("server_id")
 
-                gtids = gtid_io_pos.split(",")
-                for idx, gtid in enumerate(gtids):
-                    server_id = gtid.split("-")[1]
+                replica.connection.execute(
+                    "SELECT @@server_id AS server_id, @@gtid_slave_pos AS gtid_slave_pos, "
+                    "@@gtid_current_pos AS gtid_current_pos"
+                )
+                gtid_data = replica.connection.fetchone()
 
-                    if str(server_id) == str(primary_id):
-                        # Highlight GTID if it matches the primary ID
-                        gtids[idx] = f"[highlight]{gtid}[/highlight]"
-                    else:
-                        # Otherwise, darken GTID
-                        gtids[idx] = f"[dark_gray]{gtid}[/dark_gray]"
+                replica_server_id = gtid_data.get("server_id")
+                replica_gtid_slave_pos = gtid_data.get("gtid_slave_pos", "")
+                replica_gtid_current_pos = gtid_data.get("gtid_current_pos", "")
 
-                table.add_row("[label]GTID IO Pos", "\n".join(gtids))
+                # Detect errant transactions
+                primary_gtid_current_pos = dolphie.global_variables.get("gtid_current_pos", "")
+                if replica_gtid_current_pos and primary_gtid_current_pos:
+                    errant = _detect_mariadb_errant_trx(
+                        replica_gtid_current_pos, replica_server_id, primary_gtid_current_pos
+                    )
+                    errant_trx = f"[red]{errant}[/red]" if errant else "[green]None[/green]"
+                else:
+                    errant_trx = "[green]None[/green]"
+                table.add_row("[label]Errant TRX", errant_trx)
+
+                # Retrieved GTID from SHOW SLAVE STATUS
+                gtid_io_pos = data.get("Gtid_IO_Pos")
+                if gtid_io_pos:
+                    table.add_row("[label]Retrieved GTID", _color_mariadb_gtid_sets(gtid_io_pos, primary_id))
+
+                # Executed GTID from the replica's gtid_slave_pos
+                if replica_gtid_slave_pos:
+                    table.add_row("[label]Executed GTID", _color_mariadb_gtid_sets(replica_gtid_slave_pos, primary_id))
+            else:
+                # Self-view: this host is a replica
+                gtid_io_pos = data.get("Gtid_IO_Pos")
+                if gtid_io_pos:
+                    table.add_row("[label]Retrieved GTID", _color_mariadb_gtid_sets(gtid_io_pos, primary_id))
+
+                gtid_slave_pos = dolphie.global_variables.get("gtid_slave_pos")
+                if gtid_slave_pos:
+                    table.add_row("[label]Executed GTID", _color_mariadb_gtid_sets(gtid_slave_pos, primary_id))
 
     return table
 
