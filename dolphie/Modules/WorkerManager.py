@@ -1,3 +1,4 @@
+from collections import deque
 from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING
@@ -172,14 +173,14 @@ class WorkerManager:
                                         metric.last_value = metric_values[0]
             else:
                 # Full format: replace values entirely
-                dolphie.metric_manager.datetimes = new_datetimes
+                dolphie.metric_manager.datetimes = deque(new_datetimes)
                 for metric_name, metric_data in replay_event_data.metric_manager.items():
                     metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
                     if metric_instance:
                         for field_name, metric_values in metric_data.items():
                             metric: MetricManager.MetricData = metric_instance.__dict__.get(field_name)
                             if metric:
-                                metric.values = metric_values
+                                metric.values = deque(metric_values)
                                 metric.last_value = metric_values[-1]
 
         except Exception as e:
