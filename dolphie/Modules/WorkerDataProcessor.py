@@ -111,15 +111,6 @@ class WorkerDataProcessor:
                             "host": row.get("Host"),
                         }
 
-            # Carry forward port assignments every cycle so they persist across refreshes
-            if dolphie.replica_manager.available_replicas:
-                existing_replicas_map = {
-                    replica["id"]: replica for replica in dolphie.replica_manager.available_replicas
-                }
-                for replica in available_replicas:
-                    if replica["id"] in existing_replicas_map:
-                        replica["port"] = existing_replicas_map[replica["id"]].get("port")
-
         dolphie.replica_manager.available_replicas = available_replicas
 
         if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:

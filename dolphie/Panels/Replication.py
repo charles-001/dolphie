@@ -824,14 +824,26 @@ def fetch_replicas(tab: Tab):
     # Track which row_keys are active this cycle so we can remove stale ones after
     active_row_keys = set()
 
+    # Build lookup for existing replicas by thread_id for MariaDB port reuse
+    replica_by_thread_id = (
+        {r.thread_id: r for r in dolphie.replica_manager.replicas.values()}
+        if dolphie.connection_source_alt == ConnectionSource.mariadb
+        else {}
+    )
+
     for row in dolphie.replica_manager.available_replicas:
         replica_error = None
         host = dolphie.get_hostname(row["host"].split(":")[0])
 
         if dolphie.connection_source_alt == ConnectionSource.mariadb:
-            # MariaDB: no UUID for correlation, rotate through available ports
-            assigned_port = row.get("port")  # carried forward from previous cycle
-            if not assigned_port:
+            # MariaDB: no UUID for correlation - check if we already have this replica
+            # by thread_id, otherwise rotate through available ports
+            existing = replica_by_thread_id.get(row.get("id"))
+            if existing:
+                assigned_port = existing.port
+                host = existing.host.split(":")[0]
+            else:
+                assigned_port = None
                 for port_data in dolphie.replica_manager.ports.values():
                     if not port_data.get("in_use"):
                         assigned_port = port_data["port"]
