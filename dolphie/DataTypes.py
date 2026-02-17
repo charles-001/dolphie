@@ -24,8 +24,8 @@ class ConnectionStatus:
 @dataclass
 class Replica:
     row_key: str
-    thread_id: int
     host: str
+    thread_id: int | None = None
     port: int | None = None
     host_distro: str | None = None
     connection: pymysql.Connection | None = None
@@ -80,8 +80,13 @@ class Panel:
 
     @property
     def formatted_key(self) -> str:
-        # This uses Rich's syntax for highlighting, not Textual's Content system
+        # Rich markup — used in Rich Table titles (Dashboard, ProxySQL)
         return f"[b highlight]{self.key}[/b highlight]"
+
+    @property
+    def content_key(self) -> str:
+        # Textual Content markup — used in .update() calls
+        return f"[$b_highlight]{self.key}[/$b_highlight]"
 
     @property
     def title(self) -> str:

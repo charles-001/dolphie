@@ -1,8 +1,6 @@
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
-from loguru import logger
-
 from dolphie.DataTypes import ConnectionSource, ConnectionStatus
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
@@ -10,6 +8,7 @@ from dolphie.Panels import MetadataLocks as MetadataLocksPanel
 from dolphie.Panels import Processlist as ProcesslistPanel
 from dolphie.Panels import ProxySQLProcesslist as ProxySQLProcesslistPanel
 from dolphie.Panels import Replication as ReplicationPanel
+from loguru import logger
 
 if TYPE_CHECKING:
     from dolphie.App import DolphieApp
@@ -43,9 +42,7 @@ class WorkerDataProcessor:
         if dolphie.connection_status == ConnectionStatus.connecting:
             # Called from worker thread, use call_from_thread
             self.app.call_from_thread(
-                self.app.tab_manager.update_connection_status,
-                tab=tab,
-                connection_status=ConnectionStatus.connected
+                self.app.tab_manager.update_connection_status, tab=tab, connection_status=ConnectionStatus.connected
             )
             dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("version"))
             dolphie.get_group_replication_metadata()
@@ -54,9 +51,7 @@ class WorkerDataProcessor:
 
         global_status = dolphie.main_db_connection.fetch_status_and_variables("status")
         self.monitor_uptime_change(
-            tab=tab,
-            old_uptime=dolphie.global_status.get("Uptime", 0),
-            new_uptime=global_status.get("Uptime", 0),
+            tab=tab, old_uptime=dolphie.global_status.get("Uptime", 0), new_uptime=global_status.get("Uptime", 0)
         )
         dolphie.global_status = global_status
         # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
@@ -65,60 +60,67 @@ class WorkerDataProcessor:
             dolphie.global_status["Innodb_lsn_current"] = dolphie.global_status.get("Innodb_os_log_written")
 
         dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
+
+        if dolphie.galera_cluster and dolphie.panels.replication.visible:
+            dolphie.main_db_connection.execute(MySQLQueries.get_galera_cluster_members)
+            dolphie.galera_cluster_members = dolphie.main_db_connection.fetchall()
+
         dolphie.replication_status = ReplicationPanel.fetch_replication_data(tab)
 
-        # Manage our replicas
-        if dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
-            if dolphie.connection_source_alt == ConnectionSource.mariadb:
-                find_replicas_query = MySQLQueries.mariadb_find_replicas
-            else:
-                find_replicas_query = MySQLQueries.ps_find_replicas
+        # Manage our replicas — use processlist for discovery (real connection IP)
+        # and SHOW REPLICAS/SHOW SLAVE HOSTS for port correlation
+        if dolphie.connection_source_alt == ConnectionSource.mariadb:
+            find_replicas_query = (
+                MySQLQueries.mariadb_find_replicas
+                if dolphie.performance_schema_enabled
+                else MySQLQueries.pl_find_replicas
+            )
+        elif dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
+            find_replicas_query = MySQLQueries.ps_find_replicas
         else:
             find_replicas_query = MySQLQueries.pl_find_replicas
 
         dolphie.main_db_connection.execute(find_replicas_query)
         available_replicas = dolphie.main_db_connection.fetchall()
+
         if not dolphie.daemon_mode:
-            # We update the replica ports used if the number of replicas have changed
+            # Refresh port data when the number of replicas changes
             if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
-                query = (
-                    MySQLQueries.show_replicas
-                    if dolphie.is_mysql_version_at_least("8.0.22")
-                    and dolphie.connection_source_alt != ConnectionSource.mariadb
-                    else MySQLQueries.show_slave_hosts
+                use_show_replicas = (
+                    dolphie.connection_source_alt != ConnectionSource.mariadb
+                    and dolphie.is_mysql_version_at_least("8.0.22")
                 )
+                query = MySQLQueries.show_replicas if use_show_replicas else MySQLQueries.show_slave_hosts
+
                 dolphie.main_db_connection.execute(query)
                 ports_replica_data = dolphie.main_db_connection.fetchall()
 
-                # Reset the ports dictionary and start fresh
                 dolphie.replica_manager.ports = {}
-                for row in ports_replica_data:
-                    if dolphie.connection_source_alt == ConnectionSource.mariadb:
-                        key = "Server_id"
-                    else:
-                        key = "Replica_UUID" if dolphie.is_mysql_version_at_least("8.0.22") else "Slave_UUID"
+                if dolphie.connection_source_alt == ConnectionSource.mariadb:
+                    for row in ports_replica_data:
+                        dolphie.replica_manager.ports[row.get("Server_id")] = {
+                            "port": row.get("Port"),
+                            "host": row.get("Host"),
+                            "in_use": False,
+                        }
+                else:
+                    uuid_key = "Replica_UUID" if use_show_replicas else "Slave_UUID"
+                    for row in ports_replica_data:
+                        dolphie.replica_manager.ports[row.get(uuid_key)] = {
+                            "port": row.get("Port"),
+                            "host": row.get("Host"),
+                        }
 
-                    port_entry = {"port": row.get("Port"), "in_use": False}
-                    if dolphie.connection_source_alt == ConnectionSource.mariadb:
-                        port_entry["host"] = row.get("Host")
+            # Carry forward port assignments every cycle so they persist across refreshes
+            if dolphie.replica_manager.available_replicas:
+                existing_replicas_map = {
+                    replica["id"]: replica for replica in dolphie.replica_manager.available_replicas
+                }
+                for replica in available_replicas:
+                    if replica["id"] in existing_replicas_map:
+                        replica["port"] = existing_replicas_map[replica["id"]].get("port")
 
-                    dolphie.replica_manager.ports[row.get(key)] = port_entry
-
-                # Update the port value for each replica from an existing replica so our row_key can be properly used
-                # to manage replica_manager.replicas
-                # MariaDB cannot correlate thread_id to a port so it will just have to reconnect
-                # each time number of replicas change
-                if dolphie.connection_source_alt != ConnectionSource.mariadb:
-                    existing_replicas_map = {
-                        replica["id"]: replica for replica in dolphie.replica_manager.available_replicas
-                    }
-                    for replica in available_replicas:
-                        if replica["id"] in existing_replicas_map:
-                            replica["port"] = existing_replicas_map[replica["id"]].get("port")
-
-                dolphie.replica_manager.available_replicas = available_replicas
-        else:
-            dolphie.replica_manager.available_replicas = available_replicas
+        dolphie.replica_manager.available_replicas = available_replicas
 
         if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
             dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
@@ -146,11 +148,22 @@ class WorkerDataProcessor:
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
             dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
 
+            # MariaDB uses slave_parallel_threads; MySQL uses replica_parallel_workers
+            if dolphie.connection_source_alt == ConnectionSource.mariadb:
+                parallel_workers = dolphie.global_variables.get("slave_parallel_threads", 0)
+            else:
+                parallel_workers = dolphie.global_variables.get("replica_parallel_workers", 0)
+
+            if dolphie.connection_source_alt == ConnectionSource.mariadb:
+                has_applier_status = dolphie.is_mysql_version_at_least("10.5")
+            else:
+                has_applier_status = dolphie.is_mysql_version_at_least("8.0")
+
             if (
-                dolphie.is_mysql_version_at_least("8.0")
+                has_applier_status
                 and dolphie.replication_status
                 and dolphie.panels.replication.visible
-                and dolphie.global_variables.get("replica_parallel_workers", 0) > 1
+                and parallel_workers > 1
             ):
                 dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
                 dolphie.replication_applier_status["data"] = dolphie.main_db_connection.fetchall()
@@ -189,8 +202,7 @@ class WorkerDataProcessor:
                 if dolphie.is_mysql_version_at_least("8.0.13"):
                     dolphie.group_replication_data["write_concurrency"] = (
                         dolphie.main_db_connection.fetch_value_from_field(
-                            MySQLQueries.group_replication_get_write_concurrency,
-                            "write_concurrency",
+                            MySQLQueries.group_replication_get_write_concurrency, "write_concurrency"
                         )
                     )
 
@@ -257,9 +269,7 @@ class WorkerDataProcessor:
         if dolphie.connection_status == ConnectionStatus.connecting:
             # Called from worker thread, use call_from_thread
             self.app.call_from_thread(
-                self.app.tab_manager.update_connection_status,
-                tab=tab,
-                connection_status=ConnectionStatus.connected
+                self.app.tab_manager.update_connection_status, tab=tab, connection_status=ConnectionStatus.connected
             )
             dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("admin-version"))
 
@@ -277,15 +287,7 @@ class WorkerDataProcessor:
         # Here, we're going to format the command stats to match the global status keys of
         # MySQL and get total count of queries
         total_queries_count = 0
-        query_types_for_total = [
-            "SELECT",
-            "INSERT",
-            "UPDATE",
-            "DELETE",
-            "REPLACE",
-            "SET",
-            "CALL",
-        ]
+        query_types_for_total = ["SELECT", "INSERT", "UPDATE", "DELETE", "REPLACE", "SET", "CALL"]
         for row in dolphie.proxysql_command_stats:
             total_cnt = 0
             if row["Command"] in query_types_for_total:
@@ -319,11 +321,7 @@ class WorkerDataProcessor:
             dolphie.main_db_connection.execute(ProxySQLQueries.hostgroup_summary)
 
             previous_values = {}
-            columns_to_calculate_per_sec = [
-                "Queries",
-                "Bytes_data_sent",
-                "Bytes_data_recv",
-            ]
+            columns_to_calculate_per_sec = ["Queries", "Bytes_data_sent", "Bytes_data_recv"]
 
             # Store previous values for each row
             for row in dolphie.proxysql_hostgroup_summary:
@@ -344,7 +342,11 @@ class WorkerDataProcessor:
                         previous_value = previous_values[row_id].get(column_key, 0)
                         current_value = int(row.get(column_key, 0))
 
-                        value_per_sec = (current_value - previous_value) / dolphie.polling_latency if dolphie.polling_latency > 0 else 0
+                        value_per_sec = (
+                            (current_value - previous_value) / dolphie.polling_latency
+                            if dolphie.polling_latency > 0
+                            else 0
+                        )
                         row[f"{column_key}_per_sec"] = round(value_per_sec)
 
         if dolphie.panels.processlist.visible:
@@ -429,10 +431,10 @@ class WorkerDataProcessor:
 
         # Add to exclude_variables with user specified variables
         if dolphie.exclude_notify_global_vars:
-            exclude_variables.update(dolphie.exclude_notify_global_vars)
+            exclude_variables.update(v.lower() for v in dolphie.exclude_notify_global_vars)
 
         for variable, new_value in new_data.items():
-            if any(item in variable.lower() for item in exclude_variables):
+            if any(item in variable for item in exclude_variables):
                 continue
 
             old_value = old_data.get(variable)
@@ -453,7 +455,7 @@ class WorkerDataProcessor:
                 include_host = ""
                 if self.app.tab_manager.active_tab.id != tab.id:
                     include_host = f"Host:      [$light_blue]{dolphie.host_with_port}[/$light_blue]\n"
-                self.app.app.notify(
+                self.app.notify(
                     f"[b][$dark_yellow]{variable}[/b][/$dark_yellow]\n"
                     f"{include_host}"
                     f"Old Value: [$highlight]{old_value}[/$highlight]\n"
@@ -485,33 +487,26 @@ class WorkerDataProcessor:
 
         current_ro_status = dolphie.global_variables.get("read_only")
         formatted_ro_status = ConnectionStatus.read_only if current_ro_status == "ON" else ConnectionStatus.read_write
-        status = "read-only" if current_ro_status == "ON" else "read/write"
-
-        message = (
-            f"Host [$light_blue]{dolphie.host_with_port}[/$light_blue] is now [$b_highlight]{status}[/$b_highlight]"
-        )
 
         if (
-            current_ro_status == "ON"
-            and not dolphie.replication_status
-            and not dolphie.group_replication
-            or current_ro_status == "ON"
-            and dolphie.group_replication
-            and dolphie.is_group_replication_primary
-        ):
-            message += " ([$dark_yellow]SHOULD BE READ/WRITE?[/$dark_yellow])"
-
-        if (
-            dolphie.connection_status in [ConnectionStatus.read_write, ConnectionStatus.read_only]
+            dolphie.connection_status in (ConnectionStatus.read_write, ConnectionStatus.read_only)
             and dolphie.connection_status != formatted_ro_status
         ):
-            logger.warning(f"Read-only mode changed: {dolphie.connection_status} -> {formatted_ro_status}")
-            self.app.app.notify(
-                title="Read-only mode change",
-                message=message,
-                severity="warning",
-                timeout=15,
+            status = "read-only" if current_ro_status == "ON" else "read/write"
+            message = (
+                f"Host [$light_blue]{dolphie.host_with_port}[/$light_blue]"
+                f" is now [$b_highlight]{status}[/$b_highlight]"
             )
+
+            # Warn if a primary/standalone is unexpectedly read-only
+            if current_ro_status == "ON" and (
+                (not dolphie.replication_status and not dolphie.group_replication)
+                or (dolphie.group_replication and dolphie.is_group_replication_primary)
+            ):
+                message += " ([$dark_yellow]SHOULD BE READ/WRITE?[/$dark_yellow])"
+
+            logger.warning(f"Read-only mode changed: {dolphie.connection_status} -> {formatted_ro_status}")
+            self.app.notify(title="Read-only mode change", message=message, severity="warning", timeout=15)
 
             self.app.tab_manager.update_connection_status(tab=tab, connection_status=formatted_ro_status)
         elif dolphie.connection_status == ConnectionStatus.connected:

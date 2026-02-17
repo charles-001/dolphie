@@ -4,14 +4,6 @@ import threading
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
-from rich import box
-from rich.align import Align
-from rich.console import Group
-from rich.style import Style
-from rich.table import Table
-from sqlparse import format as sqlformat
-from textual.widgets import Button
-
 from dolphie.DataTypes import (
     ConnectionSource,
     HotkeyCommands,
@@ -23,7 +15,6 @@ from dolphie.Modules.Functions import (
     format_bytes,
     format_number,
     format_query,
-    format_sys_table_memory,
 )
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
@@ -32,6 +23,13 @@ from dolphie.Widgets.CommandScreen import CommandScreen
 from dolphie.Widgets.EventLogScreen import EventLog
 from dolphie.Widgets.ProxySQLThreadScreen import ProxySQLThreadScreen
 from dolphie.Widgets.ThreadScreen import ThreadScreen
+from rich import box
+from rich.align import Align
+from rich.console import Group
+from rich.style import Style
+from rich.table import Table
+from sqlparse import format as sqlformat
+from textual.widgets import Button
 
 if TYPE_CHECKING:
     from dolphie.App import DolphieApp
@@ -131,20 +129,18 @@ class KeyEventManager:
                 self.app.tab_manager.active_tab.proxysql_hostgroup_summary_datatable.clear()
                 return
 
-            if dolphie.replay_file and (not dolphie.replication_status and not dolphie.group_replication_members):
-                self.app.notify("This replay file has no replication data")
-                return
-
-            if not any(
+            has_replication_data = any(
                 [
-                    dolphie.replica_manager.available_replicas,
                     dolphie.replication_status,
                     dolphie.galera_cluster,
                     dolphie.group_replication,
                     dolphie.innodb_cluster,
                     dolphie.innodb_cluster_read_replica,
+                    # Replicas can only be displayed in live mode since we connect to each one
+                    not dolphie.replay_file and dolphie.replica_manager.available_replicas,
                 ]
-            ):
+            )
+            if not has_replication_data:
                 self.app.notify("Replication panel has no data to display")
                 return
 
@@ -451,16 +447,6 @@ class KeyEventManager:
 
         elif key == "l" or key == "o":
             self.execute_command_in_thread(key=key)
-
-        elif key == "m":
-            if dolphie.connection_source == ConnectionSource.proxysql:
-                self.execute_command_in_thread(key=key)
-                return
-
-            if not dolphie.is_mysql_version_at_least("5.7") or not dolphie.performance_schema_enabled:
-                self.app.notify("Memory usage command requires MySQL 5.7+ with Performance Schema enabled")
-            else:
-                self.execute_command_in_thread(key=key)
 
         elif key == "M":
 
@@ -1022,79 +1008,6 @@ class KeyEventManager:
                 )
                 self.app.call_from_thread(show_command_screen)
 
-            elif key == "m":
-                header_style = Style(bold=True)
-
-                if dolphie.connection_source == ConnectionSource.proxysql:
-                    table = Table(box=box.SIMPLE_HEAVY, style="table_border", show_edge=False)
-                    table.add_column("Variable", header_style=header_style)
-                    table.add_column("Value", header_style=header_style)
-
-                    dolphie.secondary_db_connection.execute(ProxySQLQueries.memory_metrics)
-                    data = dolphie.secondary_db_connection.fetchall()
-
-                    for row in data:
-                        if row["Variable_Name"]:
-                            table.add_row(
-                                f"{row['Variable_Name']}",
-                                f"{format_bytes(int(row['Variable_Value']))}",
-                            )
-
-                    screen_data = Group(
-                        Align.center("[b light_blue]Memory Usage[/b light_blue]"),
-                        Align.center(table),
-                    )
-
-                    self.app.call_from_thread(show_command_screen)
-                else:
-                    table_grid = Table.grid()
-                    table1 = Table(box=box.SIMPLE_HEAVY, style="table_border")
-
-                    table1.add_column("User", header_style=header_style)
-                    table1.add_column("Current", header_style=header_style)
-                    table1.add_column("Total", header_style=header_style)
-
-                    dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_user)
-                    data = dolphie.secondary_db_connection.fetchall()
-                    for row in data:
-                        table1.add_row(
-                            row["user"],
-                            format_sys_table_memory(row["current_allocated"]),
-                            format_sys_table_memory(row["total_allocated"]),
-                        )
-
-                    table2 = Table(box=box.SIMPLE_HEAVY, style="table_border")
-                    table2.add_column("Code Area", header_style=header_style)
-                    table2.add_column("Current", header_style=header_style)
-
-                    dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_code_area)
-                    data = dolphie.secondary_db_connection.fetchall()
-                    for row in data:
-                        table2.add_row(
-                            row["code_area"],
-                            format_sys_table_memory(row["current_allocated"]),
-                        )
-
-                    table3 = Table(box=box.SIMPLE_HEAVY, style="table_border")
-                    table3.add_column("Host", header_style=header_style)
-                    table3.add_column("Current", header_style=header_style)
-                    table3.add_column("Total", header_style=header_style)
-
-                    dolphie.secondary_db_connection.execute(MySQLQueries.memory_by_host)
-                    data = dolphie.secondary_db_connection.fetchall()
-                    for row in data:
-                        table3.add_row(
-                            dolphie.get_hostname(row["host"]),
-                            format_sys_table_memory(row["current_allocated"]),
-                            format_sys_table_memory(row["total_allocated"]),
-                        )
-
-                    table_grid.add_row("", Align.center("[b light_blue]Memory Allocation"), "")
-                    table_grid.add_row(table1, table3, table2)
-
-                    screen_data = Align.center(table_grid)
-
-                    self.app.call_from_thread(show_command_screen)
             elif key == "t":
                 formatted_query = ""
                 explain_failure = ""
@@ -1334,9 +1247,12 @@ class KeyEventManager:
                 self.app.call_from_thread(show_command_screen)
 
             elif key == "Z":
-                query = MySQLQueries.table_sizes.replace("$1", "INNODB_SYS_TABLESPACES")
-                if dolphie.is_mysql_version_at_least("8.0") and dolphie.connection_source_alt == ConnectionSource.mysql:
+                if dolphie.connection_source_alt == ConnectionSource.mariadb:
+                    query = MySQLQueries.table_sizes_mariadb
+                elif dolphie.is_mysql_version_at_least("8.0"):
                     query = MySQLQueries.table_sizes.replace("$1", "INNODB_TABLESPACES")
+                else:
+                    query = MySQLQueries.table_sizes.replace("$1", "INNODB_SYS_TABLESPACES")
 
                 dolphie.secondary_db_connection.execute(query)
                 database_tables_data = dolphie.secondary_db_connection.fetchall()
@@ -1345,19 +1261,26 @@ class KeyEventManager:
                     "Table": {"field": "DATABASE_TABLE", "format_bytes": False},
                     "Engine": {"field": "ENGINE", "format_bytes": False},
                     "Row Format": {"field": "ROW_FORMAT", "format_bytes": False},
-                    "File Size": {"field": "FILE_SIZE", "format_bytes": True},
-                    "Allocated Size": {"field": "ALLOCATED_SIZE", "format_bytes": True},
-                    "Clustered Index": {"field": "DATA_LENGTH", "format_bytes": True},
-                    "Secondary Indexes": {
-                        "field": "INDEX_LENGTH",
-                        "format_bytes": True,
-                    },
-                    "Free Space": {"field": "DATA_FREE", "format_bytes": True},
-                    "Frag Ratio": {
-                        "field": "fragmentation_ratio",
-                        "format_bytes": False,
-                    },
                 }
+
+                if dolphie.connection_source_alt != ConnectionSource.mariadb:
+                    columns["File Size"] = {"field": "FILE_SIZE", "format_bytes": True}
+                    columns["Allocated Size"] = {"field": "ALLOCATED_SIZE", "format_bytes": True}
+
+                columns.update(
+                    {
+                        "Clustered Index": {"field": "DATA_LENGTH", "format_bytes": True},
+                        "Secondary Indexes": {
+                            "field": "INDEX_LENGTH",
+                            "format_bytes": True,
+                        },
+                        "Free Space": {"field": "DATA_FREE", "format_bytes": True},
+                        "Frag Ratio": {
+                            "field": "fragmentation_ratio",
+                            "format_bytes": False,
+                        },
+                    }
+                )
 
                 table = Table(
                     header_style="b",

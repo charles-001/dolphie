@@ -79,7 +79,7 @@ class Config:
     show_additional_query_columns: bool = False
     record_for_replay: bool = False
     daemon_mode: bool = False
-    daemon_mode_panels: list[str] = field(default_factory=lambda: ["processlist", "metadata_locks", "pfs_metrics"])
+    daemon_mode_panels: list[str] = field(default_factory=lambda: ["processlist", "metadata_locks"])
     daemon_mode_log_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_daemon.log")
     replay_file: str = None
     replay_dir: str = None
@@ -430,8 +430,8 @@ Dolphie's config supports these options under [dolphie] section:
             dest="daemon_mode_panels",
             type=str,
             help=(
-                "Which panels to run queries for in daemon mode separated by a comma. This can control significant "
-                f"load if the queries are responsible. Dashboard/Replication panels cannot be turned off. Supports: "
+                "Which panels to run queries for in daemon mode separated by a comma. Reducing panels can lower "
+                f"query load and replay file size. Dashboard/Replication panels cannot be turned off. Supports: "
                 f"{self.panels.get_all_daemon_panel_names()}, [default: {self.config.daemon_mode_panels}]"
             ),
             metavar="",

@@ -65,6 +65,7 @@ class Tab:
 
         # Track mounted grid widgets to avoid DOM queries each refresh cycle
         self.clusterset_widgets: dict[str, Static] = {}
+        self.galera_widgets: dict[str, Static] = {}
         self.member_widgets: dict[str, Static] = {}
         self.replica_widgets: dict[str, Static] = {}
 
@@ -127,6 +128,11 @@ class Tab:
         self.clusterset_container = app.query_one("#clusterset_container", Container)
         self.clusterset_title = app.query_one("#clusterset_title", Label)
         self.clusterset_grid = app.query_one("#clusterset_grid", Container)
+
+        self.galera_container = app.query_one("#galera_container", Container)
+        self.galera_title = app.query_one("#galera_title", Label)
+        self.galera_data = app.query_one("#galera_data", Static)
+        self.galera_grid = app.query_one("#galera_grid", Container)
 
         self.group_replication_container = app.query_one("#group_replication_container", Container)
         self.group_replication_grid = app.query_one("#group_replication_grid", Container)
@@ -252,6 +258,9 @@ class Tab:
                 widget.parent.display = True
 
         toggle_container_display(
+            self.galera_container, self.dolphie.galera_cluster_members, self.galera_widgets
+        )
+        toggle_container_display(
             self.replicas_container, self.dolphie.replica_manager.available_replicas, self.replica_widgets
         )
         toggle_container_display(
@@ -262,7 +271,7 @@ class Tab:
         )
 
     def remove_replication_panel_components(self):
-        for tracked in (self.replica_widgets, self.member_widgets, self.clusterset_widgets):
+        for tracked in (self.replica_widgets, self.member_widgets, self.galera_widgets, self.clusterset_widgets):
             for widget in tracked.values():
                 widget.parent.remove()
             tracked.clear()
@@ -358,10 +367,10 @@ class TabManager:
                     id="panel_dashboard",
                     classes="dashboard",
                 ),
-                Container(Label(id="metric_graphs_title"), TabbedContent(id="metric_graph_tabs"), id="panel_graphs"),
+                Container(Label(id="metric_graphs_title", classes="panel_title"), TabbedContent(id="metric_graph_tabs"), id="panel_graphs"),
                 Container(
                     Container(
-                        Label(id="replication_title"),
+                        Label(id="replication_title", classes="panel_title"),
                         Label(id="replication_variables"),
                         Center(
                             ScrollableContainer(Static(id="replication_status"), classes="replication_status"),
@@ -375,20 +384,27 @@ class TabManager:
                         classes="replication",
                     ),
                     Container(
-                        Label(id="clusterset_title"),
+                        Label(id="clusterset_title", classes="panel_title"),
                         Container(id="clusterset_grid"),
                         id="clusterset_container",
                         classes="group_replication",
                     ),
                     Container(
-                        Label(id="group_replication_title"),
+                        Label(id="galera_title", classes="panel_title"),
+                        Static(id="galera_data"),
+                        Container(id="galera_grid"),
+                        id="galera_container",
+                        classes="group_replication",
+                    ),
+                    Container(
+                        Label(id="group_replication_title", classes="panel_title"),
                         Label(id="group_replication_data"),
                         Container(id="group_replication_grid"),
                         id="group_replication_container",
                         classes="group_replication",
                     ),
                     Container(
-                        Label(id="replicas_title"),
+                        Label(id="replicas_title", classes="panel_title"),
                         LoadingIndicator(id="replicas_loading_indicator"),
                         Container(id="replicas_grid"),
                         id="replicas_container",
@@ -656,6 +672,7 @@ class TabManager:
 
         tab.replication_container.display = False
         tab.replicas_container.display = False
+        tab.galera_container.display = False
         tab.group_replication_container.display = False
 
         # By default, hide all the panels

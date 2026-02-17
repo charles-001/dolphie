@@ -83,6 +83,7 @@ class WorkerManager:
                 dolphie.metadata_locks = replay_event_data.metadata_locks
                 dolphie.group_replication_members = replay_event_data.group_replication_members
                 dolphie.group_replication_data = replay_event_data.group_replication_data
+                dolphie.galera_cluster_members = replay_event_data.galera_cluster_members
                 dolphie.file_io_data = replay_event_data.file_io_data
                 dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
                 dolphie.statements_summary_data = replay_event_data.statements_summary_data

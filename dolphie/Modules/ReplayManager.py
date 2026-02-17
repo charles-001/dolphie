@@ -41,6 +41,7 @@ class MySQLReplayData:
     statements_summary_data: dict
     group_replication_data: dict
     group_replication_members: dict
+    galera_cluster_members: list
 
 
 @dataclass
@@ -694,6 +695,9 @@ class ReplayManager:
                 }
             )
 
+        if self.dolphie.galera_cluster:
+            data_dict["galera_cluster_members"] = self.dolphie.galera_cluster_members
+
         if self.dolphie.file_io_data and self.dolphie.file_io_data.filtered_data:
             data_dict["file_io_data"] = self.dolphie.file_io_data.filtered_data
 
@@ -910,6 +914,7 @@ class ReplayManager:
             processlist=processlist,
             group_replication_data=data.get("group_replication_data", {}),
             group_replication_members=data.get("group_replication_members", {}),
+            galera_cluster_members=data.get("galera_cluster_members", []),
             file_io_data=file_io_data,
             table_io_waits_data=table_io_waits,
             statements_summary_data=statements_summary_data,

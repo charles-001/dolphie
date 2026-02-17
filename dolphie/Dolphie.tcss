@@ -215,11 +215,7 @@ TopBar {
 }
 
 /* --- Dashboard & Replay --- */
-#metric_graphs_title, 
-#replication_title, 
-#replicas_title, 
-#group_replication_title, 
-#clusterset_title {
+.panel_title {
     color: #bbc8e8;
     text-style: bold;
     width: 100%;
@@ -378,7 +374,7 @@ TopBar {
             max-height: 20;
         }
     }
-    & > Label {
+    & > Label, & > Static {
         width: 100%;
         content-align: center middle;
     }

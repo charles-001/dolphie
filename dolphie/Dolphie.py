@@ -6,20 +6,19 @@ import socket
 import time
 from datetime import datetime
 
-import psutil
-from loguru import logger
-from packaging.version import parse as parse_version
-from rich.text import Text
-from textual.app import App
-from textual.widgets import Switch
-
 import dolphie.DataTypes as DataTypes
 import dolphie.Modules.MetricManager as MetricManager
+import psutil
 from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.Functions import load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries
+from loguru import logger
+from packaging.version import parse as parse_version
+from rich.text import Text
+from textual.app import App
+from textual.widgets import Switch
 
 
 class Dolphie:
@@ -98,9 +97,7 @@ class Dolphie:
         self.proxysql_mysql_query_rules: list[dict[str, str]] = []
         self.proxysql_per_second_data: dict[str, int | str] = {}
         self.proxysql_command_stats: list[dict[str, int | str]] = []
-        self.processlist_threads: dict[int, DataTypes.ProcesslistThread | DataTypes.ProxySQLProcesslistThread] = (
-            {}
-        )
+        self.processlist_threads: dict[int, DataTypes.ProcesslistThread | DataTypes.ProxySQLProcesslistThread] = {}
         self.processlist_threads_snapshot: dict[
             int, DataTypes.ProcesslistThread | DataTypes.ProxySQLProcesslistThread
         ] = {}
@@ -110,6 +107,8 @@ class Dolphie:
         self.group_replication_data: dict[str, str] = {}
         self.group_replication_members: list[dict[str, str]] = []
         self.innodb_cluster_clustersets: list[dict[str, str]] = []
+
+        self.galera_cluster_members: list[dict[str, str]] = []
 
         # Filters that can be applied
         self.user_filter: str = None
@@ -258,13 +257,13 @@ class Dolphie:
             if is_azure:
                 return "Azure MariaDB", ConnectionSource.mariadb
             if is_galera_cluster:
-                return "MariaDB Galera Cluster", ConnectionSource.mariadb
+                return "MariaDB", ConnectionSource.mariadb
             return "MariaDB", ConnectionSource.mariadb
 
         # Percona
         if is_percona:
             if is_galera_cluster:
-                return "Percona Galera Cluster", ConnectionSource.mysql
+                return "Percona Server", ConnectionSource.mysql
             return "Percona Server", ConnectionSource.mysql
 
         # Standard MySQL

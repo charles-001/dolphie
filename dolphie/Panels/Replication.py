@@ -1,8 +1,12 @@
 import re
-import socket
 
 from dolphie.DataTypes import ConnectionSource, Replica
-from dolphie.Modules.Functions import format_number, format_picoseconds, format_time
+from dolphie.Modules.Functions import (
+    format_bytes,
+    format_number,
+    format_picoseconds,
+    format_time,
+)
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MySQL import Database
 from dolphie.Modules.Queries import MySQLQueries
@@ -234,10 +238,8 @@ def create_panel(tab: Tab):
         tab.group_replication_container.display = True
 
         available_variables = {
-            "group_replication_view_change_uuid": ("View UUID", global_variables),
-            "group_replication_communication_stack": ("Communication Stack", global_variables),
+            "group_replication_single_primary_mode": ("Single Primary", global_variables),
             "group_replication_consistency": ("Global Consistency", global_variables),
-            "group_replication_paxos_single_leader": ("Paxos Single Leader", global_variables),
             "write_concurrency": ("Write Concurrency", group_replication_data),
         }
 
@@ -245,7 +247,7 @@ def create_panel(tab: Tab):
             f"[$label]{label}[/$label] {source.get(var, 'N/A')}" for var, (label, source) in available_variables.items()
         )
 
-        title_prefix = panels.replication.formatted_key
+        title_prefix = panels.replication.content_key
         cluster_title = "InnoDB Cluster" if dolphie.innodb_cluster else "Group Replication"
         cluster_name = group_replication_data.get("cluster_name")
         final_cluster_name = (
@@ -265,6 +267,34 @@ def create_panel(tab: Tab):
         items = create_group_replication_member_table(tab)
         _sync_grid(tab.group_replication_grid, items, "member", tab.id, dolphie.app, tab.member_widgets)
 
+    # --- Galera Cluster panel ---
+    if not dolphie.galera_cluster:
+        tab.galera_container.display = False
+    else:
+        tab.galera_container.display = True
+
+        gcache_size = global_variables.get("wsrep_provider_gcache_size")
+        gcache_formatted = format_bytes(int(gcache_size)) if gcache_size else "N/A"
+
+        galera_variables = (
+            f"[$label]Cluster Name[/$label] {global_variables.get('wsrep_cluster_name', 'N/A')}"
+            f"  [$label]SST Method[/$label] {global_variables.get('wsrep_sst_method', 'N/A')}"
+            f"  [$label]OSU Method[/$label] {global_variables.get('wsrep_osu_method', 'N/A')}"
+            f"  [$label]GCache Size[/$label] {gcache_formatted}"
+            f"  [$label]Apply Threads[/$label] {global_variables.get('wsrep_slave_threads', 'N/A')}"
+            f"  [$label]Sync Wait[/$label] {global_variables.get('wsrep_sync_wait', 'N/A')}"
+        )
+
+        title_prefix = panels.replication.content_key
+        tab.galera_title.update(
+            f"[b]{title_prefix}Galera Cluster"
+            f" ([$highlight]{dolphie.global_status.get('wsrep_cluster_size', 'N/A')} nodes[/$highlight])"
+        )
+        tab.galera_data.update(galera_variables)
+
+        items = create_galera_node_table(tab)
+        _sync_grid(tab.galera_grid, items, "galera_node", tab.id, dolphie.app, tab.galera_widgets)
+
     # --- ClusterSet panel ---
     innodb_cluster_clustersets = dolphie.innodb_cluster_clustersets
     if not innodb_cluster_clustersets:
@@ -273,7 +303,7 @@ def create_panel(tab: Tab):
         tab.clusterset_container.display = True
 
         tab.clusterset_title.update(
-            f"[b]{panels.replication.formatted_key}ClusterSets "
+            f"[b]{panels.replication.content_key}ClusterSets "
             f"([$highlight]{len(innodb_cluster_clustersets)}[/$highlight])"
         )
 
@@ -290,7 +320,7 @@ def create_panel(tab: Tab):
             table.add_column()
             table.add_column()
             table.add_row("[b][light_blue]ClusterSet", f"[light_blue]{clusterset_name}")
-            table.add_row("[label]Clusters", formatted_clusters)
+            table.add_row("[b][label]Clusters", formatted_clusters)
 
             items[clusterset_name] = table
 
@@ -314,7 +344,7 @@ def create_replica_panel(tab: Tab):
 
     # Update replicas title
     num_replicas = len(replica_manager.available_replicas)
-    title_prefix = panels.replication.formatted_key
+    title_prefix = panels.replication.content_key
     tab.replicas_title.update(f"[b]{title_prefix}Replicas ([$highlight]{num_replicas}[/$highlight])")
 
     # Sync replica grid widgets with current replica data
@@ -413,15 +443,15 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
 
     if replica:
         table.add_row("[b][light_blue]Host", f"[light_blue]{replica.host}")
-        table.add_row("[label]Version", f"{replica.host_distro} {replica.mysql_version}")
+        table.add_row("[b][label]Version", f"{replica.host_distro} {replica.mysql_version}")
     else:
-        table.add_row("[label]Primary", primary_host)
+        table.add_row("[b][label]Primary", primary_host)
 
     if not dashboard_table:
-        table.add_row("[label]User", primary_user)
+        table.add_row("[b][label]User", primary_user)
 
     table.add_row(
-        "[label]Thread",
+        "[b][label]Thread",
         f"[label]IO[/label] {io_thread_running} [label]SQL[/label] {sql_thread_running}",
     )
 
@@ -433,10 +463,10 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             replication_delay = f"[dark_yellow]Delay[/dark_yellow] {format_time(data['SQL_Delay'])}"
 
     if formatted_replica_lag is None or not is_sql_running:
-        table.add_row("[label]Lag", "")
+        table.add_row("[b][label]Lag", "")
     else:
         table.add_row(
-            "[label]Lag",
+            "[b][label]Lag",
             f"{formatted_replica_lag} [label]Speed[/label] {data['Replica_Speed']} {replication_delay}",
         )
 
@@ -448,21 +478,21 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         table.add_row("[label]State", str(replica_sql_running_state))
     else:
         table.add_row(
-            "[label]Binlog IO",
+            "[b][label]Binlog IO",
             f"{primary_log_file} ([dark_gray]{read_primary_log_pos}[/dark_gray])",
         )
         table.add_row(
-            "[label]Binlog SQL",
+            "[b][label]Binlog SQL",
             f"{relay_primary_log_file} ([dark_gray]{exec_primary_log_pos}[/dark_gray])",
         )
         table.add_row(
-            "[label]Relay Log",
+            "[b][label]Relay Log",
             f"{data['Relay_Log_File']} ([dark_gray]{data['Relay_Log_Pos']}[/dark_gray])",
         )
 
     if not dashboard_table:
         ssl_enabled = "ON" if primary_ssl_allowed == "Yes" else "OFF"
-        table.add_row("[label]SSL", ssl_enabled)
+        table.add_row("[b][label]SSL", ssl_enabled)
 
         replication_status_filtering = [
             "Replicate_Do_DB",
@@ -479,7 +509,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
 
             status_filter_formatted = f"Filter: {status_filter.split('Replicate_')[1]}"
             if value:
-                table.add_row(f"[label]{status_filter_formatted}", str(value))
+                table.add_row(f"[b][label]{status_filter_formatted}", str(value))
 
         error_types = ["Last_IO_Error", "Last_SQL_Error"]
         errors = [(error_type, data[error_type]) for error_type in error_types if data[error_type]]
@@ -487,24 +517,29 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         if errors:
             for error_type, error_message in errors:
                 table.add_row(
-                    f"[label]{error_type.replace('_', ' ')}",
+                    f"[b][label]{error_type.replace('_', ' ')}",
                     f"[red]{error_message}[/red]",
                 )
         else:
-            table.add_row("[label]IO State", str(replica_io_state))
-            table.add_row("[label]SQL State", str(replica_sql_running_state))
+            table.add_row("[b][label]IO State", str(replica_io_state))
+            table.add_row("[b][label]SQL State", str(replica_sql_running_state))
 
         if mysql_gtid_enabled:
             executed_gtid_set = data["Executed_Gtid_Set"]
             retrieved_gtid_set = data["Retrieved_Gtid_Set"]
 
-            table.add_row("[label]GTID", gtid_status)
+            table.add_row("[b][label]GTID", gtid_status)
 
             if replica:
                 # Exclude the primary's own UUID and all its replication source UUIDs to avoid
                 # false positives from stale gtid_executed snapshots. The primary actively receives
                 # GTIDs from its sources, so by the time replicas are checked the snapshot is behind.
+                # For Group Replication, also exclude the group UUID since it has the same race.
                 exclude_uuids = {dolphie.server_uuid} | dolphie.replication_source_uuids
+                if dolphie.group_replication:
+                    gr_group_name = dolphie.global_variables.get("group_replication_group_name")
+                    if gr_group_name:
+                        exclude_uuids.add(gr_group_name)
 
                 replica_gtid_set = _filter_gtid_sets(executed_gtid_set, exclude_uuids)
                 primary_gtid_set = _filter_gtid_sets(dolphie.global_variables.get("gtid_executed", ""), exclude_uuids)
@@ -519,7 +554,7 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
                 else:
                     errant_trx = "[green]None[/green]"
 
-                table.add_row("[label]Errant TRX", errant_trx)
+                table.add_row("[b][label]Errant TRX", errant_trx)
 
                 # If this replica has replicas, use its primary server UUID, else use its own
                 primary_uuid = primary_uuid or dolphie.server_uuid
@@ -527,12 +562,12 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
             retrieved_gtid_set = _color_gtid_sets(retrieved_gtid_set, primary_uuid)
             executed_gtid_set = _color_gtid_sets(executed_gtid_set, primary_uuid)
 
-            table.add_row("[label]Retrieved GTID", retrieved_gtid_set)
-            table.add_row("[label]Executed GTID", executed_gtid_set)
+            table.add_row("[b][label]Retrieved GTID", retrieved_gtid_set)
+            table.add_row("[b][label]Executed GTID", executed_gtid_set)
         elif mariadb_gtid_enabled:
             primary_id = data.get("Master_Server_Id")
 
-            table.add_row("[label]GTID", gtid_status)
+            table.add_row("[b][label]GTID", gtid_status)
 
             if replica:
                 # Determine the primary server ID for coloring
@@ -558,25 +593,27 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
                     errant_trx = f"[red]{errant}[/red]" if errant else "[green]None[/green]"
                 else:
                     errant_trx = "[green]None[/green]"
-                table.add_row("[label]Errant TRX", errant_trx)
+                table.add_row("[b][label]Errant TRX", errant_trx)
 
                 # Retrieved GTID from SHOW SLAVE STATUS
                 gtid_io_pos = data.get("Gtid_IO_Pos")
                 if gtid_io_pos:
-                    table.add_row("[label]Retrieved GTID", _color_mariadb_gtid_sets(gtid_io_pos, primary_id))
+                    table.add_row("[b][label]Retrieved GTID", _color_mariadb_gtid_sets(gtid_io_pos, primary_id))
 
                 # Executed GTID from the replica's gtid_slave_pos
                 if replica_gtid_slave_pos:
-                    table.add_row("[label]Executed GTID", _color_mariadb_gtid_sets(replica_gtid_slave_pos, primary_id))
+                    table.add_row(
+                        "[b][label]Executed GTID", _color_mariadb_gtid_sets(replica_gtid_slave_pos, primary_id)
+                    )
             else:
                 # Self-view: this host is a replica
                 gtid_io_pos = data.get("Gtid_IO_Pos")
                 if gtid_io_pos:
-                    table.add_row("[label]Retrieved GTID", _color_mariadb_gtid_sets(gtid_io_pos, primary_id))
+                    table.add_row("[b][label]Retrieved GTID", _color_mariadb_gtid_sets(gtid_io_pos, primary_id))
 
                 gtid_slave_pos = dolphie.global_variables.get("gtid_slave_pos")
                 if gtid_slave_pos:
-                    table.add_row("[label]Executed GTID", _color_mariadb_gtid_sets(gtid_slave_pos, primary_id))
+                    table.add_row("[b][label]Executed GTID", _color_mariadb_gtid_sets(gtid_slave_pos, primary_id))
 
     return table
 
@@ -606,37 +643,121 @@ def create_group_replication_member_table(tab: Tab) -> dict[str, Table]:
         table.add_column()
 
         table.add_row("[b][light_blue]Member", f"[light_blue]{host}")
-        table.add_row("[label]UUID", str(member_id))
-        table.add_row("[label]Role", member_role)
-        table.add_row("[label]State", member_state)
-        table.add_row("[label]Version", row.get("MEMBER_VERSION", "N/A"))
+        table.add_row("[b][label]UUID", str(member_id))
+        table.add_row("[b][label]Role", member_role)
+        table.add_row("[b][label]State", member_state)
+        table.add_row("[b][label]Version", row.get("MEMBER_VERSION", "N/A"))
 
         table.add_row(
-            "[label]Conflict",
-            f"[label]Queue[/label]: {format_number(row.get('COUNT_TRANSACTIONS_IN_QUEUE', 'N/A'))}"
-            f" [label]Checked[/label]: {format_number(row.get('COUNT_TRANSACTIONS_CHECKED', 'N/A'))}"
-            f" [label]Detected[/label]: {format_number(row.get('COUNT_TRANSACTIONS_DETECTED', 'N/A'))}",
+            "[b][label]Certifier",
+            f"[label]Queue[/label] {format_number(row.get('COUNT_TRANSACTIONS_IN_QUEUE', 'N/A'))}"
+            f" [label]Checked[/label] {format_number(row.get('COUNT_TRANSACTIONS_CHECKED', 'N/A'))}"
+            f" [label]Detected[/label] {format_number(row.get('COUNT_CONFLICTS_DETECTED', 'N/A'))}",
         )
         table.add_row(
-            "[label]Applied",
+            "[b][label]Applier",
             f"{format_number(row.get('COUNT_TRANSACTIONS_REMOTE_APPLIED', 'N/A'))}"
-            f" [label]Queue[/label]: {format_number(row.get('COUNT_TRANSACTIONS_REMOTE_IN_APPLIER', 'N/A'))} ",
+            f" [label]Queue[/label] {format_number(row.get('COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE', 'N/A'))}",
         )
         table.add_row(
-            "[label]Local",
-            f"[label]Proposed[/label]: {format_number(row.get('COUNT_TRANSACTIONS_LOCAL_PROPOSED', 'N/A'))}"
-            f" [label]Rollback[/label]: {format_number(row.get('COUNT_TRANSACTIONS_LOCAL_ROLLBACK', 'N/A'))}",
+            "[b][label]Local",
+            f"[label]Proposed[/label] {format_number(row.get('COUNT_TRANSACTIONS_LOCAL_PROPOSED', 'N/A'))}"
+            f" [label]Rollback[/label] {format_number(row.get('COUNT_TRANSACTIONS_LOCAL_ROLLBACK', 'N/A'))}",
         )
         table.add_row(
-            "[label]Rows",
-            f"{format_number(row.get('COUNT_TRANSACTIONS_ROWS_VALIDATING', 'N/A'))}"
-            " [dark_gray](used for certification)[/dark_gray]",
+            "[b][label]Cert Rows",
+            format_number(row.get("COUNT_TRANSACTIONS_ROWS_VALIDATING", "N/A")),
         )
 
         unsorted.append((member_id, host, table))
 
     # Return sorted by host, keyed by member_id
     return {mid: tbl for mid, _, tbl in sorted(unsorted, key=lambda x: x[1])}
+
+
+def create_galera_node_table(tab: Tab) -> dict[str, Table]:
+    dolphie = tab.dolphie
+    galera = dolphie.global_status
+
+    if not dolphie.galera_cluster_members:
+        return {}
+
+    local_uuid = galera.get("wsrep_gcomm_uuid")
+
+    unsorted: list[tuple[str, str, Table]] = []
+    for row in dolphie.galera_cluster_members:
+        node_uuid = row.get("node_uuid")
+        node_name = row.get("node_name", "N/A")
+        node_address = row.get("node_incoming_address", "N/A")
+        # Strip the port if it's 0 (default when wsrep-node-incoming-address isn't set)
+        if node_address.endswith(":0"):
+            node_address = node_address[:-2]
+        is_local = node_uuid == local_uuid
+
+        table = Table(box=None, show_header=False)
+        table.add_column()
+        table.add_column()
+
+        if is_local:
+            table.add_row(
+                "[b][light_blue]Member", f"[b][highlight]{node_name}[/highlight] [light_blue]({node_address})"
+            )
+        else:
+            table.add_row("[b][light_blue]Member", f"[light_blue]{node_name} ({node_address})")
+
+        table.add_row("[b][label]UUID", f"[dark_gray]{node_uuid}[/dark_gray]")
+
+        if is_local:
+            # Node state
+            node_state = galera.get("wsrep_local_state_comment", "N/A")
+            if node_state == "Synced":
+                node_state_colored = f"[green]{node_state}[/green]"
+            elif node_state in ("Donor/Desynced", "Donor"):
+                node_state_colored = f"[yellow]{node_state}[/yellow]"
+            else:
+                node_state_colored = f"[red]{node_state}[/red]"
+
+            table.add_row(
+                "[b][label]State",
+                f"{node_state_colored}"
+                f"  [label]Connected[/label] {galera.get('wsrep_connected', 'N/A')}"
+                f"  [label]Ready[/label] {galera.get('wsrep_ready', 'N/A')}",
+            )
+
+            # Flow control
+            flow_control_paused = float(galera.get("wsrep_flow_control_paused", 0))
+            recv_q = float(galera.get("wsrep_local_recv_queue_avg", 0))
+            send_q = float(galera.get("wsrep_local_send_queue_avg", 0))
+
+            table.add_row(
+                "[b][label]Flow Control",
+                f"[label]Paused[/label] {flow_control_paused:.4f}"
+                f"  [label]Recv Q[/label] {recv_q:.4f}"
+                f"  [label]Send Q[/label] {send_q:.4f}",
+            )
+
+            # Certification
+            cert_failures = int(galera.get("wsrep_local_cert_failures", 0))
+            bf_aborts = int(galera.get("wsrep_local_bf_aborts", 0))
+
+            table.add_row(
+                "[b][label]Certification",
+                f"[label]Deps[/label] {format_number(galera.get('wsrep_cert_deps_distance', 0))}"
+                f"  [label]Failures[/label] {format_number(cert_failures)}"
+                f"  [label]Aborts[/label] {format_number(bf_aborts)}",
+            )
+            table.add_row(
+                "[b][label]Writesets",
+                f"[label]Replicated[/label] {format_number(galera.get('wsrep_replicated', 0))}"
+                f" ({format_bytes(galera.get('wsrep_replicated_bytes', 0))})"
+                f"  [label]Received[/label] {format_number(galera.get('wsrep_received', 0))}"
+                f" ({format_bytes(galera.get('wsrep_received_bytes', 0))})",
+            )
+
+        unsorted.append((node_uuid, node_name, table))
+
+    # Return sorted by node_name, keyed by node_uuid
+    return {uid: tbl for uid, _, tbl in sorted(unsorted, key=lambda x: x[1])}
 
 
 def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
@@ -700,89 +821,58 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
 def fetch_replicas(tab: Tab):
     dolphie = tab.dolphie
 
-    # Refresh optimization: cache frequently accessed objects
-    replica_manager = dolphie.replica_manager
-    connection_source_alt = dolphie.connection_source_alt
-
     # Track which row_keys are active this cycle so we can remove stale ones after
     active_row_keys = set()
 
-    for row in replica_manager.available_replicas:
+    for row in dolphie.replica_manager.available_replicas:
         replica_error = None
         host = dolphie.get_hostname(row["host"].split(":")[0])
 
-        # MariaDB can't correlate processlist threads to SHOW SLAVE HOSTS via UUID like MySQL can.
-        # Instead, we match by host from SHOW SLAVE HOSTS and only TCP-probe as a last resort
-        # when multiple replicas share the same host.
-        if connection_source_alt == ConnectionSource.mariadb:
-            row_port = row.get("port")
-            if not row_port:
-                assigned_port = None
+        if dolphie.connection_source_alt == ConnectionSource.mariadb:
+            # MariaDB: no UUID for correlation, rotate through available ports
+            assigned_port = row.get("port")  # carried forward from previous cycle
+            if not assigned_port:
+                for port_data in dolphie.replica_manager.ports.values():
+                    if not port_data.get("in_use"):
+                        assigned_port = port_data["port"]
+                        port_data["in_use"] = True
 
-                # Match by host from SHOW SLAVE HOSTS
-                matching = [
-                    pd
-                    for pd in replica_manager.ports.values()
-                    if not pd.get("in_use") and dolphie.get_hostname(pd.get("host")) == host
-                ]
+                        # Use report_host from SHOW SLAVE HOSTS if specified, otherwise
+                        # fall back to the processlist IP
+                        report_host = port_data.get("host")
+                        if report_host:
+                            host = dolphie.get_hostname(report_host)
 
-                if len(matching) == 1:
-                    # Unique host match — use directly
-                    matching[0]["in_use"] = True
-                    assigned_port = matching[0]["port"]
-                else:
-                    # Multiple replicas on same host or no host match — TCP probe to disambiguate
-                    candidates = matching or [pd for pd in replica_manager.ports.values() if not pd.get("in_use")]
-                    for port_data in candidates:
-                        port = port_data.get("port", 3306)
-                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        sock.settimeout(2)
-
-                        try:
-                            sock.connect((host, port))
-                            port_data["in_use"] = True
-                            assigned_port = port
-                            break
-                        except (TimeoutError, OSError, ConnectionRefusedError):
-                            continue
-                        finally:
-                            sock.close()
-
-                if not assigned_port:
-                    replica_error = "No available port found for MariaDB replica"
-            else:
-                assigned_port = row_port
+                        break
         else:
-            # We can correlate the replica in the processlist to a specific port from SHOW SLAVE HOSTS with MySQL
-            assigned_port = replica_manager.ports.get(row.get("replica_uuid"), {}).get("port", 3306)
+            # MySQL: correlate the replica in the processlist to a specific port from
+            # SHOW REPLICAS via UUID — processlist IP is used for the host
+            assigned_port = dolphie.replica_manager.ports.get(row.get("replica_uuid"), {}).get("port", 3306)
 
         # Update the port of available_replicas so it can be used for the row_key
         row["port"] = assigned_port
+        port = assigned_port
 
-        # Create a unique row key for the replica since we now have the assigned port for it
-        row_key = replica_manager.create_replica_row_key(row.get("host"), assigned_port)
+        row_key = dolphie.replica_manager.create_replica_row_key(row.get("host"), port)
         active_row_keys.add(row_key)
 
-        host_and_port = f"{host}:{assigned_port}" if assigned_port else host
+        host_and_port = f"{host}:{port}" if port else host
 
-        replica = replica_manager.get_replica(row_key)
+        replica = dolphie.replica_manager.get_replica(row_key)
         if not replica:
-            replica = replica_manager.add_replica(
-                row_key=row_key,
-                thread_id=row.get("id"),
-                host=host_and_port,
-                port=assigned_port,
+            replica = dolphie.replica_manager.add_replica(
+                row_key=row_key, thread_id=row.get("id"), host=host_and_port, port=port
             )
 
         # If we don't have a replica connection, we create one
-        if not replica.connection and assigned_port:
+        if not replica.connection and port:
             try:
                 replica.connection = Database(
                     app=dolphie.app,
                     host=host,
                     user=dolphie.user,
                     password=dolphie.password,
-                    port=assigned_port,
+                    port=port,
                     socket=None,
                     ssl=dolphie.ssl,
                     save_connection_id=False,
@@ -811,11 +901,11 @@ def fetch_replicas(tab: Tab):
             table.add_column(overflow="fold")
 
             table.add_row("[b][light_blue]Host", f"[light_blue]{host_and_port}")
-            table.add_row("[label]User", row["user"])
-            table.add_row("[label]Error", f"[red]{replica_error}")
+            table.add_row("[b][label]User", row["user"])
+            table.add_row("[b][label]Error", f"[red]{replica_error}")
 
             replica.table = table
 
     # Remove replicas that are no longer in available_replicas
-    for row_key in set(replica_manager.replicas.keys()) - active_row_keys:
-        replica_manager.remove_replica(row_key)
+    for row_key in set(dolphie.replica_manager.replicas.keys()) - active_row_keys:
+        dolphie.replica_manager.remove_replica(row_key)

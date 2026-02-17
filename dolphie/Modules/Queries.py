@@ -213,15 +213,6 @@ class MySQLQueries:
         FROM
             $1
     """
-    mariadb_find_replicas: str = """
-        SELECT
-            PROCESSLIST_USER AS user,
-            PROCESSLIST_HOST AS host
-        FROM
-            `performance_schema`.threads
-        WHERE
-            PROCESSLIST_COMMAND LIKE 'Binlog Dump%'
-    """
     ps_find_replicas: str = """
         SELECT
             t.PROCESSLIST_ID AS id,
@@ -247,6 +238,16 @@ class MySQLQueries:
             information_schema.PROCESSLIST
         WHERE
             Command Like 'Binlog Dump%'
+    """
+    mariadb_find_replicas: str = """
+        SELECT
+            PROCESSLIST_ID AS id,
+            PROCESSLIST_USER AS user,
+            PROCESSLIST_HOST AS host
+        FROM
+            `performance_schema`.threads
+        WHERE
+            PROCESSLIST_COMMAND LIKE 'Binlog Dump%'
     """
     ps_user_statisitics: str = """
         SELECT
@@ -510,6 +511,26 @@ class MySQLQueries:
             s.FILE_SIZE DESC,
             fragmentation_ratio DESC;
     """
+    table_sizes_mariadb: str = """
+        SELECT
+            CONCAT( t.TABLE_SCHEMA, '.', t.TABLE_NAME ) AS DATABASE_TABLE,
+            t.ENGINE,
+            t.ROW_FORMAT,
+            t.DATA_LENGTH,
+            t.INDEX_LENGTH,
+            t.DATA_FREE,
+            CONVERT(
+                ROUND(( t.DATA_FREE / ( t.DATA_LENGTH + t.INDEX_LENGTH )) * 100, 2 ), UNSIGNED
+            ) AS fragmentation_ratio
+        FROM
+            information_schema.TABLES t
+        WHERE
+            t.DATA_LENGTH + t.INDEX_LENGTH > 10 * 1024 * 1024
+            AND t.TABLE_SCHEMA NOT IN ( 'mysql' )
+        ORDER BY
+            ( t.DATA_LENGTH + t.INDEX_LENGTH ) DESC,
+            fragmentation_ratio DESC;
+    """
     databases: str = """
         SELECT
             SCHEMA_NAME
@@ -593,6 +614,14 @@ class MySQLQueries:
             performance_schema.replication_group_members LEFT JOIN
             performance_schema.replication_group_member_stats USING(MEMBER_ID)
     """
+    get_galera_cluster_members: str = """
+        SELECT
+            node_uuid,
+            node_name,
+            node_incoming_address
+        FROM
+            mysql.wsrep_cluster_members
+    """
     replicaset_find_replicas: str = """
         SELECT
             instance_id as id,
@@ -665,7 +694,15 @@ class MySQLQueries:
             'Queries',
             'Table_open_cache_hits', 'Table_open_cache_misses', 'Table_open_cache_overflows',
             'Threads_cached', 'Threads_connected', 'Threads_running',
-            'Uptime'
+            'Uptime',
+            'wsrep_gcomm_uuid', 'wsrep_provider_version',
+            'wsrep_cluster_size', 'wsrep_cluster_status', 'wsrep_connected',
+            'wsrep_ready', 'wsrep_local_state_comment',
+            'wsrep_flow_control_paused', 'wsrep_local_recv_queue_avg',
+            'wsrep_local_send_queue_avg', 'wsrep_cert_deps_distance',
+            'wsrep_local_commits', 'wsrep_local_cert_failures',
+            'wsrep_local_bf_aborts', 'wsrep_replicated', 'wsrep_replicated_bytes',
+            'wsrep_received', 'wsrep_received_bytes'
         )
     """
     variables: str = "SHOW GLOBAL VARIABLES"

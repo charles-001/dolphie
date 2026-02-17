@@ -52,8 +52,27 @@ def create_panel(tab: Tab) -> Table:
             f"{global_variables['version_compile_os']} ({global_variables['version_compile_machine']})",
         )
     table_information.add_row("[label]Type", host_type)
-    table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
-    table_information.add_row("[label]Replicas", str(replicas))
+
+    if dolphie.galera_cluster or dolphie.group_replication or dolphie.innodb_cluster:
+        if dolphie.galera_cluster:
+            nodes = dolphie.global_status.get("wsrep_cluster_size", 0)
+            node_state = dolphie.global_status.get("wsrep_local_state_comment", "N/A")
+            if node_state == "Synced":
+                state_colored = f"[green]{node_state}[/green]"
+            elif node_state in ("Donor/Desynced", "Donor"):
+                state_colored = f"[yellow]{node_state}[/yellow]"
+            else:
+                state_colored = f"[red]{node_state}[/red]"
+            node_value = f"{nodes} ({state_colored})"
+        else:
+            nodes = len(dolphie.group_replication_members)
+            node_value = str(nodes)
+        if replicas:
+            node_value += f" [label]Replicas[/label] {replicas}"
+        table_information.add_row("[label]Nodes", node_value)
+    else:
+        table_information.add_row("[label]Replicas", str(replicas))
+
     table_information.add_row(
         "[label]Threads",
         f"[label]con[/label] {format_number(global_status['Threads_connected'])}"
@@ -65,6 +84,8 @@ def create_panel(tab: Tab) -> Table:
         f"[label]open[/label] {format_number(global_status['Open_tables'])}"
         f"[highlight]/[/highlight][label]opened[/label] {format_number(global_status['Opened_tables'])}",
     )
+    table_information.add_row("[label]Uptime", str(timedelta(seconds=global_status["Uptime"])))
+
     if not dolphie.replay_file:
         runtime = str(datetime.now().astimezone() - dolphie.dolphie_start_time).split(".")[0]
         table_information.add_row(
@@ -179,6 +200,7 @@ def create_panel(tab: Tab) -> Table:
             table_primary.add_row("[label]Format", binlog_format)
 
         if dolphie.connection_source_alt == ConnectionSource.mariadb:
+            table_primary.add_row("[label]GTID Strict", global_variables.get("gtid_strict_mode", "N/A"))
             table_primary.add_row("[label]Encrypt", global_variables.get("encrypt_binlog", "N/A"))
         else:
             table_primary.add_row("[label]GTID", global_variables.get("gtid_mode", "N/A"))

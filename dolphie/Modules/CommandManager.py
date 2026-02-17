@@ -1,4 +1,3 @@
-
 from dolphie.DataTypes import ConnectionSource
 
 
@@ -97,7 +96,6 @@ class CommandManager:
                         "human_key": "o",
                         "description": "Display output from SHOW ENGINE INNODB STATUS",
                     },
-                    "m": {"human_key": "m", "description": "Display memory usage"},
                     "d": {"human_key": "d", "description": "Display all databases"},
                     "e": {
                         "human_key": "e",
@@ -209,7 +207,6 @@ class CommandManager:
                         "human_key": "e",
                         "description": "Display errors reported by backend servers during query execution",
                     },
-                    "m": {"human_key": "m", "description": "Display memory usage"},
                     "t": {
                         "human_key": "t",
                         "description": "Display details of a thread",
