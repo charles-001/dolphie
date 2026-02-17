@@ -151,7 +151,6 @@ class Dolphie:
         self.server_uuid: str = None
         self.replication_source_uuids: set = set()
         self.host_version: str = None
-        self._parsed_host_version = None
         self.pause_refresh: bool = False
         self.active_redo_logs: int = None
         self.metadata_locks_enabled: bool = False
@@ -344,12 +343,8 @@ class Dolphie:
                 self.tab_setup_available_hosts.append(host[:-1])  # remove the \n
 
     def is_mysql_version_at_least(self, target: str, use_version: str = None):
-        if use_version:
-            parsed_source = parse_version(use_version)
-        else:
-            parsed_source = self._parsed_host_version
-
-        return parsed_source >= parse_version(target)
+        version = use_version or self.host_version
+        return parse_version(version) >= parse_version(target)
 
     def parse_server_version(self, version: str) -> str:
         if not version:
@@ -358,10 +353,7 @@ class Dolphie:
         major, minor, patch = version.split(".", 2)
         patch = patch.split("-", 1)[0]
 
-        parsed = f"{major}.{minor}.{patch}"
-        self._parsed_host_version = parse_version(parsed)
-
-        return parsed
+        return f"{major}.{minor}.{patch}"
 
     def get_hostname(self, host):
         if host in self.host_cache:
