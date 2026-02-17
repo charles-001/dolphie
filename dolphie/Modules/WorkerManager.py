@@ -338,7 +338,6 @@ class WorkerManager:
 
                 if not tab.main_container.display:
                     tab.toggle_metric_graph_tabs_display()
-                    tab.layout_graphs()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.app.worker_data_processor.refresh_screen_mysql(tab)
@@ -413,7 +412,6 @@ class WorkerManager:
 
             if not tab.main_container.display:
                 tab.toggle_metric_graph_tabs_display()
-                tab.layout_graphs()
 
             if dolphie.connection_source == ConnectionSource.mysql:
                 self.app.worker_data_processor.refresh_screen_mysql(tab)

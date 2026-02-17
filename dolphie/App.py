@@ -312,8 +312,7 @@ class DolphieApp(App):
         ):
             # Set each panel's display status based on the tab's panel visibility
             for panel in tab.dolphie.panels.get_all_panels():
-                tab_panel = tab.get_panel_widget(panel.name)
-                tab_panel.display = getattr(tab.dolphie.panels, panel.name).visible
+                tab.get_panel_widget(panel.name).display = panel.visible
 
             tab.toggle_metric_graph_tabs_display()
             tab.toggle_entities_displays()

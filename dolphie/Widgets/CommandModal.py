@@ -389,7 +389,7 @@ class CommandModal(ModalScreen):
             self.dismiss(modal_input)
         elif self.command == HotkeyCommands.maximize_panel:
             maximize_panel = self.query_one("#maximize_panel_select", Select).value
-            if maximize_panel == Select.BLANK:
+            if maximize_panel == Select.NULL:
                 self.update_error_response("Please select a panel to maximize")
                 return
 

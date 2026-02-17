@@ -136,7 +136,7 @@ class TabSetupModal(ModalScreen):
 
         self.credential_profile = credential_profile
         if not self.credential_profile:
-            self.credential_profile = Select.BLANK
+            self.credential_profile = Select.NULL
         self.credential_profiles = credential_profiles
 
         self.host = host
@@ -275,7 +275,7 @@ class TabSetupModal(ModalScreen):
             self.query_one(selector, Input).value = value or default
 
         # Reset fields if no profile selected
-        if event.value == Select.BLANK:
+        if event.value == Select.NULL:
             self.query_one("#hostgroup", Select).disabled = False
             self.query_one("#ssl", Checkbox).value = False
             for selector in ["#username", "#password", "#socket_file", "#ssl_ca", "#ssl_cert", "#ssl_key"]:
@@ -328,14 +328,14 @@ class TabSetupModal(ModalScreen):
 
     @on(Select.Changed, "#hostgroup")
     def hostgroup_changed(self, event: Select.Changed):
-        self.update_inputs(disable=event.value != Select.BLANK, exclude=["#hostgroup", "#record_for_replay"])
+        self.update_inputs(disable=event.value != Select.NULL, exclude=["#hostgroup", "#record_for_replay"])
 
     @on(Select.Changed, "#replay_file")
     def replay_file_changed(self, event: Select.Changed):
         # When loading a replay file, disable recording and reset the checkbox
-        if event.value != Select.BLANK:
+        if event.value != Select.NULL:
             self.query_one("#record_for_replay", Checkbox).value = False
-        self.update_inputs(disable=event.value != Select.BLANK, exclude=["#replay_file"])
+        self.update_inputs(disable=event.value != Select.NULL, exclude=["#replay_file"])
 
     @on(RadioSet.Changed, "#ssl_mode")
     def ssl_mode_changed(self, event: RadioSet.Changed):
@@ -420,8 +420,8 @@ class TabSetupModal(ModalScreen):
                     ssl["key"] = ssl_key
 
             socket_file = self.query_one("#socket_file", Input)
-            hostgroup_value = None if hostgroup.value == Select.BLANK else hostgroup.value
-            replay_file_value = None if replay_file.value == Select.BLANK else replay_file.value
+            hostgroup_value = None if hostgroup.value == Select.NULL else hostgroup.value
+            replay_file_value = None if replay_file.value == Select.NULL else replay_file.value
 
             modal_footer = self.query_one("#modal_footer", Label)
             host_split = host.value.split(":")

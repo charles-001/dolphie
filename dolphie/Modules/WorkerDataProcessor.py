@@ -516,5 +516,3 @@ class WorkerDataProcessor:
             self.app.tab_manager.update_connection_status(tab=tab, connection_status=formatted_ro_status)
         elif dolphie.connection_status == ConnectionStatus.connected:
             self.app.tab_manager.update_connection_status(tab=tab, connection_status=formatted_ro_status)
-
-        dolphie.connection_status = formatted_ro_status

@@ -775,14 +775,14 @@ doc = ["sphinx"]
 
 [[package]]
 name = "textual"
-version = "7.1.0"
+version = "8.0.0"
 description = "Modern Text User Interface framework"
 optional = false
 python-versions = "<4.0,>=3.9"
 groups = ["main"]
 files = [
-    {file = "textual-7.1.0-py3-none-any.whl", hash = "sha256:9209dd0d1d958316832f7e59328f3911112f8e951abef7c3fbe54effd4e4caed"},
-    {file = "textual-7.1.0.tar.gz", hash = "sha256:3c7148ef00a9277b45fd78a1a6adc7c419c451d3ed714a0b015b16eaa2a8a73b"},
+    {file = "textual-8.0.0-py3-none-any.whl", hash = "sha256:8908f4ebe93a6b4f77ca7262197784a52162bc88b05f4ecf50ac93a92d49bb8f"},
+    {file = "textual-8.0.0.tar.gz", hash = "sha256:ce48f83a3d686c0fac0e80bf9136e1f8851c653aa6a4502e43293a151df18809"},
 ]
 
 [package.dependencies]
@@ -1031,4 +1031,4 @@ cffi = ["cffi (>=1.17,<2.0) ; platform_python_implementation != \"PyPy\" and pyt
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.9"
-content-hash = "fd5ddad3492f044fe031de8600061b3bdf62c3b1561476b1de912208287f413c"
+content-hash = "534a1e7840cec22ed3d18dad9c6692255c29a06331b31fe1727a2b39cc8320e0"

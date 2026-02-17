@@ -2,6 +2,15 @@ import copy
 import os
 import uuid
 
+import dolphie.Modules.MetricManager as MetricManager
+from dolphie.DataTypes import ConnectionSource, ConnectionStatus, Panels
+from dolphie.Dolphie import Dolphie
+from dolphie.Modules.ArgumentParser import Config, HostGroupMember
+from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.ReplayManager import ReplayManager
+from dolphie.Widgets.SpinnerWidget import SpinnerWidget
+from dolphie.Widgets.TabSetupModal import TabSetupModal
+from dolphie.Widgets.TopBar import TopBar
 from rich.text import Text
 from textual.app import App
 from textual.containers import (
@@ -24,22 +33,10 @@ from textual.widgets import (
     Sparkline,
     Static,
     Switch,
-    TabbedContent,
-    TabPane,
-    Tabs,
 )
 from textual.widgets import Tab as TabWidget
+from textual.widgets import TabbedContent, TabPane, Tabs
 from textual.worker import Worker
-
-import dolphie.Modules.MetricManager as MetricManager
-from dolphie.DataTypes import ConnectionSource, ConnectionStatus, Panels
-from dolphie.Dolphie import Dolphie
-from dolphie.Modules.ArgumentParser import Config, HostGroupMember
-from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.ReplayManager import ReplayManager
-from dolphie.Widgets.SpinnerWidget import SpinnerWidget
-from dolphie.Widgets.TabSetupModal import TabSetupModal
-from dolphie.Widgets.TopBar import TopBar
 
 
 class Tab:
@@ -181,49 +178,33 @@ class Tab:
         else:
             current_position = self.replay_manager.current_replay_id - self.replay_manager.min_replay_id + 1
 
-        self.dashboard_replay_progressbar.update(
-            progress=current_position,
-            total=self.replay_manager.total_replay_rows,
-        )
+        self.dashboard_replay_progressbar.update(progress=current_position, total=self.replay_manager.total_replay_rows)
 
     def toggle_entities_displays(self):
-        if self.dolphie.system_utilization:
-            self.dashboard_section_6.display = True
-            if not self.metric_graph_tabs.get_tab("graph_tab_system").display:
-                self.metric_graph_tabs.show_tab("graph_tab_system")
-        else:
-            self.dashboard_section_6.display = False
-            if self.metric_graph_tabs.get_tab("graph_tab_system").display:
-                self.metric_graph_tabs.hide_tab("graph_tab_system")
+        def toggle_tab(tab_name, visible):
+            if visible:
+                self.metric_graph_tabs.show_tab(tab_name)
+            else:
+                self.metric_graph_tabs.hide_tab(tab_name)
+
+        self.dashboard_section_6.display = bool(self.dolphie.system_utilization)
+        toggle_tab("graph_tab_system", self.dolphie.system_utilization)
 
         if self.dolphie.connection_source == ConnectionSource.mysql:
-            if self.dolphie.replication_status and not self.dolphie.panels.replication.visible:
-                self.dashboard_section_5.display = True
-            else:
-                self.dashboard_section_5.display = False
+            self.dashboard_section_5.display = bool(
+                self.dolphie.replication_status and not self.dolphie.panels.replication.visible
+            )
 
-            if self.dolphie.replication_status:
-                if not self.metric_graph_tabs.get_tab("graph_tab_replication_lag").display:
-                    self.metric_graph_tabs.show_tab("graph_tab_replication_lag")
-            else:
-                if self.metric_graph_tabs.get_tab("graph_tab_replication_lag").display:
-                    self.metric_graph_tabs.hide_tab("graph_tab_replication_lag")
-
-            if self.dolphie.global_variables.get("innodb_adaptive_hash_index") == "OFF":
-                if self.metric_graph_tabs.get_tab("graph_tab_adaptive_hash_index").display:
-                    self.metric_graph_tabs.hide_tab("graph_tab_adaptive_hash_index")
-            else:
-                if not self.metric_graph_tabs.get_tab("graph_tab_adaptive_hash_index").display:
-                    self.metric_graph_tabs.show_tab("graph_tab_adaptive_hash_index")
-
-            if (
-                self.dolphie.metadata_locks_enabled and self.dolphie.panels.metadata_locks.visible
-            ) or self.dolphie.replay_file:
-                if not self.metric_graph_tabs.get_tab("graph_tab_locks").display:
-                    self.metric_graph_tabs.show_tab("graph_tab_locks")
-            else:
-                if self.metric_graph_tabs.get_tab("graph_tab_locks").display:
-                    self.metric_graph_tabs.hide_tab("graph_tab_locks")
+            toggle_tab("graph_tab_replication_lag", self.dolphie.replication_status)
+            toggle_tab(
+                "graph_tab_adaptive_hash_index",
+                self.dolphie.global_variables.get("innodb_adaptive_hash_index") != "OFF",
+            )
+            toggle_tab(
+                "graph_tab_locks",
+                (self.dolphie.metadata_locks_enabled and self.dolphie.panels.metadata_locks.visible)
+                or self.dolphie.replay_file,
+            )
 
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             self.dashboard_section_5.display = False
@@ -239,15 +220,11 @@ class Tab:
                 self.metric_graph_tabs.hide_tab(f"graph_tab_{metric_instance.tab_name}")
 
         # Only show the replay section if we're in replay mode
-        if self.dolphie.replay_file:
-            if not self.dashboard_replay_container.display:
-                self.dashboard_replay_container.display = True
-        else:
-            if self.dashboard_replay_container.display:
-                self.dashboard_replay_container.display = False
+        self.dashboard_replay_container.display = bool(self.dolphie.replay_file)
 
-        # Loop the metrics and update the graph switch values based on the tab's metric data so each tab can have
+        # Update the graph switch values based on the tab's metric data so each tab can have
         # its own set of visible metrics
+        metric_switches = self.dolphie.app.tab_manager.metric_switches
         for metric_instance_name, metric_instance in self.dolphie.metric_manager.metrics.__dict__.items():
             for metric, metric_data in metric_instance.__dict__.items():
                 if (
@@ -255,10 +232,18 @@ class Tab:
                     and metric_data.graphable
                     and metric_data.create_switch
                 ):
-                    switch = self.dolphie.app.query_one(
-                        f"#switch_container_{metric_instance.tab_name} #{metric_instance_name}-{metric}", Switch
-                    )
-                    switch.value = metric_data.visible
+                    switch = metric_switches.get(f"{metric_instance_name}-{metric}")
+                    if switch:
+                        switch.value = metric_data.visible
+
+        # Layout redo log graphs based on whether active count is available
+        show_active_count = bool(
+            self.dolphie.global_status.get("Active_redo_log_count") and not self.dolphie.replay_file
+        )
+        self.graph_redo_log_data_written.styles.width = "55%" if show_active_count else "88%"
+        self.graph_redo_log_active_count.display = show_active_count
+        if show_active_count:
+            self.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
 
     def toggle_replication_panel_components(self):
         def toggle_container_display(container: Container, items, tracked: dict):
@@ -282,31 +267,6 @@ class Tab:
                 widget.parent.remove()
             tracked.clear()
 
-    def layout_graphs(self):
-        # These variables are dynamically created
-        if self.dolphie.global_status.get("Active_redo_log_count"):
-            if self.dolphie.replay_file:
-                self.graph_redo_log_data_written.styles.width = "88%"
-                self.graph_redo_log_bar.styles.width = "12%"
-                self.graph_redo_log_active_count.display = False
-            else:
-                self.graph_redo_log_data_written.styles.width = "55%"
-                self.graph_redo_log_bar.styles.width = "12%"
-                self.graph_redo_log_active_count.styles.width = "33%"
-                self.graph_redo_log_active_count.display = True
-                self.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
-        else:
-            self.graph_redo_log_data_written.styles.width = "88%"
-            self.graph_redo_log_bar.styles.width = "12%"
-            self.graph_redo_log_active_count.display = False
-
-        self.graph_adaptive_hash_index.styles.width = "50%"
-        self.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
-
-        self.graph_system_cpu.styles.width = "50%"
-        self.graph_system_network.styles.width = "50%"
-        self.graph_system_memory.styles.width = "50%"
-        self.graph_system_disk_io.styles.width = "50%"
 
 
 class TabManager:
@@ -325,9 +285,13 @@ class TabManager:
         self.topbar = self.app.query_one(TopBar)
 
     def update_connection_status(self, tab: Tab, connection_status: ConnectionStatus):
+        previous_status = tab.dolphie.connection_status
         tab.dolphie.connection_status = connection_status
         self.update_topbar(tab=tab)
-        self.rename_tab(tab)
+
+        # Only rename when the host info may have changed (not for read_write/read_only toggles)
+        if previous_status not in (ConnectionStatus.read_write, ConnectionStatus.read_only):
+            self.rename_tab(tab)
 
     def update_topbar(self, tab: Tab):
         dolphie = tab.dolphie
@@ -337,7 +301,7 @@ class TabManager:
             return
 
         # Only update the topbar if we're on the active tab
-        if tab.id == self.active_tab.id:
+        if self.active_tab is tab:
             if dolphie.connection_status:
                 self.topbar.connection_status = dolphie.connection_status
                 self.topbar.host = dolphie.host_with_port
@@ -354,14 +318,6 @@ class TabManager:
                 self.topbar.replay_file_size = None
                 self.topbar.connection_status = None
                 self.topbar.host = ""
-
-    def generate_tab_id(self) -> str:
-        tab_id = str(uuid.uuid4()).replace("-", "")
-        # Check if the first character is a digit since Textual doesn't allow that
-        if tab_id[0].isdigit():
-            # Prepend a letter to ensure it does not start with a digit
-            tab_id = "a" + tab_id
-        return tab_id
 
     async def create_ui_widgets(self):
         if self.config.daemon_mode:
@@ -536,13 +492,14 @@ class TabManager:
 
         # Loop the metric instances and create the graph tabs
         metric_manager = MetricManager.MetricManager(None)
+        metric_graph_tabs = self.app.query_one("#metric_graph_tabs", TabbedContent)
         for metric_instance_name, metric_instance in metric_manager.metrics.__dict__.items():
             metric_tab_name = metric_instance.tab_name
             graph_names = metric_instance.graphs
             graph_tab_name = metric_instance.graph_tab_name
 
             if not self.app.query(f"#graph_tab_{metric_tab_name}"):
-                await self.app.query_one("#metric_graph_tabs", TabbedContent).add_pane(
+                await metric_graph_tabs.add_pane(
                     TabPane(
                         graph_tab_name,
                         Label(id=f"metric_graph_stats_{metric_tab_name}", classes="metric_graph_stats"),
@@ -556,44 +513,44 @@ class TabManager:
                     )
                 )
 
+            tab_pane = self.app.query_one(f"#graph_tab_{metric_tab_name}", TabPane)
+            graph_containers = {}
             for graph_name in graph_names:
                 graph_container = (
                     "metric_graph_container2"
                     if graph_name in ["graph_system_network", "graph_system_disk_io"]
                     else "metric_graph_container"
                 )
+                container_id = f"{graph_container}_{metric_tab_name}"
 
                 # Add graph_container2 only if it's needed
-                if not self.app.query(f"#{graph_container}_{metric_tab_name}"):
+                if container_id not in graph_containers and not self.app.query(f"#{container_id}"):
                     if graph_container == "metric_graph_container2":
-                        await self.app.query_one(f"#graph_tab_{metric_tab_name}", TabPane).mount(
-                            Horizontal(id=f"{graph_container}_{metric_tab_name}", classes="metric_graph_container2"),
-                            after=1,
-                        )
+                        horizontal = Horizontal(id=container_id, classes="metric_graph_container2")
+                        await tab_pane.mount(horizontal, after=1)
+                        graph_containers[container_id] = horizontal
 
-                await self.app.query_one(f"#{graph_container}_{metric_tab_name}", Horizontal).mount(
+                if container_id not in graph_containers:
+                    graph_containers[container_id] = self.app.query_one(f"#{container_id}", Horizontal)
+
+                await graph_containers[container_id].mount(
                     MetricManager.Graph(id=f"{graph_name}", classes="panel_data")
                 )
 
+            switch_container = self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal)
             for metric, metric_data in metric_instance.__dict__.items():
-                if not self.app.query(f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}"):
-                    if (
-                        isinstance(metric_data, MetricManager.MetricData)
-                        and metric_data.graphable
-                        and metric_data.create_switch
-                    ):
-                        await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
-                            Label(metric_data.label)
-                        )
-                        await self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal).mount(
-                            Switch(animate=False, id=f"{metric_instance_name}-{metric}", name=metric_tab_name)
-                        )
+                if (
+                    isinstance(metric_data, MetricManager.MetricData)
+                    and metric_data.graphable
+                    and metric_data.create_switch
+                    and not self.app.query(f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}")
+                ):
+                    switch = Switch(animate=False, id=f"{metric_instance_name}-{metric}", name=metric_tab_name)
+                    await switch_container.mount(Label(metric_data.label), switch)
 
-                        # Toggle the switch if the metric is visible (means to enable it by default)
-                        if metric_data.visible:
-                            self.app.query_one(
-                                f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}", Switch
-                            ).toggle()
+                    # Toggle the switch if the metric is visible (means to enable it by default)
+                    if metric_data.visible:
+                        switch.toggle()
 
         # Add the PFS metrics tabs
         pfs_metrics_tabs = self.app.query_one("#pfs_metrics_tabs", TabbedContent)
@@ -616,13 +573,22 @@ class TabManager:
             ),
         )
 
+        # Set what marker we use for graphs
+        for graph in self.app.query(MetricManager.Graph):
+            graph.marker = self.config.graph_marker
+
+        # Cache switch references for fast lookup during tab switches
+        self.metric_switches: dict[str, Switch] = {}
+        for switch in self.app.query(Switch):
+            self.metric_switches[switch.id] = switch
+
     async def create_tab(
         self, tab_name: str = None, hostgroup_member: HostGroupMember = None, switch_tab: bool = True
     ) -> Tab:
         if len(self.app.screen_stack) > 1:
             return
 
-        tab_id = self.generate_tab_id()
+        tab_id = f"t{uuid.uuid4().hex}"
 
         # Create a new tab instance
         tab = Tab(id=tab_id, name=tab_name)
@@ -670,8 +636,8 @@ class TabManager:
         tab.save_references_to_components()
 
         # Create the tab in the UI
-        intial_tab_name = "" if hostgroup_member else tab_name
-        self.host_tabs.add_tab(TabWidget(intial_tab_name, id=tab_id))
+        initial_tab_name = "" if hostgroup_member else tab_name
+        self.host_tabs.add_tab(TabWidget(initial_tab_name, id=tab_id))
 
         # Loop the metric instances and save references to the graphs and its labels
         for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
@@ -694,17 +660,22 @@ class TabManager:
 
         # By default, hide all the panels
         for panel in tab.dolphie.panels.all():
-            self.app.query_one(f"#panel_{panel}").display = False
+            tab.get_panel_widget(panel).display = False
 
         # Set panels to be visible for the ones the user specifies
         for panel in dolphie.startup_panels:
-            self.app.query_one(f"#panel_{panel}").display = True
+            tab.get_panel_widget(panel).display = True
             getattr(dolphie.panels, panel).visible = True
 
-        # Set what marker we use for graphs
-        graphs = self.app.query(MetricManager.Graph)
-        for graph in graphs:
-            graph.marker = dolphie.graph_marker
+        # Set static graph widths (only needs to happen once per tab)
+        tab.graph_redo_log_bar.styles.width = "12%"
+        tab.graph_redo_log_active_count.styles.width = "33%"
+        tab.graph_adaptive_hash_index.styles.width = "50%"
+        tab.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
+        tab.graph_system_cpu.styles.width = "50%"
+        tab.graph_system_network.styles.width = "50%"
+        tab.graph_system_memory.styles.width = "50%"
+        tab.graph_system_disk_io.styles.width = "50%"
 
         # Set the sparkline data to 0
         tab.sparkline.data = [0]
@@ -746,9 +717,7 @@ class TabManager:
             if tab.dolphie.replay_file:
                 new_name = f"[b recording][Replay][/b recording] {new_name}"
 
-            self.host_tabs.query(TabWidget).filter("#" + tab.id)[0].label = Content.from_rich_text(
-                new_name, console=self.app.console
-            )
+            self.host_tabs.get_tab(tab.id).label = Content.from_rich_text(new_name, console=self.app.console)
 
     def switch_tab(self, tab_id: str, set_active: bool = True):
         tab = self.get_tab(tab_id)
@@ -765,39 +734,28 @@ class TabManager:
         # Update the topbar
         self.update_topbar(tab=tab)
 
-        if not tab.dolphie.main_db_connection.is_connected():
-            tab.main_container.display = False
-        else:
-            tab.main_container.display = True
+        tab.main_container.display = bool(tab.dolphie.main_db_connection.is_connected())
 
     def get_tab(self, id: str) -> Tab:
         return self.tabs.get(id)
 
-    def get_all_tabs(self) -> list[Tab]:
-        all_tabs = []
-
-        for tab in self.tabs.values():
-            all_tabs.append(tab)
-
-        return all_tabs
-
     async def disconnect_tab(self, tab: Tab, update_topbar: bool = True):
-        if tab.worker:
-            tab.worker.cancel()
-        if tab.replicas_worker:
-            tab.replicas_worker.cancel()
+        for worker in (tab.worker, tab.replicas_worker):
+            if worker:
+                worker.cancel()
+        for timer in (tab.worker_timer, tab.replicas_worker_timer):
+            if timer:
+                timer.stop()
 
-        if tab.worker_timer:
-            tab.worker_timer.stop()
-        if tab.replicas_worker_timer:
-            tab.replicas_worker_timer.stop()
+        tab.worker = tab.worker_timer = None
+        tab.replicas_worker = tab.replicas_worker_timer = None
 
         tab.dolphie.main_db_connection.close()
         tab.dolphie.secondary_db_connection.close()
 
         tab.dolphie.replica_manager.remove_all_replicas()
 
-        if self.active_tab.id == tab.id:
+        if self.active_tab is tab:
             tab.main_container.display = False
             tab.loading_indicator.display = False
 
