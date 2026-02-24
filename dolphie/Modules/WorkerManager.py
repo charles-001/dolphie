@@ -269,7 +269,8 @@ class WorkerManager:
             tab.worker_cancel_error = exception
 
             # Disconnect from worker thread - call_from_thread handles async functions
-            self.app.call_from_thread(self.app.tab_manager.disconnect_tab, tab)
+            # wait_for_workers=False to avoid deadlock since we're calling from within the worker
+            self.app.call_from_thread(self.app.tab_manager.disconnect_tab, tab, wait_for_workers=False)
 
     def run_worker_replicas(self, tab_id: str):
         tab = self.app.tab_manager.get_tab(tab_id)

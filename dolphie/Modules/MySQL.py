@@ -4,12 +4,11 @@ import time
 from ssl import SSLError
 
 import pymysql
-from loguru import logger
-from textual.app import App
-
 from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
+from loguru import logger
+from textual.app import App
 
 
 class Database:
@@ -181,9 +180,6 @@ class Database:
         return self._decode_value(value)
 
     def fetch_status_and_variables(self, command):
-        if not self.is_connected():
-            return None
-
         self.execute(
             getattr(ProxySQLQueries, command)
             if self.source == ConnectionSource.proxysql

@@ -252,14 +252,13 @@ class Tab:
             self.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
 
     def toggle_replication_panel_components(self):
-        def toggle_container_display(container: Container, items, tracked: dict):
+        def toggle_container_display(container: Container, items, tracked: dict[str, Static]):
             container.display = bool(items)
             for widget in tracked.values():
-                widget.parent.display = True
+                if widget.parent is not None:
+                    widget.parent.display = True
 
-        toggle_container_display(
-            self.galera_container, self.dolphie.galera_cluster_members, self.galera_widgets
-        )
+        toggle_container_display(self.galera_container, self.dolphie.galera_cluster_members, self.galera_widgets)
         toggle_container_display(
             self.replicas_container, self.dolphie.replica_manager.available_replicas, self.replica_widgets
         )
@@ -273,9 +272,9 @@ class Tab:
     def remove_replication_panel_components(self):
         for tracked in (self.replica_widgets, self.member_widgets, self.galera_widgets, self.clusterset_widgets):
             for widget in tracked.values():
-                widget.parent.remove()
+                if widget.parent is not None:
+                    widget.parent.remove()
             tracked.clear()
-
 
 
 class TabManager:
@@ -367,7 +366,11 @@ class TabManager:
                     id="panel_dashboard",
                     classes="dashboard",
                 ),
-                Container(Label(id="metric_graphs_title", classes="panel_title"), TabbedContent(id="metric_graph_tabs"), id="panel_graphs"),
+                Container(
+                    Label(id="metric_graphs_title", classes="panel_title"),
+                    TabbedContent(id="metric_graph_tabs"),
+                    id="panel_graphs",
+                ),
                 Container(
                     Container(
                         Label(id="replication_title", classes="panel_title"),
@@ -756,10 +759,19 @@ class TabManager:
     def get_tab(self, id: str) -> Tab:
         return self.tabs.get(id)
 
-    async def disconnect_tab(self, tab: Tab, update_topbar: bool = True):
+    async def disconnect_tab(self, tab: Tab, update_topbar: bool = True, wait_for_workers: bool = True):
         for worker in (tab.worker, tab.replicas_worker):
             if worker:
                 worker.cancel()
+        # Wait for workers to fully stop before modifying shared state to avoid
+        # a race condition where a running worker reads partially-updated state
+        if wait_for_workers:
+            for worker in (tab.worker, tab.replicas_worker):
+                if worker and not worker.is_finished:
+                    try:
+                        await worker.wait()
+                    except Exception:
+                        pass
         for timer in (tab.worker_timer, tab.replicas_worker_timer):
             if timer:
                 timer.stop()

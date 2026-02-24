@@ -849,8 +849,8 @@ def fetch_replicas(tab: Tab):
                         assigned_port = port_data["port"]
                         port_data["in_use"] = True
 
-                        # Use report_host from SHOW SLAVE HOSTS if specified, otherwise
-                        # fall back to the processlist IP
+                        # Override host with report_host from SHOW SLAVE HOSTS if specified,
+                        # otherwise keep the processlist IP already set above
                         report_host = port_data.get("host")
                         if report_host:
                             host = dolphie.get_hostname(report_host)
