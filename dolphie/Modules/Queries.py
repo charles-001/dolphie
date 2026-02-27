@@ -670,7 +670,7 @@ class MySQLQueries:
             JOIN mysql_innodb_cluster_metadata.v2_cs_members csm USING ( cluster_id )
             JOIN mysql_innodb_cluster_metadata.clustersets cs USING ( clusterset_id )
         ORDER BY
-            FIELD(csm.member_role, 'PRIMARY', 'REPLICA'), csm.cluster_name, i.address
+            csm.cluster_name, i.address
     """
     get_binlog_transaction_compression_percentage: str = """
         SELECT
