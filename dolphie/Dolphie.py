@@ -106,7 +106,7 @@ class Dolphie:
         self.is_group_replication_primary: bool = False
         self.group_replication_data: dict[str, str] = {}
         self.group_replication_members: list[dict[str, str]] = []
-        self.innodb_cluster_clustersets: list[dict[str, str]] = []
+        self.clusterset_instances: list[dict[str, str]] = []
 
         self.galera_cluster_members: list[dict[str, str]] = []
 

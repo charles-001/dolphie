@@ -132,8 +132,8 @@ class WorkerDataProcessor:
             dolphie.processlist_threads = ProcesslistPanel.fetch_data(tab)
 
         if dolphie.panels.replication.visible and (dolphie.innodb_cluster or dolphie.innodb_cluster_read_replica):
-            dolphie.main_db_connection.execute(MySQLQueries.get_clustersets)
-            dolphie.innodb_cluster_clustersets = dolphie.main_db_connection.fetchall()
+            dolphie.main_db_connection.execute(MySQLQueries.get_clusterset_instances)
+            dolphie.clusterset_instances = dolphie.main_db_connection.fetchall()
 
         if dolphie.performance_schema_enabled:
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)

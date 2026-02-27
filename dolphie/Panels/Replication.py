@@ -296,33 +296,65 @@ def create_panel(tab: Tab):
         _sync_grid(tab.galera_grid, items, "galera_node", tab.id, dolphie.app, tab.galera_widgets)
 
     # --- ClusterSet panel ---
-    innodb_cluster_clustersets = dolphie.innodb_cluster_clustersets
-    if not innodb_cluster_clustersets:
+    clusterset_instances = dolphie.clusterset_instances
+    if not clusterset_instances:
         tab.clusterset_container.display = False
     else:
         tab.clusterset_container.display = True
 
-        tab.clusterset_title.update(
-            f"[b]{panels.replication.content_key}ClusterSets "
-            f"([$highlight]{len(innodb_cluster_clustersets)}[/$highlight])"
-        )
-
         host_cluster_name = group_replication_data.get("cluster_name")
 
-        items = {}
-        for row in innodb_cluster_clustersets:
-            clusterset_name = row["ClusterSet"]
-            clusters = row["Clusters"]
+        # Build per-cluster data from the combined query
+        cluster_members: dict[str, list[str]] = {}
+        cluster_meta: dict[str, dict] = {}
+        for inst in clusterset_instances:
+            cname = inst.get("cluster_name", "")
+            cluster_members.setdefault(cname, []).append(inst.get("address", "N/A"))
+            if cname not in cluster_meta:
+                cluster_meta[cname] = {
+                    "clusterset_name": inst.get("clusterset_name", "N/A"),
+                    "cluster_role": inst.get("cluster_role", "N/A"),
+                    "invalidated": inst.get("invalidated", 0),
+                }
 
-            formatted_clusters = clusters.replace(host_cluster_name, f"[b highlight]{host_cluster_name}[/b highlight]")
+        tab.clusterset_title.update(
+            f"[b]{panels.replication.content_key}ClusterSet "
+            f"([$highlight]{len(cluster_meta)}[/$highlight] clusters)"
+        )
+
+        items = {}
+        for cname, meta in cluster_meta.items():
+            clusterset_name = meta["clusterset_name"]
+            cluster_role = meta["cluster_role"]
+            invalidated = meta["invalidated"]
+            members = cluster_members.get(cname, [])
+            is_local = cname == host_cluster_name
+
+            cluster_role_fmt = (
+                f"[b][highlight]{cluster_role}[/highlight]"
+                if cluster_role == "PRIMARY"
+                else f"[dark_gray]{cluster_role}[/dark_gray]"
+            )
 
             table = Table(box=None, show_header=False)
             table.add_column()
             table.add_column()
-            table.add_row("[b][light_blue]ClusterSet", f"[light_blue]{clusterset_name}")
-            table.add_row("[b][label]Clusters", formatted_clusters)
 
-            items[clusterset_name] = table
+            if is_local:
+                table.add_row("[b][light_blue]Cluster", f"[b][highlight]{cname}[/highlight]")
+            else:
+                table.add_row("[b][light_blue]Cluster", f"[light_blue]{cname}")
+
+            table.add_row("[b][label]ClusterSet", clusterset_name)
+            table.add_row("[b][label]Role", cluster_role_fmt)
+
+            if invalidated:
+                table.add_row("[b][label]State", "[red]INVALIDATED[/red]")
+
+            if members:
+                table.add_row("[b][label]Members", "\n".join(members))
+
+            items[f"{clusterset_name}_{cname}"] = table
 
         _sync_grid(tab.clusterset_grid, items, "clusterset", tab.id, dolphie.app, tab.clusterset_widgets)
 

@@ -657,15 +657,20 @@ class MySQLQueries:
             view_id DESC
             LIMIT 1
     """
-    get_clustersets: str = """
+    get_clusterset_instances: str = """
         SELECT
-            cs.domain_name AS ClusterSet,
-            GROUP_CONCAT(c.cluster_name ORDER BY c.cluster_name SEPARATOR ', ') AS Clusters
+            cs.domain_name AS clusterset_name,
+            csm.cluster_name,
+            i.address,
+            i.mysql_server_uuid,
+            csm.member_role AS cluster_role,
+            csm.invalidated
         FROM
-            mysql_innodb_cluster_metadata.clustersets cs JOIN
-            mysql_innodb_cluster_metadata.clusters c USING ( clusterset_id )
-        GROUP BY
-            cs.domain_name
+            mysql_innodb_cluster_metadata.instances i
+            JOIN mysql_innodb_cluster_metadata.v2_cs_members csm USING ( cluster_id )
+            JOIN mysql_innodb_cluster_metadata.clustersets cs USING ( clusterset_id )
+        ORDER BY
+            FIELD(csm.member_role, 'PRIMARY', 'REPLICA'), csm.cluster_name, i.address
     """
     get_binlog_transaction_compression_percentage: str = """
         SELECT
