@@ -280,13 +280,12 @@ class Database:
                 if ignore_error:
                     return None
 
-                # Handle lost connection errors
-                if error_code in (0, 2006, 2013, 2055):
-                    # 0: Not connected to MySQL
-                    # 2006: MySQL server has gone away
-                    # 2013: Lost connection to MySQL server during query
-                    # 2055: Lost connection to MySQL server at hostname
-
+                # Determine if this is a connection-loss error:
+                # 1. is_connected() catches client-side errors where pymysql closes the socket
+                #    (e.g. 2006, 2013, 2055 - server gone, lost connection, etc.)
+                # 2. Server-side shutdown errors (1053, 1079, 1080) where the error packet is
+                #    received successfully but the server is going away
+                if not self.is_connected() or error_code in (1053, 1079, 1080):
                     if error_message:
                         logger.error(
                             f"{self.source} has lost its connection: {error_message}, attempting to reconnect..."
