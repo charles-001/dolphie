@@ -84,7 +84,7 @@ class Dolphie:
         self.global_variables: dict[str, int | str] = {}
         self.global_status: dict[str, int | str] = {}
         self.binlog_status: dict[str, int | str] = {}
-        self.replication_status: dict[str, int | str] = {}
+        self.replication_status: list[dict[str, int | str]] = []
         self.replication_applier_status: dict[str, list[dict[str, int | str]] | int] = {}
         self.innodb_metrics: dict[str, int | str] = {}
         self.metadata_locks: list[dict[str, int | str]] = []

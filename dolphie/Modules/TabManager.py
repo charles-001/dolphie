@@ -64,6 +64,7 @@ class Tab:
         self.replicas_worker_timer: Timer = None
 
         # Track mounted grid widgets to avoid DOM queries each refresh cycle
+        self.channel_widgets: dict[str, Static] = {}
         self.clusterset_widgets: dict[str, Static] = {}
         self.galera_widgets: dict[str, Static] = {}
         self.member_widgets: dict[str, Static] = {}
@@ -146,7 +147,8 @@ class Tab:
 
         self.replication_container = app.query_one("#replication_container", Container)
         self.replication_variables = app.query_one("#replication_variables", Label)
-        self.replication_status = app.query_one("#replication_status", Static)
+        self.replication_status_grid = app.query_one("#replication_status_grid", Container)
+        self.replication_status_single = app.query_one("#replication_status_single", Static)
         self.replication_thread_applier_container = app.query_one(
             "#replication_thread_applier_container", ScrollableContainer
         )
@@ -375,8 +377,12 @@ class TabManager:
                     Container(
                         Label(id="replication_title", classes="panel_title"),
                         Label(id="replication_variables"),
+                        Container(id="replication_status_grid", classes="replication_status_grid"),
                         Center(
-                            ScrollableContainer(Static(id="replication_status"), classes="replication_status"),
+                            ScrollableContainer(
+                                Static(id="replication_status_single"),
+                                classes="replication_status",
+                            ),
                             ScrollableContainer(
                                 Static(id="replication_thread_applier"),
                                 id="replication_thread_applier_container",

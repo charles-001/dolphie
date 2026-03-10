@@ -729,7 +729,7 @@ class MetricManager:
         self.innodb_metrics: dict[str, int] = {}
         self.disk_io_metrics: dict[str, int] = {}
         self.metadata_lock_metrics: dict[str, int] = {}
-        self.replication_status: dict[str, int | str] = {}
+        self.replication_status: list[dict[str, int | str]] = []
         self.proxysql_total_command_stats: dict[str, int] = {}
         self.proxysql_select_command_stats: dict[str, int] = {}
 
@@ -1070,11 +1070,11 @@ class MetricManager:
         proxysql_command_stats: list[dict[str, str]] = None,
         disk_io_metrics: dict[str, int] = None,
         metadata_lock_metrics: dict[str, int] = None,
-        replication_status: dict[str, int | str] = None,
+        replication_status: list[dict[str, int | str]] = None,
     ):
         """Ingests new data from a polling worker and updates all metric values."""
         if replication_status is None:
-            replication_status = {}
+            replication_status = []
         if metadata_lock_metrics is None:
             metadata_lock_metrics = {}
         if disk_io_metrics is None:
@@ -1213,11 +1213,12 @@ class MetricManager:
                     self.proxysql_total_command_stats[key] = self.proxysql_total_command_stats.get(key, 0) + int_value
 
     def update_metrics_replication_lag(self):
-        """Updates the replication lag metric."""
-        self.add_metric(
-            self.metrics.replication_lag.lag,
-            int(self.replication_status.get("Seconds_Behind", 0)),
-        )
+        """Updates the replication lag metric using the max lag across all channels."""
+        if self.replication_status:
+            max_lag = max(int(ch.get("Seconds_Behind") or 0) for ch in self.replication_status)
+        else:
+            max_lag = 0
+        self.add_metric(self.metrics.replication_lag.lag, max_lag)
 
     def update_metrics_adaptive_hash_index_hit_ratio(self):
         """Updates the AHI hit ratio metric from its calculated value."""

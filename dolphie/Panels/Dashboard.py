@@ -216,7 +216,14 @@ def create_panel(tab: Tab) -> Table:
     ###############
     if dolphie.replication_status and not dolphie.panels.replication.visible:
         tab.dashboard_section_5.display = True
-        tab.dashboard_section_5.update(ReplicationPanel.create_replication_table(tab, dashboard_table=True))
+        # Show the channel with the highest lag in the dashboard summary
+        max_lag_channel = max(dolphie.replication_status, key=lambda ch: int(ch.get("Seconds_Behind") or 0))
+        is_multi_source = len(dolphie.replication_status) > 1
+        tab.dashboard_section_5.update(
+            ReplicationPanel.create_replication_table(
+                tab, dashboard_table=True, channel_data=max_lag_channel, show_channel_name=is_multi_source
+            )
+        )
     else:
         tab.dashboard_section_5.display = False
     ###############

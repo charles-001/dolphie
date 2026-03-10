@@ -581,6 +581,7 @@ class MySQLQueries:
     """
     replication_applier_status: str = """
         SELECT
+            applier_status.CHANNEL_NAME,
             applier_status.thread_id,
             applier_status.worker_id,
             applier_status.applying_transaction_retries_count,
@@ -597,10 +598,10 @@ class MySQLQueries:
             `performance_schema`.replication_applier_status_by_worker applier_status JOIN
             `performance_schema`.events_transactions_summary_by_thread_by_event_name thread_events USING (THREAD_ID)
         GROUP BY
-            applier_status.thread_id
+            applier_status.CHANNEL_NAME, applier_status.thread_id
         WITH ROLLUP
         ORDER BY
-            applier_status.thread_id
+            applier_status.CHANNEL_NAME, applier_status.thread_id
     """
 
     # Group Replication Event Horizon and Protocol

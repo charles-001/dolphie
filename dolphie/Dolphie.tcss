@@ -340,6 +340,30 @@ TopBar {
         width: 100%;
         content-align: center middle;
     }
+    & > .replication_status_grid {
+        height: auto;
+        align-horizontal: center;
+        margin-bottom: 1;
+
+        & > ScrollableContainer {
+            content-align: center top;
+            background: #0f1525;
+            border: tall #1b233a;
+            height: auto;
+            max-height: 22;
+            max-width: 85;
+        }
+
+        &.multi_source {
+            layout: grid;
+            grid-size: 2;
+            grid-gutter: 1 0;
+
+            & > ScrollableContainer {
+                max-width: 100%;
+            }
+        }
+    }
     & > Center {
         height: auto;
         layout: horizontal;

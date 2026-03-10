@@ -157,27 +157,40 @@ class WorkerDataProcessor:
                 and parallel_workers > 1
             ):
                 dolphie.main_db_connection.execute(MySQLQueries.replication_applier_status)
-                dolphie.replication_applier_status["data"] = dolphie.main_db_connection.fetchall()
+                all_rows = dolphie.main_db_connection.fetchall()
 
-                # Calculate the difference in total_thread_events for each worker + all workers
-                for row in dolphie.replication_applier_status["data"]:
-                    total_thread_events = row["total_thread_events"]
+                # Partition rows by channel and compute per-channel diffs
+                prev = dolphie.replication_applier_status
+                channels: dict = {}
+                for row in all_rows:
+                    channel_name = row.get("CHANNEL_NAME")
                     thread_id = row.get("thread_id")
+                    total_thread_events = row["total_thread_events"]
 
-                    # Handle the ROLLUP row, which contains the total for all threads
-                    if not thread_id:
-                        dolphie.replication_applier_status["diff_all"] = (
-                            total_thread_events
-                            - dolphie.replication_applier_status.get("previous_all", total_thread_events)
-                        )
-                        dolphie.replication_applier_status["previous_all"] = total_thread_events
+                    # Grand total rollup (NULL, NULL) — skip
+                    if channel_name is None and thread_id is None:
                         continue
 
-                    dolphie.replication_applier_status[f"diff_{thread_id}"] = (
-                        total_thread_events
-                        - dolphie.replication_applier_status.get(f"previous_{thread_id}", total_thread_events)
+                    # Per-channel subtotal rollup (channel_name, NULL thread_id)
+                    if thread_id is None:
+                        ch = channels.setdefault(channel_name, {"data": []})
+                        prev_ch = prev.get(channel_name, {})
+                        ch["diff_all"] = total_thread_events - prev_ch.get("previous_all", total_thread_events)
+                        ch["previous_all"] = total_thread_events
+                        continue
+
+                    # Regular worker row
+                    ch = channels.setdefault(channel_name, {"data": []})
+                    prev_ch = prev.get(channel_name, {})
+                    ch["data"].append(row)
+                    ch[f"diff_{thread_id}"] = (
+                        total_thread_events - prev_ch.get(f"previous_{thread_id}", total_thread_events)
                     )
-                    dolphie.replication_applier_status[f"previous_{thread_id}"] = total_thread_events
+                    ch[f"previous_{thread_id}"] = total_thread_events
+
+                dolphie.replication_applier_status = channels
+            else:
+                dolphie.replication_applier_status = {}
 
             if (
                 not dolphie.daemon_mode

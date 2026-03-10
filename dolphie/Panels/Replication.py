@@ -147,8 +147,11 @@ def create_panel(tab: Tab):
     else:
         tab.replication_container.display = True
 
-        if dolphie.replication_applier_status.get("data"):
+        if dolphie.replication_applier_status:
+            is_multi_channel = len(dolphie.replication_applier_status) > 1
             table_thread_applier_status = Table(box=None, header_style="#c5c7d2")
+            if is_multi_channel:
+                table_thread_applier_status.add_column("Channel")
             table_thread_applier_status.add_column("Worker", justify="center")
             table_thread_applier_status.add_column("Usage", min_width=6)
             table_thread_applier_status.add_column("Apply Time")
@@ -157,44 +160,51 @@ def create_panel(tab: Tab):
             table_thread_applier_status.add_column("Error Time")
             table_thread_applier_status.add_column("Error Message", overflow="fold")
 
-            for row in dolphie.replication_applier_status["data"]:
-                worker_id = row.get("worker_id")
-                thread_id = row.get("thread_id")
+            for channel_name, channel_data in dolphie.replication_applier_status.items():
+                all_workers_diff = channel_data.get("diff_all", 0)
 
-                # Handle the ROLLUP row, which contains the total for all threads
-                if not thread_id:
-                    all_workers_diff = dolphie.replication_applier_status["diff_all"]
-                    continue
+                for row in channel_data.get("data", []):
+                    worker_id = row.get("worker_id")
+                    thread_id = row.get("thread_id")
 
-                # Calculate the difference in thread events for this worker
-                worker_diff = dolphie.replication_applier_status[f"diff_{thread_id}"]
+                    # Calculate the difference in thread events for this worker
+                    worker_diff = channel_data.get(f"diff_{thread_id}", 0)
 
-                # Format the last applied transaction
-                last_applied_transaction = row.get("last_applied_transaction", "N/A")
-                if last_applied_transaction and "-" in last_applied_transaction:
-                    source_id_split = last_applied_transaction.split("-")[4].split(":")[0]
-                    transaction_id = last_applied_transaction.split(":")[1]
-                    last_applied_transaction = f"…[dark_gray]{source_id_split}[/dark_gray]:{transaction_id}"
+                    # Format the last applied transaction
+                    last_applied_transaction = row.get("last_applied_transaction", "N/A")
+                    if last_applied_transaction and "-" in last_applied_transaction:
+                        source_id_split = last_applied_transaction.split("-")[4].split(":")[0]
+                        transaction_id = last_applied_transaction.split(":")[1]
+                        last_applied_transaction = f"…[dark_gray]{source_id_split}[/dark_gray]:{transaction_id}"
 
-                # Format the last error time
-                last_error_time = row.get("applying_transaction_last_transient_error_timestamp", "N/A")
-                last_error_time = "" if last_error_time == "0000-00-00 00:00:00.000000" else str(last_error_time)
+                    # Format the last error time
+                    last_error_time = row.get("applying_transaction_last_transient_error_timestamp", "N/A")
+                    last_error_time = "" if last_error_time == "0000-00-00 00:00:00.000000" else str(last_error_time)
 
-                # Calculate the usage percentage for each worker for the current poll
-                usage_percentage = round(100 * (worker_diff / all_workers_diff), 2) if all_workers_diff > 0 else 0.0
-                retries_count = row.get("applying_transaction_retries_count", 0)
-                retries_count = f"[dark_gray]{retries_count}" if retries_count == 0 else f"[red]{retries_count}"
+                    # Calculate the usage percentage for each worker for the current poll
+                    usage_percentage = (
+                        round(100 * (worker_diff / all_workers_diff), 2) if all_workers_diff > 0 else 0.0
+                    )
+                    retries_count = row.get("applying_transaction_retries_count", 0)
+                    retries_count = f"[dark_gray]{retries_count}" if retries_count == 0 else f"[red]{retries_count}"
 
-                # Display the cumulative usage for the worker
-                table_thread_applier_status.add_row(
-                    f"[b highlight]{worker_id}[/b highlight]: {thread_id}",
-                    f"{usage_percentage}%",
-                    format_picoseconds(float(row["apply_time"])),
-                    last_applied_transaction,
-                    retries_count,
-                    last_error_time,
-                    row.get("applying_transaction_last_transient_error_message", "N/A"),
-                )
+                    # Build the row values
+                    row_values = []
+                    if is_multi_channel:
+                        row_values.append(f"[highlight]{channel_name}[/highlight]")
+                    row_values.extend([
+                        f"[b highlight]{worker_id}[/b highlight]: {thread_id}",
+                        f"{usage_percentage}%",
+                        format_picoseconds(float(row["apply_time"])),
+                        last_applied_transaction,
+                        retries_count,
+                        last_error_time,
+                        row.get("applying_transaction_last_transient_error_message", "N/A"),
+                    ])
+                    table_thread_applier_status.add_row(*row_values)
+
+                if is_multi_channel:
+                    table_thread_applier_status.add_section()
 
             tab.replication_thread_applier.update(table_thread_applier_status)
             tab.replication_thread_applier_container.display = True
@@ -229,7 +239,30 @@ def create_panel(tab: Tab):
         )
 
         tab.replication_variables.update(replication_variables)
-        tab.replication_status.update(create_replication_table(tab))
+
+        # Multi-source replication: render a table per channel using the grid
+        is_multi_source = len(dolphie.replication_status) > 1
+
+        if is_multi_source:
+            tab.replication_status_grid.display = True
+            tab.replication_status_single.parent.display = False
+            tab.replication_status_grid.set_class(True, "multi_source")
+            items = {}
+            for channel in dolphie.replication_status:
+                channel_name = channel.get("Channel_Name", "")
+                channel_key = channel_name or "_default"
+                items[channel_key] = create_replication_table(
+                    tab, channel_data=channel, show_channel_name=True
+                )
+            _sync_grid(
+                tab.replication_status_grid, items, "replication_channel", tab.id, dolphie.app, tab.channel_widgets
+            )
+        else:
+            tab.replication_status_grid.display = False
+            tab.replication_status_single.parent.display = True
+            tab.replication_status_single.update(
+                create_replication_table(tab, channel_data=dolphie.replication_status[0])
+            )
 
     # --- Group Replication panel ---
     if not (dolphie.group_replication or dolphie.innodb_cluster):
@@ -386,7 +419,9 @@ def create_replica_panel(tab: Tab):
     _sync_grid(tab.replicas_grid, items, "replica", tab.id, dolphie.app, tab.replica_widgets)
 
 
-def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica = None) -> Table:
+def create_replication_table(
+    tab: Tab, dashboard_table=False, replica: Replica = None, channel_data: dict = None, show_channel_name: bool = False
+) -> Table:
     dolphie = tab.dolphie
 
     # When replica is specified, that means we're creating a table for a replica and not replication
@@ -394,10 +429,12 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         data = replica.replication_status
         mysql_version = replica.mysql_version
         connection_source_alt = replica.connection_source_alt
-    else:
-        data = dolphie.replication_status
+    elif channel_data is not None:
+        data = channel_data
         mysql_version = dolphie.host_version
         connection_source_alt = dolphie.connection_source_alt
+    else:
+        raise ValueError("create_replication_table requires either 'replica' or 'channel_data'")
 
     # Determine replication terminology based on MySQL version
     # and connection source (MariaDB or MySQL)
@@ -458,11 +495,14 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         formatted_replica_lag = f"[{lag_color}]{format_time(replica_lag)}[/{lag_color}]"
 
     if dashboard_table:
+        title = "Replication"
+        if show_channel_name and data.get("Channel_Name"):
+            title = f"Replication ({data['Channel_Name']})"
         table = Table(
             show_header=False,
             box=None,
             expand=True,
-            title="Replication",
+            title=title,
             title_style=Style(color="#bbc8e8", bold=True),
             style="table_border",
         )
@@ -477,6 +517,9 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
         table.add_row("[b][light_blue]Host", f"[light_blue]{replica.host}")
         table.add_row("[b][label]Version", f"{replica.host_distro} {replica.mysql_version}")
     else:
+        if show_channel_name and not dashboard_table:
+            channel_name = data.get("Channel_Name", "")
+            table.add_row("[b][label]Channel", channel_name)
         table.add_row("[b][label]Primary", primary_host)
 
     if not dashboard_table:
@@ -603,7 +646,11 @@ def create_replication_table(tab: Tab, dashboard_table=False, replica: Replica =
 
             if replica:
                 # Determine the primary server ID for coloring
-                replica_primary_server_id = dolphie.replication_status.get("Master_Server_Id")
+                replica_primary_server_id = (
+                    dolphie.replication_status[0].get("Master_Server_Id")
+                    if dolphie.replication_status
+                    else None
+                )
                 primary_id = replica_primary_server_id or dolphie.global_variables.get("server_id")
 
                 replica.connection.execute(
@@ -792,7 +839,7 @@ def create_galera_node_table(tab: Tab) -> dict[str, Table]:
     return {uid: tbl for uid, _, tbl in sorted(unsorted, key=lambda x: x[1])}
 
 
-def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
+def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict | list[dict]:
     dolphie = tab.dolphie
     connection = replica.connection if replica else dolphie.main_db_connection
     mysql_version = replica.mysql_version if replica else None
@@ -814,7 +861,6 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
     # Fetch replication status
     connection.execute(replication_status_query)
     all_rows = connection.fetchall()
-    replication_status = all_rows[0] if all_rows else {}
 
     # Collect all source UUIDs for multi-source replication errant TRX detection
     if not replica and all_rows:
@@ -826,28 +872,56 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict:
         connection.execute(replica_lag_query)
         replica_lag_data = connection.fetchone()
     else:
-        replica_lag_data = replication_status
+        replica_lag_data = None
 
-    # Determine lag key and calculate replica lag
     lag_key = "Seconds_Behind_Source" if use_show_replica_status else "Seconds_Behind_Master"
-    seconds_behind = replica_lag_data.get(lag_key)
-    replica_lag = int(seconds_behind) if seconds_behind is not None else 0
 
-    if replication_status:
-        # Update replication status with lag and speed
-        previous_lag = (
-            replica.replication_status.get("Seconds_Behind", 0)
-            if replica
-            else dolphie.replication_status.get("Seconds_Behind", 0)
-        )
-        replication_status["Seconds_Behind"] = replica_lag
-        replication_status["Replica_Speed"] = (
+    # For replicas (downstream hosts), return a single dict as before
+    if replica:
+        replication_status = all_rows[0] if all_rows else {}
+        lag_source = replica_lag_data if replica_lag_data else replication_status
+        seconds_behind = lag_source.get(lag_key)
+        replica_lag = int(seconds_behind) if seconds_behind is not None else 0
+
+        if replication_status:
+            previous_lag = replica.replication_status.get("Seconds_Behind", 0)
+            replication_status["Seconds_Behind"] = replica_lag
+            replication_status["Replica_Speed"] = (
+                round((previous_lag - replica_lag) / dolphie.polling_latency)
+                if previous_lag and replica_lag < previous_lag and dolphie.polling_latency > 0
+                else 0
+            )
+
+        return replication_status
+
+    # For the main host, return a list of dicts (one per channel)
+    # Build a lookup of previous lag by channel name for speed calculation
+    previous_lag_by_channel = {}
+    for prev_channel in dolphie.replication_status:
+        ch_name = prev_channel.get("Channel_Name", "")
+        previous_lag_by_channel[ch_name] = prev_channel.get("Seconds_Behind", 0)
+
+    is_multi_source = len(all_rows) > 1
+
+    result = []
+    for row in all_rows:
+        # Heartbeat lag is not channel-aware, so only use it for single-source setups
+        lag_source = replica_lag_data if (replica_lag_data and not is_multi_source) else row
+        seconds_behind = lag_source.get(lag_key)
+        replica_lag = int(seconds_behind) if seconds_behind is not None else 0
+
+        channel_name = row.get("Channel_Name", "")
+        previous_lag = previous_lag_by_channel.get(channel_name, 0)
+        row["Seconds_Behind"] = replica_lag
+        row["Replica_Speed"] = (
             round((previous_lag - replica_lag) / dolphie.polling_latency)
             if previous_lag and replica_lag < previous_lag and dolphie.polling_latency > 0
             else 0
         )
 
-    return replication_status
+        result.append(row)
+
+    return result
 
 
 def fetch_replicas(tab: Tab):

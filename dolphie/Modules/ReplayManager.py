@@ -31,7 +31,7 @@ class MySQLReplayData:
     binlog_status: dict
     innodb_metrics: dict
     replica_manager: dict
-    replication_status: dict
+    replication_status: list
     replication_applier_status: dict
     processlist: dict
     metric_manager: dict
@@ -908,8 +908,10 @@ class ReplayManager:
             binlog_status=data.get("binlog_status", {}),
             innodb_metrics=data.get("innodb_metrics", {}),
             replica_manager=data.get("replica_manager", {}),
-            replication_status=data.get("replication_status", {}),
-            replication_applier_status=data.get("replication_applier_status", {}),
+            replication_status=self._migrate_replication_status(data.get("replication_status", [])),
+            replication_applier_status=self._migrate_replication_applier_status(
+                data.get("replication_applier_status", {})
+            ),
             metadata_locks=data.get("metadata_locks", {}),
             processlist=processlist,
             group_replication_data=data.get("group_replication_data", {}),
@@ -919,6 +921,20 @@ class ReplayManager:
             table_io_waits_data=table_io_waits,
             statements_summary_data=statements_summary_data,
         )
+
+    @staticmethod
+    def _migrate_replication_applier_status(value) -> dict:
+        """Handle backward compatibility: old replay files store applier status as a flat dict."""
+        if isinstance(value, dict) and "data" in value:
+            return {"": value}
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _migrate_replication_status(value) -> list:
+        """Handle backward compatibility: old replay files store replication_status as a dict."""
+        if isinstance(value, dict):
+            return [value] if value else []
+        return value if isinstance(value, list) else []
 
     def _create_proxysql_replay_data(self, timestamp: str, data: dict) -> ProxySQLReplayData:
         """Creates a ProxySQLReplayData object from parsed replay data.
