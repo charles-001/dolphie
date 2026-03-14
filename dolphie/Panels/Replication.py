@@ -429,12 +429,10 @@ def create_replication_table(
         data = replica.replication_status
         mysql_version = replica.mysql_version
         connection_source_alt = replica.connection_source_alt
-    elif channel_data is not None:
-        data = channel_data
+    else:
+        data = channel_data if channel_data is not None else {}
         mysql_version = dolphie.host_version
         connection_source_alt = dolphie.connection_source_alt
-    else:
-        raise ValueError("create_replication_table requires either 'replica' or 'channel_data'")
 
     # Determine replication terminology based on MySQL version
     # and connection source (MariaDB or MySQL)

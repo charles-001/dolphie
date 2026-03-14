@@ -276,18 +276,14 @@ class Graph(Static):
 
 def get_number_format_function(data: MetricInstance, color: bool = False) -> Callable[[int | float], str]:
     """Returns the correct formatting function based on the metric type."""
-    data_formatters: dict[type, Callable[[int | float], str]] = {
-        ReplicationLagMetrics: lambda val: format_time(val),
-        CheckpointMetrics: lambda val: format_bytes(val, color=color),
-        RedoLogMetrics: lambda val: format_bytes(val, color=color),
-        AdaptiveHashIndexHitRatio: lambda val: f"{round(val)}%",
-        ProxySQLMultiplexEfficiency: lambda val: f"{round(val)}%",
-        DiskIOMetrics: lambda val: format_bytes(val, color=color),
-        ProxySQLQueriesDataNetwork: lambda val: format_bytes(val, color=color),
-        SystemMemoryMetrics: lambda val: format_bytes(val, color=color),
-        SystemNetworkMetrics: lambda val: format_bytes(val, color=color),
-    }
-    return data_formatters.get(type(data), lambda val: format_number(val, color=color))
+    data_type = type(data)
+    if data_type in _FORMAT_TIME_TYPES:
+        return lambda val: format_time(val)
+    if data_type in _FORMAT_BYTES_TYPES:
+        return lambda val: format_bytes(val, color=color)
+    if data_type in _FORMAT_PERCENT_TYPES:
+        return lambda val: f"{round(val)}%"
+    return lambda val: format_number(val, color=color)
 
 
 @dataclass
@@ -674,6 +670,13 @@ MetricInstance = Union[
     ProxySQLTotalCommandStats,
 ]
 
+_FORMAT_TIME_TYPES = frozenset({ReplicationLagMetrics})
+_FORMAT_BYTES_TYPES = frozenset({
+    CheckpointMetrics, RedoLogMetrics, DiskIOMetrics,
+    ProxySQLQueriesDataNetwork, SystemMemoryMetrics, SystemNetworkMetrics,
+})
+_FORMAT_PERCENT_TYPES = frozenset({AdaptiveHashIndexHitRatio, ProxySQLMultiplexEfficiency})
+
 
 @dataclass
 class MetricInstances:
@@ -770,19 +773,13 @@ class MetricManager:
         """Resets all metrics and state to their default values."""
         self.initialized = False
         self.polling_latency = 0
-        self.global_variables.clear()
-        self.global_status.clear()
         self.redo_log_size = 0
         self.datetimes.clear()
 
-        # Clear raw data stores
-        self.system_utilization.clear()
-        self.innodb_metrics.clear()
-        self.disk_io_metrics.clear()
-        self.metadata_lock_metrics.clear()
-        self.replication_status.clear()
-        self.proxysql_total_command_stats.clear()
-        self.proxysql_select_command_stats.clear()
+        # Note: raw data stores (global_variables, global_status, replication_status, etc.)
+        # are intentionally NOT cleared here — they are owned by dolphie and shared by
+        # reference. Mutating them would cause bugs (e.g. false errant TRX detection).
+        # They are overwritten every poll cycle by refresh_data().
 
         # Clear performance lookup tables
         self._source_to_metrics_processing.clear()
@@ -1205,7 +1202,10 @@ class MetricManager:
 
         for row in proxysql_command_stats:
             if row.get("Command") == "SELECT":
-                self.proxysql_select_command_stats = {key: int(value) for key, value in row.items() if value.isdigit()}
+                # Mutate in place to preserve _metric_source_map reference
+                self.proxysql_select_command_stats.update(
+                    {key: int(value) for key, value in row.items() if value.isdigit()}
+                )
 
             for key, value in row.items():
                 if key.startswith("cnt_") and value.isdigit():
