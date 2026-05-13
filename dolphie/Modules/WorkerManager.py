@@ -35,6 +35,11 @@ class WorkerManager:
         if not tab:
             return
 
+        # Bail out if the tab has been reconfigured out of replay mode while a stale
+        # worker_timer was still in flight.
+        if not tab.dolphie.replay_file or not tab.replay_manager:
+            return
+
         try:
             # Get our worker thread
             tab.worker = get_current_worker()
@@ -210,6 +215,14 @@ class WorkerManager:
         if not tab:
             return
 
+        # Bail out if the tab has been reconfigured into replay mode while a stale
+        # worker_timer was still in flight. The replay path is driven by
+        # run_worker_replay; letting run_worker_main proceed here races with it on
+        # the same Dolphie state (host_version, global_variables, connection) and
+        # has been observed to crash fetch_replication_data with host_version=None.
+        if tab.dolphie.replay_file:
+            return
+
         # Get our worker thread
         tab.worker = get_current_worker()
         tab.worker.name = tab_id
@@ -275,6 +288,11 @@ class WorkerManager:
     def run_worker_replicas(self, tab_id: str):
         tab = self.app.tab_manager.get_tab(tab_id)
         if not tab:
+            return
+
+        # Bail out if the tab has been reconfigured into replay mode while a stale
+        # replicas_worker_timer was still in flight.
+        if tab.dolphie.replay_file:
             return
 
         # Get our worker thread

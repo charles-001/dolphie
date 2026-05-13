@@ -15,7 +15,7 @@ from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries
 from loguru import logger
-from packaging.version import parse as parse_version
+from packaging.version import InvalidVersion, parse as parse_version
 from rich.text import Text
 from textual.app import App
 from textual.widgets import Switch
@@ -344,7 +344,14 @@ class Dolphie:
 
     def is_mysql_version_at_least(self, target: str, use_version: str = None):
         version = use_version or self.host_version
-        return parse_version(version) >= parse_version(target)
+        if not version:
+            return False
+        try:
+            return parse_version(version) >= parse_version(target)
+        except InvalidVersion:
+            # Defensive: host_version can be the "N/A" sentinel from parse_server_version
+            # when the version variable hasn't been read yet (e.g. during a connection race).
+            return False
 
     def parse_server_version(self, version: str) -> str:
         if not version:

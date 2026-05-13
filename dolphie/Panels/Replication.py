@@ -841,7 +841,7 @@ def create_galera_node_table(tab: Tab) -> dict[str, Table]:
 def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict | list[dict]:
     dolphie = tab.dolphie
     connection = replica.connection if replica else dolphie.main_db_connection
-    mysql_version = replica.mysql_version if replica else None
+    mysql_version = replica.mysql_version if replica else dolphie.host_version
     connection_source_alt = replica.connection_source_alt if replica else dolphie.connection_source_alt
 
     # Determine replication status query

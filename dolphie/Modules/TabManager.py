@@ -766,11 +766,22 @@ class TabManager:
         return self.tabs.get(id)
 
     async def disconnect_tab(self, tab: Tab, update_topbar: bool = True, wait_for_workers: bool = True):
+        # Stop timers first so they can't fire (and queue a fresh worker iteration)
+        # while we yield to the event loop in worker.wait() below.
+        for timer in (tab.worker_timer, tab.replicas_worker_timer):
+            if timer:
+                timer.stop()
+        tab.worker_timer = tab.replicas_worker_timer = None
+
         for worker in (tab.worker, tab.replicas_worker):
             if worker:
                 worker.cancel()
         # Wait for workers to fully stop before modifying shared state to avoid
-        # a race condition where a running worker reads partially-updated state
+        # a race condition where a running worker reads partially-updated state.
+        # Thread workers run to completion even after cancel(), so their state
+        # transitions to SUCCESS rather than CANCELLED — which triggers
+        # on_worker_state_changed to reschedule a new worker_timer. Stop timers
+        # again after the await to nuke any timer set during the await window.
         if wait_for_workers:
             for worker in (tab.worker, tab.replicas_worker):
                 if worker and not worker.is_finished:
