@@ -877,7 +877,20 @@ def fetch_replication_data(tab: Tab, replica: Replica = None) -> dict | list[dic
 
     # For replicas (downstream hosts), return a single dict as before
     if replica:
-        replication_status = all_rows[0] if all_rows else {}
+        if not all_rows:
+            return {}
+
+        # For multi-source replicas, find the channel connected to the monitored primary
+        # by matching the source UUID against the primary's server_uuid
+        if len(all_rows) > 1:
+            uuid_key = "Source_UUID" if use_show_replica_status else "Master_UUID"
+            replication_status = next(
+                (row for row in all_rows if row.get(uuid_key) == dolphie.server_uuid),
+                all_rows[0],
+            )
+        else:
+            replication_status = all_rows[0]
+
         lag_source = replica_lag_data if replica_lag_data else replication_status
         seconds_behind = lag_source.get(lag_key)
         replica_lag = int(seconds_behind) if seconds_behind is not None else 0
