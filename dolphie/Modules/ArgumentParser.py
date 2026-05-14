@@ -120,7 +120,7 @@ Order of precedence for methods that pass options to Dolphie:
 \t1. Command-line
 \t2. Credential profile (set by --cred-profile)
 \t3. Environment variables
-\t4. Dolphie's config (set by --config-file)
+\t4. Dolphie's config (set by --config-file OR DOLPHIE_CONFIG)
 \t5. ~/.mylogin.cnf (mysql_config_editor)
 \t6. ~/.my.cnf (set by --mycnf-file)
 
@@ -169,6 +169,7 @@ Environment variables support these options:
 \tDOLPHIE_SSL_CA
 \tDOLPHIE_SSL_CERT
 \tDOLPHIE_SSL_KEY
+\tDOLPHIE_CONFIG
 
 Dolphie's config supports these options under [dolphie] section:
 \t{self.formatted_options}
@@ -255,7 +256,8 @@ Dolphie's config supports these options under [dolphie] section:
             dest="config_file",
             type=str,
             help=(
-                f"Dolphie's config file to use. Options are read from these files in the given order: "
+                f"Dolphie's config file to use, takes precedence over DOLPHIE_CONFIG environment variable. "
+                f"If neither is set, options are read from these files in the given order: "
                 f"{self.config.config_file}"
             ),
             metavar="",
@@ -537,6 +539,9 @@ Dolphie's config supports these options under [dolphie] section:
 
         if options["config_file"]:
             self.config.config_file = [options["config_file"]]
+        elif os.environ.get("DOLPHIE_CONFIG"):
+            self.config.config_file = [os.environ["DOLPHIE_CONFIG"]]
+            self.add_to_debug_options("environment", "config_file", os.environ["DOLPHIE_CONFIG"])
 
         # Loop through config files to find the supplied options
         for config_file in self.config.config_file:

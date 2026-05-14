@@ -63,7 +63,7 @@ options:
   -h , --host           Hostname/IP address
   -P , --port           Port (socket has precedence)
   -S , --socket         Socket file
-  -c , --config-file    Dolphie's config file to use. Options are read from these files in the given order: ['/etc/dolphie.cnf', '/etc/dolphie/dolphie.cnf', '~/.dolphie.cnf']
+  -c , --config-file    Dolphie's config file to use, takes precedence over DOLPHIE_CONFIG environment variable. If neither is set, options are read from these files in the given order: ['/etc/dolphie.cnf', '/etc/dolphie/dolphie.cnf', '~/.dolphie.cnf']
   -m , --mycnf-file     MySQL config file path to use. This should use [client] section [default: ~/.my.cnf]
   -l , --login-path     Specify login path to use with mysql_config_editor's file ~/.mylogin.cnf for encrypted login credentials [default: client]
   -r , --refresh-interval
@@ -98,7 +98,7 @@ Order of precedence for methods that pass options to Dolphie:
 	1. Command-line
 	2. Credential profile (set by --cred-profile)
 	3. Environment variables
-	4. Dolphie's config (set by --config-file)
+	4. Dolphie's config (set by --config-file OR DOLPHIE_CONFIG)
 	5. ~/.mylogin.cnf (mysql_config_editor)
 	6. ~/.my.cnf (set by --mycnf-file)
 
@@ -145,7 +145,8 @@ Environment variables support these options:
 	DOLPHIE_SSL_CA
 	DOLPHIE_SSL_CERT
 	DOLPHIE_SSL_KEY
-
+	DOLPHIE_CONFIG
+	
 Dolphie's config supports these options under [dolphie] section:
 	(bool) tab_setup
 	(str) credential_profile
