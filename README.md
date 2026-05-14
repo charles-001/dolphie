@@ -113,6 +113,7 @@ The following options are supported in credential profiles:
 	ssl_ca
 	ssl_cert
 	ssl_key
+	tab_title
 	mycnf_file
 	login_path
 

@@ -30,6 +30,7 @@ class CredentialProfile:
     ssl_ca: str = None
     ssl_cert: str = None
     ssl_key: str = None
+    tab_title: str = None
 
 
 @dataclass
@@ -136,6 +137,7 @@ The following options are supported in credential profiles:
 \tssl_ca
 \tssl_cert
 \tssl_key
+\ttab_title
 \tmycnf_file
 \tlogin_path
 
@@ -767,7 +769,7 @@ Dolphie's config supports these options under [dolphie] section:
         ]
 
         # All options. mycnf_file and login_path are processed instead of directly set
-        supported_options = credential_profile_options + ["mycnf_file", "login_path"]
+        supported_options = credential_profile_options + ["tab_title", "mycnf_file", "login_path"]
 
         credential_name = section.split("credential_profile_")[1]
         credential = CredentialProfile(name=credential_name)
@@ -777,6 +779,9 @@ Dolphie's config supports these options under [dolphie] section:
 
             if key in credential_profile_options:
                 setattr(credential, key, value)
+                self.add_to_debug_options(f"cred profile setup - {credential_name}", key, value)
+            elif key == "tab_title":
+                credential.tab_title = value
                 self.add_to_debug_options(f"cred profile setup - {credential_name}", key, value)
             elif key == "mycnf_file":
                 if not os.path.isfile(value):
