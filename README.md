@@ -146,7 +146,7 @@ Environment variables support these options:
 	DOLPHIE_SSL_CERT
 	DOLPHIE_SSL_KEY
 	DOLPHIE_CONFIG
-	
+
 Dolphie's config supports these options under [dolphie] section:
 	(bool) tab_setup
 	(str) credential_profile
