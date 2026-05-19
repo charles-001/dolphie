@@ -639,6 +639,13 @@ class TabManager:
                     config.socket = credential_profile_data.socket
                 if credential_profile_data.ssl:
                     config.ssl = credential_profile_data.ssl
+                if not tab.manual_tab_name and credential_profile_data.tab_title:
+                    tab.manual_tab_name = credential_profile_data.tab_title
+        elif config.credential_profile:
+            # When launched with -C alone, use the credential profile's tab_title if set
+            credential_profile_data = self.config.credential_profiles.get(config.credential_profile)
+            if credential_profile_data and credential_profile_data.tab_title:
+                tab.manual_tab_name = credential_profile_data.tab_title
 
         # Create a new Dolphie instance
         dolphie = Dolphie(config=config, app=self.app)

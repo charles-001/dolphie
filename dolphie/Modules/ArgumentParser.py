@@ -30,6 +30,7 @@ class CredentialProfile:
     ssl_ca: str = None
     ssl_cert: str = None
     ssl_key: str = None
+    tab_title: str = None
 
 
 @dataclass
@@ -119,7 +120,7 @@ Order of precedence for methods that pass options to Dolphie:
 \t1. Command-line
 \t2. Credential profile (set by --cred-profile)
 \t3. Environment variables
-\t4. Dolphie's config (set by --config-file)
+\t4. Dolphie's config (set by --config-file OR DOLPHIE_CONFIG)
 \t5. ~/.mylogin.cnf (mysql_config_editor)
 \t6. ~/.my.cnf (set by --mycnf-file)
 
@@ -136,6 +137,7 @@ The following options are supported in credential profiles:
 \tssl_ca
 \tssl_cert
 \tssl_key
+\ttab_title
 \tmycnf_file
 \tlogin_path
 
@@ -167,6 +169,7 @@ Environment variables support these options:
 \tDOLPHIE_SSL_CA
 \tDOLPHIE_SSL_CERT
 \tDOLPHIE_SSL_KEY
+\tDOLPHIE_CONFIG
 
 Dolphie's config supports these options under [dolphie] section:
 \t{self.formatted_options}
@@ -253,7 +256,8 @@ Dolphie's config supports these options under [dolphie] section:
             dest="config_file",
             type=str,
             help=(
-                f"Dolphie's config file to use. Options are read from these files in the given order: "
+                f"Dolphie's config file to use, takes precedence over DOLPHIE_CONFIG environment variable. "
+                f"If neither is set, options are read from these files in the given order: "
                 f"{self.config.config_file}"
             ),
             metavar="",
@@ -535,6 +539,9 @@ Dolphie's config supports these options under [dolphie] section:
 
         if options["config_file"]:
             self.config.config_file = [options["config_file"]]
+        elif os.environ.get("DOLPHIE_CONFIG"):
+            self.config.config_file = [os.environ["DOLPHIE_CONFIG"]]
+            self.add_to_debug_options("environment", "config_file", os.environ["DOLPHIE_CONFIG"])
 
         # Loop through config files to find the supplied options
         for config_file in self.config.config_file:
@@ -767,7 +774,7 @@ Dolphie's config supports these options under [dolphie] section:
         ]
 
         # All options. mycnf_file and login_path are processed instead of directly set
-        supported_options = credential_profile_options + ["mycnf_file", "login_path"]
+        supported_options = credential_profile_options + ["tab_title", "mycnf_file", "login_path"]
 
         credential_name = section.split("credential_profile_")[1]
         credential = CredentialProfile(name=credential_name)
@@ -777,6 +784,9 @@ Dolphie's config supports these options under [dolphie] section:
 
             if key in credential_profile_options:
                 setattr(credential, key, value)
+                self.add_to_debug_options(f"cred profile setup - {credential_name}", key, value)
+            elif key == "tab_title":
+                credential.tab_title = value
                 self.add_to_debug_options(f"cred profile setup - {credential_name}", key, value)
             elif key == "mycnf_file":
                 if not os.path.isfile(value):
