@@ -6,7 +6,7 @@ import dataclasses
 from collections import defaultdict, deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Union
 
@@ -1141,7 +1141,12 @@ class MetricManager:
     def add_metric_datetime(self):
         """Adds the current worker timestamp to the global datetime list."""
         if self.initialized and not self.replay_file and self.worker_start_time:
-            self.datetimes.append(self.worker_start_time.strftime(self.DATETIME_FORMAT))
+            # plotext parses these strings as UTC and then renders them in the
+            # local timezone. Store the timestamps as UTC so the rendered
+            # X-axis labels match the host's wall clock time.
+            self.datetimes.append(
+                self.worker_start_time.astimezone(timezone.utc).strftime(self.DATETIME_FORMAT)
+            )
 
     def get_metric_source_data(self, metric_source: MetricSource) -> dict[str, int] | None:
         """Retrieves the raw data dictionary for a given MetricSource."""
@@ -1324,7 +1329,11 @@ class MetricManager:
         if not self.datetimes:
             return False
 
-        threshold = reference_time.replace(tzinfo=None) - timedelta(minutes=self.ROLLING_WINDOW_MINUTES)
+        # datetimes are stored as UTC (see add_metric_datetime); compare against
+        # reference_time converted to UTC to keep the window boundary consistent.
+        threshold = reference_time.astimezone(timezone.utc).replace(tzinfo=None) - timedelta(
+            minutes=self.ROLLING_WINDOW_MINUTES
+        )
         trimmed = False
 
         while self.datetimes:
