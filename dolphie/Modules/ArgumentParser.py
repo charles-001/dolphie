@@ -68,6 +68,7 @@ class Config:
     host_cache_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_host_cache")
     tab_setup_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_hosts")
     refresh_interval: int = 1
+    graph_window_minutes: int = 60
     heartbeat_table: str = None
     credential_profiles: dict[str, CredentialProfile] = field(default_factory=dict)
     tab_setup_available_hosts: list[str] = field(default_factory=list)
@@ -292,6 +293,17 @@ Dolphie's config supports these options under [dolphie] section:
             help=(
                 "The time, in seconds, between each data collection and processing cycle "
                 f"[default: {self.config.refresh_interval}]"
+            ),
+            metavar="",
+        )
+        self.parser.add_argument(
+            "--graph-window-minutes",
+            dest="graph_window_minutes",
+            type=int,
+            help=(
+                "How many minutes of history to retain in the metric graphs. Older datetimes and "
+                "their metric values are trimmed on each refresh cycle. Set to 0 to disable trimming "
+                f"and accumulate all history [default: {self.config.graph_window_minutes}]"
             ),
             metavar="",
         )

@@ -713,18 +713,26 @@ class MetricManager:
     """Manages the state, collection, and processing of all metrics."""
 
     DATETIME_FORMAT = "%d/%m/%y %H:%M:%S"
-    ROLLING_WINDOW_MINUTES = 10
+    DEFAULT_ROLLING_WINDOW_MINUTES = 60
+    # Backward-compatible alias; ReplayManager references this name as a default.
+    ROLLING_WINDOW_MINUTES = DEFAULT_ROLLING_WINDOW_MINUTES
 
-    def __init__(self, replay_file: str, daemon_mode: bool = False):
+    def __init__(self, replay_file: str, daemon_mode: bool = False, rolling_window_minutes: int = None):
         """Initialize the MetricManager.
 
         Args:
             replay_file: Path to a replay file, if one is being used.
             daemon_mode: True if running in daemon mode (trims old data).
+            rolling_window_minutes: How many minutes of history to keep in graph
+                data. 0 disables trimming (accumulate forever). None falls back
+                to DEFAULT_ROLLING_WINDOW_MINUTES.
         """
         self.connection_source = ConnectionSource.mysql
         self.replay_file = replay_file
         self.daemon_mode = daemon_mode
+        self.rolling_window_minutes = (
+            rolling_window_minutes if rolling_window_minutes is not None else self.DEFAULT_ROLLING_WINDOW_MINUTES
+        )
 
         # Attributes populated by refresh_data
         self.worker_start_time: datetime | None = None
@@ -1122,7 +1130,9 @@ class MetricManager:
 
         # Apply rolling window trim in TUI mode as well (previously daemon-only).
         # Without this, graphs accumulate indefinitely in interactive sessions.
-        self.trim_datetimes_to_window(worker_start_time)
+        # rolling_window_minutes <= 0 disables trimming.
+        if self.rolling_window_minutes > 0:
+            self.trim_datetimes_to_window(worker_start_time)
 
         self.initialized = True
 
@@ -1332,7 +1342,7 @@ class MetricManager:
         # datetimes are stored as UTC (see add_metric_datetime); compare against
         # reference_time converted to UTC to keep the window boundary consistent.
         threshold = reference_time.astimezone(timezone.utc).replace(tzinfo=None) - timedelta(
-            minutes=self.ROLLING_WINDOW_MINUTES
+            minutes=self.rolling_window_minutes
         )
         trimmed = False
 

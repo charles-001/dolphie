@@ -40,6 +40,7 @@ class Dolphie:
         self.host_cache_file = config.host_cache_file
         self.tab_setup_file = config.tab_setup_file
         self.refresh_interval = config.refresh_interval
+        self.graph_window_minutes = config.graph_window_minutes
         self.show_trxs_only = config.show_trxs_only
         self.show_threads_with_concurrency_tickets = False
         self.show_additional_query_columns = config.show_additional_query_columns
@@ -72,7 +73,9 @@ class Dolphie:
         self.reset_runtime_variables()
 
     def reset_runtime_variables(self):
-        self.metric_manager = MetricManager.MetricManager(self.replay_file, self.daemon_mode)
+        self.metric_manager = MetricManager.MetricManager(
+            self.replay_file, self.daemon_mode, self.graph_window_minutes
+        )
         self.replica_manager = DataTypes.ReplicaManager()
 
         self.dolphie_start_time: datetime = datetime.now().astimezone()
