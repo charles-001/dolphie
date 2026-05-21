@@ -1120,8 +1120,9 @@ class MetricManager:
 
         self.add_metric_datetime()
 
-        if self.daemon_mode:
-            self.trim_datetimes_to_window(worker_start_time)
+        # Apply rolling window trim in TUI mode as well (previously daemon-only).
+        # Without this, graphs accumulate indefinitely in interactive sessions.
+        self.trim_datetimes_to_window(worker_start_time)
 
         self.initialized = True
 
