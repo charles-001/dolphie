@@ -713,9 +713,12 @@ class MetricManager:
     """Manages the state, collection, and processing of all metrics."""
 
     DATETIME_FORMAT = "%d/%m/%y %H:%M:%S"
-    DEFAULT_ROLLING_WINDOW_MINUTES = 60
-    # Backward-compatible alias; ReplayManager references this name as a default.
-    ROLLING_WINDOW_MINUTES = DEFAULT_ROLLING_WINDOW_MINUTES
+    # Default for the instance-level rolling_window_minutes (TUI graph trim).
+    # Configurable per-run via --graph-window-minutes.
+    DEFAULT_ROLLING_WINDOW_MINUTES = 10
+    # Replay rebuild window used by ReplayManager.fetch_delta_metrics_for_window.
+    # Independent from the TUI graph window above.
+    ROLLING_WINDOW_MINUTES = 10
 
     def __init__(self, replay_file: str, daemon_mode: bool = False, rolling_window_minutes: int = None):
         """Initialize the MetricManager.

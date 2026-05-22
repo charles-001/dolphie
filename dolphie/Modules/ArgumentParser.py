@@ -68,7 +68,7 @@ class Config:
     host_cache_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_host_cache")
     tab_setup_file: str = field(default_factory=lambda: f"{os.path.expanduser('~')}/dolphie_hosts")
     refresh_interval: int = 1
-    graph_window_minutes: int = 60
+    graph_window_minutes: int = 10
     heartbeat_table: str = None
     credential_profiles: dict[str, CredentialProfile] = field(default_factory=dict)
     tab_setup_available_hosts: list[str] = field(default_factory=list)
