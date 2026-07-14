@@ -26,6 +26,9 @@ dependencies = [
 [project.scripts]
 dolphie = "dolphie.App:main"
 
+[project.urls]
+Repository = "https://github.com/charles-001/dolphie"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
