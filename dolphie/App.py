@@ -5,14 +5,24 @@ Author: Charles Thompson
 License: GPL-3.0
 """
 
+from __future__ import annotations
+
 import asyncio
 import os
 import sys
 import time
 from importlib import metadata
 
-import dolphie.Modules.MetricManager as MetricManager
 import requests
+from loguru import logger
+from packaging.version import parse as parse_version
+from rich.emoji import Emoji
+from rich.traceback import Traceback
+from textual import events, on, work
+from textual.app import App
+from textual.widgets import RadioSet, Tabs
+from textual.worker import Worker
+
 from dolphie.DataTypes import ConnectionSource, ConnectionStatus, HotkeyCommands
 from dolphie.Modules.ArgumentParser import ArgumentParser, Config
 from dolphie.Modules.CommandManager import CommandManager
@@ -20,6 +30,7 @@ from dolphie.Modules.CommandPalette import CommandPaletteCommands
 from dolphie.Modules.KeyEventManager import KeyEventManager
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Modules.TabManager import Tab, TabManager
+from dolphie.Modules.Theme import DOLPHIE_THEME
 from dolphie.Modules.WorkerDataProcessor import WorkerDataProcessor
 from dolphie.Modules.WorkerManager import WorkerManager
 from dolphie.Panels import DDL as DDLPanel
@@ -36,16 +47,6 @@ from dolphie.Panels import Replication as ReplicationPanel
 from dolphie.Panels import StatementsSummaryMetrics as StatementsSummaryPanel
 from dolphie.Widgets.CommandModal import CommandModal
 from dolphie.Widgets.TopBar import TopBar
-from loguru import logger
-from packaging.version import parse as parse_version
-from rich.emoji import Emoji
-from rich.theme import Theme as RichTheme
-from rich.traceback import Traceback
-from textual import events, on, work
-from textual.app import App
-from textual.theme import Theme as TextualTheme
-from textual.widgets import RadioSet, Switch, TabbedContent, Tabs
-from textual.worker import Worker
 
 try:
     __package_name__ = metadata.metadata(__package__ or __name__)["Name"]
@@ -84,9 +85,10 @@ class DolphieApp(App):
 
         self.config = config
         self.command_manager = CommandManager()
-        self.key_event_manager: KeyEventManager = None
-        self.worker_manager: WorkerManager = None
-        self.worker_data_processor: WorkerDataProcessor = None
+        self.key_event_manager: KeyEventManager
+        self.worker_manager: WorkerManager
+        self.worker_data_processor: WorkerDataProcessor
+        self.tab_manager: TabManager
 
         self._has_tty = sys.stdin.isatty()
 
@@ -95,64 +97,14 @@ class DolphieApp(App):
         # without a render per row. Manual clicks/taps stay at a single row.
         self._replay_nav_streak = 0
 
-        theme = RichTheme(
-            {
-                "white": "#e9e9e9",
-                "green": "#54efae",
-                "yellow": "#f6ff8f",
-                "dark_yellow": "#e6d733",
-                "red": "#fd8383",
-                "purple": "#b565f3",
-                "dark_gray": "#969aad",
-                "b dark_gray": "b #969aad",
-                "highlight": "#91abec",
-                "label": "#c5c7d2",
-                "b label": "b #c5c7d2",
-                "light_blue": "#bbc8e8",
-                "b white": "b #e9e9e9",
-                "b highlight": "b #91abec",
-                "b light_blue": "b #bbc8e8",
-                "recording": "#ff5e5e",
-                "b recording": "b #ff5e5e",
-                "panel_border": "#6171a6",
-                "table_border": "#333f62",
-            }
-        )
-        self.console.push_theme(theme)
-        self.console.set_window_title(self.TITLE)
+        self.console.set_window_title(self.TITLE or "Dolphie")
 
-        theme = TextualTheme(
-            name="custom",
-            primary="white",
-            variables={
-                "white": "#e9e9e9",
-                "green": "#54efae",
-                "yellow": "#f6ff8f",
-                "dark_yellow": "#e6d733",
-                "red": "#fd8383",
-                "purple": "#b565f3",
-                "dark_gray": "#969aad",
-                "b_dark_gray": "b #969aad",
-                "highlight": "#91abec",
-                "label": "#c5c7d2",
-                "b_label": "b #c5c7d2",
-                "light_blue": "#bbc8e8",
-                "b_white": "b #e9e9e9",
-                "b_highlight": "b #91abec",
-                "b_light_blue": "b #bbc8e8",
-                "recording": "#ff5e5e",
-                "b_recording": "b #ff5e5e",
-                "panel_border": "#6171a6",
-                "table_border": "#333f62",
-            },
-        )
-        self.register_theme(theme)
-        self.theme = "custom"
+        self.register_theme(DOLPHIE_THEME)
+        self.theme = DOLPHIE_THEME.name
 
         if config.daemon_mode:
             logger.info(
-                f"Starting Dolphie v{__version__} in daemon mode with a refresh "
-                f"interval of {config.refresh_interval}s"
+                f"Starting Dolphie v{__version__} in daemon mode with a refresh interval of {config.refresh_interval}s"
             )
             logger.info(f"Log file: {config.daemon_mode_log_file}")
 
@@ -241,7 +193,7 @@ class DolphieApp(App):
         self.tab_manager.loading_hostgroups = False
         self.notify(
             f"Finished connecting to hosts in hostgroup [$highlight]{hostgroup}",
-            severity="success",
+            severity="information",
         )
 
     # Replay playback actions. Both the ReplayControls buttons and the keyboard
@@ -262,7 +214,7 @@ class DolphieApp(App):
 
     def action_replay_back(self, accelerate: bool = False):
         tab = self.tab_manager.active_tab
-        if not tab or not tab.dolphie.replay_file:
+        if not tab or not tab.dolphie.replay_file or tab.replay_manager is None:
             return
 
         if tab.replay_manager.seek_relative(-self._replay_nav_step(accelerate)):
@@ -272,7 +224,7 @@ class DolphieApp(App):
 
     def action_replay_forward(self, accelerate: bool = False):
         tab = self.tab_manager.active_tab
-        if not tab or not tab.dolphie.replay_file:
+        if not tab or not tab.dolphie.replay_file or tab.replay_manager is None:
             return
 
         if tab.replay_manager.current_replay_id >= tab.replay_manager.max_replay_id:
@@ -293,22 +245,24 @@ class DolphieApp(App):
         if tab.dolphie.pause_refresh:
             self.notify("Replay is paused")
         else:
-            self.notify("Replay has resumed", severity="success")
+            self.notify("Replay has resumed", severity="information")
 
     def action_replay_seek(self):
         tab = self.tab_manager.active_tab
-        if not tab or not tab.dolphie.replay_file:
+        if not tab or not tab.dolphie.replay_file or tab.replay_manager is None:
             return
 
-        def command_get_input(timestamp: str):
-            if timestamp and tab.replay_manager.seek_to_timestamp(timestamp):
+        replay_manager = tab.replay_manager
+
+        def command_get_input(timestamp: object | None) -> None:
+            if isinstance(timestamp, str) and timestamp and replay_manager.seek_to_timestamp(timestamp):
                 self.force_refresh_for_replay()
 
         self.push_screen(
             CommandModal(
                 command=HotkeyCommands.replay_seek,
                 message="What time would you like to seek to?",
-                max_replay_timestamp=tab.replay_manager.max_replay_timestamp,
+                max_replay_timestamp=replay_manager.max_replay_timestamp,
             ),
             command_get_input,
         )
@@ -334,6 +288,8 @@ class DolphieApp(App):
             if previous_tab.worker_timer:
                 previous_tab.worker_timer.stop()
 
+        if event.tab.id is None:
+            return
         self.tab_manager.switch_tab(event.tab.id, set_active=False)
 
         tab = self.tab_manager.active_tab
@@ -353,7 +309,7 @@ class DolphieApp(App):
             for panel in tab.dolphie.panels.get_all_panels():
                 tab.get_panel_widget(panel.name).display = panel.visible
 
-            tab.toggle_metric_graph_tabs_display()
+            tab.sync_shared_ui()
             tab.toggle_entities_displays()
 
             if tab.dolphie.connection_source == ConnectionSource.mysql:
@@ -365,54 +321,29 @@ class DolphieApp(App):
 
             self.force_refresh_for_replay(need_current_data=True)
 
-    @on(TabbedContent.TabActivated, "#metric_graph_tabs")
-    def metric_graph_tab_changed(self, event: TabbedContent.TabActivated):
-        metric_tab_name = event.pane.name
-
-        if metric_tab_name:
-            self.update_graphs(metric_tab_name)
-
-    def update_graphs(self, metric_tab_name: str):
+    def update_graphs(self) -> None:
+        """Refresh the shared dashboard from the active host."""
         tab = self.tab_manager.active_tab
         if not tab or not tab.panel_graphs.display:
             return
 
-        for metric_instance in tab.dolphie.metric_manager.metrics.__dict__.values():
-            if metric_tab_name == metric_instance.tab_name:
-                # Batch all graph and stats label updates into a single rendering cycle
-                with self.batch_update():
-                    for graph_name in metric_instance.graphs:
-                        getattr(tab, graph_name).render_graph(metric_instance, tab.dolphie.metric_manager.datetimes)
-                    self.update_stats_label(metric_tab_name)
-
-    def update_stats_label(self, metric_tab_name: str):
-        stat_data = {}
-
-        for metric_instance in self.tab_manager.active_tab.dolphie.metric_manager.metrics.__dict__.values():
-            if metric_tab_name == metric_instance.tab_name:
-                number_format_func = MetricManager.get_number_format_function(metric_instance, color=True)
-                for metric_name, metric_data in metric_instance.__dict__.items():
-                    if isinstance(metric_data, MetricManager.MetricData) and metric_data.values and metric_data.visible:
-                        if f"graph_{metric_name}" in metric_instance.graphs:
-                            stat_data[metric_data.label] = round(metric_data.values[-1])
-                        else:
-                            stat_data[metric_data.label] = number_format_func(metric_data.values[-1])
-
-        formatted_stat_data = "  ".join(
-            f"[$b_light_blue]{label}[/$b_light_blue] {value}" for label, value in stat_data.items()
-        )
-        getattr(self.tab_manager.active_tab, metric_tab_name).update(formatted_stat_data)
+        with self.batch_update():
+            tab.graph_dashboard.bind_host(tab.dolphie)
 
     def toggle_panel(self, panel_name: str):
+        tab = self.tab_manager.active_tab
+        if tab is None:
+            return
+
         # We store the panel objects in the tab object (i.e. tab.panel_dashboard, tab.panel_processlist, etc.)
-        panel = self.tab_manager.active_tab.get_panel_widget(panel_name)
+        panel = tab.get_panel_widget(panel_name)
 
         new_display_status = not panel.display
 
-        getattr(self.tab_manager.active_tab.dolphie.panels, panel_name).visible = new_display_status
+        getattr(tab.dolphie.panels, panel_name).visible = new_display_status
 
-        if panel_name not in [self.tab_manager.active_tab.dolphie.panels.graphs.name]:
-            self.refresh_panel(self.tab_manager.active_tab, panel_name, toggled=True)
+        if panel_name != tab.dolphie.panels.graphs.name:
+            self.refresh_panel(tab, panel_name, toggled=True)
 
         panel.display = new_display_status
 
@@ -422,7 +353,12 @@ class DolphieApp(App):
         # This function lets us force a refresh of the worker thread when we're in a replay
         tab = self.tab_manager.active_tab
 
-        if tab.dolphie.replay_file and (not tab.worker or not tab.worker.is_running):
+        if (
+            tab is not None
+            and tab.dolphie.replay_file
+            and tab.replay_manager is not None
+            and (not tab.worker or not tab.worker.is_running)
+        ):
             if tab.worker:
                 tab.worker.cancel()
             if tab.worker_timer:
@@ -449,28 +385,6 @@ class DolphieApp(App):
             # When replication panel status is changed, we need to refresh the dashboard panel as well since
             # it adds/removes it from there
             DashboardPanel.create_panel(tab)
-
-    @on(Switch.Changed)
-    def switch_changed(self, event: Switch.Changed):
-        if len(self.screen_stack) > 1 or not self.tab_manager.active_tab:
-            return
-
-        metric_tab_name = event.switch.name
-
-        # The switch id is in the format of metric_instance_name-metric
-        metric_split = event.switch.id.split("-")
-        metric_instance_name = metric_split[0]
-        metric = metric_split[1]
-
-        # Set the visible boolean of the metric data to the switch value
-        metric_instance = getattr(
-            self.tab_manager.active_tab.dolphie.metric_manager.metrics,
-            metric_instance_name,
-        )
-        metric_data: MetricManager.MetricData = getattr(metric_instance, metric)
-        metric_data.visible = event.value
-
-        self.update_graphs(metric_tab_name)
 
     def check_for_new_version(self):
         # Query PyPI API to get the latest version
@@ -526,7 +440,7 @@ class DolphieApp(App):
         self.set_timer(5.0, self._monitor_terminal_disconnect)
 
     async def on_mount(self):
-        self.tab_manager = TabManager(app=self.app, config=self.config)
+        self.tab_manager = TabManager(app=self, config=self.config)
         await self.tab_manager.create_ui_widgets()
 
         self.key_event_manager = KeyEventManager(app=self)
@@ -540,21 +454,22 @@ class DolphieApp(App):
 
             if self.config.tab_setup:
                 self.tab_manager.setup_host_tab(tab)
-            elif self.tab_manager.active_tab.dolphie.replay_file:
-                self.tab_manager.active_tab.replay_manager = ReplayManager(tab.dolphie)
-                if not tab.replay_manager.verify_replay_file():
+            elif tab.dolphie.replay_file:
+                tab.replay_manager = ReplayManager(tab.dolphie)
+                replay_manager = tab.replay_manager
+                if replay_manager is None or not replay_manager.verify_replay_file():
                     tab.replay_manager = None
                     self.tab_manager.setup_host_tab(tab)
                     return
 
                 self.tab_manager.rename_tab(tab)
                 self.tab_manager.update_connection_status(tab=tab, connection_status=ConnectionStatus.connected)
-                self.run_worker_replay(self.tab_manager.active_tab.id)
+                self.run_worker_replay(tab.id)
             else:
-                self.run_worker_main(self.tab_manager.active_tab.id)
+                self.run_worker_main(tab.id)
 
                 if not self.config.daemon_mode:
-                    self.run_worker_replicas(self.tab_manager.active_tab.id)
+                    self.run_worker_replicas(tab.id)
 
         self.check_for_new_version()
 
@@ -564,7 +479,7 @@ class DolphieApp(App):
         yield TopBar(
             host="",
             app_version=__version__,
-            help="press [b highlight]?[/b highlight] for commands",
+            help="press [$b_highlight]?[/] for help",
         )
         yield Tabs(id="host_tabs")
 

@@ -1,14 +1,21 @@
-from collections import deque
-from datetime import datetime
+from collections.abc import Iterator, Mapping
+from datetime import datetime, timedelta
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from textual.worker import Worker, WorkerState, get_current_worker
 
 import dolphie.Modules.MetricManager as MetricManager
-from dolphie.DataTypes import ConnectionSource, ConnectionStatus
+from dolphie.DataTypes import (
+    ConnectionSource,
+    ConnectionStatus,
+    ProcesslistThread,
+    ProxySQLProcesslistThread,
+)
+from dolphie.Modules.Functions import coerce_float, coerce_str
 from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.ReplayManager import ReplayManager
+from dolphie.Modules.MetricDefinitions import MetricData, MetricValue, parse_metric_datetime
+from dolphie.Modules.ReplayManager import MySQLReplayData, ProxySQLReplayData, ReplayManager
 from dolphie.Panels import Replication as ReplicationPanel
 
 if TYPE_CHECKING:
@@ -30,6 +37,32 @@ class WorkerManager:
         """
         self.app = app
 
+    @staticmethod
+    def _replay_datetimes(metric_payload: Mapping[str, Any]) -> list[str]:
+        """Return normalized timestamps from a replay metric payload."""
+        datetimes = metric_payload.get("datetimes", [])
+        return [coerce_str(value) for value in datetimes] if isinstance(datetimes, list) else []
+
+    @staticmethod
+    def _iter_replay_metric_values(
+        metric_manager: MetricManager.MetricManager,
+        metric_payload: Mapping[str, Any],
+    ) -> Iterator[tuple[MetricData, list[MetricValue]]]:
+        """Yield known metric fields and their numeric replay values."""
+        for metric_name, raw_metric_data in metric_payload.items():
+            metric_instance = metric_manager.get_metric_instance(metric_name)
+            if metric_instance is None or not isinstance(raw_metric_data, dict):
+                continue
+
+            for field_name, raw_values in raw_metric_data.items():
+                metric_data = metric_manager.get_metric_data(metric_instance, field_name)
+                if metric_data is None or not isinstance(raw_values, list):
+                    continue
+
+                values = [value for value in raw_values if isinstance(value, (int, float))]
+                if values:
+                    yield metric_data, values
+
     async def run_worker_replay(self, tab_id: str, manual_control: bool = False):
         tab = self.app.tab_manager.get_tab(tab_id)
         if not tab:
@@ -48,10 +81,12 @@ class WorkerManager:
             dolphie = tab.dolphie
 
             tab.replay_manual_control = manual_control
+            active_tab = self.app.tab_manager.active_tab
             if (
                 len(self.app.screen_stack) > 1
                 or (dolphie.pause_refresh and not manual_control)
-                or tab.id != self.app.tab_manager.active_tab.id
+                or active_tab is None
+                or tab.id != active_tab.id
             ):
                 return
 
@@ -67,35 +102,51 @@ class WorkerManager:
 
             # Common data for refreshing
             dolphie.system_utilization = replay_event_data.system_utilization
-            dolphie.global_variables = replay_event_data.global_variables
-            dolphie.global_status = replay_event_data.global_status
-            common_metrics = {
+            dolphie.global_variables = cast(dict[str, int | str], replay_event_data.global_variables)
+            dolphie.global_status = cast(dict[str, int | str], replay_event_data.global_status)
+            common_metrics: dict[str, Any] = {
                 "system_utilization": dolphie.system_utilization,
                 "global_variables": dolphie.global_variables,
                 "global_status": dolphie.global_status,
             }
 
-            dolphie.worker_processing_time = dolphie.global_status.get("replay_polling_latency", 0)
+            dolphie.worker_processing_time = coerce_float(dolphie.global_status.get("replay_polling_latency"))
 
             if dolphie.connection_source == ConnectionSource.mysql:
-                dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("version"))
-                dolphie.binlog_status = replay_event_data.binlog_status
-                dolphie.innodb_metrics = replay_event_data.innodb_metrics
+                if not isinstance(replay_event_data, MySQLReplayData):
+                    raise TypeError("MySQL replay returned a non-MySQL payload")
+
+                dolphie.host_version = dolphie.parse_server_version(coerce_str(dolphie.global_variables.get("version")))
+                dolphie.binlog_status = cast(dict[str, int | str], replay_event_data.binlog_status)
+                dolphie.innodb_metrics = cast(dict[str, int | str], replay_event_data.innodb_metrics)
                 dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
-                dolphie.processlist_threads = replay_event_data.processlist
+                dolphie.processlist_threads = cast(
+                    dict[int, ProcesslistThread | ProxySQLProcesslistThread],
+                    replay_event_data.processlist,
+                )
                 dolphie.replication_status = replay_event_data.replication_status
-                dolphie.replication_applier_status = replay_event_data.replication_applier_status
+                dolphie.replication_applier_status = cast(
+                    dict[str, list[dict[str, int | str]] | int],
+                    replay_event_data.replication_applier_status,
+                )
                 dolphie.metadata_locks = replay_event_data.metadata_locks
-                dolphie.group_replication_members = replay_event_data.group_replication_members
+                dolphie.group_replication_members = cast(
+                    list[dict[str, str]],
+                    replay_event_data.group_replication_members,
+                )
                 dolphie.group_replication_data = replay_event_data.group_replication_data
-                dolphie.galera_cluster_members = replay_event_data.galera_cluster_members
+                dolphie.galera_cluster_members = cast(
+                    list[dict[str, str]],
+                    replay_event_data.galera_cluster_members,
+                )
                 dolphie.file_io_data = replay_event_data.file_io_data
                 dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
                 dolphie.statements_summary_data = replay_event_data.statements_summary_data
 
-                dolphie.pfs_metrics_last_reset_time = dolphie.global_status.get("pfs_metrics_last_reset_time", 0)
+                reset_age = coerce_float(replay_event_data.global_status.get("replay_pfs_metrics_last_reset_time"))
+                dolphie.pfs_metrics_last_reset_time = datetime.now().astimezone() - timedelta(seconds=reset_age)
 
-                connection_source_metrics = {
+                connection_source_metrics: dict[str, Any] = {
                     "innodb_metrics": dolphie.innodb_metrics,
                     "replication_status": dolphie.replication_status,
                 }
@@ -103,12 +154,28 @@ class WorkerManager:
                 if not dolphie.server_uuid:
                     dolphie.configure_mysql_variables()
             elif dolphie.connection_source == ConnectionSource.proxysql:
-                dolphie.host_version = dolphie.parse_server_version(dolphie.global_variables.get("admin-version"))
-                dolphie.proxysql_command_stats = replay_event_data.command_stats
-                dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
-                dolphie.processlist_threads = replay_event_data.processlist
+                if not isinstance(replay_event_data, ProxySQLReplayData):
+                    raise TypeError("ProxySQL replay returned a non-ProxySQL payload")
+
+                dolphie.host_version = dolphie.parse_server_version(
+                    coerce_str(dolphie.global_variables.get("admin-version"))
+                )
+                dolphie.proxysql_command_stats = cast(
+                    list[dict[str, int | str]],
+                    replay_event_data.command_stats,
+                )
+                dolphie.proxysql_hostgroup_summary = cast(
+                    list[dict[str, str]],
+                    replay_event_data.hostgroup_summary,
+                )
+                dolphie.processlist_threads = cast(
+                    dict[int, ProcesslistThread | ProxySQLProcesslistThread],
+                    replay_event_data.processlist,
+                )
 
                 connection_source_metrics = {"proxysql_command_stats": dolphie.proxysql_command_stats}
+            else:
+                raise ValueError(f"Unsupported replay connection source: {dolphie.connection_source}")
 
             # Refresh the metric manager metrics to the state of the replay event
             dolphie.metric_manager.refresh_data(
@@ -119,43 +186,36 @@ class WorkerManager:
 
             # Metrics data is already calculated in the replay event data so we just need to update the values
             is_delta_metrics = replay_event_data.metric_manager.get("_delta", False)
-            new_datetimes = replay_event_data.metric_manager.get("datetimes", [])
+            new_datetimes = self._replay_datetimes(replay_event_data.metric_manager)
 
             if is_delta_metrics:
                 # Delta format from daemon mode
                 new_dt = new_datetimes[0] if new_datetimes else None
-                last_dt = dolphie.metric_manager.datetimes[-1] if dolphie.metric_manager.datetimes else None
+                last_dt = dolphie.metric_manager.latest_datetime()
 
                 is_sequential = False
-                if last_dt is not None and new_dt is not None and new_dt > last_dt:
-                    # Verify the gap isn't too large (e.g. daemon restart after downtime)
-                    try:
-                        dt_fmt = MetricManager.MetricManager.DATETIME_FORMAT
-                        new_dt_parsed = datetime.strptime(new_dt, dt_fmt)
-                        gap = (new_dt_parsed - datetime.strptime(last_dt, dt_fmt)).total_seconds()
-                        is_sequential = gap <= dolphie.refresh_interval * 10
-                    except ValueError:
-                        new_dt_parsed = None
+                new_dt_parsed = parse_metric_datetime(new_dt) if new_dt is not None else None
+                if last_dt is not None and new_dt is not None:
+                    last_dt_parsed = parse_metric_datetime(last_dt)
+                    if new_dt_parsed is not None and last_dt_parsed is not None:
+                        gap = (new_dt_parsed - last_dt_parsed).total_seconds()
+                        is_sequential = 0 < gap <= dolphie.refresh_interval * 10
 
-                if is_sequential:
+                if is_sequential and new_dt is not None:
                     # Normal forward step: append new delta value
-                    dolphie.metric_manager.datetimes.append(new_dt)
-                    for metric_name, metric_data in replay_event_data.metric_manager.items():
-                        metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
-                        if metric_instance:
-                            for field_name, metric_values in metric_data.items():
-                                metric: MetricManager.MetricData = metric_instance.__dict__.get(field_name)
-                                if metric and metric_values:
-                                    metric.values.append(metric_values[0])
-                                    metric.last_value = metric_values[0]
-
-                    # Trim to rolling window
-                    if new_dt_parsed:
-                        dolphie.metric_manager.trim_datetimes_to_window(new_dt_parsed)
+                    metric_values = [
+                        (metric_data, values[0])
+                        for metric_data, values in self._iter_replay_metric_values(
+                            dolphie.metric_manager,
+                            replay_event_data.metric_manager,
+                        )
+                    ]
+                    dolphie.metric_manager.append_replay_history(new_dt, metric_values, new_dt_parsed)
                 else:
                     # Non-sequential (backward, seek, or first event): rebuild the rolling window
                     metrics_list = tab.replay_manager.fetch_delta_metrics_for_window(
-                        tab.replay_manager.current_replay_id
+                        tab.replay_manager.current_replay_id,
+                        window_minutes=dolphie.metric_manager.rolling_window_minutes,
                     )
 
                     # Old format entries contain complete snapshots so skip to the last one
@@ -167,38 +227,22 @@ class WorkerManager:
                     if last_full_idx >= 0:
                         metrics_list = metrics_list[last_full_idx:]
 
-                    # Clear existing metrics
-                    dolphie.metric_manager.datetimes.clear()
-                    for metric_data_obj in dolphie.metric_manager._all_metrics_data_history:
-                        metric_data_obj.values.clear()
-
                     # Rebuild from the window entries
+                    replay_history = []
                     for entry in metrics_list:
-                        entry_datetimes = entry.get("datetimes", [])
-                        if entry_datetimes:
-                            dolphie.metric_manager.datetimes.extend(entry_datetimes)
-
-                        for metric_name, metric_data in entry.items():
-                            if metric_name in ("datetimes", "_delta"):
-                                continue
-                            metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
-                            if metric_instance:
-                                for field_name, metric_values in metric_data.items():
-                                    metric: MetricManager.MetricData = metric_instance.__dict__.get(field_name)
-                                    if metric and metric_values:
-                                        metric.values.extend(metric_values)
-                                        metric.last_value = metric_values[-1]
+                        entry_datetimes = self._replay_datetimes(entry)
+                        metric_values = list(self._iter_replay_metric_values(dolphie.metric_manager, entry))
+                        replay_history.append((entry_datetimes, metric_values))
+                    dolphie.metric_manager.rebuild_replay_history(replay_history)
             else:
                 # Full format: replace values entirely
-                dolphie.metric_manager.datetimes = deque(new_datetimes)
-                for metric_name, metric_data in replay_event_data.metric_manager.items():
-                    metric_instance = dolphie.metric_manager.metrics.__dict__.get(metric_name)
-                    if metric_instance:
-                        for field_name, metric_values in metric_data.items():
-                            metric: MetricManager.MetricData = metric_instance.__dict__.get(field_name)
-                            if metric:
-                                metric.values = deque(metric_values)
-                                metric.last_value = metric_values[-1]
+                metric_values = list(
+                    self._iter_replay_metric_values(
+                        dolphie.metric_manager,
+                        replay_event_data.metric_manager,
+                    )
+                )
+                dolphie.metric_manager.replace_replay_history(new_datetimes, metric_values)
 
         except Exception as e:
             # Catch any errors during replay and log them without crashing the app
@@ -234,7 +278,7 @@ class WorkerManager:
                 self.app.call_from_thread(
                     self.app.tab_manager.update_connection_status,
                     tab=tab,
-                    connection_status=ConnectionStatus.connecting
+                    connection_status=ConnectionStatus.connecting,
                 )
 
                 tab.replay_manager = None
@@ -242,6 +286,7 @@ class WorkerManager:
                     # Display property triggers UI updates, must be called from main thread
                     def show_loading():
                         tab.loading_indicator.display = True
+
                     self.app.call_from_thread(show_loading)
 
                 dolphie.db_connect()
@@ -302,11 +347,13 @@ class WorkerManager:
         dolphie = tab.dolphie
 
         if dolphie.panels.replication.visible:
-            if tab.id != self.app.tab_manager.active_tab.id:
+            active_tab = self.app.tab_manager.active_tab
+            if active_tab is None or tab.id != active_tab.id:
                 return
 
             if dolphie.replica_manager.available_replicas:
                 if not dolphie.replica_manager.replicas:
+
                     def update_replicas_ui():
                         tab.replicas_container.display = True
                         tab.replicas_loading_indicator.display = True
@@ -314,6 +361,7 @@ class WorkerManager:
                             f"[$white][b]Loading [$highlight]{len(dolphie.replica_manager.available_replicas)}"
                             "[/$highlight] replicas...\n"
                         )
+
                     self.app.call_from_thread(update_replicas_ui)
 
                 ReplicationPanel.fetch_replicas(tab)
@@ -321,6 +369,7 @@ class WorkerManager:
                 # Display property triggers UI updates, must be called from main thread
                 def hide_replicas():
                     tab.replicas_container.display = False
+
                 self.app.call_from_thread(hide_replicas)
         else:
             # If we're not displaying the replication panel, remove all replica connections
@@ -335,6 +384,7 @@ class WorkerManager:
             return
 
         dolphie = tab.dolphie
+        active_tab = self.app.tab_manager.active_tab
 
         if event.worker.group == "main":
             if event.state == WorkerState.SUCCESS:
@@ -350,14 +400,15 @@ class WorkerManager:
                     or dolphie.pause_refresh
                     or not dolphie.main_db_connection.is_connected()
                     or dolphie.daemon_mode
-                    or tab.id != self.app.tab_manager.active_tab.id
+                    or active_tab is None
+                    or tab.id != active_tab.id
                 ):
                     tab.worker_timer = self.app.set_timer(refresh_interval, partial(self.app.run_worker_main, tab.id))
 
                     return
 
                 if not tab.main_container.display:
-                    tab.toggle_metric_graph_tabs_display()
+                    tab.sync_shared_ui()
 
                 if dolphie.connection_source == ConnectionSource.mysql:
                     self.app.worker_data_processor.refresh_screen_mysql(tab)
@@ -378,7 +429,7 @@ class WorkerManager:
 
                     logger.critical(tab.worker_cancel_error)
 
-                    if self.app.tab_manager.active_tab.id != tab.id or self.app.tab_manager.loading_hostgroups:
+                    if active_tab is None or active_tab.id != tab.id or self.app.tab_manager.loading_hostgroups:
                         self.app.notify(
                             (
                                 f"[$b_light_blue]{dolphie.host}:{dolphie.port}[/$b_light_blue]: "
@@ -400,7 +451,8 @@ class WorkerManager:
                 if (
                     len(self.app.screen_stack) > 1
                     or dolphie.pause_refresh
-                    or tab.id != self.app.tab_manager.active_tab.id
+                    or active_tab is None
+                    or tab.id != active_tab.id
                 ):
                     tab.replicas_worker_timer = self.app.set_timer(
                         dolphie.refresh_interval,
@@ -416,7 +468,7 @@ class WorkerManager:
                     partial(self.app.run_worker_replicas, tab.id),
                 )
         elif event.worker.group == "replay" and event.state == WorkerState.SUCCESS:
-            if tab.id == self.app.tab_manager.active_tab.id:
+            if active_tab is not None and tab.id == active_tab.id:
                 if len(self.app.screen_stack) > 1 or (dolphie.pause_refresh and not tab.replay_manual_control):
                     tab.worker_timer = self.app.set_timer(
                         dolphie.refresh_interval,
@@ -431,7 +483,7 @@ class WorkerManager:
             self.app.worker_data_processor.monitor_read_only_change(tab)
 
             if not tab.main_container.display:
-                tab.toggle_metric_graph_tabs_display()
+                tab.sync_shared_ui()
 
             if dolphie.connection_source == ConnectionSource.mysql:
                 self.app.worker_data_processor.refresh_screen_mysql(tab)

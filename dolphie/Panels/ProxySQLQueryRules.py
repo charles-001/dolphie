@@ -1,9 +1,8 @@
-from dolphie.Modules.Functions import format_number
+from dolphie.Modules.Functions import coerce_int, coerce_str, format_number
 from dolphie.Modules.TabManager import Tab
-from textual.widgets import DataTable
 
 
-def create_panel(tab: Tab) -> DataTable:
+def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
 
     all_columns = {
@@ -101,6 +100,7 @@ def create_panel(tab: Tab) -> DataTable:
     }
 
     mysql_query_rules = tab.proxysql_mysql_query_rules_datatable
+    per_second_data = dolphie.proxysql_per_second_data
 
     # Clear table if columns change
     if len(mysql_query_rules.columns) != len(columns_filtered):
@@ -140,37 +140,40 @@ def create_panel(tab: Tab) -> DataTable:
                 mysql_query_rules.clear()
 
         for row in dolphie.proxysql_mysql_query_rules:
-            row_id = row["rule_id"]
+            row_id = coerce_str(row.get("rule_id"))
+            if not row_id:
+                continue
 
             row_values = []
-            for column_key, column_format in zip(column_keys, column_formats):
+            for column_key, column_format in zip(column_keys, column_formats, strict=True):
                 column_value = row.get(column_key)
 
                 # Calculate the values per second for the following columns
                 if column_key in ["hits_s"]:
-                    previous_value = dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0)
+                    previous_value = per_second_data.get(row_id, {}).get(column_key, 0)
                     if not previous_value:
-                        column_value = "[dark_gray]0"
+                        column_value = "[$dark_gray]0"
                     else:
                         current_value = int(column_value or 0)
                         value_diff = current_value - previous_value
                         column_value = round(value_diff / polling_latency) if polling_latency > 0 else 0
 
-                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = int(row.get(column_key, 0))
+                    per_second_data.setdefault(row_id, {})[column_key] = coerce_int(row.get(column_key))
 
                 if column_key in ["apply", "log"]:
                     column_value = "Yes" if column_value == "1" else "No"
 
                 if column_format == "number":
-                    column_value = format_number(column_value)
+                    column_value = format_number(0 if column_value is None else column_value)
 
                 if column_value is None:
-                    column_value = "[dark_gray]N/A"
+                    column_value = "[$dark_gray]N/A"
                 elif column_value == "0":
-                    column_value = "[dark_gray]0"
+                    column_value = "[$dark_gray]0"
 
                 row_values.append(column_value)
 
+            row_values = mysql_query_rules.normalize_cells(row_values)
             if row_id in mysql_query_rules.rows:
                 datatable_row = mysql_query_rules.get_row(row_id)
 
@@ -181,6 +184,5 @@ def create_panel(tab: Tab) -> DataTable:
                 mysql_query_rules.add_row(*row_values, key=row_id)
 
     tab.proxysql_mysql_query_rules_title.update(
-        f"{dolphie.panels.proxysql_mysql_query_rules.title} "
-        f"([$highlight]{mysql_query_rules.row_count}[/$highlight])"
+        f"{dolphie.panels.proxysql_mysql_query_rules.title} ([$highlight]{mysql_query_rules.row_count}[/$highlight])"
     )

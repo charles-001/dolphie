@@ -1,9 +1,8 @@
-from dolphie.Modules.Functions import format_bytes, format_time
+from dolphie.Modules.Functions import coerce_int, format_bytes, format_time
 from dolphie.Modules.TabManager import Tab
-from textual.widgets import DataTable
 
 
-def create_panel(tab: Tab) -> DataTable:
+def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
 
     columns = {
@@ -34,16 +33,16 @@ def create_panel(tab: Tab) -> DataTable:
         for ddl in dolphie.ddl:
             row_values = []
 
-            for column_key, column_format in zip(column_keys, column_formats):
+            for column_key, column_format in zip(column_keys, column_formats, strict=True):
                 if column_format == "time":
-                    value = format_time(ddl[column_key], picoseconds=True)
+                    value = format_time(coerce_int(ddl[column_key]), picoseconds=True)
                 elif column_format == "bytes":
-                    value = format_bytes(ddl[column_key])
+                    value = format_bytes(coerce_int(ddl[column_key]))
                 else:
                     value = ddl[column_key]
 
                 row_values.append(value)
 
-            ddl_datatable.add_row(*row_values, key=ddl["processlist_id"])
+            ddl_datatable.add_row(*row_values, key=str(ddl["processlist_id"]))
 
-    tab.ddl_title.update(f"{dolphie.panels.ddl.title} " f"([$highlight]{ddl_datatable.row_count}[/$highlight])")
+    tab.ddl_title.update(f"{dolphie.panels.ddl.title} ([$highlight]{ddl_datatable.row_count}[/$highlight])")

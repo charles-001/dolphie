@@ -1,12 +1,14 @@
+from __future__ import annotations
+
+from rich.syntax import Syntax
+
 from dolphie.DataTypes import ProcesslistThread, ProxySQLProcesslistThread
-from dolphie.Modules.Functions import format_query
+from dolphie.Modules.Functions import coerce_int, format_query
 from dolphie.Modules.Queries import ProxySQLQueries
 from dolphie.Modules.TabManager import Tab
-from rich.syntax import Syntax
-from textual.widgets import DataTable
 
 
-def create_panel(tab: Tab) -> DataTable:
+def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
 
     columns = [
@@ -53,10 +55,11 @@ def create_panel(tab: Tab) -> DataTable:
         column_names.append(column_data["name"])
         column_fields.append(column_data["field"])
 
-    threads_to_render: dict[str, ProxySQLProcesslistThread] = {}
+    threads_to_render: dict[int, ProcesslistThread | ProxySQLProcesslistThread] = {}
     if dolphie.replay_file:
         for thread_id, thread in dolphie.processlist_threads.items():
-            thread: ProxySQLProcesslistThread
+            if not isinstance(thread, ProxySQLProcesslistThread):
+                continue
 
             # Check each filter condition and skip thread if it doesn't match
             if dolphie.user_filter and dolphie.user_filter != thread.user:
@@ -88,7 +91,8 @@ def create_panel(tab: Tab) -> DataTable:
     with dolphie.app.batch_update():
         # Remove stale rows first
         if threads_to_render:
-            rows_to_remove = set(processlist_datatable.rows.keys()) - set(threads_to_render.keys())
+            active_row_keys = {str(thread_id) for thread_id in threads_to_render}
+            rows_to_remove = set(processlist_datatable.rows.keys()) - active_row_keys
             if rows_to_remove:
                 changed = True
                 if len(rows_to_remove) > len(threads_to_render):
@@ -102,7 +106,10 @@ def create_panel(tab: Tab) -> DataTable:
                 processlist_datatable.clear()
 
         for thread_id, thread in threads_to_render.items():
-            thread: ProxySQLProcesslistThread
+            if not isinstance(thread, ProxySQLProcesslistThread):
+                continue
+
+            row_key = str(thread_id)
 
             row_values = []
             for column_field in column_fields:
@@ -111,10 +118,11 @@ def create_panel(tab: Tab) -> DataTable:
                     value = format_query(value.code[:query_length_max])
                 row_values.append(value)
 
-            if thread_id in processlist_datatable.rows:
-                datatable_row = processlist_datatable.get_row(thread_id)
+            row_values = processlist_datatable.normalize_cells(row_values)
+            if row_key in processlist_datatable.rows:
+                datatable_row = processlist_datatable.get_row(row_key)
 
-                for column_id, (column_name, column_field) in enumerate(zip(column_names, column_fields)):
+                for column_id, (column_name, column_field) in enumerate(zip(column_names, column_fields, strict=True)):
                     new_val = row_values[column_id]
                     old_val = datatable_row[column_id]
 
@@ -125,14 +133,14 @@ def create_panel(tab: Tab) -> DataTable:
                     if cmp_new != cmp_old or column_field == "formatted_time" or column_field == "time":
                         changed = True
                         processlist_datatable.update_cell(
-                            thread_id,
+                            row_key,
                             column_name,
                             new_val,
                             update_width=(column_field == "formatted_query"),
                         )
             else:
                 changed = True
-                processlist_datatable.add_row(*row_values, key=thread_id)
+                processlist_datatable.add_row(*row_values, key=row_key)
 
         if changed:
             processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
@@ -141,11 +149,11 @@ def create_panel(tab: Tab) -> DataTable:
         dolphie.processlist_threads = threads_to_render
 
     tab.processlist_title.update(
-        f"{dolphie.panels.processlist.title} " f"([$highlight]{processlist_datatable.row_count}[/$highlight])"
+        f"{dolphie.panels.processlist.title} ([$highlight]{processlist_datatable.row_count}[/$highlight])"
     )
 
 
-def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
+def fetch_data(tab: Tab) -> dict[int, ProcesslistThread | ProxySQLProcesslistThread]:
     dolphie = tab.dolphie
 
     ########################
@@ -205,6 +213,6 @@ def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
         thread["backend_host"] = dolphie.get_hostname(thread["backend_host"])
         thread["query"] = thread["query"] or ""
 
-        processlist_threads[str(thread["id"])] = ProxySQLProcesslistThread(thread)
+        processlist_threads[coerce_int(thread["id"])] = ProxySQLProcesslistThread(thread)
 
     return processlist_threads

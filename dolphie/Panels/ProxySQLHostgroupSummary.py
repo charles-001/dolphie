@@ -1,10 +1,8 @@
-from textual.widgets import DataTable
-
-from dolphie.Modules.Functions import format_bytes, format_number
+from dolphie.Modules.Functions import coerce_str, format_bytes, format_number
 from dolphie.Modules.TabManager import Tab
 
 
-def create_panel(tab: Tab) -> DataTable:
+def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
 
     columns = {
@@ -52,19 +50,25 @@ def create_panel(tab: Tab) -> DataTable:
         column_formats.append(column_data["format"])
 
     changed = False
+    valid_rows = []
+    for row in dolphie.proxysql_hostgroup_summary:
+        hostgroup = coerce_str(row.get("hostgroup"))
+        host = coerce_str(row.get("srv_host"))
+        port = coerce_str(row.get("srv_port"))
+        if not hostgroup or not host or not port:
+            continue
+        valid_rows.append((row, f"{hostgroup}_{host}_{port}"))
 
     with dolphie.app.batch_update():
         # Remove stale rows first
-        if dolphie.proxysql_hostgroup_summary:
-            current_rows = {
-                f"{row['hostgroup']}_{row['srv_host']}_{row['srv_port']}" for row in dolphie.proxysql_hostgroup_summary
-            }
+        if valid_rows:
+            current_rows = {row_id for _, row_id in valid_rows}
             existing_rows = set(hostgroup_summary_datatable.rows.keys())
 
             rows_to_remove = existing_rows - current_rows
             if rows_to_remove:
                 changed = True
-                if len(rows_to_remove) > len(dolphie.proxysql_hostgroup_summary):
+                if len(rows_to_remove) > len(valid_rows):
                     hostgroup_summary_datatable.clear()
                 else:
                     for row_id in rows_to_remove:
@@ -75,11 +79,9 @@ def create_panel(tab: Tab) -> DataTable:
                 hostgroup_summary_datatable.clear()
 
         # Iterate through hostgroup summary data
-        for row in dolphie.proxysql_hostgroup_summary:
-            row_id = f"{row['hostgroup']}_{row['srv_host']}_{row['srv_port']}"
-
+        for row, row_id in valid_rows:
             row_values = []
-            for column_key, column_format in zip(column_keys, column_formats):
+            for column_key, column_format in zip(column_keys, column_formats, strict=True):
                 column_value = row.get(column_key, 0)
 
                 if column_format == "time":
@@ -91,17 +93,18 @@ def create_panel(tab: Tab) -> DataTable:
                 elif column_key == "hostgroup":
                     column_value = int(column_value)
                 elif column_key == "srv_host":
-                    column_value = dolphie.get_hostname(column_value)
+                    column_value = dolphie.get_hostname(coerce_str(column_value))
                 elif column_key == "status":
-                    column_value = "[green]ONLINE" if column_value == "ONLINE" else f"[red]{column_value}"
+                    column_value = "[$green]ONLINE" if column_value == "ONLINE" else f"[$red]{column_value}"
                 elif column_key == "use_ssl":
                     column_value = "ON" if column_value == "1" else "OFF"
 
                 if column_key != "hostgroup" and (column_value == "0" or column_value == 0):
-                    column_value = "[dark_gray]0"
+                    column_value = "[$dark_gray]0"
 
                 row_values.append(column_value)
 
+            row_values = hostgroup_summary_datatable.normalize_cells(row_values)
             if row_id in hostgroup_summary_datatable.rows:
                 datatable_row = hostgroup_summary_datatable.get_row(row_id)
 

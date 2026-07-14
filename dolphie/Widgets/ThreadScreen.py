@@ -1,12 +1,14 @@
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+
+from rich.console import RenderableType
 from rich.style import Style
-from rich.text import Text
+from rich.syntax import Syntax
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Center, Container, Horizontal, ScrollableContainer
-from textual.screen import Screen
+from textual.containers import Center, Container, ScrollableContainer
 from textual.widgets import (
-    Button,
-    DataTable,
     Label,
     Rule,
     Static,
@@ -16,14 +18,16 @@ from textual.widgets import (
 )
 from textual.widgets.text_area import TextAreaTheme
 
-from dolphie.Modules.Functions import format_number
-from dolphie.Widgets.TopBar import TopBar
+from dolphie.DataTypes import DatabaseScalar
+from dolphie.Modules.Functions import coerce_float, format_number
+from dolphie.Modules.Theme import ThemedDataTable as DataTable
+from dolphie.Widgets.DolphieScreen import DolphieScreen, ScreenContext
 
 
-class ThreadScreen(Screen):
+class ThreadScreen(DolphieScreen):
     CSS = """
         ThreadScreen {
-            background: #0a0e1b;
+            background: $background;
 
             & #explain_table {
                 margin-top: 1;
@@ -53,7 +57,7 @@ class ThreadScreen(Screen):
             & .title {
                 width: 100%;
                 content-align: center middle;
-                color: #bbc8e8;
+                color: $light_blue;
                 text-style: bold;
             }
 
@@ -69,7 +73,7 @@ class ThreadScreen(Screen):
                 layout: horizontal;
             }
 
-            & ScrollableContainer {
+            & #thread_container ScrollableContainer {
                 height: auto;
                 width: 50vw;
                 max-height: 15;
@@ -77,7 +81,7 @@ class ThreadScreen(Screen):
 
             & .table {
                 content-align: center middle;
-                background: #0f1525;
+                background: $surface;
                 border: tall #1d253e;
                 padding-left: 1;
                 padding-right: 1;
@@ -89,49 +93,27 @@ class ThreadScreen(Screen):
                 max-height: 25;
             }
 
-            & .copy-button {
-                margin-left: 1;
-                margin-right: 1;
-                background: #1d253e;
-                color: #bbc8e8;
-                border: tall #2F3C59;
-            }
-
-            & .copy-button:hover {
-                background: #2F3C59;
-                color: #ffffff;
-            }
-
-            & .copy-buttons {
-                margin-bottom: 1;
-            }
         }
 
     """
 
     BINDINGS = [
-        Binding("q", "app.pop_screen", "", show=False),
-        Binding("c", "copy_query", "Copy Query", show=True),
+        Binding("c", "copy_query", "Copy Query"),
+        Binding("j", "copy_json", "Copy JSON"),
     ]
 
     def __init__(
         self,
-        connection_status: str,
-        app_version: str,
-        host: str,
-        thread_table: str,
-        user_thread_attributes_table: str,
-        query: str,
-        explain_data: str,
-        explain_json_data: str,
-        explain_failure: str,
-        transaction_history_table: str,
+        context: ScreenContext,
+        thread_table: RenderableType,
+        user_thread_attributes_table: RenderableType | None,
+        query: Syntax | None,
+        explain_data: Sequence[Mapping[str, DatabaseScalar]] | None,
+        explain_json_data: str | None,
+        explain_failure: str | None,
+        transaction_history_table: RenderableType | None,
     ):
-        super().__init__()
-
-        self.connection_status = connection_status
-        self.app_version = app_version
-        self.host = host
+        super().__init__(context)
 
         self.thread_table = thread_table
         self.user_thread_attributes_table = user_thread_attributes_table
@@ -142,6 +124,8 @@ class ThreadScreen(Screen):
         self.transaction_history_table = transaction_history_table
 
         dracula = TextAreaTheme.get_builtin_theme("dracula")
+        if dracula is None:
+            raise RuntimeError("Textual's built-in dracula theme is unavailable")
         dracula.base_style = Style(bgcolor="#101626")
         dracula.gutter_style = Style(color="#606e88")
         dracula.cursor_line_gutter_style = Style(color="#95a7c7", bgcolor="#20243b")
@@ -155,7 +139,7 @@ class ThreadScreen(Screen):
 
         self.explain_json_text_area = TextArea(theme="dracula", show_line_numbers=True, read_only=True)
 
-    def copy_to_clipboard(self, text: str, content_type: str = "content"):
+    def _copy_to_clipboard(self, text: str, content_type: str = "content"):
         """Copy text to clipboard and show notification."""
         try:
             self.app.copy_to_clipboard(text)
@@ -165,44 +149,43 @@ class ThreadScreen(Screen):
 
     def action_copy_query(self) -> None:
         """Action to copy the query via keyboard shortcut."""
-        if self.formatted_query:
-            self.copy_to_clipboard(self.formatted_query.code, "query")
-        else:
-            self.notify("No query to copy", severity="warning")
+        if self.formatted_query is not None:
+            self._copy_to_clipboard(self.formatted_query.code, "query")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """Handle button press events."""
-        if event.button.id == "copy_query_btn":
-            if self.formatted_query:
-                self.copy_to_clipboard(self.formatted_query.code, "query")
-            else:
-                self.notify("No query to copy", severity="warning")
-        elif event.button.id == "copy_json_btn":
-            if self.explain_json_data:
-                self.copy_to_clipboard(self.explain_json_data, "JSON data")
-            else:
-                self.notify("No JSON data to copy", severity="warning")
+    def action_copy_json(self) -> None:
+        """Copy the JSON explain plan via keyboard shortcut."""
+        if self.explain_json_data is not None:
+            self._copy_to_clipboard(self.explain_json_data, "JSON data")
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Hide copy commands when the corresponding content is unavailable."""
+        if action == "copy_query":
+            return bool(self.formatted_query)
+        if action == "copy_json":
+            return bool(self.explain_json_data)
+        return True
 
     def on_mount(self):
-        self.query_one("#thread_table").update(self.thread_table)
-        self.query_one("#query").update(self.formatted_query)
+        self.query_one("#thread_table", Static).update(self.thread_table)
+        if self.formatted_query is not None:
+            self.query_one("#query", Static).update(self.formatted_query)
 
         if self.transaction_history_table:
-            self.query_one("#transaction_history_table").update(self.transaction_history_table)
+            self.query_one("#transaction_history_table", Static).update(self.transaction_history_table)
         else:
-            self.query_one("#transaction_history_container").display = False
+            self.query_one("#transaction_history_container", Container).display = False
 
         if self.user_thread_attributes_table:
-            self.query_one("#user_thread_attributes_table").update(self.user_thread_attributes_table)
+            self.query_one("#user_thread_attributes_table", Static).update(self.user_thread_attributes_table)
         else:
-            self.query_one("#user_thread_attributes_table").display = False
+            self.query_one("#user_thread_attributes_table", Static).display = False
 
         if self.formatted_query:
             if self.explain_failure:
-                self.query_one("#explain_tabbed_content").display = False
-                self.query_one("#explain_failure").update(Text.from_markup(self.explain_failure))
+                self.query_one("#explain_tabbed_content", TabbedContent).display = False
+                self.query_one("#explain_failure", Label).update(self.explain_failure)
             elif self.explain_data:
-                self.query_one("#explain_failure").display = False
+                self.query_one("#explain_failure", Label).display = False
 
                 explain_table = self.query_one("#explain_table", DataTable)
 
@@ -216,32 +199,31 @@ class ThreadScreen(Screen):
 
                         # Don't duplicate columns
                         if column not in columns:
-                            explain_table.add_column(f"[label]{column}")
+                            explain_table.add_column(f"[$label]{column}")
                             columns.append(column)
 
                         if column == "key" and value is None:
-                            value = "[b white on #B30000]NO INDEX[/b white on #B30000]"
+                            value = "[b $white on #B30000]NO INDEX[/]"
 
-                        if column == "rows":
-                            value = format_number(value)
+                        if column == "rows" and value is not None:
+                            value = format_number(coerce_float(value))
 
                         values.append(str(value))
 
                     explain_table.add_row(*values)
             else:
-                self.query_one("#explain_table").display = False
-                self.query_one("#explain_failure").display = False
+                self.query_one("#explain_table", DataTable).display = False
+                self.query_one("#explain_failure", Label).display = False
         else:
-            self.query_one("#query_container").display = False
+            self.query_one("#query_container", Container).display = False
 
         if self.explain_json_data:
             self.explain_json_text_area.text = self.explain_json_data
         else:
-            self.query_one("#explain_tabbed_content").display = False
+            self.query_one("#explain_tabbed_content", TabbedContent).display = False
 
-    def compose(self) -> ComposeResult:
-        yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
-
+    def compose_content(self) -> ComposeResult:
+        """Compose thread context, query plans, and transaction history."""
         with Container(id="thread_container", classes="container"):
             with Container():
                 yield Label("Thread Details", classes="title")
@@ -252,18 +234,6 @@ class ThreadScreen(Screen):
 
         with Container(id="query_container", classes="container"):
             yield Rule(line_style="heavy")
-
-            # Only show copy buttons if there's data to copy
-            copy_buttons = []
-            if self.formatted_query:
-                copy_buttons.append(Button("📋 Copy Query", id="copy_query_btn", classes="copy-button"))
-            if self.explain_json_data:
-                copy_buttons.append(Button("📋 Copy JSON", id="copy_json_btn", classes="copy-button"))
-
-            # Only create the horizontal container if there are buttons to show
-            if copy_buttons:
-                with Horizontal(classes="button_container copy-buttons"):
-                    yield from copy_buttons
 
             yield Label("Query", classes="title")
             yield Center(Static(id="query", shrink=True, classes="table"))

@@ -8,18 +8,17 @@
     scrollbar-color-hover: #404f71;
     scrollbar-color-active: #4f608a;
 
-    color: #e9e9e9;
+    color: $foreground;
 }
 
 #_default, CommandScreen, EventLog {
-    background: #0a0e1b;
+    background: $background;
 }
 
 Screen.-maximized-view {
     height: 100%;
 
-    & .metric_graph_container,
-    & .metric_graph_container2,
+    & .metric-graph-row,
     & TabPane {
         height: 1fr !important;
     }
@@ -48,22 +47,22 @@ Center > * {
 
 /* --- Data Tables --- */
 DataTable {
-    background: #0f1525;
+    background: $surface;
     overflow-x: hidden;
     max-height: 40;
 
     &:focus {
-        background-tint: #0f1525;
+        background-tint: $surface;
     }
     & > .datatable--odd-row {
         background: #131a2c;
     }
     & > .datatable--even-row {
-        background: #0f1525;
+        background: $surface;
     }
     & > .datatable--header {
         background: transparent;
-        color: #c5c7d2;
+        color: $label;
     }
 }
 
@@ -95,7 +94,7 @@ Toast {
     width: auto;
     max-width: 50%;
     background: #20283e;
-    border-right: wide #192036;
+    border-right: wide $panel;
 
     &.-information { border-left: wide #788bc9; }
     &.-warning     { border-left: wide #f0e357; }
@@ -116,7 +115,7 @@ CommandPalette {
     background: #0d1015 70%;
 
     & > Vertical {
-        background: #0a0e1b;
+        background: $background;
     }
     & #--input {
         border-top: hkey #1c2440;
@@ -142,7 +141,7 @@ CommandList {
 }
 
 CommandInput, CommandInput:focus {
-    background: #0a0e1b !important;
+    background: $background !important;
     width: 1fr !important;
     border: blank !important;
     padding-left: 0 !important;
@@ -193,7 +192,7 @@ AutoComplete {
 /* --- Top Bar --- */
 TopBar {
     dock: top;
-    background: #192036;
+    background: $panel;
     height: 1;
     layout: horizontal;
 
@@ -202,7 +201,7 @@ TopBar {
         content-align: left middle;
     }
     & #topbar_host {
-        color: #bbc8e8;
+        color: $light_blue;
         width: 70%;
         content-align: center middle;
         text-style: bold;
@@ -214,9 +213,35 @@ TopBar {
     }
 }
 
+Footer {
+    width: 100%;
+    color: $label;
+    background: $panel;
+
+    FooterKey,
+    FooterLabel,
+    .footer-key--key,
+    .footer-key--description {
+        background: $panel;
+    }
+
+    FooterKey {
+        margin-right: 1;
+    }
+
+    .footer-key--key {
+        color: $highlight;
+        text-style: bold;
+    }
+
+    .footer-key--description {
+        color: $label;
+    }
+}
+
 /* --- Dashboard & Replay --- */
 .panel_title {
-    color: #bbc8e8;
+    color: $light_blue;
     text-style: bold;
     width: 100%;
     content-align: center middle;
@@ -255,11 +280,11 @@ TopBar {
 
     & > #bar { width: 65; }
     & > #bar > .bar--bar {
-        color: #91abec;
+        color: $highlight;
         background: #3a3f51;
     }
     & > #bar > .bar--complete {
-        color: #54efae;
+        color: $green;
     }
 }
 
@@ -281,7 +306,7 @@ TopBar {
     /* Combine hover and focus */
     &:hover, &:focus {
         background: transparent;
-        color: #91abec;
+        color: $highlight;
         text-style: bold;
         border: none;
         tint: transparent 0%;
@@ -297,7 +322,7 @@ TopBar {
 
     /* Boundary-disabled (start/end of replay): dim and non-interactive */
     &:disabled {
-        color: #969aad;
+        color: $dark_gray;
         text-style: none;
         background: transparent;
         tint: transparent 0%;
@@ -308,13 +333,13 @@ TopBar {
 .panel_container {
     height: auto;
     width: 100%;
-    background: #0f1525;
+    background: $surface;
     border: tall #1b233a;
     margin-bottom: 1;
 
     & > Label {
         width: 100%;
-        color: #bbc8e8;
+        color: $light_blue;
         text-style: bold;
         content-align: center middle;
     }
@@ -330,13 +355,69 @@ TopBar {
 }
 
 #panel_graphs {
-    & .metric_graph_container, 
-    & .metric_graph_container2  {
+    & MetricGraphDashboard {
+        height: auto;
+    }
+
+    & .metric-graph-row {
         height: 19;
     }
-    & .metric_graph_stats {
+
+    & .metric-controls-row {
+        height: 2;
         width: 100%;
-        content-align: center middle;
+    }
+
+    & .metric-series-controls {
+        align: center middle;
+        height: 2;
+        width: 1fr;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-size-horizontal: 1;
+    }
+
+    & .metric-controls-overflow {
+        color: $dark_gray;
+        content-align: right middle;
+        height: 2;
+        width: 3;
+    }
+
+    & .metric-control-group {
+        height: 1;
+        width: auto;
+    }
+
+    & .metric-control-group-label {
+        color: $dark_gray;
+        height: 1;
+        margin-right: 1;
+        text-style: bold;
+        width: auto;
+    }
+}
+
+MetricSeriesControl {
+    height: 1;
+    width: auto;
+    margin-right: 2;
+
+    &:focus {
+        background: $surface;
+        text-style: bold;
+    }
+
+    & > .metric-series-label {
+        height: 1;
+        width: auto;
+        content-align: left middle;
+    }
+
+    & > .metric-series-switch {
+        height: 1;
+        margin-left: 1;
+        width: auto;
     }
 }
 
@@ -355,7 +436,7 @@ TopBar {
 
         & > ScrollableContainer {
             content-align: center top;
-            background: #0f1525;
+            background: $surface;
             border: tall #1b233a;
             height: auto;
             max-height: 22;
@@ -379,7 +460,7 @@ TopBar {
 
         & > ScrollableContainer {
             content-align: center top;
-            background: #0f1525;
+            background: $surface;
             border: tall #1b233a;
             height: auto;
             max-height: 18;
@@ -400,7 +481,7 @@ TopBar {
         grid-gutter: 1 0;
         
         & > ScrollableContainer  {
-            background: #0f1525;
+            background: $surface;
             border: tall #1b233a;
             height: auto;
             max-height: 20;
@@ -425,7 +506,7 @@ Tabs {
     margin-top: 1;
 
     &:focus {
-        & .-active { background: #0a0e1b; }
+        & .-active { background: $background; }
         & .underline--bar { color: #caddfe; }
     }
 }
@@ -472,7 +553,7 @@ SelectCurrent {
     border: none;
 
     & Static#label { color: #606e88; }
-    &.-has-value Static#label { color: #e9e9e9; }
+    &.-has-value Static#label { color: $foreground; }
 }
 
 Select > OptionList {
@@ -552,14 +633,14 @@ Button {
     height: auto;
 
     & > Label {
-        color: #bbc8e8;
+        color: $light_blue;
         padding-left: 1;
         text-style: bold;
     }
 }
 
 Switch {
-    background: #0a0e1b;
+    background: $background;
     border: none #364774;
 
     &:focus { background-tint: transparent; }
@@ -571,14 +652,14 @@ Switch {
     /* Combined focus/hover slider states */
     &:focus > .switch--slider, 
     &:hover > .switch--slider {
-        color: #fd8383;
+        color: $red;
     }
 
     &.-on {
         & > .switch--slider { color: #5c81d7; }
         &:focus > .switch--slider, 
         &:hover > .switch--slider { 
-            color: #54efae; 
+            color: $green;
         }
     }
 }
@@ -591,7 +672,7 @@ Checkbox {
     content-align: left middle;
 
     & .toggle--button {
-        color: #0f1525;
+        color: $surface;
         text-style: bold;
         background: #343d56;
     }
@@ -627,7 +708,7 @@ RadioButton {
     }
 
     & > .toggle--button {
-        color: #0f1525;
+        color: $surface;
         background: #343d56;
     }
 }

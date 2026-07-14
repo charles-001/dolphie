@@ -1,5 +1,5 @@
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from textual.command import DiscoveryHit, Hit, Provider
 
@@ -12,7 +12,7 @@ class CommandPaletteCommands(Provider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.dolphie_app: DolphieApp = self.app
+        self.dolphie_app = cast("DolphieApp", self.app)
 
     def async_command(self, key: str):
         """Helper function to call the process_key_event command asynchronously."""
@@ -20,9 +20,13 @@ class CommandPaletteCommands(Provider):
 
     def get_command_hits(self):
         """Helper function to get all commands and format them for discovery or search."""
+        active_tab = self.dolphie_app.tab_manager.active_tab
+        if active_tab is None:
+            return {}
+
         commands = self.dolphie_app.command_manager.get_commands(
-            self.dolphie_app.tab_manager.active_tab.dolphie.replay_file,
-            self.dolphie_app.tab_manager.active_tab.dolphie.connection_source,
+            active_tab.dolphie.replay_file,
+            active_tab.dolphie.connection_source,
         )
 
         # Find the longest human_key length

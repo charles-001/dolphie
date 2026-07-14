@@ -1,30 +1,19 @@
+from __future__ import annotations
+
 import copy
 import os
 import uuid
+from typing import TYPE_CHECKING, Any
 
-import dolphie.Modules.MetricManager as MetricManager
-from dolphie.DataTypes import ConnectionSource, ConnectionStatus, Panels
-from dolphie.Dolphie import Dolphie
-from dolphie.Modules.ArgumentParser import Config, HostGroupMember
-from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.ReplayManager import ReplayManager
-from dolphie.Widgets.ReplayControls import ReplayControls
-from dolphie.Widgets.SpinnerWidget import SpinnerWidget
-from dolphie.Widgets.TabSetupModal import TabSetupModal
-from dolphie.Widgets.TopBar import TopBar
-from rich.text import Text
-from textual.app import App
 from textual.containers import (
     Center,
     Container,
-    Horizontal,
     ScrollableContainer,
     VerticalScroll,
 )
-from textual.content import Content
 from textual.timer import Timer
+from textual.widget import Widget
 from textual.widgets import (
-    DataTable,
     Label,
     LoadingIndicator,
     ProgressBar,
@@ -32,11 +21,28 @@ from textual.widgets import (
     RadioSet,
     Sparkline,
     Static,
-    Switch,
+    TabbedContent,
+    TabPane,
+    Tabs,
 )
 from textual.widgets import Tab as TabWidget
-from textual.widgets import TabbedContent, TabPane, Tabs
 from textual.worker import Worker
+
+from dolphie.DataTypes import ConnectionSource, ConnectionStatus, ConnectionStatusType, Panels
+from dolphie.Dolphie import Dolphie
+from dolphie.Modules.ArgumentParser import Config, HostGroupMember
+from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.ReplayManager import ReplayManager
+from dolphie.Modules.Theme import ThemedDataTable as DataTable
+from dolphie.Modules.Theme import themed_content
+from dolphie.Widgets.MetricGraphDashboard import MetricGraphDashboard
+from dolphie.Widgets.ReplayControls import ReplayControls
+from dolphie.Widgets.SpinnerWidget import SpinnerWidget
+from dolphie.Widgets.TabSetupModal import TabSetupModal
+from dolphie.Widgets.TopBar import TopBar
+
+if TYPE_CHECKING:
+    from dolphie.App import DolphieApp
 
 
 class Tab:
@@ -44,24 +50,24 @@ class Tab:
         self,
         id: str,
         name: str,
-        dolphie: Dolphie = None,
-        manual_tab_name: str = None,
-        replay_manager: ReplayManager = None,
+        dolphie: Dolphie | None = None,
+        manual_tab_name: str | None = None,
+        replay_manager: ReplayManager | None = None,
     ):
         self.id = id
         self.name = name
-        self.dolphie = dolphie
+        self._dolphie = dolphie
         self.manual_tab_name = manual_tab_name
         self.replay_manager = replay_manager
 
-        self.worker: Worker = None
-        self.worker_timer: Timer = None
-        self.worker_cancel_error: ManualException = None
+        self.worker: Worker[Any] | None = None
+        self.worker_timer: Timer | None = None
+        self.worker_cancel_error: ManualException | None = None
 
         self.replay_manual_control: bool = False
 
-        self.replicas_worker: Worker = None
-        self.replicas_worker_timer: Timer = None
+        self.replicas_worker: Worker[Any] | None = None
+        self.replicas_worker_timer: Timer | None = None
 
         # Track mounted grid widgets to avoid DOM queries each refresh cycle
         self.channel_widgets: dict[str, Static] = {}
@@ -70,11 +76,21 @@ class Tab:
         self.member_widgets: dict[str, Static] = {}
         self.replica_widgets: dict[str, Static] = {}
 
+    @property
+    def dolphie(self) -> Dolphie:
+        if self._dolphie is None:
+            raise RuntimeError("Tab has not been initialized with a Dolphie instance")
+        return self._dolphie
+
+    @dolphie.setter
+    def dolphie(self, value: Dolphie) -> None:
+        self._dolphie = value
+
     def save_references_to_components(self):
         app = self.dolphie.app
 
         self.main_container = app.query_one("#main_container", VerticalScroll)
-        self.metric_graph_tabs = app.query_one("#metric_graph_tabs", TabbedContent)
+        self.graph_dashboard = app.query_one(MetricGraphDashboard)
         self.loading_indicator = app.query_one("#loading_indicator", LoadingIndicator)
         self.sparkline = app.query_one("#panel_dashboard_queries_qps", Sparkline)
         self.panel_dashboard = app.query_one("#panel_dashboard", Container)
@@ -159,12 +175,13 @@ class Tab:
         return getattr(self, f"panel_{panel_name}")
 
     def refresh_replay_dashboard_section(self):
-        if not self.dolphie.replay_file:
+        replay_manager = self.replay_manager
+        if not self.dolphie.replay_file or replay_manager is None:
             return
 
-        min_timestamp = self.replay_manager.min_replay_timestamp
-        max_timestamp = self.replay_manager.max_replay_timestamp
-        current_timestamp = self.replay_manager.current_replay_timestamp
+        min_timestamp = replay_manager.min_replay_timestamp
+        max_timestamp = replay_manager.max_replay_timestamp
+        current_timestamp = replay_manager.current_replay_timestamp
 
         # Highlight if the max timestamp matches the current timestamp
         max_timestamp = (
@@ -182,85 +199,38 @@ class Tab:
         )
 
         # Update the progress bar with the current replay progress
-        if self.replay_manager.current_replay_id == self.replay_manager.min_replay_id:
+        if replay_manager.current_replay_id == replay_manager.min_replay_id:
             current_position = 0
         else:
-            current_position = self.replay_manager.current_replay_id - self.replay_manager.min_replay_id + 1
+            current_position = replay_manager.current_replay_id - replay_manager.min_replay_id + 1
 
-        self.dashboard_replay_progressbar.update(progress=current_position, total=self.replay_manager.total_replay_rows)
+        self.dashboard_replay_progressbar.update(progress=current_position, total=replay_manager.total_replay_rows)
 
         # Keep the controls in sync with the active tab: reflect this tab's pause state
         # and disable Back/Forward at the boundaries so they reflect what's possible.
         self.replay_controls.paused = self.dolphie.pause_refresh
         self.replay_controls.set_boundary_states(
-            at_start=self.replay_manager.current_replay_id <= self.replay_manager.min_replay_id,
-            at_end=self.replay_manager.current_replay_id >= self.replay_manager.max_replay_id,
+            at_start=replay_manager.current_replay_id <= replay_manager.min_replay_id,
+            at_end=replay_manager.current_replay_id >= replay_manager.max_replay_id,
         )
 
     def toggle_entities_displays(self):
-        def toggle_tab(tab_name, visible):
-            if visible:
-                self.metric_graph_tabs.show_tab(tab_name)
-            else:
-                self.metric_graph_tabs.hide_tab(tab_name)
-
         self.dashboard_section_6.display = bool(self.dolphie.system_utilization)
-        toggle_tab("graph_tab_system", self.dolphie.system_utilization)
 
         if self.dolphie.connection_source == ConnectionSource.mysql:
             self.dashboard_section_5.display = bool(
                 self.dolphie.replication_status and not self.dolphie.panels.replication.visible
             )
-
-            toggle_tab("graph_tab_replication_lag", self.dolphie.replication_status)
-            toggle_tab(
-                "graph_tab_adaptive_hash_index",
-                self.dolphie.global_variables.get("innodb_adaptive_hash_index") != "OFF",
-            )
-            toggle_tab(
-                "graph_tab_locks",
-                (self.dolphie.metadata_locks_enabled and self.dolphie.panels.metadata_locks.visible)
-                or self.dolphie.replay_file,
-            )
-
         elif self.dolphie.connection_source == ConnectionSource.proxysql:
             self.dashboard_section_5.display = False
 
-    def toggle_metric_graph_tabs_display(self):
+    def sync_shared_ui(self) -> None:
+        """Bind shared replay and graph widgets to this host."""
         self.main_container.display = True
-
-        # Hide/show the tabs that are available for the current connection source
-        for metric_instance in self.dolphie.metric_manager.metrics.__dict__.values():
-            if self.dolphie.connection_source in metric_instance.connection_source:
-                self.metric_graph_tabs.show_tab(f"graph_tab_{metric_instance.tab_name}")
-            else:
-                self.metric_graph_tabs.hide_tab(f"graph_tab_{metric_instance.tab_name}")
 
         # Only show the replay section if we're in replay mode
         self.dashboard_replay_container.display = bool(self.dolphie.replay_file)
-
-        # Update the graph switch values based on the tab's metric data so each tab can have
-        # its own set of visible metrics
-        metric_switches = self.dolphie.app.tab_manager.metric_switches
-        for metric_instance_name, metric_instance in self.dolphie.metric_manager.metrics.__dict__.items():
-            for metric, metric_data in metric_instance.__dict__.items():
-                if (
-                    isinstance(metric_data, MetricManager.MetricData)
-                    and metric_data.graphable
-                    and metric_data.create_switch
-                ):
-                    switch = metric_switches.get(f"{metric_instance_name}-{metric}")
-                    if switch:
-                        switch.value = metric_data.visible
-
-        # Layout redo log graphs based on whether active count is available
-        show_active_count = bool(
-            self.dolphie.global_status.get("Active_redo_log_count") and not self.dolphie.replay_file
-        )
-        self.graph_redo_log_data_written.styles.width = "55%" if show_active_count else "88%"
-        self.graph_redo_log_active_count.display = show_active_count
-        if show_active_count:
-            self.dolphie.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible = True
+        self.graph_dashboard.bind_host(self.dolphie)
 
     def toggle_replication_panel_components(self):
         def toggle_container_display(container: Container, items, tracked: dict[str, Static]):
@@ -276,34 +246,34 @@ class Tab:
         toggle_container_display(
             self.group_replication_container, self.dolphie.group_replication_members, self.member_widgets
         )
-        toggle_container_display(
-            self.clusterset_container, self.dolphie.clusterset_instances, self.clusterset_widgets
-        )
+        toggle_container_display(self.clusterset_container, self.dolphie.clusterset_instances, self.clusterset_widgets)
 
     def remove_replication_panel_components(self):
         for tracked in (self.replica_widgets, self.member_widgets, self.galera_widgets, self.clusterset_widgets):
             for widget in tracked.values():
                 if widget.parent is not None:
-                    widget.parent.remove()
+                    if isinstance(widget.parent, Widget):
+                        widget.parent.remove()
             tracked.clear()
 
 
 class TabManager:
-    def __init__(self, app: App, config: Config):
+    def __init__(self, app: DolphieApp, config: Config):
         self.app = app
         self.config = config
 
-        self.active_tab: Tab = None
+        self.active_tab: Tab | None = None
         self.tabs: dict[str, Tab] = {}
 
         self.host_tabs = self.app.query_one("#host_tabs", Tabs)
 
         self.loading_hostgroups: bool = False
         self.last_replay_time: int = 0
+        self.metric_graph_dashboard: MetricGraphDashboard | None = None
 
         self.topbar = self.app.query_one(TopBar)
 
-    def update_connection_status(self, tab: Tab, connection_status: ConnectionStatus):
+    def update_connection_status(self, tab: Tab, connection_status: ConnectionStatusType):
         previous_status = tab.dolphie.connection_status
         tab.dolphie.connection_status = connection_status
         self.update_topbar(tab=tab)
@@ -342,6 +312,10 @@ class TabManager:
         if self.config.daemon_mode:
             return
 
+        self.metric_graph_dashboard = MetricGraphDashboard(
+            marker=self.config.graph_marker,
+            id="metric_graph_dashboard",
+        )
         await self.app.mount(
             LoadingIndicator(id="loading_indicator"),
             VerticalScroll(
@@ -364,7 +338,7 @@ class TabManager:
                 ),
                 Container(
                     Label(id="metric_graphs_title", classes="panel_title"),
-                    TabbedContent(id="metric_graph_tabs"),
+                    self.metric_graph_dashboard,
                     id="panel_graphs",
                 ),
                 Container(
@@ -478,7 +452,7 @@ class TabManager:
                 Container(
                     Label(id="statements_summary_title"),
                     Label(
-                        Text.from_markup(":bulb: [label]Prepared statements are not included in this panel"),
+                        ":bulb: [$label]Prepared statements are not included in this panel",
                         id="statements_summary_info",
                     ),
                     RadioSet(
@@ -509,68 +483,6 @@ class TabManager:
         self.app.query_one("#pfs_metrics_title", Label).update(panels.pfs_metrics.title)
         self.app.query_one("#statements_summary_title", Label).update(panels.statements_summary.title)
 
-        # Loop the metric instances and create the graph tabs
-        metric_manager = MetricManager.MetricManager(None)
-        metric_graph_tabs = self.app.query_one("#metric_graph_tabs", TabbedContent)
-        for metric_instance_name, metric_instance in metric_manager.metrics.__dict__.items():
-            metric_tab_name = metric_instance.tab_name
-            graph_names = metric_instance.graphs
-            graph_tab_name = metric_instance.graph_tab_name
-
-            if not self.app.query(f"#graph_tab_{metric_tab_name}"):
-                await metric_graph_tabs.add_pane(
-                    TabPane(
-                        graph_tab_name,
-                        Label(id=f"metric_graph_stats_{metric_tab_name}", classes="metric_graph_stats"),
-                        Horizontal(id=f"metric_graph_container_{metric_tab_name}", classes="metric_graph_container"),
-                        Horizontal(
-                            id=f"switch_container_{metric_tab_name}",
-                            classes="switch_container switch_container",
-                        ),
-                        id=f"graph_tab_{metric_tab_name}",
-                        name=metric_tab_name,
-                    )
-                )
-
-            tab_pane = self.app.query_one(f"#graph_tab_{metric_tab_name}", TabPane)
-            graph_containers = {}
-            for graph_name in graph_names:
-                graph_container = (
-                    "metric_graph_container2"
-                    if graph_name in ["graph_system_network", "graph_system_disk_io"]
-                    else "metric_graph_container"
-                )
-                container_id = f"{graph_container}_{metric_tab_name}"
-
-                # Add graph_container2 only if it's needed
-                if container_id not in graph_containers and not self.app.query(f"#{container_id}"):
-                    if graph_container == "metric_graph_container2":
-                        horizontal = Horizontal(id=container_id, classes="metric_graph_container2")
-                        await tab_pane.mount(horizontal, after=1)
-                        graph_containers[container_id] = horizontal
-
-                if container_id not in graph_containers:
-                    graph_containers[container_id] = self.app.query_one(f"#{container_id}", Horizontal)
-
-                await graph_containers[container_id].mount(
-                    MetricManager.Graph(id=f"{graph_name}", classes="panel_data")
-                )
-
-            switch_container = self.app.query_one(f"#switch_container_{metric_tab_name}", Horizontal)
-            for metric, metric_data in metric_instance.__dict__.items():
-                if (
-                    isinstance(metric_data, MetricManager.MetricData)
-                    and metric_data.graphable
-                    and metric_data.create_switch
-                    and not self.app.query(f"#switch_container_{metric_tab_name} #{metric_instance_name}-{metric}")
-                ):
-                    switch = Switch(animate=False, id=f"{metric_instance_name}-{metric}", name=metric_tab_name)
-                    await switch_container.mount(Label(metric_data.label), switch)
-
-                    # Toggle the switch if the metric is visible (means to enable it by default)
-                    if metric_data.visible:
-                        switch.toggle()
-
         # Add the PFS metrics tabs
         pfs_metrics_tabs = self.app.query_one("#pfs_metrics_tabs", TabbedContent)
         await pfs_metrics_tabs.add_pane(
@@ -584,7 +496,7 @@ class TabManager:
             TabPane(
                 "Table I/O Waits Summary",
                 Label(
-                    Text.from_markup(":bulb: [label]Format for each metric: Wait time (Operations count)"),
+                    ":bulb: [$label]Format for each metric: Wait time (Operations count)",
                     id="pfs_metrics_format",
                 ),
                 DataTable(id="pfs_metrics_table_io_waits_datatable", show_cursor=False),
@@ -592,36 +504,32 @@ class TabManager:
             ),
         )
 
-        # Set what marker we use for graphs
-        for graph in self.app.query(MetricManager.Graph):
-            graph.marker = self.config.graph_marker
-
-        # Cache switch references for fast lookup during tab switches
-        self.metric_switches: dict[str, Switch] = {}
-        for switch in self.app.query(Switch):
-            self.metric_switches[switch.id] = switch
-
     async def create_tab(
-        self, tab_name: str = None, hostgroup_member: HostGroupMember = None, switch_tab: bool = True
+        self,
+        tab_name: str | None = None,
+        hostgroup_member: HostGroupMember | None = None,
+        switch_tab: bool = True,
     ) -> Tab:
-        if len(self.app.screen_stack) > 1:
-            return
-
         tab_id = f"t{uuid.uuid4().hex}"
 
         # Create a new tab instance
-        tab = Tab(id=tab_id, name=tab_name)
+        tab = Tab(id=tab_id, name=tab_name or "")
 
         # If we're using hostgroups
         config = copy.deepcopy(self.config)
         if hostgroup_member and self.config.hostgroup_hosts:
             config.replay_file = None
             config.host = hostgroup_member.host
-            config.port = hostgroup_member.port
+            if hostgroup_member.port is not None:
+                config.port = hostgroup_member.port
             tab.manual_tab_name = hostgroup_member.tab_title
 
             # If the hostgroup member has a credential profile, update config with its credentials
-            credential_profile_data = self.config.credential_profiles.get(hostgroup_member.credential_profile)
+            credential_profile_data = (
+                self.config.credential_profiles.get(hostgroup_member.credential_profile)
+                if hostgroup_member.credential_profile
+                else None
+            )
             if credential_profile_data:
                 config.credential_profile = hostgroup_member.credential_profile
 
@@ -643,7 +551,6 @@ class TabManager:
 
         # Create a new Dolphie instance
         dolphie = Dolphie(config=config, app=self.app)
-        dolphie.tab_id = tab_id
 
         # Set the tab's Dolphie instance
         tab.dolphie = dolphie
@@ -662,20 +569,8 @@ class TabManager:
         tab.save_references_to_components()
 
         # Create the tab in the UI
-        initial_tab_name = "" if hostgroup_member else tab_name
+        initial_tab_name = "" if hostgroup_member else (tab_name or "")
         self.host_tabs.add_tab(TabWidget(initial_tab_name, id=tab_id))
-
-        # Loop the metric instances and save references to the graphs and its labels
-        for metric_instance in dolphie.metric_manager.metrics.__dict__.values():
-            metric_tab_name = metric_instance.tab_name
-            graph_names = metric_instance.graphs
-
-            # Save references graph's labels
-            setattr(tab, metric_tab_name, self.app.query_one(f"#metric_graph_stats_{metric_tab_name}"))
-
-            # Save references to the graphs
-            for graph_name in graph_names:
-                setattr(tab, graph_name, self.app.query_one(f"#{graph_name}"))
 
         if tab.manual_tab_name:
             self.rename_tab(tab, tab.manual_tab_name)
@@ -694,16 +589,6 @@ class TabManager:
             tab.get_panel_widget(panel).display = True
             getattr(dolphie.panels, panel).visible = True
 
-        # Set static graph widths (only needs to happen once per tab)
-        tab.graph_redo_log_bar.styles.width = "12%"
-        tab.graph_redo_log_active_count.styles.width = "33%"
-        tab.graph_adaptive_hash_index.styles.width = "50%"
-        tab.graph_adaptive_hash_index_hit_ratio.styles.width = "50%"
-        tab.graph_system_cpu.styles.width = "50%"
-        tab.graph_system_network.styles.width = "50%"
-        tab.graph_system_memory.styles.width = "50%"
-        tab.graph_system_disk_io.styles.width = "50%"
-
         # Set the sparkline data to 0
         tab.sparkline.data = [0]
 
@@ -717,7 +602,7 @@ class TabManager:
     async def remove_tab(self, tab: Tab):
         self.host_tabs.remove_tab(tab.id)
 
-    def rename_tab(self, tab: Tab, manual_name: str = None):
+    def rename_tab(self, tab: Tab, manual_name: str | None = None):
         if tab.dolphie.daemon_mode:
             return
 
@@ -732,7 +617,7 @@ class TabManager:
             if not host[-1].isalnum():
                 host = host[:-1]
 
-            new_name = f"{host}:[dark_gray]{tab.dolphie.port}"
+            new_name = f"{host}:[$dark_gray]{tab.dolphie.port}[/$dark_gray]"
         elif manual_name:
             new_name = manual_name
         elif tab.manual_tab_name:
@@ -742,9 +627,11 @@ class TabManager:
             tab.name = new_name
 
             if tab.dolphie.replay_file:
-                new_name = f"[b recording][Replay][/b recording] {new_name}"
+                new_name = f"[$b_recording][Replay][/$b_recording] {new_name}"
 
-            self.host_tabs.get_tab(tab.id).label = Content.from_rich_text(new_name, console=self.app.console)
+            tab_widget = self.host_tabs.get_tab(tab.id)
+            if tab_widget is not None:
+                tab_widget.label = themed_content(new_name)
 
     def switch_tab(self, tab_id: str, set_active: bool = True):
         tab = self.get_tab(tab_id)
@@ -762,8 +649,9 @@ class TabManager:
         self.update_topbar(tab=tab)
 
         tab.main_container.display = bool(tab.dolphie.main_db_connection.is_connected())
+        tab.graph_dashboard.bind_host(tab.dolphie, render=tab.panel_graphs.display)
 
-    def get_tab(self, id: str) -> Tab:
+    def get_tab(self, id: str) -> Tab | None:
         return self.tabs.get(id)
 
     async def disconnect_tab(self, tab: Tab, update_topbar: bool = True, wait_for_workers: bool = True):
@@ -802,14 +690,17 @@ class TabManager:
 
         tab.dolphie.replica_manager.remove_all_replicas()
 
-        if self.active_tab is tab:
-            tab.main_container.display = False
-            tab.loading_indicator.display = False
+        if not tab.dolphie.daemon_mode:
+            if self.active_tab is tab:
+                tab.main_container.display = False
+                tab.loading_indicator.display = False
 
-        tab.sparkline.data = [0]
-        tab.remove_replication_panel_components()
+            tab.sparkline.data = [0]
+            tab.remove_replication_panel_components()
 
-        if update_topbar:
+        if tab.dolphie.daemon_mode:
+            tab.dolphie.connection_status = ConnectionStatus.disconnected
+        elif update_topbar:
             self.update_connection_status(tab=tab, connection_status=ConnectionStatus.disconnected)
 
     def setup_host_tab(self, tab: Tab):

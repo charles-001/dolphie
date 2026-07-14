@@ -1,12 +1,40 @@
+from __future__ import annotations
+
 import os
+import re
 from datetime import datetime
 
-from dolphie.Modules.Functions import format_bytes, format_number, format_time
+from rich.text import Text
+
+from dolphie.DataTypes import DatabaseScalar
+from dolphie.Modules.Functions import coerce_float, format_bytes, format_number, format_time
+from dolphie.Modules.PerformanceSchemaMetrics import FilteredValue
 from dolphie.Modules.TabManager import Tab
-from textual.widgets import DataTable
+from dolphie.Modules.Theme import HIGHLIGHT, LIGHT_BLUE
 
 
-def create_panel(tab: Tab):
+def _metric_value(metrics: dict[str, FilteredValue], field: str, mode: str) -> DatabaseScalar:
+    value = metrics.get(field)
+    return value.get(mode, 0) if isinstance(value, dict) else value
+
+
+def _format_file_or_table_name(file_name: str, table_pattern: re.Pattern[str]) -> str | Text:
+    table_match = table_pattern.search(file_name)
+    if file_name.endswith("/mysql.ibd"):
+        return f"[$dark_gray]{os.path.dirname(file_name)}[/$dark_gray]/{os.path.basename(file_name)}"
+    if table_match:
+        return f"{table_match.group(1)}.{table_match.group(2)}"
+    if "/" in file_name:
+        return f"[$dark_gray]{os.path.dirname(file_name)}[/$dark_gray]/{os.path.basename(file_name)}"
+
+    label = Text()
+    label.append("[", style=f"bold {LIGHT_BLUE}")
+    label.append(file_name, style=HIGHLIGHT)
+    label.append("]", style=f"bold {LIGHT_BLUE}")
+    return label
+
+
+def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
 
     update_file_io_by_instance(tab)
@@ -20,18 +48,20 @@ def create_panel(tab: Tab):
             if dolphie.pfs_metrics_last_reset_time
             else 0
         )
-    tab.pfs_metrics_delta.label = f"Delta since last reset ([$light_blue]{format_time(time)}[/$light_blue])"
+    tab.pfs_metrics_delta.label = (
+        f"Delta since last reset ([$light_blue]{format_time(coerce_float(time))}[/$light_blue])"
+    )
 
 
-def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
+def update_table_io_waits_summary_by_table(tab: Tab) -> None:
     dolphie = tab.dolphie
     datatable = tab.pfs_metrics_table_io_waits_datatable
 
     if not dolphie.table_io_waits_data or not dolphie.table_io_waits_data.filtered_data:
         datatable.display = False
-        tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
-            "Table I/O Waits ([$highlight]0[/$highlight])"
-        )
+        tab.pfs_metrics_tabs.get_tab(
+            "pfs_metrics_table_io_waits_tab"
+        ).label = "Table I/O Waits ([$highlight]0[/$highlight])"
 
         return
 
@@ -61,7 +91,8 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
         column_fields.append(column_data["field"])
 
     data = dolphie.table_io_waits_data.filtered_data
-    use_total = tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total"
+    pressed_button = tab.pfs_metrics_radio_set.pressed_button
+    use_total = bool(pressed_button and pressed_button.id == "pfs_metrics_total")
 
     changed = False
 
@@ -89,26 +120,27 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
         for file_name, metrics in data.items():
             row_id = file_name
 
-            row_values = [file_name]
-            for column_name, field in zip(column_names, column_fields):
+            row_values: list[object] = [file_name]
+            for column_name, field in zip(column_names, column_fields, strict=True):
                 if column_name == "Table":
                     continue
 
                 if isinstance(field, list):
                     count_field, wait_time_field = field
-                    count_value = metrics.get(count_field, {}).get(mode, 0)
-                    wait_time_value = metrics.get(wait_time_field, {}).get(mode, 0)
+                    count_value = _metric_value(metrics, count_field, mode)
+                    wait_time_value = _metric_value(metrics, wait_time_field, mode)
 
                     if count_value and wait_time_value:
-                        formatted_time = format_time(wait_time_value, picoseconds=True)
-                        column_value = f"{formatted_time} ({format_number(count_value)})"
+                        formatted_time = format_time(coerce_float(wait_time_value), picoseconds=True)
+                        column_value = f"{formatted_time} ({format_number(coerce_float(count_value))})"
                     else:
-                        column_value = "[dark_gray]N/A"
+                        column_value = "[$dark_gray]N/A"
                 else:
-                    column_value = metrics.get(field, {}).get(mode, 0)
+                    column_value = _metric_value(metrics, field, mode)
 
                 row_values.append(column_value)
 
+            row_values = datatable.normalize_cells(row_values)
             if row_id in datatable.rows:
                 datatable_row = datatable.get_row(row_id)
 
@@ -124,12 +156,12 @@ def update_table_io_waits_summary_by_table(tab: Tab) -> DataTable:
             datatable.sort("wait_time_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.pfs_metrics_tabs.get_tab("pfs_metrics_table_io_waits_tab").label = (
-        f"Table I/O Waits ([$highlight]{datatable.row_count}[/$highlight])"
-    )
+    tab.pfs_metrics_tabs.get_tab(
+        "pfs_metrics_table_io_waits_tab"
+    ).label = f"Table I/O Waits ([$highlight]{datatable.row_count}[/$highlight])"
 
 
-def update_file_io_by_instance(tab: Tab) -> DataTable:
+def update_file_io_by_instance(tab: Tab) -> None:
     dolphie = tab.dolphie
     datatable = tab.pfs_metrics_file_io_datatable
 
@@ -177,7 +209,8 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
         column_formats.append(column_data.get("format"))
 
     data = dolphie.file_io_data.filtered_data
-    use_total = tab.pfs_metrics_radio_set.pressed_button.id == "pfs_metrics_total"
+    pressed_button = tab.pfs_metrics_radio_set.pressed_button
+    use_total = bool(pressed_button and pressed_button.id == "pfs_metrics_total")
 
     changed = False
 
@@ -205,34 +238,26 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
         for file_name, metrics in data.items():
             row_id = file_name
 
-            table_match = dolphie.file_io_data.table_pattern.search(file_name)
-            if file_name.endswith("/mysql.ibd"):
-                file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
-            elif table_match:
-                file_name = f"{table_match.group(1)}.{table_match.group(2)}"
-            elif "/" in file_name:
-                file_name = f"[dark_gray]{os.path.dirname(file_name)}[/dark_gray]/{os.path.basename(file_name)}"
-            else:
-                file_name = f"[b][light_blue][[/light_blue][/b][highlight]{file_name}[b][light_blue]][/light_blue][/b]"
-
-            row_values = [file_name]
-            for column_name, field, column_format in zip(column_names, column_fields, column_formats):
+            formatted_file_name = _format_file_or_table_name(file_name, dolphie.file_io_data.table_pattern)
+            row_values: list[object] = [formatted_file_name]
+            for column_name, field, column_format in zip(column_names, column_fields, column_formats, strict=True):
                 if field == "FILE_NAME":
                     continue
 
-                column_value = metrics.get(field, {}).get(mode, 0)
+                column_value = _metric_value(metrics, field, mode)
 
                 if column_format == "time":
-                    column_value = format_time(column_value, picoseconds=True)
+                    column_value = format_time(coerce_float(column_value), picoseconds=True)
                 elif column_value == 0 or column_value is None:
-                    column_value = 0 if column_name == "wait_time_ps" else "[dark_gray]0"
+                    column_value = 0 if column_name == "wait_time_ps" else "[$dark_gray]0"
                 elif column_format == "number":
-                    column_value = format_number(column_value)
+                    column_value = format_number(coerce_float(column_value))
                 elif column_format == "bytes":
-                    column_value = format_bytes(column_value)
+                    column_value = format_bytes(coerce_float(column_value))
 
                 row_values.append(column_value)
 
+            row_values = datatable.normalize_cells(row_values)
             if row_id in datatable.rows:
                 datatable_row = datatable.get_row(row_id)
 
@@ -248,6 +273,6 @@ def update_file_io_by_instance(tab: Tab) -> DataTable:
             datatable.sort("wait_time_ps", reverse=True)
 
     # Update the title to reflect the number of active rows
-    tab.pfs_metrics_tabs.get_tab("pfs_metrics_file_io_tab").label = (
-        f"File I/O ([$highlight]{datatable.row_count}[/$highlight])"
-    )
+    tab.pfs_metrics_tabs.get_tab(
+        "pfs_metrics_file_io_tab"
+    ).label = f"File I/O ([$highlight]{datatable.row_count}[/$highlight])"

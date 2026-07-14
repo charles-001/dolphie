@@ -16,7 +16,7 @@
 
 ## Installation
 
-Requires Python 3.9+
+Requires Python 3.10+
 
 #### Using PyPi
 
@@ -307,6 +307,17 @@ Example:
 3={"host": "host3:3307", "tab_title": "[red]production[/red]", "credential_profile": "prod"}
 4={"host": "host4"}
 ```
+
+## Development
+
+```shell
+poetry install
+poetry run dolphie --help
+poetry run basedpyright
+poetry run pytest
+```
+
+BasedPyright runs without a baseline; new diagnostics must be fixed rather than suppressed as accepted debt.
 
 ## Feedback
 

@@ -1,9 +1,8 @@
-from dolphie.Modules.Functions import format_number
+from dolphie.Modules.Functions import coerce_str, format_number
 from dolphie.Modules.TabManager import Tab
-from textual.widgets import DataTable
 
 
-def create_panel(tab: Tab) -> DataTable:
+def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
 
     columns = {
@@ -25,6 +24,7 @@ def create_panel(tab: Tab) -> DataTable:
     }
 
     command_stats = tab.proxysql_command_stats_datatable
+    per_second_data = dolphie.proxysql_per_second_data
 
     column_keys = []
     column_names = []
@@ -60,32 +60,35 @@ def create_panel(tab: Tab) -> DataTable:
                 command_stats.clear()
 
         for row in dolphie.proxysql_command_stats:
-            row_id = row["Command"]
+            row_id = coerce_str(row.get("Command"))
+            if not row_id:
+                continue
 
             row_values = []
-            for column_key, column_format in zip(column_keys, column_formats):
+            for column_key, column_format in zip(column_keys, column_formats, strict=True):
                 column_value = row.get(column_key)
 
                 # Calculate the values per second for the following columns
                 if "cnt_" in column_key:
                     current_value = int(column_value or 0)
-                    previous_value = dolphie.proxysql_per_second_data.get(row_id, {}).get(column_key, 0)
+                    previous_value = per_second_data.get(row_id, {}).get(column_key, 0)
                     if not previous_value:
                         column_value = 0
                     else:
                         value_diff = current_value - previous_value
                         column_value = round(value_diff / polling_latency) if polling_latency > 0 else 0
 
-                    dolphie.proxysql_per_second_data.setdefault(row_id, {})[column_key] = current_value
+                    per_second_data.setdefault(row_id, {})[column_key] = current_value
 
                 if column_format == "number":
-                    column_value = format_number(column_value)
+                    column_value = format_number(0 if column_value is None else column_value)
 
                 if column_value == "0":
-                    column_value = "[dark_gray]0"
+                    column_value = "[$dark_gray]0"
 
                 row_values.append(column_value)
 
+            row_values = command_stats.normalize_cells(row_values)
             if row_id in command_stats.rows:
                 datatable_row = command_stats.get_row(row_id)
 
@@ -96,5 +99,5 @@ def create_panel(tab: Tab) -> DataTable:
                 command_stats.add_row(*row_values, key=row_id)
 
     tab.proxysql_command_stats_title.update(
-        f"{dolphie.panels.proxysql_command_stats.title} " f"([$highlight]{command_stats.row_count}[/$highlight])"
+        f"{dolphie.panels.proxysql_command_stats.title} ([$highlight]{command_stats.row_count}[/$highlight])"
     )

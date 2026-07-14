@@ -1,12 +1,19 @@
-from dolphie.DataTypes import ConnectionSource
-from dolphie.Modules.Functions import format_number, format_picoseconds, format_query
-from dolphie.Modules.TabManager import Tab
 from rich.syntax import Syntax
+
+from dolphie.DataTypes import ConnectionSource, DatabaseScalar
+from dolphie.Modules.Functions import coerce_float, coerce_str, format_number, format_picoseconds, format_query
+from dolphie.Modules.PerformanceSchemaMetrics import FilteredValue
+from dolphie.Modules.TabManager import Tab
 
 MAX_ROWS = 100
 
 
-def create_panel(tab: Tab):
+def _metric_value(metrics: dict[str, FilteredValue], field: str, display_mode: str) -> DatabaseScalar:
+    value = metrics.get(field)
+    return value.get(display_mode, 0) if isinstance(value, dict) else value
+
+
+def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
     datatable = tab.statements_summary_datatable
     query_length_max = 300
@@ -102,9 +109,7 @@ def create_panel(tab: Tab):
 
     if not dolphie.statements_summary_data or not dolphie.statements_summary_data.filtered_data:
         datatable.display = False
-        tab.statements_summary_title.update(
-            f"{dolphie.panels.statements_summary.title} " f"([$highlight]0[/$highlight])"
-        )
+        tab.statements_summary_title.update(f"{dolphie.panels.statements_summary.title} ([$highlight]0[/$highlight])")
 
         return
 
@@ -128,9 +133,10 @@ def create_panel(tab: Tab):
 
     data = dolphie.statements_summary_data.filtered_data
     display_mode = ""
-    if tab.statements_summary_radio_set.pressed_button.id == "statements_summary_total":
+    pressed_button = tab.statements_summary_radio_set.pressed_button
+    if pressed_button and pressed_button.id == "statements_summary_total":
         display_mode = "t"
-    elif tab.statements_summary_radio_set.pressed_button.id == "statements_summarys_delta":
+    elif pressed_button and pressed_button.id == "statements_summarys_delta":
         display_mode = "d"
     else:
         display_mode = "d_last_sample"
@@ -140,7 +146,7 @@ def create_panel(tab: Tab):
     display_data = dict(
         sorted(
             data.items(),
-            key=lambda element: element[1]["sum_timer_wait"].get(display_mode, 0),
+            key=lambda element: coerce_float(_metric_value(element[1], "sum_timer_wait", display_mode)),
             reverse=True,
         )[: MAX_ROWS + 1]
     )
@@ -169,34 +175,32 @@ def create_panel(tab: Tab):
         for digest, metrics in display_data.items():
             row_values = []
             for column_name, column_field, column_format_number in zip(
-                column_names, column_fields, column_format_numbers
+                column_names, column_fields, column_format_numbers, strict=True
             ):
-                column_value = metrics.get(column_field, {})
-
-                if isinstance(column_value, dict):
-                    column_value = column_value.get(display_mode, 0)
+                column_value = _metric_value(metrics, column_field, display_mode)
 
                 if column_name == "Query":
                     if dolphie.show_statements_summary_query_digest_text_sample:
                         column_value = metrics.get("query_sample_text")
                     else:
                         column_value = metrics.get("digest_text")
-                    column_value = format_query(column_value)
+                    column_value = format_query(coerce_str(column_value))
                     # Truncate query Syntax objects
                     if isinstance(column_value, Syntax):
                         column_value = format_query(column_value.code[:query_length_max])
                 elif column_name == "Schema":
-                    column_value = column_value or "[dark_gray]N/A"
+                    column_value = column_value or "[$dark_gray]N/A"
                 elif column_format_number:
-                    column_value = format_number(column_value)
+                    column_value = format_number(coerce_float(column_value))
                 elif column_name in ("Latency", "Lock time", "CPU time", "95th %", "99th %"):
-                    column_value = format_picoseconds(column_value)
+                    column_value = format_picoseconds(coerce_float(column_value))
 
                 if column_name != "latency_total" and (column_value == "0" or column_value == 0):
-                    column_value = "[dark_gray]0"
+                    column_value = "[$dark_gray]0"
 
                 row_values.append(column_value)
 
+            row_values = datatable.normalize_cells(row_values)
             if digest in datatable.rows:
                 datatable_row = datatable.get_row(digest)
 
@@ -223,8 +227,5 @@ def create_panel(tab: Tab):
         if changed:
             datatable.sort("latency_total", reverse=dolphie.sort_by_time_descending)
 
-    title = (
-        f"{dolphie.panels.statements_summary.title} "
-        f"([$highlight]{datatable.row_count}[/$highlight])"
-    )
+    title = f"{dolphie.panels.statements_summary.title} ([$highlight]{datatable.row_count}[/$highlight])"
     tab.statements_summary_title.update(title)

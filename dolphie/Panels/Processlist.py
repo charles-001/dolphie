@@ -1,13 +1,14 @@
-from rich.syntax import Syntax
-from textual.widgets import DataTable
+from __future__ import annotations
 
-from dolphie.DataTypes import ProcesslistThread
-from dolphie.Modules.Functions import format_number, format_query
+from rich.syntax import Syntax
+
+from dolphie.DataTypes import ProcesslistThread, ProxySQLProcesslistThread
+from dolphie.Modules.Functions import coerce_int, coerce_str, format_number, format_query
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 
 
-def create_panel(tab: Tab) -> DataTable:
+def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
 
     columns = [
@@ -139,14 +140,15 @@ def create_panel(tab: Tab) -> DataTable:
         column_fields.append(column_data["field"])
         column_format_numbers.append(column_data["format_number"])
 
-    threads_to_render: dict[str, ProcesslistThread] = {}
+    threads_to_render: dict[int, ProcesslistThread | ProxySQLProcesslistThread] = {}
     # We use filter here for replays since the original way requires changing WHERE clause
     if dolphie.replay_file:
         for thread_id, thread in dolphie.processlist_threads.items():
-            thread: ProcesslistThread
+            if not isinstance(thread, ProcesslistThread):
+                continue
 
             # Check each filter condition and skip thread if it doesn't match
-            if dolphie.show_trxs_only and thread.trx_state == "[dark_gray]N/A":
+            if dolphie.show_trxs_only and thread.trx_state == "[$dark_gray]N/A":
                 continue
 
             if dolphie.user_filter and dolphie.user_filter != thread.user:
@@ -164,7 +166,7 @@ def create_panel(tab: Tab) -> DataTable:
             if dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
                 continue
 
-            if dolphie.show_threads_with_concurrency_tickets and thread.trx_concurrency_tickets == "[dark_gray]0":
+            if dolphie.show_threads_with_concurrency_tickets and thread.trx_concurrency_tickets == "[$dark_gray]0":
                 continue
 
             # If all checks passed, add it to the visible list
@@ -178,7 +180,8 @@ def create_panel(tab: Tab) -> DataTable:
     with dolphie.app.batch_update():
         # Remove stale rows first so updates/adds operate on a cleaner table
         if threads_to_render:
-            rows_to_remove = set(processlist_datatable.rows.keys()) - set(threads_to_render.keys())
+            active_row_keys = {str(thread_id) for thread_id in threads_to_render}
+            rows_to_remove = set(processlist_datatable.rows.keys()) - active_row_keys
             if rows_to_remove:
                 changed = True
                 # Bulk-clear and re-add when most rows are stale
@@ -194,10 +197,13 @@ def create_panel(tab: Tab) -> DataTable:
                 processlist_datatable.clear()
 
         for thread_id, thread in threads_to_render.items():
-            thread: ProcesslistThread
+            if not isinstance(thread, ProcesslistThread):
+                continue
+
+            row_key = str(thread_id)
 
             row_values = []
-            for column_field, column_format_number in zip(column_fields, column_format_numbers):
+            for column_field, column_format_number in zip(column_fields, column_format_numbers, strict=True):
                 value = getattr(thread, column_field)
                 if column_format_number:
                     value = format_number(value)
@@ -205,10 +211,11 @@ def create_panel(tab: Tab) -> DataTable:
                     value = format_query(value.code[:query_length_max])
                 row_values.append(value)
 
-            if thread_id in processlist_datatable.rows:
-                datatable_row = processlist_datatable.get_row(thread_id)
+            row_values = processlist_datatable.normalize_cells(row_values)
+            if row_key in processlist_datatable.rows:
+                datatable_row = processlist_datatable.get_row(row_key)
 
-                for column_id, (column_name, column_field) in enumerate(zip(column_names, column_fields)):
+                for column_id, (column_name, column_field) in enumerate(zip(column_names, column_fields, strict=True)):
                     new_val = row_values[column_id]
                     old_val = datatable_row[column_id]
 
@@ -219,14 +226,14 @@ def create_panel(tab: Tab) -> DataTable:
                     if cmp_new != cmp_old or column_field == "formatted_time" or column_field == "time":
                         changed = True
                         processlist_datatable.update_cell(
-                            thread_id,
+                            row_key,
                             column_name,
                             new_val,
                             update_width=(column_field == "formatted_query"),
                         )
             else:
                 changed = True
-                processlist_datatable.add_row(*row_values, key=thread_id)
+                processlist_datatable.add_row(*row_values, key=row_key)
 
         if changed:
             processlist_datatable.sort("time_seconds", reverse=dolphie.sort_by_time_descending)
@@ -241,7 +248,7 @@ def create_panel(tab: Tab) -> DataTable:
     tab.processlist_title.update(title)
 
 
-def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
+def fetch_data(tab: Tab) -> dict[int, ProcesslistThread | ProxySQLProcesslistThread]:
     dolphie = tab.dolphie
 
     # Determine query and column names based on whether performance_schema is used
@@ -323,12 +330,12 @@ def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
 
         # Resolve hostname if possible
         if thread["host"]:
-            host = thread["host"].split(":")[0]
+            host = coerce_str(thread["host"]).split(":")[0]
             thread["host"] = dolphie.get_hostname(host)
 
         # We don't need trx_query anymore
         thread.pop("trx_query", None)
 
-        processlist_threads[str(thread["id"])] = ProcesslistThread(thread)
+        processlist_threads[coerce_int(thread["id"])] = ProcesslistThread(thread)
 
     return processlist_threads

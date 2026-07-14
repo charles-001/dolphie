@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
+from typing import cast
 
 from textual import on
 from textual.app import ComposeResult
@@ -75,13 +79,13 @@ class TabSetupModal(ModalScreen):
 
                 &:hover {
                     background: transparent;
-                    color: #91abec;
+                    color: $highlight;
                     tint: transparent 0%;
                 }
 
                 &:focus {
                     background: transparent;
-                    color: #91abec;
+                    color: $highlight;
                     tint: transparent 0%;
                 }
             }
@@ -117,55 +121,45 @@ class TabSetupModal(ModalScreen):
 
     def __init__(
         self,
-        credential_profile: str,
-        credential_profiles: dict[str, CredentialProfile],
-        host: str,
-        port: int,
-        username: str,
-        password: str,
-        ssl: dict,
-        socket_file: str,
-        available_hosts: list,
-        hostgroups: dict,
-        replay_files: list,
-        replay_directory: str,
-        record_for_replay: str,
-        error_message: ManualException = None,
+        credential_profile: str | None,
+        credential_profiles: Mapping[str, CredentialProfile],
+        host: str | None,
+        port: int | str | None,
+        username: str | None,
+        password: str | None,
+        ssl: Mapping[str, object] | None,
+        socket_file: str | None,
+        available_hosts: Iterable[str],
+        hostgroups: Iterable[str],
+        replay_files: Iterable[tuple[str, str]],
+        replay_directory: str | None,
+        record_for_replay: bool,
+        error_message: ManualException | None = None,
     ):
         super().__init__()
 
-        self.credential_profile = credential_profile
-        if not self.credential_profile:
-            self.credential_profile = Select.NULL
+        self.credential_profile = credential_profile if credential_profile else Select.NULL
         self.credential_profiles = credential_profiles
 
-        self.host = host
+        self.host = host or ""
         self.port = port
-        self.username = username
-        self.password = password
-        self.ssl = ssl
-        self.socket_file = socket_file
-        self.replay_directory = replay_directory
+        self.username = username or ""
+        self.password = password or ""
+        self.ssl = dict(ssl or {})
+        self.socket_file = socket_file or ""
+        self.replay_directory = replay_directory or ""
         self.record_for_replay = record_for_replay
 
         if self.host and self.port:
             self.host = f"{self.host}:{self.port}"
 
-        self.options_available_hosts = []
-        if available_hosts:
-            self.options_available_hosts = [DropdownItem(id) for id in sorted(available_hosts)]
+        self.options_available_hosts = [DropdownItem(host_id) for host_id in sorted(available_hosts)]
 
-        self.options_hostgroups = []
-        if hostgroups:
-            self.options_hostgroups = [(host, host) for host in hostgroups]
+        self.options_hostgroups = [(host, host) for host in hostgroups]
 
-        self.options_credential_profiles = []
-        if credential_profiles:
-            self.options_credential_profiles = [(profile, profile) for profile in credential_profiles]
+        self.options_credential_profiles = [(profile, profile) for profile in credential_profiles]
 
-        self.options_replay_files = []
-        if replay_files:
-            self.options_replay_files = [(replay_file, replay_path) for replay_path, replay_file in replay_files]
+        self.options_replay_files = [(replay_file, replay_path) for replay_path, replay_file in replay_files]
 
         self.error_message = error_message
 
@@ -180,20 +174,21 @@ class TabSetupModal(ModalScreen):
         self.query_one("#host", Input).border_title = "Host"
         self.query_one("#username", Input).border_title = "Username"
         self.query_one("#password", Input).border_title = "Password"
-        self.query_one("#socket_file", Input).border_title = "Socket File [dark_gray](optional)[/dark_gray]"
-        self.query_one("#ssl_ca", Input).border_title = "CA File [dark_gray](optional)[/dark_gray]"
-        self.query_one("#ssl_cert", Input).border_title = "Client Certificate File [dark_gray](optional)[/dark_gray]"
-        self.query_one("#ssl_key", Input).border_title = "Client Key File [dark_gray](optional)[/dark_gray]"
+        self.query_one("#socket_file", Input).border_title = "Socket File [$dark_gray](optional)[/$dark_gray]"
+        self.query_one("#ssl_ca", Input).border_title = "CA File [$dark_gray](optional)[/$dark_gray]"
+        self.query_one("#ssl_cert", Input).border_title = "Client Certificate File [$dark_gray](optional)[/$dark_gray]"
+        self.query_one("#ssl_key", Input).border_title = "Client Key File [$dark_gray](optional)[/$dark_gray]"
 
-        self.query_one("#credential_profile", Select).border_title = (
-            "Credential Profile [dark_gray](optional)[/dark_gray]"
-        )
+        self.query_one(
+            "#credential_profile", Select
+        ).border_title = "Credential Profile [$dark_gray](optional)[/$dark_gray]"
         self.query_one("#hostgroup", Select).border_title = "Hostgroup"
         self.query_one("#replay_file", Select).border_title = "Replay File"
 
         if self.ssl:
             self.query_one("#ssl", Checkbox).value = True
 
+            ssl_mode = "REQUIRED"
             if self.ssl.get("required"):
                 ssl_mode = "REQUIRED"
             elif self.ssl.get("check_hostname") is False:
@@ -202,9 +197,9 @@ class TabSetupModal(ModalScreen):
                 ssl_mode = "VERIFY_IDENTITY"
 
             self.query_one(f"#{ssl_mode}", RadioButton).value = True
-            self.query_one("#ssl_ca", Input).value = self.ssl.get("ca", "")
-            self.query_one("#ssl_cert", Input).value = self.ssl.get("cert", "")
-            self.query_one("#ssl_key", Input).value = self.ssl.get("key", "")
+            self.query_one("#ssl_ca", Input).value = cast(str, self.ssl.get("ca", ""))
+            self.query_one("#ssl_cert", Input).value = cast(str, self.ssl.get("cert", ""))
+            self.query_one("#ssl_key", Input).value = cast(str, self.ssl.get("key", ""))
         else:
             self.query_one("#container_ssl", Container).display = False
 
@@ -259,7 +254,7 @@ class TabSetupModal(ModalScreen):
                 )
                 yield Rule(line_style="heavy")
                 yield Label("Load a Replay File")
-                yield Static(f"[dark_gray][b]Directory[/b]: {self.replay_directory}", id="replay_directory")
+                yield Static(f"[$dark_gray][b]Directory[/b]: {self.replay_directory}", id="replay_directory")
                 yield Select(
                     options=self.options_replay_files,
                     id="replay_file",
@@ -283,6 +278,8 @@ class TabSetupModal(ModalScreen):
             return
 
         # Load selected credential profile
+        if not isinstance(event.value, str):
+            return
         credential_profile = self.credential_profiles.get(event.value)
         if not credential_profile:
             return
@@ -299,11 +296,15 @@ class TabSetupModal(ModalScreen):
             self.query_one(f"#{credential_profile.ssl_mode}", RadioButton).value = True
 
             for field, ssl_key in [("#ssl_ca", "ca"), ("#ssl_cert", "cert"), ("#ssl_key", "key")]:
-                set_field(field, getattr(credential_profile, f"ssl_{ssl_key}"), default=self.ssl.get(ssl_key, ""))
+                set_field(
+                    field,
+                    getattr(credential_profile, f"ssl_{ssl_key}"),
+                    default=cast(str, self.ssl.get(ssl_key, "")),
+                )
         else:
             self.query_one("#ssl", Checkbox).value = False
 
-    def update_inputs(self, disable: bool = None, exclude: list = None):
+    def update_inputs(self, disable: bool | None = None, exclude: list[str] | None = None):
         if exclude is None:
             exclude = []
         inputs = {
@@ -323,8 +324,9 @@ class TabSetupModal(ModalScreen):
                 input_element = self.query_one(key, widget)
                 if disable is not None:
                     input_element.disabled = disable
-                    if key == "#ssl" and disable:  # Reset SSL checkbox when disabled
-                        input_element.value = False
+
+        if disable and "#ssl" not in exclude:
+            self.query_one("#ssl", Checkbox).value = False
 
     @on(Select.Changed, "#hostgroup")
     def hostgroup_changed(self, event: Select.Changed):
@@ -339,18 +341,21 @@ class TabSetupModal(ModalScreen):
 
     @on(RadioSet.Changed, "#ssl_mode")
     def ssl_mode_changed(self, event: RadioSet.Changed):
-        if event.pressed.id in ["VERIFY_CA", "VERIFY_IDENTITY"]:
+        pressed_id = event.pressed.id
+        if pressed_id is None:
+            return
+        if pressed_id in ["VERIFY_CA", "VERIFY_IDENTITY"]:
             self.query_one("#ssl_ca", Input).border_title = "CA File"
-            self.query_one("#ssl_cert", Input).border_title = (
-                "Client Certificate File [dark_gray](optional)[/dark_gray]"
-            )
-            self.query_one("#ssl_key", Input).border_title = "Client Key File [dark_gray](optional)[/dark_gray]"
+            self.query_one(
+                "#ssl_cert", Input
+            ).border_title = "Client Certificate File [$dark_gray](optional)[/$dark_gray]"
+            self.query_one("#ssl_key", Input).border_title = "Client Key File [$dark_gray](optional)[/$dark_gray]"
         else:
-            self.query_one("#ssl_ca", Input).border_title = "CA File [dark_gray](optional)[/dark_gray]"
-            self.query_one("#ssl_cert", Input).border_title = (
-                "Client Certificate File [dark_gray](optional)[/dark_gray]"
-            )
-            self.query_one("#ssl_key", Input).border_title = "Client Key File [dark_gray](optional)[/dark_gray]"
+            self.query_one("#ssl_ca", Input).border_title = "CA File [$dark_gray](optional)[/$dark_gray]"
+            self.query_one(
+                "#ssl_cert", Input
+            ).border_title = "Client Certificate File [$dark_gray](optional)[/$dark_gray]"
+            self.query_one("#ssl_key", Input).border_title = "Client Key File [$dark_gray](optional)[/$dark_gray]"
 
     @on(Checkbox.Changed, "#ssl")
     def ssl_changed(self, event: Checkbox.Changed):
@@ -376,19 +381,16 @@ class TabSetupModal(ModalScreen):
         if event.button.id == "submit":
             error_message = None
 
-            credential_profile = self.query_one("#credential_profile", Select)
-            replay_file = self.query_one("#replay_file", Select)
+            credential_profile = cast(Select[str], self.query_one("#credential_profile", Select))
+            replay_file = cast(Select[str], self.query_one("#replay_file", Select))
             host = self.query_one("#host", Input)
-            hostgroup = self.query_one("#hostgroup", Select)
+            hostgroup = cast(Select[str], self.query_one("#hostgroup", Select))
             username = self.query_one("#username", Input)
             password = self.query_one("#password", Input)
             record_for_replay = self.query_one("#record_for_replay", Checkbox)
 
-            ssl_mode = (
-                self.query_one("#ssl_mode", RadioSet).pressed_button.id
-                if self.query_one("#ssl_mode", RadioSet).pressed_button
-                else None
-            )
+            pressed_ssl_mode = self.query_one("#ssl_mode", RadioSet).pressed_button
+            ssl_mode = pressed_ssl_mode.id if pressed_ssl_mode is not None else None
             ssl_ca = self.query_one("#ssl_ca", Input).value
             ssl_cert = self.query_one("#ssl_cert", Input).value
             ssl_key = self.query_one("#ssl_key", Input).value
@@ -420,8 +422,8 @@ class TabSetupModal(ModalScreen):
                     ssl["key"] = ssl_key
 
             socket_file = self.query_one("#socket_file", Input)
-            hostgroup_value = None if hostgroup.value == Select.NULL else hostgroup.value
-            replay_file_value = None if replay_file.value == Select.NULL else replay_file.value
+            hostgroup_value = hostgroup.value if isinstance(hostgroup.value, str) else None
+            replay_file_value = replay_file.value if isinstance(replay_file.value, str) else None
 
             modal_footer = self.query_one("#modal_footer", Label)
             host_split = host.value.split(":")

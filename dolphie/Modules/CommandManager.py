@@ -1,9 +1,14 @@
-from dolphie.DataTypes import ConnectionSource
+from __future__ import annotations
+
+from dolphie.DataTypes import ConnectionSource, ConnectionSourceType
+
+Command = dict[str, str]
+CommandMap = dict[str, Command]
 
 
 class CommandManager:
     def __init__(self):
-        self.command_keys = {
+        self.command_keys: dict[str, dict[str, CommandMap]] = {
             ConnectionSource.mysql: {
                 "Commands": {
                     "1": {"human_key": "1", "description": "Toggle panel Dashboard"},
@@ -463,7 +468,7 @@ class CommandManager:
             "ctrl+d",
         ]
 
-    def get_commands(self, replay_file: str, connection_source: ConnectionSource) -> dict[str, dict[str, str]]:
+    def get_commands(self, replay_file: str | None, connection_source: ConnectionSourceType) -> CommandMap:
         if replay_file:
             key = {
                 ConnectionSource.mysql: "mysql_replay",
@@ -472,4 +477,4 @@ class CommandManager:
         else:
             key = connection_source
 
-        return self.command_keys.get(key, {}).get("Commands")
+        return self.command_keys.get(key, {}).get("Commands", {})

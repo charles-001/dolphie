@@ -7,21 +7,22 @@ authors = ["Charles Thompson <01charles.t@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.10"
 rich = "^15.0.0"
 pymysql = "^1.2.0"
 myloginpath = "^0.0.4"
 packaging = "^26.2"
-requests = "^2.32.5"  # held: 2.34+ requires Python >=3.10
+requests = "^2.32.5"
 sqlparse = "^0.5.5"
 textual = "^8.2.7"
-plotext = "^5.3.2"
 zstandard = "^0.25.0"
 loguru = "^0.7.3"
-orjson = "^3.10.18"  # held: 3.11+ requires Python >=3.10
+orjson = "^3.10.18"
 psutil = "^7.2.2"
+textual-plotext = "^1.0.1"
 
 [tool.poetry.group.dev.dependencies]
+basedpyright = "^1.39.9"
 pytest = "~8.3.5"
 
 [build-system]
@@ -34,9 +35,15 @@ dolphie = "dolphie.App:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.basedpyright]
+failOnWarnings = true
+include = ["dolphie", "tests"]
+pythonVersion = "3.10"
+typeCheckingMode = "standard"
+
 [tool.ruff]
 line-length = 120
-target-version = "py311"
+target-version = "py310"
 
 [tool.ruff.format]
 
@@ -47,7 +54,7 @@ select = [
     "F",      # pyflakes
     "I",      # isort - import sorting
     "N",      # pep8-naming - naming conventions
-    "UP",     # pyupgrade - use modern Python syntax (3.11+)
+    "UP",     # pyupgrade - use modern Python syntax
     "ASYNC",  # flake8-async - async/await best practices
     "B",      # flake8-bugbear - likely bugs and design problems
     "C4",     # flake8-comprehensions - better comprehensions
@@ -82,8 +89,7 @@ ignore = [
     "SIM105",    # Use contextlib.suppress (2 violations - try-except-pass sometimes clearer)
     "SIM115",    # Use context manager (minor improvement)
     "SIM117",    # Combine with statements (sometimes nested is clearer)
-    "UP017",     # Use datetime.UTC alias (only available in Python 3.11+, we support 3.9+)
-    "UP007",     # Use X | Y for type unions (runtime type aliases need Union[] for Python 3.9)
+    "UP017",     # Use datetime.UTC alias (only available in Python 3.11+, we support 3.10+)
 
     # --- Async patterns ---
     "ASYNC110",  # Async busy wait (1 violation - intentional polling pattern)

@@ -1,14 +1,22 @@
+from __future__ import annotations
+
 import re
 import string
 import time
+from collections.abc import Mapping
+from datetime import date, timedelta
+from decimal import Decimal
 from ssl import SSLError
 
 import pymysql
-from dolphie.DataTypes import ConnectionSource
-from dolphie.Modules.ManualException import ManualException
-from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
 from loguru import logger
 from textual.app import App
+
+from dolphie.DataTypes import ConnectionSource, ConnectionSourceType, DatabaseRow, DatabaseScalar
+from dolphie.Modules.ArgumentParser import SSLConfig
+from dolphie.Modules.Functions import coerce_int, coerce_str, escape_markup
+from dolphie.Modules.ManualException import ManualException
+from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
 
 
 class Database:
@@ -16,11 +24,11 @@ class Database:
         self,
         app: App,
         host: str,
-        user: str,
-        password: str,
-        socket: str,
+        user: str | None,
+        password: str | None,
+        socket: str | None,
         port: int,
-        ssl: str,
+        ssl: SSLConfig,
         save_connection_id: bool = True,
         auto_connect: bool = True,
         daemon_mode: bool = False,
@@ -43,42 +51,44 @@ class Database:
             1143,  # column command denied to user
         }
 
-        self.connection: pymysql.Connection = None
-        self.connection_id: int = None
-        self.source: ConnectionSource = None
+        self.connection: pymysql.Connection | None = None
+        self.cursor: pymysql.cursors.DictCursor | None = None
+        self.connection_id: int | None = None
+        self.source: ConnectionSourceType | None = None
         self.is_running_query: bool = False
         self.has_connected: bool = False
         self.last_execute_successful: bool = False
-        self.privilege_errors_notified: set = (
-            set()
-        )  # Track queries that have already shown privilege error notifications
+        # Track queries that have already shown privilege error notifications.
+        self.privilege_errors_notified: set[str] = set()
 
         # Pre-compile regex pattern to filter non-printable characters
         self.non_printable_regex = re.compile(f"[^{re.escape(string.printable)}]")
 
+        self.max_reconnect_attempts: int
         if daemon_mode:
-            self.max_reconnect_attempts: int = 999999999
+            self.max_reconnect_attempts = 999999999
         else:
-            self.max_reconnect_attempts: int = 3
+            self.max_reconnect_attempts = 3
 
         if auto_connect:
             self.connect()
 
     def connect(self, reconnect_attempt: bool = False):
         try:
-            self.connection = pymysql.connect(
+            connection = pymysql.connect(
                 host=self.host,
                 user=self.user,
                 passwd=self.password,
                 unix_socket=self.socket,
                 port=int(self.port),
                 use_unicode=False,
-                ssl=self.ssl,
+                ssl=self.ssl or None,
                 autocommit=True,
                 connect_timeout=5,
                 program_name="Dolphie",
             )
-            self.cursor = self.connection.cursor(pymysql.cursors.DictCursor)
+            self.connection = connection
+            self.cursor = connection.cursor(pymysql.cursors.DictCursor)
 
             # If the query is successful, then the connection is to ProxySQL
             try:
@@ -100,7 +110,8 @@ class Database:
         except pymysql.Error as e:
             if reconnect_attempt:
                 logger.error(f"Failed to reconnect to {self.source}: {e.args[1]}")
-                escaped_error_message = e.args[1].replace("[", "\\[")
+                error_message = coerce_str(e.args[1] if len(e.args) > 1 else next(iter(e.args), ""))
+                escaped_error_message = escape_markup(error_message)
                 self.app.notify(
                     (
                         f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: "
@@ -121,16 +132,17 @@ class Database:
             raise ManualException(f"SSL error: {e}") from e
 
     def close(self):
-        if self.is_connected():
-            self.connection.close()
+        connection = self.connection
+        if connection is not None and self.is_connected():
+            connection.close()
 
     def is_connected(self) -> bool:
-        return self.connection and self.connection.open
+        return bool(self.connection and self.connection.open)
 
-    def _process_row(self, row):
+    def _process_row(self, row: Mapping[str, object]) -> DatabaseRow:
         return {field: self._decode_value(value) for field, value in row.items()}
 
-    def _decode_value(self, value):
+    def _decode_value(self, value: object) -> DatabaseScalar:
         if isinstance(value, (bytes, bytearray)):
             # First attempt: UTF-8
             try:
@@ -149,28 +161,42 @@ class Database:
 
             return self.non_printable_regex.sub("?", decoded_value)
 
-        return value
+        if isinstance(value, (str, int, float, Decimal, date, timedelta)) or value is None:
+            return value
+        return coerce_str(value)
 
-    def fetchall(self):
-        if not self.is_connected() or not self.last_execute_successful:
+    def fetchall(self) -> list[DatabaseRow]:
+        cursor = self.cursor
+        if not self.is_connected() or not self.last_execute_successful or cursor is None:
             return []
 
-        rows = self.cursor.fetchall()
+        rows = cursor.fetchall()
         return [self._process_row(row) for row in rows] if rows else []
 
-    def fetchone(self):
-        if not self.is_connected() or not self.last_execute_successful:
+    def fetchone(self) -> DatabaseRow:
+        cursor = self.cursor
+        if not self.is_connected() or not self.last_execute_successful or cursor is None:
             return {}
 
-        row = self.cursor.fetchone()
+        row = cursor.fetchone()
         return self._process_row(row) if row else {}
 
-    def fetch_value_from_field(self, query, field=None, values=None):
+    def fetch_value_from_field(
+        self,
+        query: str,
+        field: str | None = None,
+        values: object = None,
+        ignore_error: bool = False,
+    ) -> DatabaseScalar:
         if not self.is_connected():
             return None
 
-        self.execute(query, values)
-        data = self.cursor.fetchone()
+        self.execute(query, values, ignore_error=ignore_error)
+        cursor = self.cursor
+        if not self.last_execute_successful or cursor is None:
+            return None
+
+        data = cursor.fetchone()
 
         if not data:
             return None
@@ -179,7 +205,7 @@ class Database:
         value = data.get(field)
         return self._decode_value(value)
 
-    def fetch_status_and_variables(self, command):
+    def fetch_status_and_variables(self, command: str) -> dict[str, int | str]:
         self.execute(
             getattr(ProxySQLQueries, command)
             if self.source == ConnectionSource.proxysql
@@ -188,13 +214,19 @@ class Database:
         data = self.fetchall()
 
         if command in {"status", "variables", "mysql_stats"}:
-            return {
-                row["Variable_name"]: int(row["Value"]) if row["Value"].isnumeric() else row["Value"] for row in data
-            }
+            values: dict[str, int | str] = {}
+            for row in data:
+                variable_name = coerce_str(row.get("Variable_name"))
+                value = coerce_str(row.get("Value"))
+                if variable_name:
+                    values[variable_name] = int(value) if value.isnumeric() else value
+            return values
         elif command == "innodb_metrics":
-            return {row["NAME"]: int(row["COUNT"]) for row in data}
+            return {name: coerce_int(row.get("COUNT")) for row in data if (name := coerce_str(row.get("NAME")))}
 
-    def execute(self, query, values=None, ignore_error=False):
+        return {}
+
+    def execute(self, query: str, values: object = None, ignore_error: bool = False) -> int | None:
         if not self.is_connected():
             self.last_execute_successful = False
             return None
@@ -219,12 +251,16 @@ class Database:
             self.last_execute_successful = False
             return None
 
+        error_code: int | None = None
         for attempt_number in range(self.max_reconnect_attempts):
             self.is_running_query = True
             error_message = None
 
             try:
-                rows = self.cursor.execute(query, values)
+                cursor = self.cursor
+                if cursor is None:
+                    raise AttributeError
+                rows = cursor.execute(query, values)
                 self.is_running_query = False
                 self.last_execute_successful = True
 
@@ -247,7 +283,7 @@ class Database:
                 else:
                     error_code = e.args[0]
                     if e.args[1]:
-                        error_message = e.args[1]
+                        error_message = coerce_str(e.args[1])
 
                 # Check if this is a privilege error - silently return None without raising exception
                 if error_code in self._PRIVILEGE_ERROR_CODES:
@@ -262,8 +298,8 @@ class Database:
                         )
 
                         # Escape [ and ] characters in the error message and query
-                        escaped_error_message = error_message.replace("[", "\\[") if error_message else "Access denied"
-                        escaped_query = raw_query.replace("[", "\\[")
+                        escaped_error_message = escape_markup(error_message) if error_message else "Access denied"
+                        escaped_query = escape_markup(raw_query)
 
                         self.app.notify(
                             f"[$b_highlight]{self.host}:{self.port}[/$b_highlight]: [dim]{error_code}: "
@@ -291,7 +327,7 @@ class Database:
                             f"{self.source} has lost its connection: {error_message}, attempting to reconnect..."
                         )
                         # Escape [ and ] characters in the error message
-                        escaped_error_message = error_message.replace("[", "\\[")
+                        escaped_error_message = escape_markup(error_message)
                         self.app.notify(
                             f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: {escaped_error_message}",
                             title="MySQL Connection Lost",
@@ -302,7 +338,8 @@ class Database:
                     self.close()
                     self.connect(reconnect_attempt=True)
 
-                    if not self.connection.open:
+                    connection = self.connection
+                    if connection is None or not connection.open:
                         # Exponential backoff
                         time.sleep(min(1 * (2**attempt_number), 20))  # Cap the wait time at 20 seconds
 
@@ -312,18 +349,19 @@ class Database:
                     self.app.notify(
                         f"[$b_light_blue]{self.host}:{self.port}[/$b_light_blue]: Successfully reconnected",
                         title="MySQL Connection Created",
-                        severity="success",
+                        severity="information",
                         timeout=10,
                     )
 
                     # Retry the query
                     return self.execute(query, values)
                 else:
-                    raise ManualException(error_message, query=query, code=error_code) from e
+                    raise ManualException(coerce_str(error_message), query=query, code=error_code or 0) from e
 
-        if not self.connection.open:
+        connection = self.connection
+        if connection is None or not connection.open:
             raise ManualException(
                 f"Failed to reconnect to {self.source} after {self.max_reconnect_attempts} attempts",
                 query=query,
-                code=error_code,
+                code=error_code or 0,
             )

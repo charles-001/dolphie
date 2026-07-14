@@ -455,7 +455,7 @@ class MySQLQueries:
             $1
             $2
         ORDER BY
-            timestamp
+            timestamp DESC
     """
     memory_by_user: str = """
         SELECT

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from dolphie.Modules.Functions import format_query, format_time
+from collections.abc import Mapping
+
+from rich.syntax import Syntax
+
+from dolphie.DataTypes import DatabaseRow
+from dolphie.Modules.Functions import coerce_int, coerce_str, format_query, format_time
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
-from rich.syntax import Syntax
-from textual.widgets import DataTable
 
 
-def create_panel(tab: Tab) -> DataTable:
+def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
 
     columns = {
@@ -68,17 +71,18 @@ def create_panel(tab: Tab) -> DataTable:
             row_height = 1
 
             row_values = []
-            for column_key, column_name, column_width in zip(column_keys, column_names, column_widths):
+            for column_key, column_name, column_width in zip(column_keys, column_names, column_widths, strict=True):
                 column_value = lock[column_key]
+                column_text = coerce_str(column_value)
 
                 # Get height of row based on the how many objects are in the OBJECT_NAME field
                 if (
                     column_key == "OBJECT_NAME"
-                    and column_value
-                    and len(column_value) > column_width
-                    and "," in column_value
+                    and column_text
+                    and len(column_text) > column_width
+                    and "," in column_text
                 ):
-                    object_names = [object_name[:column_width] for object_name in column_value.split(",")]
+                    object_names = [object_name[:column_width] for object_name in column_text.split(",")]
                     value = "\n".join(object_names)
                     row_height = len(object_names)
                 else:
@@ -90,6 +94,7 @@ def create_panel(tab: Tab) -> DataTable:
 
                 row_values.append(value)
 
+            row_values = metadata_locks_datatable.normalize_cells(row_values)
             if lock_id in metadata_locks_datatable.rows:
                 datatable_row = metadata_locks_datatable.get_row(lock_id)
 
@@ -112,11 +117,11 @@ def create_panel(tab: Tab) -> DataTable:
             metadata_locks_datatable.sort("Age", reverse=dolphie.sort_by_time_descending)
 
     tab.metadata_locks_title.update(
-        f"{dolphie.panels.metadata_locks.title} " f"([$highlight]{metadata_locks_datatable.row_count}[/$highlight])"
+        f"{dolphie.panels.metadata_locks.title} ([$highlight]{metadata_locks_datatable.row_count}[/$highlight])"
     )
 
 
-def fetch_data(tab: Tab) -> list[dict[str, int | str]]:
+def fetch_data(tab: Tab) -> list[DatabaseRow]:
     dolphie = tab.dolphie
 
     ########################
@@ -157,33 +162,35 @@ def fetch_data(tab: Tab) -> list[dict[str, int | str]]:
     return threads
 
 
-def format_value(lock: dict, column_key: str, value: str) -> str:
-    formatted_value = value
+def format_value(lock: Mapping[str, object], column_key: str, value: object) -> str | Syntax:
+    value_text = coerce_str(value)
+    object_name = coerce_str(lock.get("OBJECT_NAME"))
+    formatted_value: str | Syntax = value_text
 
     # OBJECT_NAME is in the format "schema/table" sometimes where OBJECT_SCHEMA is empty,
     # so I want to split OBJECT_NAME and correct it if necessary
-    if column_key == "OBJECT_SCHEMA" and not value and lock["OBJECT_NAME"] and "/" in lock["OBJECT_NAME"]:
-        formatted_value = lock["OBJECT_NAME"].split("/")[0]
-    elif column_key == "OBJECT_NAME" and value and "/" in value:
-        formatted_value = value.split("/")[1]
+    if column_key == "OBJECT_SCHEMA" and not value_text and "/" in object_name:
+        formatted_value = object_name.split("/")[0]
+    elif column_key == "OBJECT_NAME" and value_text and "/" in value_text:
+        formatted_value = value_text.split("/")[1]
     elif value is None or value == "":
-        formatted_value = "[dark_gray]N/A"
+        formatted_value = "[$dark_gray]N/A"
     elif column_key == "PROCESSLIST_INFO":
-        formatted_value = format_query(value)
+        formatted_value = format_query(value_text)
     elif column_key == "LOCK_STATUS":
-        if value == "GRANTED":
-            formatted_value = f"[green]{value}[/green]"
-        elif value == "PENDING":
-            formatted_value = f"[red]{value}[/red]"
+        if value_text == "GRANTED":
+            formatted_value = f"[$green]{value_text}[/$green]"
+        elif value_text == "PENDING":
+            formatted_value = f"[$red]{value_text}[/$red]"
     elif column_key == "LOCK_TYPE":
-        if value == "EXCLUSIVE":
-            formatted_value = f"[yellow]{value}[/yellow]"
+        if value_text == "EXCLUSIVE":
+            formatted_value = f"[$yellow]{value_text}[/$yellow]"
     elif column_key == "PROCESSLIST_TIME":
-        formatted_value = format_time(value)
+        formatted_value = format_time(coerce_int(value))
     elif column_key == "CODE_SOURCE":
-        formatted_value = value.split(":")[0]
+        formatted_value = value_text.split(":")[0]
     elif column_key == "THREAD_SOURCE":
-        formatted_value = value.split("/")[-1]
+        formatted_value = value_text.split("/")[-1]
 
         if formatted_value == "one_connection":
             formatted_value = "user_connection"

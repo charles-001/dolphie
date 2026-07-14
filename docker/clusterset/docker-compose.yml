@@ -1,0 +1,225 @@
+services:
+  cs-node1:
+    image: mysql:8.4
+    container_name: cs-node1
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --server-id=1
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --plugin-load-add=group_replication.so
+      - --loose-group-replication-start-on-boot=OFF
+      - --report-host=172.28.2.2
+      - --report-port=3306
+      - --disabled-storage-engines=MyISAM,BLACKHOLE,FEDERATED,ARCHIVE,MEMORY
+      - --log-replica-updates=ON
+    ports:
+      - "3311:3306"
+    networks:
+      clusterset:
+        ipv4_address: 172.28.2.2
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  cs-node2:
+    image: mysql:8.4
+    container_name: cs-node2
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --server-id=2
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --plugin-load-add=group_replication.so
+      - --loose-group-replication-start-on-boot=OFF
+      - --report-host=172.28.2.3
+      - --report-port=3306
+      - --disabled-storage-engines=MyISAM,BLACKHOLE,FEDERATED,ARCHIVE,MEMORY
+      - --log-replica-updates=ON
+    ports:
+      - "3312:3306"
+    networks:
+      clusterset:
+        ipv4_address: 172.28.2.3
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  cs-node3:
+    image: mysql:8.4
+    container_name: cs-node3
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --server-id=3
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --plugin-load-add=group_replication.so
+      - --loose-group-replication-start-on-boot=OFF
+      - --report-host=172.28.2.4
+      - --report-port=3306
+      - --disabled-storage-engines=MyISAM,BLACKHOLE,FEDERATED,ARCHIVE,MEMORY
+      - --log-replica-updates=ON
+    ports:
+      - "3313:3306"
+    networks:
+      clusterset:
+        ipv4_address: 172.28.2.4
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  cs-node4:
+    image: mysql:8.4
+    container_name: cs-node4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --server-id=4
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --plugin-load-add=group_replication.so
+      - --loose-group-replication-start-on-boot=OFF
+      - --report-host=172.28.2.5
+      - --report-port=3306
+      - --disabled-storage-engines=MyISAM,BLACKHOLE,FEDERATED,ARCHIVE,MEMORY
+      - --log-replica-updates=ON
+    ports:
+      - "3314:3306"
+    networks:
+      clusterset:
+        ipv4_address: 172.28.2.5
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  cs-node5:
+    image: mysql:8.4
+    container_name: cs-node5
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --server-id=5
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --plugin-load-add=group_replication.so
+      - --loose-group-replication-start-on-boot=OFF
+      - --report-host=172.28.2.6
+      - --report-port=3306
+      - --disabled-storage-engines=MyISAM,BLACKHOLE,FEDERATED,ARCHIVE,MEMORY
+      - --log-replica-updates=ON
+    ports:
+      - "3315:3306"
+    networks:
+      clusterset:
+        ipv4_address: 172.28.2.6
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  cs-node6:
+    image: mysql:8.4
+    container_name: cs-node6
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --server-id=6
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --plugin-load-add=group_replication.so
+      - --loose-group-replication-start-on-boot=OFF
+      - --report-host=172.28.2.7
+      - --report-port=3306
+      - --disabled-storage-engines=MyISAM,BLACKHOLE,FEDERATED,ARCHIVE,MEMORY
+      - --log-replica-updates=ON
+    ports:
+      - "3316:3306"
+    networks:
+      clusterset:
+        ipv4_address: 172.28.2.7
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  bootstrap:
+    image: mysql:8.4
+    container_name: cs-bootstrap
+    depends_on:
+      cs-node1:
+        condition: service_healthy
+      cs-node2:
+        condition: service_healthy
+      cs-node3:
+        condition: service_healthy
+      cs-node4:
+        condition: service_healthy
+      cs-node5:
+        condition: service_healthy
+      cs-node6:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c", "mysqlsh --no-defaults --js --file /bootstrap.js"]
+    volumes:
+      - ./bootstrap.js:/bootstrap.js
+    networks:
+      clusterset:
+        ipv4_address: 172.28.2.10
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -h172.28.2.2 -uroot -proot -N -e \"SELECT COUNT(*) FROM performance_schema.replication_group_members WHERE MEMBER_STATE='ONLINE'\" 2>/dev/null | grep -q 3"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 10s
+
+  write-load:
+    image: mysql:8.4
+    container_name: cs-write-load
+    depends_on:
+      bootstrap:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/write-load.sh"]
+    volumes:
+      - ./write-load.sh:/write-load.sh
+    networks:
+      clusterset:
+        ipv4_address: 172.28.2.11
+    restart: unless-stopped
+
+networks:
+  clusterset:
+    driver: bridge
+    enable_ipv6: false
+    ipam:
+      config:
+        - subnet: 172.28.2.0/24

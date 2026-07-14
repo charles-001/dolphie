@@ -1,12 +1,11 @@
-from textual.binding import Binding
+from textual.app import ComposeResult
 from textual.containers import Center
-from textual.screen import Screen
 from textual.widgets import Static
 
-from dolphie.Widgets.TopBar import TopBar
+from dolphie.Widgets.DolphieScreen import DolphieScreen, ScreenContext
 
 
-class CommandScreen(Screen):
+class CommandScreen(DolphieScreen):
     CSS = """
         CommandScreen {
             & Center {
@@ -23,17 +22,10 @@ class CommandScreen(Screen):
         }
     """
 
-    BINDINGS = [
-        Binding("q", "app.pop_screen", "", show=False),
-    ]
-
-    def __init__(self, connection_status, app_version, host, data):
-        super().__init__()
-        self.connection_status = connection_status
-        self.app_version = app_version
-        self.host = host
+    def __init__(self, context: ScreenContext, data):
+        super().__init__(context)
         self.data = data
 
-    def compose(self):
-        yield TopBar(connection_status=self.connection_status, app_version=self.app_version, host=self.host)
+    def compose_content(self) -> ComposeResult:
+        """Compose the command result."""
         yield Center(Static(self.data, shrink=True))

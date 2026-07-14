@@ -1,30 +1,56 @@
-import re
-from typing import Any
+from __future__ import annotations
 
-from dolphie.Modules.Functions import minify_query
+import re
+from typing import TypedDict
+
+from dolphie.DataTypes import DatabaseRow, DatabaseScalar
+from dolphie.Modules.Functions import coerce_str, minify_query
+
+
+class _MetricAccumulator(TypedDict):
+    total: int
+    delta: int
+    delta_last_sample: int
+
+
+class _FilteredMetric(TypedDict, total=False):
+    t: int
+    d: int
+    d_last_sample: int
+
+
+class _InstanceData(TypedDict):
+    event_name: str | None
+    metrics: dict[str, _MetricAccumulator]
+
+
+FilteredValue = DatabaseScalar | _FilteredMetric
 
 
 class PerformanceSchemaMetrics:
-    def __init__(self, query_data: list[dict[str, Any]], metric_name: str, metric_key: str):
+    def __init__(self, query_data: list[DatabaseRow], metric_name: str, metric_key: str):
         self.metric_name = metric_name
         self.metric_key = metric_key
 
         # These are integer columns that should be ignored for delta calculations
         self.ignore_int_columns = ["quantile_95", "quantile_99"]
 
-        self.filtered_data: dict[str, dict[str, dict[str, int]]] = {}
-        self.internal_data: dict[str, dict[str, dict[str, Any]]] = {
-            row[self.metric_key]: {
-                "event_name": row.get("EVENT_NAME"),
+        self.filtered_data: dict[str, dict[str, FilteredValue]] = {}
+        self.internal_data: dict[str, _InstanceData] = {}
+        for row in query_data:
+            instance_value = row.get(self.metric_key)
+            if instance_value is None:
+                continue
+
+            instance_name = coerce_str(instance_value)
+            self.internal_data[instance_name] = {
+                "event_name": coerce_str(row.get("EVENT_NAME")) or None,
                 "metrics": {
                     metric: {"total": value, "delta": 0, "delta_last_sample": 0}
                     for metric, value in row.items()
                     if isinstance(value, int) and metric not in self.ignore_int_columns
                 },
             }
-            for row in query_data
-            if row[self.metric_key] is not None
-        }
 
         self.table_pattern = re.compile(r"([^/]+)/([^/]+)\.(frm|ibd|MYD|MYI|CSM|CSV|par)$")
         self.undo_logs_pattern = re.compile(r"undo_\d+$")
@@ -39,17 +65,20 @@ class PerformanceSchemaMetrics:
             "wait/io/file/sql/hash_join": "Hash joins",
         }
 
-    def update_internal_data(self, query_data: list[dict[str, int]]):
+    def update_internal_data(self, query_data: list[DatabaseRow]):
         # Track instances and remove missing ones
-        current_instance_names = {row[self.metric_key] for row in query_data if row[self.metric_key] is not None}
+        current_instance_names = {
+            coerce_str(instance_value) for row in query_data if (instance_value := row.get(self.metric_key)) is not None
+        }
         instances_to_remove = set(self.internal_data) - current_instance_names
 
         # Process current query data
         for row in query_data:
-            instance_name = row[self.metric_key]
+            instance_value = row.get(self.metric_key)
             # Skip rows where the metric key is None (orjson cannot serialize None as dict keys)
-            if instance_name is None:
+            if instance_value is None:
                 continue
+            instance_name = coerce_str(instance_value)
             metrics = {
                 metric: value
                 for metric, value in row.items()
@@ -59,7 +88,7 @@ class PerformanceSchemaMetrics:
             # Initialize instance in internal_data if not present
             if instance_name not in self.internal_data:
                 self.internal_data[instance_name] = {
-                    "event_name": row.get("EVENT_NAME"),
+                    "event_name": coerce_str(row.get("EVENT_NAME")) or None,
                     "metrics": {
                         metric: {"total": value, "delta": 0, "delta_last_sample": 0}
                         for metric, value in metrics.items()
@@ -114,9 +143,11 @@ class PerformanceSchemaMetrics:
                         and "schema_name" not in self.filtered_data[instance_name]
                     ):
                         self.filtered_data[instance_name]["schema_name"] = row.get("schema_name")
-                        self.filtered_data[instance_name]["digest_text"] = minify_query(row.get("digest_text"))
+                        self.filtered_data[instance_name]["digest_text"] = minify_query(
+                            coerce_str(row.get("digest_text"))
+                        )
                         self.filtered_data[instance_name]["query_sample_text"] = minify_query(
-                            row.get("query_sample_text")
+                            coerce_str(row.get("query_sample_text"))
                         )
                         self.filtered_data[instance_name]["quantile_95"] = row.get("quantile_95")
                         self.filtered_data[instance_name]["quantile_99"] = row.get("quantile_99")
@@ -132,7 +163,7 @@ class PerformanceSchemaMetrics:
             self.aggregate_and_combine_data()
 
     def aggregate_and_combine_data(self):
-        combined_results = {}
+        combined_results: dict[str, dict[str, dict[str, int]]] = {}
 
         # Aggregate deltas for combined events and instances matching the regex
         for instance_name, instance_data in self.internal_data.items():
@@ -171,5 +202,10 @@ class PerformanceSchemaMetrics:
         self.filtered_data = {
             instance_name: instance_metrics
             for instance_name, instance_metrics in self.filtered_data.items()
-            if instance_metrics.get("SUM_TIMER_WAIT", {}).get("d", 0) != 0
+            if self._filtered_delta(instance_metrics, "SUM_TIMER_WAIT") != 0
         }
+
+    @staticmethod
+    def _filtered_delta(instance_metrics: dict[str, FilteredValue], metric_name: str) -> int:
+        metric = instance_metrics.get(metric_name)
+        return metric.get("d", 0) if isinstance(metric, dict) else 0

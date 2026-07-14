@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 from loguru import logger
 from rich import box
-from rich.table import Table
 
 from dolphie.Modules.Functions import format_query, minify_query
+from dolphie.Modules.Theme import ThemedTable as Table
 
 
 class ManualException(Exception):
-    def __init__(self, reason: str, query: str = "", code: int = None):
+    def __init__(self, reason: str, query: str = "", code: int | None = None):
         self.reason = reason
         self.query = query
         self.code = code
@@ -19,7 +21,7 @@ class ManualException(Exception):
         logger_message = []
 
         if self.query:
-            table_exception.add_row("[red]Failed to execute query:[/red]")
+            table_exception.add_row("[$red]Failed to execute query:[/$red]")
             table_exception.add_row(format_query(self.query, minify=False))
             table_exception.add_row("")
 
