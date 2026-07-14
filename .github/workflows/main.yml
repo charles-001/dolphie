@@ -17,23 +17,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install poetry
-        run: pipx install poetry
-
-      - uses: actions/setup-python@v5
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
         with:
           python-version: ${{ matrix.python-version }}
-          cache: poetry
+          enable-cache: true
 
-      - run: poetry install
+      - name: Install dependencies
+        run: uv sync --locked --all-groups
 
       - name: Lint and format
-        run: poetry run ruff check . && poetry run ruff format --check .
+        run: uv run ruff check . && uv run ruff format --check .
 
       - name: Type check
-        run: poetry run basedpyright
+        run: uv run basedpyright
 
-      - run: poetry run pytest
+      - name: Test
+        run: uv run pytest
 
-      - if: matrix.python-version == '3.14'
-        run: poetry build
+      - name: Build package
+        if: matrix.python-version == '3.14'
+        run: uv build

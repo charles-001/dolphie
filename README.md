@@ -24,12 +24,10 @@ Requires Python 3.10+
 $ pip install dolphie
 ```
 
-#### Using Poetry
+#### Using uv
 
 ```shell
-$ curl -sSL https://install.python-poetry.org | python3 -
-
-$ poetry install
+$ uv tool install dolphie
 ```
 
 #### Using Homebrew
@@ -311,10 +309,12 @@ Example:
 ## Development
 
 ```shell
-poetry install
-poetry run dolphie --help
-poetry run basedpyright
-poetry run pytest
+uv sync --all-groups
+uv run dolphie --help
+uv run ruff format .
+uv run ruff check .
+uv run basedpyright
+uv run pytest
 ```
 
 BasedPyright runs without a baseline; new diagnostics must be fixed rather than suppressed as accepted debt.

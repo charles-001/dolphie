@@ -1,36 +1,44 @@
-[tool.poetry]
+[project]
 name = "dolphie"
 version = "6.15.0"
-license = "GPL-3.0-or-later"
 description = "Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL"
-authors = ["Charles Thompson <01charles.t@gmail.com>"]
 readme = "README.md"
+license = "GPL-3.0-or-later"
+authors = [
+    { name = "Charles Thompson", email = "01charles.t@gmail.com" },
+]
+requires-python = ">=3.10"
+dependencies = [
+    "loguru>=0.7.3,<0.8",
+    "myloginpath>=0.0.4,<0.0.5",
+    "orjson>=3.10.18,<4",
+    "packaging>=26.2,<27",
+    "psutil>=7.2.2,<8",
+    "pymysql>=1.2.0,<2",
+    "requests>=2.32.5,<3",
+    "rich>=15.0.0,<16",
+    "sqlparse>=0.5.5,<0.6",
+    "textual>=8.2.7,<9",
+    "textual-plotext>=1.0.1,<2",
+    "zstandard>=0.25.0,<0.26",
+]
 
-[tool.poetry.dependencies]
-python = "^3.10"
-rich = "^15.0.0"
-pymysql = "^1.2.0"
-myloginpath = "^0.0.4"
-packaging = "^26.2"
-requests = "^2.32.5"
-sqlparse = "^0.5.5"
-textual = "^8.2.7"
-zstandard = "^0.25.0"
-loguru = "^0.7.3"
-orjson = "^3.10.18"
-psutil = "^7.2.2"
-textual-plotext = "^1.0.1"
-
-[tool.poetry.group.dev.dependencies]
-basedpyright = "^1.39.9"
-pytest = "~8.3.5"
+[project.scripts]
+dolphie = "dolphie.App:main"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.poetry.scripts]
-dolphie = "dolphie.App:main"
+[tool.hatch.build.targets.wheel.force-include]
+"dolphie/Dolphie.tcss" = "dolphie/Dolphie.tcss"
+
+[dependency-groups]
+dev = [
+    "basedpyright>=1.39.9,<2",
+    "pytest>=9.1.1",
+    "ruff>=0.15.21",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -40,6 +48,8 @@ failOnWarnings = true
 include = ["dolphie", "tests"]
 pythonVersion = "3.10"
 typeCheckingMode = "standard"
+venv = ".venv"
+venvPath = "."
 
 [tool.ruff]
 line-length = 120
