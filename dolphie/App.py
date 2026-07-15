@@ -388,10 +388,7 @@ class DolphieApp(App):
 
     def sync_replication_ui(self, tab: Tab) -> None:
         """Render a host's cached data into the shared replication panel."""
-        if (
-            tab.dolphie.connection_source != ConnectionSource.mysql
-            or not tab.dolphie.panels.replication.visible
-        ):
+        if tab.dolphie.connection_source != ConnectionSource.mysql or not tab.dolphie.panels.replication.visible:
             return
 
         ReplicationPanel.create_panel(tab)

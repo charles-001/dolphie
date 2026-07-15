@@ -579,9 +579,7 @@ def create_replica_panel(tab: Tab):
         tab.replicas_container.display = bool(replica_count)
         tab.replicas_loading_indicator.display = bool(replica_count)
         if replica_count:
-            tab.replicas_title.update(
-                f"[$white][b]Loading [$highlight]{replica_count}[/$highlight] replicas...\n"
-            )
+            tab.replicas_title.update(f"[$white][b]Loading [$highlight]{replica_count}[/$highlight] replicas...\n")
         _sync_grid(tab.replicas_grid, {}, "replica", tab.id, dolphie.app, tab.replica_widgets)
         return
 
