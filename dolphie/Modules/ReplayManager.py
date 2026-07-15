@@ -46,6 +46,7 @@ class MySQLReplayData:
     statements_summary_data: PerformanceSchemaMetrics
     group_replication_data: DatabaseRow
     group_replication_members: list[DatabaseRow]
+    clusterset_instances: list[DatabaseRow]
     galera_cluster_members: list[DatabaseRow]
 
 
@@ -735,14 +736,16 @@ class ReplayManager:
         if self.dolphie.replication_applier_status:
             data_dict["replication_applier_status"] = self.dolphie.replication_applier_status
 
-        if self.dolphie.replica_manager.available_replicas:
-            data_dict["replica_manager"] = self.dolphie.replica_manager.available_replicas
+        available_replicas = self.dolphie.replica_manager.available_replicas
+        if available_replicas:
+            data_dict["replica_manager"] = available_replicas
 
-        if self.dolphie.group_replication or self.dolphie.innodb_cluster:
+        if self.dolphie.group_replication or self.dolphie.innodb_cluster or self.dolphie.innodb_cluster_read_replica:
             data_dict.update(
                 {
                     "group_replication_data": self.dolphie.group_replication_data,
                     "group_replication_members": self.dolphie.group_replication_members,
+                    "clusterset_instances": self.dolphie.clusterset_instances,
                 }
             )
 
@@ -994,6 +997,7 @@ class ReplayManager:
             processlist=processlist,
             group_replication_data=data.get("group_replication_data", {}),
             group_replication_members=data.get("group_replication_members", []),
+            clusterset_instances=data.get("clusterset_instances", []),
             galera_cluster_members=data.get("galera_cluster_members", []),
             file_io_data=file_io_data,
             table_io_waits_data=table_io_waits,

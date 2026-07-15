@@ -355,6 +355,8 @@ Footer {
 }
 
 #panel_graphs {
+    padding-bottom: 1;
+
     & MetricGraphDashboard {
         height: auto;
     }
@@ -498,6 +500,15 @@ MetricSeriesControl {
 
 .group_replication > Container {
     grid-size: 3;
+
+    &.two_columns {
+        grid-size: 2;
+    }
+
+    & > ScrollableContainer.local_node {
+        background: $surface;
+        border: tall $highlight;
+    }
 }
 
 /* --- Tabs --- */

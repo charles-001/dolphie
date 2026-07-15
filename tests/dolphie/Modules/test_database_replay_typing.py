@@ -65,9 +65,31 @@ def test_replay_payloads_use_integer_thread_ids_and_list_defaults() -> None:
     assert mysql_data.replica_manager == []
     assert mysql_data.metadata_locks == []
     assert mysql_data.group_replication_members == []
+    assert mysql_data.clusterset_instances == []
     assert isinstance(proxysql_data.processlist[8], ProxySQLProcesslistThread)
     assert proxysql_data.command_stats == []
     assert proxysql_data.hostgroup_summary == []
+
+
+def test_replay_payload_preserves_clusterset_instances() -> None:
+    manager = ReplayManager.__new__(ReplayManager)
+    clusterset_instances = [
+        {
+            "clusterset_name": "production",
+            "cluster_name": "replica-cluster",
+            "cluster_role": "REPLICA",
+        }
+    ]
+
+    mysql_data = manager._create_mysql_replay_data(
+        "2026-01-01 00:00:00",
+        {
+            "processlist": [],
+            "clusterset_instances": clusterset_instances,
+        },
+    )
+
+    assert mysql_data.clusterset_instances == clusterset_instances
 
 
 def test_replay_metadata_refreshes_after_external_head_purge(tmp_path: Path) -> None:

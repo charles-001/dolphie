@@ -386,6 +386,18 @@ class DolphieApp(App):
             # it adds/removes it from there
             DashboardPanel.create_panel(tab)
 
+    def sync_replication_ui(self, tab: Tab) -> None:
+        """Render a host's cached data into the shared replication panel."""
+        if (
+            tab.dolphie.connection_source != ConnectionSource.mysql
+            or not tab.dolphie.panels.replication.visible
+        ):
+            return
+
+        ReplicationPanel.create_panel(tab)
+        ReplicationPanel.create_replica_panel(tab)
+        tab.toggle_replication_panel_components()
+
     def check_for_new_version(self):
         # Query PyPI API to get the latest version
         try:

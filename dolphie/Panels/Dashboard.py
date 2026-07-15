@@ -10,6 +10,20 @@ from dolphie.Modules.Theme import ThemedTable as Table
 from dolphie.Panels import Replication as ReplicationPanel
 
 
+def _format_utilization_percent(
+    value: float,
+    thresholds: tuple[float, float] = (80, 90),
+    colors: tuple[str, str, str] = ("$green", "$yellow", "$red"),
+) -> str:
+    if value > thresholds[1]:
+        color = colors[2]
+    elif value > thresholds[0]:
+        color = colors[1]
+    else:
+        color = colors[0]
+    return f"[{color}]{value}%[/{color}]"
+
+
 def create_panel(tab: Tab) -> None:
     dolphie = tab.dolphie
 
@@ -42,7 +56,7 @@ def create_panel(tab: Tab) -> None:
     else:
         host_type = "MariaDB" if dolphie.connection_source_alt == ConnectionSource.mariadb else "MySQL"
 
-    replicas = len(dolphie.replica_manager.available_replicas) if dolphie.replica_manager.available_replicas else 0
+    replicas = dolphie.replica_manager.discovery_count
 
     table_information.add_column()
     table_information.add_column(min_width=25, max_width=35)
@@ -219,14 +233,15 @@ def create_panel(tab: Tab) -> None:
     ###############
     # Replication #
     ###############
-    if dolphie.replication_status and not dolphie.panels.replication.visible:
+    replication_channels = ReplicationPanel.user_replication_channels(dolphie.replication_status)
+    if replication_channels and not dolphie.panels.replication.visible:
         tab.dashboard_section_5.display = True
-        # Show the channel with the highest lag in the dashboard summary
-        max_lag_channel = max(dolphie.replication_status, key=lambda ch: coerce_int(ch.get("Seconds_Behind")))
-        is_multi_source = len(dolphie.replication_status) > 1
+        # Surface stopped, errored, or unknown channels before ordinary numeric lag.
+        priority_channel = max(replication_channels, key=ReplicationPanel.replication_channel_priority)
+        is_multi_source = len(replication_channels) > 1
         tab.dashboard_section_5.update(
             ReplicationPanel.create_replication_table(
-                tab, dashboard_table=True, channel_data=max_lag_channel, show_channel_name=is_multi_source
+                tab, dashboard_table=True, channel_data=priority_channel, show_channel_name=is_multi_source
             )
         )
     else:
@@ -280,13 +295,6 @@ def create_system_utilization_table(tab: Tab) -> Table | None:
     table.add_column()
     table.add_column(min_width=18, max_width=25)
 
-    def format_percent(value, thresholds=(80, 90), colors=("green", "yellow", "red")):
-        if value > thresholds[1]:
-            return f"[{colors[2]}]{value}%[/{colors[2]}]"
-        elif value > thresholds[0]:
-            return f"[{colors[1]}]{value}%[/{colors[1]}]"
-        return f"[{colors[0]}]{value}%[/{colors[0]}]"
-
     # Uptime
     uptime = system_utilization.get("Uptime", "N/A")
     table.add_row(
@@ -298,7 +306,7 @@ def create_system_utilization_table(tab: Tab) -> Table | None:
     cpu_percent = dolphie.metric_manager.metrics.system_cpu.CPU_Percent.latest_value()
     if cpu_percent is not None:
         cpu_percent = round(cpu_percent, 2)
-        formatted_cpu_percent = format_percent(cpu_percent)
+        formatted_cpu_percent = _format_utilization_percent(cpu_percent)
         cpu_cores = system_utilization.get("CPU_Count", "N/A")
         table.add_row("[$label]CPU", f"{formatted_cpu_percent} [$label]cores[/$label] {cpu_cores}")
     else:
@@ -315,7 +323,7 @@ def create_system_utilization_table(tab: Tab) -> Table | None:
     memory_total = dolphie.metric_manager.metrics.system_memory.Memory_Total.last_value
     if memory_used and memory_total:
         memory_percent_used = round((memory_used / memory_total) * 100, 2)
-        formatted_memory_percent_used = format_percent(memory_percent_used)
+        formatted_memory_percent_used = _format_utilization_percent(memory_percent_used)
         table.add_row(
             "[$label]Memory",
             (

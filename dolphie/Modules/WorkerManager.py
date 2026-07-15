@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from functools import partial
 from typing import TYPE_CHECKING, Any, cast
 
+from loguru import logger
 from textual.worker import Worker, WorkerState, get_current_worker
 
 import dolphie.Modules.MetricManager as MetricManager
@@ -16,6 +17,7 @@ from dolphie.Modules.Functions import coerce_float, coerce_str
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MetricDefinitions import MetricData, MetricValue, parse_metric_datetime
 from dolphie.Modules.ReplayManager import MySQLReplayData, ProxySQLReplayData, ReplayManager
+from dolphie.Modules.WorkerDataProcessor import is_group_replication_primary
 from dolphie.Panels import Replication as ReplicationPanel
 
 if TYPE_CHECKING:
@@ -135,6 +137,10 @@ class WorkerManager:
                     replay_event_data.group_replication_members,
                 )
                 dolphie.group_replication_data = replay_event_data.group_replication_data
+                dolphie.clusterset_instances = cast(
+                    list[dict[str, str]],
+                    replay_event_data.clusterset_instances,
+                )
                 dolphie.galera_cluster_members = cast(
                     list[dict[str, str]],
                     replay_event_data.galera_cluster_members,
@@ -153,6 +159,10 @@ class WorkerManager:
 
                 if not dolphie.server_uuid:
                     dolphie.configure_mysql_variables()
+                dolphie.is_group_replication_primary = is_group_replication_primary(
+                    dolphie.group_replication_members,
+                    dolphie.server_uuid,
+                )
             elif dolphie.connection_source == ConnectionSource.proxysql:
                 if not isinstance(replay_event_data, ProxySQLReplayData):
                     raise TypeError("ProxySQL replay returned a non-ProxySQL payload")
@@ -351,32 +361,28 @@ class WorkerManager:
             if active_tab is None or tab.id != active_tab.id:
                 return
 
-            if dolphie.replica_manager.available_replicas:
-                if not dolphie.replica_manager.replicas:
+            replica_count = dolphie.replica_manager.discovery_count
+            if replica_count:
+                if not dolphie.replica_manager.active_count:
 
                     def update_replicas_ui():
                         tab.replicas_container.display = True
                         tab.replicas_loading_indicator.display = True
                         tab.replicas_title.update(
-                            f"[$white][b]Loading [$highlight]{len(dolphie.replica_manager.available_replicas)}"
-                            "[/$highlight] replicas...\n"
+                            f"[$white][b]Loading [$highlight]{replica_count}[/$highlight] replicas...\n"
                         )
 
                     self.app.call_from_thread(update_replicas_ui)
 
-                ReplicationPanel.fetch_replicas(tab)
-            else:
-                # Display property triggers UI updates, must be called from main thread
-                def hide_replicas():
-                    tab.replicas_container.display = False
-
-                self.app.call_from_thread(hide_replicas)
+            # Reconcile even an empty discovery snapshot so stale connections and
+            # widgets are removed in the same cycle.
+            ReplicationPanel.fetch_replicas(tab)
         else:
             # If we're not displaying the replication panel, remove all replica connections
             dolphie.replica_manager.remove_all_replicas()
 
     def on_worker_state_changed(self, event: Worker.StateChanged):
-        if event.state not in [WorkerState.SUCCESS, WorkerState.CANCELLED]:
+        if event.state not in [WorkerState.SUCCESS, WorkerState.CANCELLED, WorkerState.ERROR]:
             return
 
         tab = self.app.tab_manager.get_tab(event.worker.name)
@@ -425,8 +431,6 @@ class WorkerManager:
             elif event.state == WorkerState.CANCELLED:
                 # Only show the modal if there's a worker cancel error
                 if tab.worker_cancel_error:
-                    from loguru import logger
-
                     logger.critical(tab.worker_cancel_error)
 
                     if active_tab is None or active_tab.id != tab.id or self.app.tab_manager.loading_hostgroups:
@@ -460,11 +464,18 @@ class WorkerManager:
                     )
                     return
 
-                if dolphie.panels.replication.visible and dolphie.replica_manager.available_replicas:
+                if dolphie.panels.replication.visible:
                     ReplicationPanel.create_replica_panel(tab)
 
                 tab.replicas_worker_timer = self.app.set_timer(
                     dolphie.refresh_interval,
+                    partial(self.app.run_worker_replicas, tab.id),
+                )
+            elif event.state == WorkerState.ERROR:
+                retry_interval = min(max(dolphie.refresh_interval * 2, 5), 30)
+                logger.error(f"Replica worker failed for {dolphie.host_with_port}: {event.worker.error}")
+                tab.replicas_worker_timer = self.app.set_timer(
+                    retry_interval,
                     partial(self.app.run_worker_replicas, tab.id),
                 )
         elif event.worker.group == "replay" and event.state == WorkerState.SUCCESS:

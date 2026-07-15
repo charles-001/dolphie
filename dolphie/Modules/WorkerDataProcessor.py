@@ -1,11 +1,12 @@
+from collections import Counter
 from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
-from dolphie.DataTypes import ConnectionSource, ConnectionStatus, DatabaseRow, DatabaseScalar, ReplicaPort, ReplicaRow
-from dolphie.Modules.Functions import coerce_float, coerce_int, coerce_str
+from dolphie.DataTypes import ConnectionSource, ConnectionStatus, DatabaseRow, DatabaseScalar, ReplicaRow
+from dolphie.Modules.Functions import coerce_float, coerce_int, coerce_str, host_without_port
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
 from dolphie.Panels import MetadataLocks as MetadataLocksPanel
@@ -16,6 +17,166 @@ from dolphie.Panels import Replication as ReplicationPanel
 if TYPE_CHECKING:
     from dolphie.App import DolphieApp
     from dolphie.Modules.TabManager import Tab
+
+
+def _reported_replica_identity(row: DatabaseRow, *, mariadb: bool, uuid_key: str) -> str:
+    identity_value = row.get("Server_id") if mariadb else row.get(uuid_key)
+    identity = coerce_str(identity_value)
+    return f"{'mariadb-id' if mariadb else 'mysql-uuid'}:{identity}" if identity else ""
+
+
+def build_replica_discovery(
+    processlist_rows: list[DatabaseRow],
+    reported_rows: list[DatabaseRow],
+    previous_rows: list[ReplicaRow],
+    *,
+    mariadb: bool,
+    use_show_replicas: bool,
+    replicaset: bool = False,
+) -> list[ReplicaRow]:
+    """Correlate processlist discovery with stable replica endpoints."""
+    uuid_key = "Replica_UUID" if use_show_replicas else "Slave_UUID"
+    previous_by_thread_id = {row.get("id"): row for row in previous_rows if row.get("id") is not None}
+
+    reports = []
+    for row in reported_rows:
+        port = coerce_int(row.get("Port")) if row.get("Port") is not None else None
+        report_host = coerce_str(row.get("Host"))
+        identity = _reported_replica_identity(row, mariadb=mariadb, uuid_key=uuid_key)
+        if port is not None:
+            reports.append((identity, report_host, port))
+
+    unused_reports = set(range(len(reports)))
+    discovered: list[ReplicaRow] = []
+    pending: list[tuple[DatabaseRow, int, str, str]] = []
+
+    for row in processlist_rows:
+        thread_id = coerce_int(row.get("id"))
+        raw_host = coerce_str(row.get("host"))
+        if not thread_id or not raw_host:
+            continue
+
+        replica_uuid = coerce_str(row.get("replica_uuid"))
+        if replicaset:
+            host = host_without_port(raw_host)
+            raw_port = raw_host.rpartition(":")[2]
+            port = coerce_int(raw_port) if raw_port.isdigit() else 3306
+            identity = f"mysql-uuid:{replica_uuid}" if replica_uuid else f"replicaset-instance:{thread_id}"
+            discovered.append(
+                {
+                    "id": thread_id,
+                    "user": coerce_str(row.get("user")),
+                    "host": host,
+                    "replica_uuid": replica_uuid,
+                    "identity": identity,
+                    "port": port,
+                }
+            )
+            continue
+
+        if not mariadb:
+            matching_report = next(
+                (
+                    (index, report)
+                    for index, report in enumerate(reports)
+                    if index in unused_reports and report[0] == f"mysql-uuid:{replica_uuid}"
+                ),
+                None,
+            )
+            if matching_report:
+                report_index, (reported_identity, report_host, port) = matching_report
+                unused_reports.remove(report_index)
+            else:
+                reported_identity, report_host, port = "", "", 3306
+
+            process_host = host_without_port(raw_host)
+            host = host_without_port(report_host) if report_host else process_host
+            identity = reported_identity or (
+                f"mysql-uuid:{replica_uuid}" if replica_uuid else f"endpoint:{host.lower()}:{port}:thread:{thread_id}"
+            )
+            mysql_replica: ReplicaRow = {
+                "id": thread_id,
+                "user": coerce_str(row.get("user")),
+                "host": host,
+                "replica_uuid": replica_uuid,
+                "identity": identity,
+                "port": port,
+            }
+            if report_host:
+                mysql_replica["report_host"] = report_host
+            discovered.append(mysql_replica)
+            continue
+
+        pending.append((row, thread_id, raw_host, replica_uuid))
+
+    # MariaDB does not expose the replica server ID in the binlog dump thread. Preserve
+    # prior same-host correlations, then require an exact report_host match. Never pair
+    # unrelated rows by list position because that can cross-wire replica endpoints.
+    pending.sort(key=lambda item: (host_without_port(item[2]).lower(), item[1]))
+    for row, thread_id, raw_host, replica_uuid in pending:
+        report_host = ""
+        previous = previous_by_thread_id.get(thread_id)
+        process_host = host_without_port(raw_host)
+        previous_matches_host = bool(
+            previous and host_without_port(coerce_str(previous.get("host"))).lower() == process_host.lower()
+        )
+        previous_identity = previous.get("identity", "") if previous_matches_host and previous else ""
+        report_index = next(
+            (
+                index
+                for index, report in enumerate(reports)
+                if index in unused_reports and report[0] == previous_identity
+            ),
+            None,
+        )
+
+        if report_index is None:
+            report_index = next(
+                (
+                    index
+                    for index, (_, report_host, _) in enumerate(reports)
+                    if index in unused_reports
+                    and report_host
+                    and host_without_port(report_host).lower() == process_host.lower()
+                ),
+                None,
+            )
+
+        if report_index is not None:
+            identity, report_host, port = reports[report_index]
+            unused_reports.remove(report_index)
+            host = host_without_port(report_host) if report_host else process_host
+        else:
+            port = coerce_int(previous.get("port"), 3306) if previous_matches_host and previous else 3306
+            host = process_host
+            identity = previous_identity or f"endpoint:{host.lower()}:{port}:thread:{thread_id}"
+
+        mariadb_replica: ReplicaRow = {
+            "id": thread_id,
+            "user": coerce_str(row.get("user")),
+            "host": host,
+            "replica_uuid": replica_uuid,
+            "identity": identity or f"endpoint:{host.lower()}:{port}:thread:{thread_id}",
+            "port": port,
+        }
+        if report_index is not None and report_host:
+            mariadb_replica["report_host"] = report_host
+        discovered.append(mariadb_replica)
+
+    identity_counts = Counter(coerce_str(row.get("identity")) for row in discovered)
+    for row in discovered:
+        identity = coerce_str(row.get("identity"))
+        if identity and identity_counts[identity] > 1:
+            row["identity"] = (
+                f"{identity}:endpoint:{coerce_str(row.get('host')).lower()}:{coerce_int(row.get('port'), 3306)}"
+            )
+
+    return sorted(discovered, key=lambda row: (row.get("identity", ""), row.get("id", 0)))
+
+
+def is_group_replication_primary(members: list[dict[str, str]], server_uuid: str | int | None) -> bool:
+    """Return whether the current server is the reported Group Replication primary."""
+    return any(row.get("MEMBER_ID") == server_uuid and row.get("MEMBER_ROLE") == "PRIMARY" for row in members)
 
 
 class WorkerDataProcessor:
@@ -32,6 +193,48 @@ class WorkerDataProcessor:
             app: Reference to the main DolphieApp instance
         """
         self.app = app
+
+    def _refresh_replica_discovery(self, tab: "Tab") -> None:
+        """Publish a complete discovery snapshot only after every query succeeds."""
+        dolphie = tab.dolphie
+        if dolphie.replicaset:
+            find_replicas_query = MySQLQueries.replicaset_find_replicas
+        elif dolphie.connection_source_alt == ConnectionSource.mariadb:
+            find_replicas_query = (
+                MySQLQueries.mariadb_find_replicas
+                if dolphie.performance_schema_enabled
+                else MySQLQueries.pl_find_replicas
+            )
+        elif dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
+            find_replicas_query = MySQLQueries.ps_find_replicas
+        else:
+            find_replicas_query = MySQLQueries.pl_find_replicas
+
+        dolphie.main_db_connection.execute(find_replicas_query)
+        if not dolphie.main_db_connection.last_execute_successful:
+            return
+        processlist_replicas = dolphie.main_db_connection.fetchall()
+
+        use_show_replicas = (
+            dolphie.connection_source_alt != ConnectionSource.mariadb and dolphie.is_mysql_version_at_least("8.0.22")
+        )
+        reported_replicas: list[DatabaseRow] = []
+        if not dolphie.daemon_mode and not dolphie.replicaset:
+            query = MySQLQueries.show_replicas if use_show_replicas else MySQLQueries.show_slave_hosts
+            dolphie.main_db_connection.execute(query)
+            if not dolphie.main_db_connection.last_execute_successful:
+                return
+            reported_replicas = dolphie.main_db_connection.fetchall()
+
+        normalized_replicas = build_replica_discovery(
+            processlist_replicas,
+            reported_replicas,
+            dolphie.replica_manager.available_replicas,
+            mariadb=dolphie.connection_source_alt == ConnectionSource.mariadb,
+            use_show_replicas=use_show_replicas,
+            replicaset=dolphie.replicaset,
+        )
+        dolphie.replica_manager.replace_discovery(normalized_replicas)
 
     def process_mysql_data(self, tab: "Tab"):
         """Process MySQL data for a given tab."""
@@ -81,69 +284,7 @@ class WorkerDataProcessor:
         replication_status = ReplicationPanel.fetch_replication_data(tab)
         dolphie.replication_status = replication_status if isinstance(replication_status, list) else []
 
-        # Manage our replicas — use processlist for discovery (real connection IP)
-        # and SHOW REPLICAS/SHOW SLAVE HOSTS for port correlation
-        if dolphie.connection_source_alt == ConnectionSource.mariadb:
-            find_replicas_query = (
-                MySQLQueries.mariadb_find_replicas
-                if dolphie.performance_schema_enabled
-                else MySQLQueries.pl_find_replicas
-            )
-        elif dolphie.performance_schema_enabled and dolphie.is_mysql_version_at_least("5.7"):
-            find_replicas_query = MySQLQueries.ps_find_replicas
-        else:
-            find_replicas_query = MySQLQueries.pl_find_replicas
-
-        dolphie.main_db_connection.execute(find_replicas_query)
-        available_replicas = dolphie.main_db_connection.fetchall()
-
-        if not dolphie.daemon_mode:
-            # Refresh port data when the number of replicas changes
-            if len(available_replicas) != len(dolphie.replica_manager.available_replicas):
-                use_show_replicas = (
-                    dolphie.connection_source_alt != ConnectionSource.mariadb
-                    and dolphie.is_mysql_version_at_least("8.0.22")
-                )
-                query = MySQLQueries.show_replicas if use_show_replicas else MySQLQueries.show_slave_hosts
-
-                dolphie.main_db_connection.execute(query)
-                ports_replica_data = dolphie.main_db_connection.fetchall()
-
-                dolphie.replica_manager.ports = {}
-                if dolphie.connection_source_alt == ConnectionSource.mariadb:
-                    for row in ports_replica_data:
-                        port_data: ReplicaPort = {
-                            "port": coerce_int(row.get("Port")) if row.get("Port") is not None else None,
-                            "host": coerce_str(row.get("Host")) or None,
-                            "in_use": False,
-                        }
-                        dolphie.replica_manager.ports[row.get("Server_id")] = port_data
-                else:
-                    uuid_key = "Replica_UUID" if use_show_replicas else "Slave_UUID"
-                    for row in ports_replica_data:
-                        port_data = {
-                            "port": coerce_int(row.get("Port")) if row.get("Port") is not None else None,
-                            "host": coerce_str(row.get("Host")) or None,
-                        }
-                        dolphie.replica_manager.ports[row.get(uuid_key)] = port_data
-
-        normalized_replicas: list[ReplicaRow] = []
-        for row in available_replicas:
-            thread_id = coerce_int(row.get("id"))
-            host = coerce_str(row.get("host"))
-            if not thread_id or not host:
-                continue
-
-            normalized_replicas.append(
-                {
-                    "id": thread_id,
-                    "user": coerce_str(row.get("user")),
-                    "host": host,
-                    "replica_uuid": coerce_str(row.get("replica_uuid")),
-                }
-            )
-
-        dolphie.replica_manager.available_replicas = normalized_replicas
+        self._refresh_replica_discovery(tab)
 
         if dolphie.is_mysql_version_at_least("8.2.0") and dolphie.connection_source_alt != ConnectionSource.mariadb:
             dolphie.main_db_connection.execute(MySQLQueries.show_binary_log_status)
@@ -170,6 +311,8 @@ class WorkerDataProcessor:
                 list[dict[str, str]],
                 dolphie.main_db_connection.fetchall(),
             )
+        else:
+            dolphie.clusterset_instances = []
 
         if dolphie.performance_schema_enabled:
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
@@ -184,10 +327,11 @@ class WorkerDataProcessor:
             else:
                 parallel_workers = coerce_int(dolphie.global_variables.get("replica_parallel_workers"))
 
-            if dolphie.connection_source_alt == ConnectionSource.mariadb:
-                has_applier_status = dolphie.is_mysql_version_at_least("10.5")
-            else:
-                has_applier_status = dolphie.is_mysql_version_at_least("8.0")
+            # The MariaDB table has a different schema from MySQL's
+            # replication_applier_status_by_worker, so this query is MySQL-only.
+            has_applier_status = (
+                dolphie.connection_source_alt != ConnectionSource.mariadb and dolphie.is_mysql_version_at_least("8.0")
+            )
 
             if (
                 has_applier_status
@@ -268,6 +412,13 @@ class WorkerDataProcessor:
                     list[dict[str, str]],
                     dolphie.main_db_connection.fetchall(),
                 )
+                dolphie.is_group_replication_primary = is_group_replication_primary(
+                    dolphie.group_replication_members,
+                    dolphie.server_uuid,
+                )
+            else:
+                dolphie.group_replication_members = []
+                dolphie.is_group_replication_primary = False
 
             if dolphie.is_mysql_version_at_least("5.7"):
                 dolphie.metadata_locks = []
@@ -587,11 +738,14 @@ class WorkerDataProcessor:
                 f"Host [$light_blue]{dolphie.host_with_port}[/$light_blue] is now [$b_highlight]{status}[/$b_highlight]"
             )
 
-            # Warn if a primary/standalone is unexpectedly read-only
-            if current_ro_status == "ON" and (
-                (not dolphie.replication_status and not dolphie.group_replication)
-                or (dolphie.group_replication and dolphie.is_group_replication_primary)
-            ):
+            is_group_member = dolphie.group_replication or dolphie.innodb_cluster
+            is_clusterset_replica_cluster = dolphie.group_replication_data.get("clusterset_role") == "REPLICA"
+            unexpectedly_read_only = (not dolphie.replication_status and not is_group_member) or (
+                is_group_member and dolphie.is_group_replication_primary and not is_clusterset_replica_cluster
+            )
+
+            # Standalone hosts and writable cluster primaries should not be read-only.
+            if current_ro_status == "ON" and unexpectedly_read_only:
                 message += " ([$dark_yellow]SHOULD BE READ/WRITE?[/$dark_yellow])"
 
             logger.warning(f"Read-only mode changed: {dolphie.connection_status} -> {formatted_ro_status}")

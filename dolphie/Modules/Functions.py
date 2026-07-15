@@ -151,6 +151,17 @@ def coerce_str(value: object, default: str = "") -> str:
     return default if value is None else str(value)
 
 
+def host_without_port(address: str) -> str:
+    """Return the host portion of a MySQL host or host:port value."""
+    if address.startswith("[") and "]" in address:
+        return address[1 : address.index("]")]
+    if address.count(":") > 1:
+        return address
+
+    host, separator, port = address.rpartition(":")
+    return host if separator and port.isdigit() else address
+
+
 def format_bytes(bytes_value: Numeric | str, color: bool = True, decimal: int = 2) -> str:
     if isinstance(bytes_value, str):
         return bytes_value

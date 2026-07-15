@@ -627,7 +627,8 @@ class MySQLQueries:
         SELECT
             instance_id as id,
             address AS host,
-            attributes ->> '$."replicationAccountUser"' AS user
+            attributes ->> '$."replicationAccountUser"' AS user,
+            mysql_server_uuid AS replica_uuid
         FROM
             mysql_innodb_cluster_metadata.instances
         WHERE
@@ -647,7 +648,12 @@ class MySQLQueries:
         SELECT
             cluster_name,
             instance_type,
-            cluster_type
+            cluster_type,
+            CASE
+                WHEN primary_cluster = 1 THEN 'PRIMARY'
+                WHEN primary_cluster = 0 THEN 'REPLICA'
+                ELSE NULL
+            END AS clusterset_role
         FROM
             mysql_innodb_cluster_metadata.clusters
             JOIN mysql_innodb_cluster_metadata.instances USING ( cluster_id )
@@ -704,7 +710,9 @@ class MySQLQueries:
             'wsrep_gcomm_uuid', 'wsrep_provider_version',
             'wsrep_cluster_size', 'wsrep_cluster_status', 'wsrep_connected',
             'wsrep_ready', 'wsrep_local_state_comment',
-            'wsrep_flow_control_paused', 'wsrep_local_recv_queue_avg',
+            'wsrep_flow_control_paused', 'wsrep_flow_control_recv',
+            'wsrep_flow_control_sent', 'wsrep_local_recv_queue',
+            'wsrep_local_recv_queue_avg', 'wsrep_local_send_queue',
             'wsrep_local_send_queue_avg', 'wsrep_cert_deps_distance',
             'wsrep_local_commits', 'wsrep_local_cert_failures',
             'wsrep_local_bf_aborts', 'wsrep_replicated', 'wsrep_replicated_bytes',
@@ -715,6 +723,8 @@ class MySQLQueries:
     show_master_status: str = "SHOW MASTER STATUS"
     show_binary_log_status: str = "SHOW BINARY LOG STATUS"
     show_slave_status: str = "SHOW SLAVE STATUS"
+    show_all_slaves_status: str = "SHOW ALL SLAVES STATUS"
+    show_all_replicas_status: str = "SHOW ALL REPLICAS STATUS"
     show_replica_status: str = "SHOW REPLICA STATUS"
     innodb_status: str = "SHOW ENGINE INNODB STATUS"
     show_replicas: str = "SHOW REPLICAS"

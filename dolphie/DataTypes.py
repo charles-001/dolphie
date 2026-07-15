@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
+from threading import Lock
 from typing import TYPE_CHECKING, Final, Literal, TypedDict
 
 from dolphie.Modules.Functions import coerce_float, coerce_int, coerce_str, format_query, format_time
-from dolphie.Modules.Theme import ThemedTable as Table
 
 if TYPE_CHECKING:
     from dolphie.Modules.MySQL import Database
@@ -36,62 +37,141 @@ class ReplicaRow(TypedDict, total=False):
     user: str
     host: str
     replica_uuid: str
+    identity: str
+    report_host: str
     port: int | None
-
-
-class ReplicaPort(TypedDict, total=False):
-    port: int | None
-    host: str | None
-    in_use: bool
 
 
 @dataclass
 class Replica:
+    identity: str
     row_key: str
     host: str
+    user: str = ""
     thread_id: int | None = None
     port: int | None = None
     host_distro: str | None = None
     connection: Database | None = None
     connection_source_alt: ConnectionSourceType | None = None
-    table: Table | None = None
     replication_status: DatabaseRow = field(default_factory=dict)
+    replication_source_uuids: set[str] = field(default_factory=set)
+    group_replication_view_change_uuid: str = ""
     mysql_version: str | None = None
+    last_error: str | None = None
+    consecutive_errors: int = 0
+    next_poll_at: float = 0
+    errant_transactions: str | None = None
+    errant_check_error: str | None = None
+    next_errant_check_at: float = 0
+    mariadb_gtid_slave_pos: str = ""
+
+    @property
+    def host_with_port(self) -> str:
+        host = f"[{self.host}]" if ":" in self.host and not self.host.startswith("[") else self.host
+        return f"{host}:{self.port}" if self.port is not None else host
 
 
 class ReplicaManager:
     def __init__(self):
-        self.available_replicas: list[ReplicaRow] = []
-        self.replicas: dict[str, Replica] = {}
-        self.ports: dict[DatabaseScalar, ReplicaPort] = {}
+        self._lock = Lock()
+        self._available_replicas: tuple[ReplicaRow, ...] = ()
+        self._replicas: dict[str, Replica] = {}
 
-    # Dots/colons are invalid in Textual widget IDs - translate to hyphens in one pass
-    _widget_id_sanitize = str.maketrans({".": "-", ":": "-"})
+    @property
+    def available_replicas(self) -> list[ReplicaRow]:
+        """Return a detached discovery snapshot safe for another worker to consume."""
+        with self._lock:
+            return [row.copy() for row in self._available_replicas]
 
-    @classmethod
-    def create_replica_row_key(cls, host: str, port: int | None) -> str:
-        return f"{host}-{port}".translate(cls._widget_id_sanitize)
+    @available_replicas.setter
+    def available_replicas(self, replicas: list[ReplicaRow]) -> None:
+        self.replace_discovery(replicas)
 
-    def add_replica(self, row_key: str, thread_id: int, host: str, port: int) -> Replica:
-        self.replicas[row_key] = Replica(row_key=row_key, thread_id=thread_id, host=host, port=port)
-        return self.replicas[row_key]
+    def replace_discovery(self, replicas: list[ReplicaRow]) -> None:
+        """Atomically publish a complete replica discovery cycle."""
+        snapshot = tuple(row.copy() for row in replicas)
+        with self._lock:
+            self._available_replicas = snapshot
+
+    @property
+    def discovery_count(self) -> int:
+        with self._lock:
+            return len(self._available_replicas)
+
+    @property
+    def active_count(self) -> int:
+        with self._lock:
+            return len(self._replicas)
+
+    @staticmethod
+    def create_replica_row_key(identity: str) -> str:
+        """Create a stable, Textual-safe widget key from a replica identity."""
+        digest = hashlib.blake2s(identity.encode(), digest_size=8).hexdigest()
+        return f"replica-{digest}"
+
+    def upsert_replica(self, identity: str, thread_id: int, host: str, port: int, user: str = "") -> Replica:
+        row_key = self.create_replica_row_key(identity)
+        with self._lock:
+            replica = self._replicas.get(row_key)
+            if replica is None:
+                replica = Replica(
+                    identity=identity,
+                    row_key=row_key,
+                    user=user,
+                    thread_id=thread_id,
+                    host=host,
+                    port=port,
+                )
+                self._replicas[row_key] = replica
+                return replica
+
+            if replica.host != host or replica.port != port:
+                if replica.connection:
+                    replica.connection.close()
+                replica.connection = None
+                replica.host_distro = None
+                replica.connection_source_alt = None
+                replica.mysql_version = None
+                replica.replication_status = {}
+                replica.replication_source_uuids = set()
+                replica.group_replication_view_change_uuid = ""
+                replica.last_error = None
+                replica.consecutive_errors = 0
+                replica.next_poll_at = 0
+                replica.next_errant_check_at = 0
+                replica.errant_transactions = None
+                replica.errant_check_error = None
+                replica.mariadb_gtid_slave_pos = ""
+
+            replica.thread_id = thread_id
+            replica.host = host
+            replica.port = port
+            replica.user = user
+            return replica
 
     def remove_replica(self, row_key: str):
-        replica = self.replicas.pop(row_key, None)
+        with self._lock:
+            replica = self._replicas.pop(row_key, None)
         if replica and replica.connection:
             replica.connection.close()
 
-    def get_replica(self, row_key: str) -> Replica | None:
-        return self.replicas.get(row_key)
+    def remove_missing_replicas(self, active_row_keys: set[str]) -> None:
+        with self._lock:
+            stale_row_keys = set(self._replicas) - active_row_keys
+        for row_key in stale_row_keys:
+            self.remove_replica(row_key)
 
     def remove_all_replicas(self):
-        for replica in self.replicas.values():
+        with self._lock:
+            replicas = list(self._replicas.values())
+            self._replicas = {}
+        for replica in replicas:
             if replica.connection:
                 replica.connection.close()
-        self.replicas = {}
 
     def get_sorted_replicas(self) -> list[Replica]:
-        return sorted(self.replicas.values(), key=lambda x: x.host)
+        with self._lock:
+            return sorted(self._replicas.values(), key=lambda x: x.host)
 
 
 @dataclass

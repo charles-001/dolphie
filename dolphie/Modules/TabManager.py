@@ -241,7 +241,7 @@ class Tab:
 
         toggle_container_display(self.galera_container, self.dolphie.galera_cluster_members, self.galera_widgets)
         toggle_container_display(
-            self.replicas_container, self.dolphie.replica_manager.available_replicas, self.replica_widgets
+            self.replicas_container, self.dolphie.replica_manager.discovery_count, self.replica_widgets
         )
         toggle_container_display(
             self.group_replication_container, self.dolphie.group_replication_members, self.member_widgets
@@ -249,7 +249,13 @@ class Tab:
         toggle_container_display(self.clusterset_container, self.dolphie.clusterset_instances, self.clusterset_widgets)
 
     def remove_replication_panel_components(self):
-        for tracked in (self.replica_widgets, self.member_widgets, self.galera_widgets, self.clusterset_widgets):
+        for tracked in (
+            self.channel_widgets,
+            self.replica_widgets,
+            self.member_widgets,
+            self.galera_widgets,
+            self.clusterset_widgets,
+        ):
             for widget in tracked.values():
                 if widget.parent is not None:
                     if isinstance(widget.parent, Widget):
@@ -638,6 +644,12 @@ class TabManager:
         if not tab:
             return
 
+        # Replication grids live in the shared UI. Remove widgets owned by inactive
+        # host tabs so their cards cannot accumulate beside the active tab's cards.
+        for inactive_tab in self.tabs.values():
+            if inactive_tab is not tab:
+                inactive_tab.remove_replication_panel_components()
+
         # Update the active/current tab
         self.active_tab = tab
 
@@ -650,6 +662,7 @@ class TabManager:
 
         tab.main_container.display = bool(tab.dolphie.main_db_connection.is_connected())
         tab.graph_dashboard.bind_host(tab.dolphie, render=tab.panel_graphs.display)
+        self.app.sync_replication_ui(tab)
 
     def get_tab(self, id: str) -> Tab | None:
         return self.tabs.get(id)

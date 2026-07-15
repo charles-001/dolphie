@@ -195,6 +195,7 @@ class KeyEventManager:
                 tab.proxysql_hostgroup_summary_datatable.clear()
                 return
 
+            replica_count = dolphie.replica_manager.discovery_count
             has_replication_data = any(
                 [
                     dolphie.replication_status,
@@ -203,7 +204,7 @@ class KeyEventManager:
                     dolphie.innodb_cluster,
                     dolphie.innodb_cluster_read_replica,
                     # Replicas can only be displayed in live mode since we connect to each one
-                    not dolphie.replay_file and dolphie.replica_manager.available_replicas,
+                    not dolphie.replay_file and replica_count,
                 ]
             )
             if not has_replication_data:
@@ -214,13 +215,12 @@ class KeyEventManager:
             tab.toggle_entities_displays()
 
             if dolphie.panels.replication.visible:
-                if dolphie.replica_manager.available_replicas:
+                if replica_count:
                     # No loading animation necessary for replay mode
                     if not dolphie.replay_file:
                         tab.replicas_loading_indicator.display = True
                         tab.replicas_title.update(
-                            f"[$white][b]Loading [$highlight]{len(dolphie.replica_manager.available_replicas)}"
-                            "[/$highlight] replicas...\n"
+                            f"[$white][b]Loading [$highlight]{replica_count}[/$highlight] replicas...\n"
                         )
 
                 tab.toggle_replication_panel_components()
