@@ -144,6 +144,9 @@ def create_panel(tab: Tab) -> DataTable:
         column_fields.append(column_data["field"])
         column_format_numbers.append(column_data["format_number"])
 
+    # Has to happen before the filtering below so replays remember the values being filtered out
+    dolphie.record_filter_dropdown_values()
+
     threads_to_render: dict[str, ProcesslistThread] = {}
     # We use filter here for replays since the original way requires changing WHERE clause
     if dolphie.replay_file:

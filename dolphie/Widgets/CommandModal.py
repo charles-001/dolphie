@@ -98,6 +98,8 @@ class CommandModal(ModalScreen):
         maximize_panel_options=None,
         host_cache_data=None,
         max_replay_timestamp=None,
+        current_filters=None,
+        filter_dropdown_values=None,
     ):
         super().__init__()
         self.command = command
@@ -106,6 +108,8 @@ class CommandModal(ModalScreen):
         self.processlist_data = processlist_data
         self.host_cache_data = host_cache_data
         self.max_replay_timestamp = max_replay_timestamp
+        self.current_filters = current_filters or {}
+        self.filter_dropdown_values = filter_dropdown_values or {}
 
         self.dropdown_items = []
         if processlist_data:
@@ -147,10 +151,7 @@ class CommandModal(ModalScreen):
 
                     yield Input(id="filter_by_query_time_input")
                     yield Input(id="filter_by_query_text_input")
-                    yield Label(
-                        "[$dark_gray][b]Note:[/b] Prefix a value with [b]![/b] to exclude what matches it\n"
-                        "instead (i.e. [b]!azure_superuser[/b] shows every other user)"
-                    )
+                    yield Label("[$dark_gray][b]Note:[/b] Prefix a value with [b]![/b] to exclude what it matches")
                 with Vertical(id="kill_container", classes="command_container"):
                     yield kill_by_id_input
                     yield AutoComplete(kill_by_id_input, id="kill_by_id_dropdown_items", candidates=[])
@@ -199,14 +200,16 @@ class CommandModal(ModalScreen):
             self.query_one("#filter_by_username_input", Input).focus()
             self.query_one("#filter_by_username_input", Input).border_title = "Username"
             self.query_one("#filter_by_username_dropdown_items", AutoComplete).candidates = self.create_dropdown_items(
-                "user"
+                "user", include_filtered_out=True
             )
             self.query_one("#filter_by_host_input", Input).border_title = "Host/IP"
             self.query_one("#filter_by_host_dropdown_items", AutoComplete).candidates = self.create_dropdown_items(
-                "host"
+                "host", include_filtered_out=True
             )
             self.query_one("#filter_by_db_input", Input).border_title = "Database"
-            self.query_one("#filter_by_db_dropdown_items", AutoComplete).candidates = self.create_dropdown_items("db")
+            self.query_one("#filter_by_db_dropdown_items", AutoComplete).candidates = self.create_dropdown_items(
+                "db", include_filtered_out=True
+            )
             self.query_one("#filter_by_query_time_input", Input).border_title = (
                 "Minimum Query Time [$dark_gray](seconds)"
             )
@@ -220,8 +223,15 @@ class CommandModal(ModalScreen):
                 self.query_one("#filter_by_host_input", Input).border_title = "Backend Host/IP"
                 self.query_one("#filter_by_hostgroup_input", Input).border_title = "Hostgroup"
                 self.query_one("#filter_by_hostgroup_dropdown_items", AutoComplete).candidates = (
-                    self.create_dropdown_items("hostgroup")
+                    self.create_dropdown_items("hostgroup", include_filtered_out=True)
                 )
+
+            # Show the filters in effect so they can be changed/removed instead of retyped
+            for field, filter_value in self.current_filters.items():
+                if filter_value:
+                    filter_input = self.query_one(f"#filter_by_{field}_input", Input)
+                    filter_input.value = str(filter_value)
+                    filter_input.cursor_position = len(filter_input.value)
         elif self.command == HotkeyCommands.thread_kill_by_parameter:
             input.display = False
             kill_container.display = True
@@ -271,19 +281,23 @@ class CommandModal(ModalScreen):
         else:
             input.focus()
 
-    def create_dropdown_items(self, field):
+    def create_dropdown_items(self, field, include_filtered_out=False):
         dropdown_items = []
 
         if field:
             # Filter out None values before sorting
-            sorted_array = sorted(
-                {
-                    getattr(thread, field)
-                    for thread in self.processlist_data.values()
-                    if getattr(thread, field) is not None
-                }
-            )
-            dropdown_items = [DropdownItem(str(value)) for value in sorted_array]
+            values = {
+                getattr(thread, field)
+                for thread in self.processlist_data.values()
+                if getattr(thread, field) is not None
+            }
+
+            # The processlist only has what the filters in effect allow, so include the values
+            # they're hiding to keep every option available to filter by
+            if include_filtered_out:
+                values.update(self.filter_dropdown_values.get(field, set()))
+
+            dropdown_items = [DropdownItem(str(value)) for value in sorted(values)]
 
         return dropdown_items
 
@@ -333,8 +347,8 @@ class CommandModal(ModalScreen):
                     self.update_error_response(f"{field_name} must be an integer")
                     return
 
-            # Ensure at least one filter is provided
-            if not any(filters.values()):
+            # Ensure at least one filter is provided, unless there are filters in effect to remove
+            if not any(filters.values()) and not any(self.current_filters.values()):
                 self.update_error_response("At least one field must be provided")
                 return
 

@@ -53,6 +53,9 @@ def create_panel(tab: Tab) -> DataTable:
         column_names.append(column_data["name"])
         column_fields.append(column_data["field"])
 
+    # Has to happen before the filtering below so replays remember the values being filtered out
+    dolphie.record_filter_dropdown_values()
+
     threads_to_render: dict[str, ProxySQLProcesslistThread] = {}
     if dolphie.replay_file:
         for thread_id, thread in dolphie.processlist_threads.items():

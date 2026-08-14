@@ -121,6 +121,9 @@ class Dolphie:
         self.hostgroup_filter: str = None
         self.query_time_filter: int = None
 
+        # Values seen in the processlist, so the filter dropdowns can offer ones being filtered out
+        self.filter_dropdown_values: dict[str, set] = {field: set() for field in ("user", "db", "host", "hostgroup")}
+
         # Types of hosts
         self.connection_source: ConnectionSource = ConnectionSource.mysql  # mysql, proxysql
         self.connection_source_alt: ConnectionSource = ConnectionSource.mysql  # mariadb
@@ -382,6 +385,18 @@ class Dolphie:
             hostname = host
 
         return hostname
+
+    def record_filter_dropdown_values(self):
+        # Filters are applied in the query (or when rendering a replay), so a value that's being
+        # filtered out isn't in the processlist anymore. Remember the values we've seen so the
+        # filter dropdowns can still offer them
+        for thread in self.processlist_threads.values():
+            for field, values in self.filter_dropdown_values.items():
+                value = getattr(thread, field, None)
+
+                # Skip values that aren't real, such as the N/A placeholder threads get when empty
+                if value and not str(value).startswith("["):
+                    values.add(value)
 
     def update_switches_after_reset(self):
         # Set the graph switches to what they're currently selected to after a reset
