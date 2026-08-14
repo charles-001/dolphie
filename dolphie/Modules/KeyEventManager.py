@@ -15,6 +15,7 @@ from dolphie.Modules.Functions import (
     format_bytes,
     format_number,
     format_query,
+    parse_filter,
 )
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
@@ -432,12 +433,15 @@ class KeyEventManager:
                 # Apply filters and notify the user for each valid input
                 for filter_name, filter_value in filters.items():
                     if filter_value:
-                        if filter_name in ["Minimum Query Time", "Hostgroup"]:
+                        if filter_name == "Minimum Query Time":
                             filter_value = int(filter_value)
 
                         setattr(dolphie, filters_mapping[filter_name], filter_value)
+
+                        # A value prefixed with ! excludes what matches it instead
+                        value, negate = parse_filter(filter_value)
                         self.app.notify(
-                            f"[b]{filter_name}[/b]: [$b_highlight]{filter_value}[/$b_highlight]",
+                            f"[b]{filter_name}[/b]: {'not ' if negate else ''}[$b_highlight]{value}[/$b_highlight]",
                             title="Filter applied",
                             severity="success",
                         )

@@ -2,7 +2,12 @@ from rich.syntax import Syntax
 from textual.widgets import DataTable
 
 from dolphie.DataTypes import ProcesslistThread
-from dolphie.Modules.Functions import format_number, format_query
+from dolphie.Modules.Functions import (
+    filter_excludes,
+    filter_sql_condition,
+    format_number,
+    format_query,
+)
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 
@@ -149,19 +154,21 @@ def create_panel(tab: Tab) -> DataTable:
             if dolphie.show_trxs_only and thread.trx_state == "[dark_gray]N/A":
                 continue
 
-            if dolphie.user_filter and dolphie.user_filter != thread.user:
+            if dolphie.user_filter and filter_excludes(dolphie.user_filter, thread.user):
                 continue
 
-            if dolphie.db_filter and dolphie.db_filter != thread.db:
+            if dolphie.db_filter and filter_excludes(dolphie.db_filter, thread.db):
                 continue
 
-            if dolphie.host_filter and dolphie.host_filter not in thread.host:
+            if dolphie.host_filter and filter_excludes(dolphie.host_filter, thread.host, partial=True):
                 continue
 
             if dolphie.query_time_filter and thread.time < dolphie.query_time_filter:
                 continue
 
-            if dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
+            if dolphie.query_filter and filter_excludes(
+                dolphie.query_filter, thread.formatted_query.code, partial=True
+            ):
                 continue
 
             if dolphie.show_threads_with_concurrency_tickets and thread.trx_concurrency_tickets == "[dark_gray]0":
@@ -283,20 +290,18 @@ def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
     if dolphie.show_threads_with_concurrency_tickets:
         where_clause.append("trx_concurrency_tickets > 0")
     if dolphie.user_filter:
-        where_clause.append(f"{user_col} = '{dolphie.user_filter}'")
+        where_clause.append(filter_sql_condition(user_col, dolphie.user_filter))
     if dolphie.db_filter:
-        where_clause.append(f"{db_col} = '{dolphie.db_filter}'")
+        where_clause.append(filter_sql_condition(db_col, dolphie.db_filter))
     if dolphie.host_filter:
-        where_clause.append(f"{host_col} LIKE '{dolphie.host_filter}%'")
+        where_clause.append(filter_sql_condition(host_col, dolphie.host_filter, "{}%"))
     if dolphie.query_time_filter:
         where_clause.append(f"{time_col} >= '{dolphie.query_time_filter}'")
     if dolphie.query_filter:
         if dolphie.use_performance_schema_for_processlist:
-            where_clause.append(
-                f"({info_col} LIKE '%%{dolphie.query_filter}%%' OR trx_query LIKE '%%{dolphie.query_filter}%%')"
-            )
+            where_clause.append(filter_sql_condition([info_col, "trx_query"], dolphie.query_filter, "%%{}%%"))
         else:
-            where_clause.append(f"{info_col} LIKE '%%{dolphie.query_filter}%%'")
+            where_clause.append(filter_sql_condition(info_col, dolphie.query_filter, "%%{}%%"))
 
     # Add the WHERE clause to the query
     if where_clause:

@@ -1,5 +1,5 @@
 from dolphie.DataTypes import ProcesslistThread, ProxySQLProcesslistThread
-from dolphie.Modules.Functions import format_query
+from dolphie.Modules.Functions import filter_excludes, filter_sql_condition, format_query
 from dolphie.Modules.Queries import ProxySQLQueries
 from dolphie.Modules.TabManager import Tab
 from rich.syntax import Syntax
@@ -59,22 +59,24 @@ def create_panel(tab: Tab) -> DataTable:
             thread: ProxySQLProcesslistThread
 
             # Check each filter condition and skip thread if it doesn't match
-            if dolphie.user_filter and dolphie.user_filter != thread.user:
+            if dolphie.user_filter and filter_excludes(dolphie.user_filter, thread.user):
                 continue
 
-            if dolphie.db_filter and dolphie.db_filter != thread.db:
+            if dolphie.db_filter and filter_excludes(dolphie.db_filter, thread.db):
                 continue
 
-            if dolphie.host_filter and dolphie.host_filter not in thread.host:
+            if dolphie.host_filter and filter_excludes(dolphie.host_filter, thread.host, partial=True):
                 continue
 
             if dolphie.query_time_filter and thread.time < dolphie.query_time_filter:
                 continue
 
-            if dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
+            if dolphie.query_filter and filter_excludes(
+                dolphie.query_filter, thread.formatted_query.code, partial=True
+            ):
                 continue
 
-            if dolphie.hostgroup_filter and dolphie.hostgroup_filter != thread.hostgroup:
+            if dolphie.hostgroup_filter and filter_excludes(dolphie.hostgroup_filter, str(thread.hostgroup)):
                 continue
 
             # If all checks passed, add it to the visible list
@@ -159,15 +161,15 @@ def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
 
     # Filter user
     if dolphie.user_filter:
-        where_clause.append(f"user = '{dolphie.user_filter}'")
+        where_clause.append(filter_sql_condition("user", dolphie.user_filter))
 
     # Filter database
     if dolphie.db_filter:
-        where_clause.append(f"db = '{dolphie.db_filter}'")
+        where_clause.append(filter_sql_condition("db", dolphie.db_filter))
 
     # Filter hostname/IP
     if dolphie.host_filter:
-        where_clause.append(f"srv_host = '{dolphie.host_filter}'")
+        where_clause.append(filter_sql_condition("srv_host", dolphie.host_filter))
 
     # Filter time
     if dolphie.query_time_filter:
@@ -176,11 +178,11 @@ def fetch_data(tab: Tab) -> dict[str, ProcesslistThread]:
 
     # Filter query
     if dolphie.query_filter:
-        where_clause.append(f"info LIKE '%%{dolphie.query_filter}%%'")
+        where_clause.append(filter_sql_condition("info", dolphie.query_filter, "%%{}%%"))
 
     # Filter hostgroup
     if dolphie.hostgroup_filter:
-        where_clause.append(f"hostgroup = '{dolphie.hostgroup_filter}'")
+        where_clause.append(filter_sql_condition("hostgroup", dolphie.hostgroup_filter))
 
     # Add in our dynamic WHERE clause for filtering
     if where_clause:

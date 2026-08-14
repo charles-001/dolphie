@@ -8,7 +8,22 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Checkbox, Input, Label, Rule, Select, Static
 
 from dolphie.DataTypes import ConnectionSource, HotkeyCommands
-from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem
+from dolphie.Modules.Functions import parse_filter
+from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem, TargetState
+
+
+class FilterAutoComplete(AutoComplete):
+    """AutoComplete that ignores a leading ! so suggestions still work when excluding a value"""
+
+    def get_search_string(self, target_state: TargetState) -> str:
+        value, _ = parse_filter(super().get_search_string(target_state))
+
+        return value
+
+    def apply_completion(self, value: str, state: TargetState) -> None:
+        _, negate = parse_filter(state.text)
+
+        super().apply_completion(f"!{value}" if negate else value, state)
 
 
 class CommandModal(ModalScreen):
@@ -121,15 +136,21 @@ class CommandModal(ModalScreen):
                     yield filter_by_host_input
                     yield filter_by_db_input
                     yield filter_by_hostgroup_input
-                    yield AutoComplete(filter_by_username_input, id="filter_by_username_dropdown_items", candidates=[])
-                    yield AutoComplete(filter_by_host_input, id="filter_by_host_dropdown_items", candidates=[])
-                    yield AutoComplete(filter_by_db_input, id="filter_by_db_dropdown_items", candidates=[])
-                    yield AutoComplete(
+                    yield FilterAutoComplete(
+                        filter_by_username_input, id="filter_by_username_dropdown_items", candidates=[]
+                    )
+                    yield FilterAutoComplete(filter_by_host_input, id="filter_by_host_dropdown_items", candidates=[])
+                    yield FilterAutoComplete(filter_by_db_input, id="filter_by_db_dropdown_items", candidates=[])
+                    yield FilterAutoComplete(
                         filter_by_hostgroup_input, id="filter_by_hostgroup_dropdown_items", candidates=[]
                     )
 
                     yield Input(id="filter_by_query_time_input")
                     yield Input(id="filter_by_query_text_input")
+                    yield Label(
+                        "[$dark_gray][b]Note:[/b] Prefix a value with [b]![/b] to exclude what matches it\n"
+                        "instead (i.e. [b]!azure_superuser[/b] shows every other user)"
+                    )
                 with Vertical(id="kill_container", classes="command_container"):
                     yield kill_by_id_input
                     yield AutoComplete(kill_by_id_input, id="kill_by_id_dropdown_items", candidates=[])
@@ -294,13 +315,21 @@ class CommandModal(ModalScreen):
 
             # Use IP address instead of hostname since that's what is used in the processlist
             if filters["host"]:
-                filters["host"] = next(
-                    (ip for ip, addr in self.host_cache_data.items() if filters["host"] == addr), filters["host"]
-                )
+                host, negate = parse_filter(filters["host"])
+                host = next((ip for ip, addr in self.host_cache_data.items() if host == addr), host)
+                filters["host"] = f"!{host}" if negate else host
 
-            # Validate numeric fields
-            for value, field_name in [(filters["query_time"], "Query time"), (filters["hostgroup"], "Hostgroup")]:
-                if value and not re.search(r"^\d+$", value):
+            # Query time is a minimum, so excluding a value from it doesn't mean anything
+            if filters["query_time"].startswith("!"):
+                self.update_error_response("Query time doesn't support [b]![/b] exclusion")
+                return
+
+            # Validate numeric fields (hostgroup can be prefixed with ! to exclude it)
+            for value, field_name, pattern in [
+                (filters["query_time"], "Query time", r"^\d+$"),
+                (filters["hostgroup"], "Hostgroup", r"^!?\d+$"),
+            ]:
+                if value and not re.search(pattern, value):
                     self.update_error_response(f"{field_name} must be an integer")
                     return
 

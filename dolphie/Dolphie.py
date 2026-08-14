@@ -113,12 +113,12 @@ class Dolphie:
 
         self.galera_cluster_members: list[dict[str, str]] = []
 
-        # Filters that can be applied
+        # Filters that can be applied. String filters support a leading ! to exclude matches
         self.user_filter: str = None
         self.db_filter: str = None
         self.host_filter: str = None
         self.query_filter: str = None
-        self.hostgroup_filter: int = None
+        self.hostgroup_filter: str = None
         self.query_time_filter: int = None
 
         # Types of hosts

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dolphie.Modules.Functions import format_query, format_time
+from dolphie.Modules.Functions import filter_sql_condition, format_query, format_time
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 from rich.syntax import Syntax
@@ -126,16 +126,16 @@ def fetch_data(tab: Tab) -> list[dict[str, int | str]]:
 
     # Filter user
     if dolphie.user_filter:
-        where_clause.append(f"processlist_user = '{dolphie.user_filter}'")
+        where_clause.append(filter_sql_condition("processlist_user", dolphie.user_filter))
 
     # Filter database
     if dolphie.db_filter:
-        where_clause.append(f"processlist_db = '{dolphie.db_filter}'")
+        where_clause.append(filter_sql_condition("processlist_db", dolphie.db_filter))
 
     # Filter hostname/IP
     if dolphie.host_filter:
         # Have to use LIKE since there's a port at the end
-        where_clause.append(f"processlist_host LIKE '{dolphie.host_filter}%'")
+        where_clause.append(filter_sql_condition("processlist_host", dolphie.host_filter, "{}%"))
 
     # Filter time
     if dolphie.query_time_filter:
@@ -143,7 +143,7 @@ def fetch_data(tab: Tab) -> list[dict[str, int | str]]:
 
     # Filter query
     if dolphie.query_filter:
-        where_clause.append(f"(processlist_info LIKE '%{dolphie.query_filter}%')")
+        where_clause.append(filter_sql_condition("processlist_info", dolphie.query_filter, "%{}%"))
 
     if where_clause:
         # Add in our dynamic WHERE clause for filtering

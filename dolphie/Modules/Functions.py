@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import re
 from decimal import Decimal
@@ -274,3 +276,70 @@ def escape_markup(text: str) -> str:
         str: The escaped text.
     """
     return text.replace("[", r"\[")
+
+
+def parse_filter(filter_value: str) -> tuple[str, bool]:
+    """Split a leading ! off a filter value, which means "exclude what matches this".
+
+    Args:
+        filter_value (str): The filter value as the user typed it.
+
+    Returns:
+        tuple[str, bool]: The value without the ! and whether the filter is negated.
+    """
+    filter_value = str(filter_value)
+    if filter_value.startswith("!"):
+        return filter_value[1:], True
+
+    return filter_value, False
+
+
+def filter_excludes(filter_value: str, thread_value: str, partial: bool = False) -> bool:
+    """Determine if a thread should be hidden by a filter, honoring ! negation.
+
+    Args:
+        filter_value (str): The filter value as the user typed it.
+        thread_value (str): The thread's value to compare against.
+        partial (bool): Match the filter anywhere in the thread's value instead of exactly.
+
+    Returns:
+        bool: True if the thread doesn't pass the filter.
+    """
+    value, negate = parse_filter(filter_value)
+
+    if partial:
+        matched = value in (thread_value or "")
+    else:
+        matched = value == thread_value
+
+    return matched if negate else not matched
+
+
+def filter_sql_condition(columns: str | list[str], filter_value: str, pattern: str = None) -> str:
+    """Build a WHERE clause condition for a filter value, honoring ! negation.
+
+    Args:
+        columns (str | list[str]): Column(s) to compare. Multiple columns are OR'd together
+                                   (AND'd when negated, so a thread has to fail every column).
+        filter_value (str): The filter value as the user typed it.
+        pattern (str): A LIKE pattern with {} where the value goes (i.e. "%{}%").
+                       Compares with = when not specified.
+
+    Returns:
+        str: The condition to add to a WHERE clause.
+    """
+    value, negate = parse_filter(filter_value)
+    comparison = f"LIKE '{pattern.format(value)}'" if pattern else f"= '{value}'"
+
+    conditions = []
+    for column in [columns] if isinstance(columns, str) else columns:
+        if negate:
+            # IFNULL so threads with a NULL column aren't excluded by SQL's NULL comparison rules
+            conditions.append(f"NOT (IFNULL({column}, '') {comparison})")
+        else:
+            conditions.append(f"{column} {comparison}")
+
+    if len(conditions) == 1:
+        return conditions[0]
+
+    return f"({' AND '.join(conditions)})" if negate else f"({' OR '.join(conditions)})"
