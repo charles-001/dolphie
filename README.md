@@ -89,6 +89,7 @@ options:
                         Number of hours to keep replay data. Data will be purged every hour [default: 48]
   --exclude-notify-vars
                         Dolphie will let you know when a global variable has been changed. If you have variables that change frequently and you don't want to see them, you can specify which ones with this option separated by a comma (i.e. --exclude-notify-vars=variable1,variable2)
+  --filters             Start with filters applied to threads, separated by a comma in the format name=value. Supports: user, host, db, hostgroup, time (minimum query time), query (partial query text). Prefix a value with ! to exclude what it matches (i.e. --filters user=!azure_superuser,time=5). Filters set by Dolphie's config, a credential profile and this option are merged, with the more specific source winning for the filters it sets. A name with no value (i.e. time=) unsets an inherited filter
   --show-trxs-only      (MySQL only) Start with only showing threads that have an active transaction
   --additional-columns  Start with additional columns in Processlist panel
   --debug-options       Display options that are set and what they're set by (command-line, dolphie config, etc) then exit. WARNING: This will show passwords and other sensitive information in plain text
@@ -106,6 +107,8 @@ Credential profiles can be defined in Dolphie's config file as a way to store cr
 A profile can be created by adding a section in the config file with the format: [credential_profile_<name>]
 When using a credential profile, do not include the prefix 'credential_profile' (i.e. -C production)
 The following options are supported in credential profiles:
+	host
+	port (default is 3306)
 	user
 	password
 	socket
@@ -114,6 +117,7 @@ The following options are supported in credential profiles:
 	ssl_cert
 	ssl_key
 	tab_title
+	filters
 	mycnf_file
 	login_path
 
@@ -171,6 +175,7 @@ Dolphie's config supports these options under [dolphie] section:
 	(str) hostgroup
 	(bool) show_trxs_only
 	(bool) show_additional_query_columns
+	(comma-separated str) filters
 	(bool) record_for_replay
 	(bool) daemon_mode
 	(comma-separated str) daemon_mode_panels
@@ -276,8 +281,14 @@ The following options are supported in credential profiles:
 - ssl_ca
 - ssl_cert
 - ssl_key
+- tab_title
+- filters
 - mycnf_file
 - login_path
+
+`filters` starts the profile's tabs with filters applied to threads, separated by a comma in the format `name=value`. It supports `user`, `host`, `db`, `hostgroup`, `time` (minimum query time) and `query` (partial query text). Prefix a value with `!` to exclude what it matches, the same as the filter modal (`f`) does.
+
+Filters merge from the least specific source to the most: Dolphie's config, then the credential profile, then `--filters`. Each one only overrides the filters it sets, so a profile that sets `user` keeps a `time` filter that Dolphie's config set. To drop an inherited filter instead, give its name with no value (i.e. `time=`).
 
 Example:
 
@@ -288,6 +299,7 @@ password = dev_password
 
 [credential_profile_prod]
 mycnf_file = /secure/path/to/prod.cnf
+filters = user=!azure_superuser
 ```
 
 To use a credential profile, you can specify it with `-C`/`--cred-profile` option without using the prefix `credential_profile` (i.e. `-C prod`) when starting Dolphie. Hostgroups can also use credential profiles (see below)

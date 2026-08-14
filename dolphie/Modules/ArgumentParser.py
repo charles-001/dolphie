@@ -14,6 +14,7 @@ from rich.table import Table
 from rich.theme import Theme
 
 from dolphie.DataTypes import Panels
+from dolphie.Modules.Functions import merge_filters
 from dolphie.Modules.Queries import MySQLQueries
 
 
@@ -31,6 +32,8 @@ class CredentialProfile:
     ssl_cert: str = None
     ssl_key: str = None
     tab_title: str = None
+    filters: str = None
+    filter_values: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -39,6 +42,7 @@ class HostGroupMember:
     host: str
     port: int = None
     credential_profile: CredentialProfile = None
+    key: str = None  # The key the host is listed under in Dolphie's config
 
 
 @dataclass
@@ -79,6 +83,8 @@ class Config:
     hostgroup_hosts: dict[str, list[HostGroupMember]] = field(default_factory=dict)
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
+    filters: str = None
+    filter_values: dict = field(default_factory=dict)
     record_for_replay: bool = False
     daemon_mode: bool = False
     daemon_mode_panels: list[str] = field(default_factory=lambda: ["processlist", "metadata_locks"])
@@ -101,6 +107,7 @@ class ArgumentParser:
                 "ssl",
                 "hostgroup_hosts",
                 "credential_profiles",
+                "filter_values",
             ]:
                 self.config_object_options[variable.name] = variable.type
 
@@ -108,7 +115,7 @@ class ArgumentParser:
             [
                 (
                     f"(comma-separated str) {option}"
-                    if option in ("daemon_mode_panels", "startup_panels", "exclude_notify_global_vars")
+                    if option in ("daemon_mode_panels", "startup_panels", "exclude_notify_global_vars", "filters")
                     else f"({data_type.__name__}) {option}" if hasattr(data_type, "__name__") else f"(str) {option} []"
                 )
                 for option, data_type in self.config_object_options.items()
@@ -139,6 +146,7 @@ The following options are supported in credential profiles:
 \tssl_cert
 \tssl_key
 \ttab_title
+\tfilters
 \tmycnf_file
 \tlogin_path
 
@@ -488,6 +496,19 @@ Dolphie's config supports these options under [dolphie] section:
             metavar="",
         )
         self.parser.add_argument(
+            "--filters",
+            dest="filters",
+            type=str,
+            help=(
+                "Start with filters applied to threads, separated by a comma in the format name=value. Supports: "
+                "user, host, db, hostgroup, time (minimum query time), query (partial query text). Prefix a value "
+                "with ! to exclude what it matches (i.e. --filters user=!azure_superuser,time=5). Filters set by "
+                "Dolphie's config, a credential profile and this option are merged, with the more specific source "
+                "winning for the filters it sets. A name with no value (i.e. time=) unsets an inherited filter"
+            ),
+            metavar="",
+        )
+        self.parser.add_argument(
             "--show-trxs-only",
             dest="show_trxs_only",
             action="store_true",
@@ -594,6 +615,9 @@ Dolphie's config supports these options under [dolphie] section:
         # Save the hostgroups found to the config object
         self.config.hostgroup_hosts = hostgroups
 
+        # Save the filters Dolphie's config set before the more specific sources overwrite the option
+        dolphie_config_filters = self.config.filters
+
         # We need to loop through all options and set non-login options so we can use them for the logic below
         for option in self.config_object_options:
             if option not in login_options and options[option]:
@@ -604,6 +628,24 @@ Dolphie's config supports these options under [dolphie] section:
                 f"Credential profile [red2]{self.config.credential_profile}[/red2] does not exist in "
                 "Dolphie's config file"
             )
+
+        # Filters are merged from the least specific source to the most, so each one only
+        # overrides the filters it sets instead of replacing the whole set
+        profile = self.config.credential_profiles.get(self.config.credential_profile)
+        filter_values = merge_filters(
+            self.parse_filters("filters option", dolphie_config_filters),
+            profile.filter_values if profile else {},
+            self.parse_filters("filters option", options.get("filters")),
+        )
+
+        self.config.filter_values = filter_values
+        if filter_values or self.config.filters:
+            # Save the merged filters back to the option so it reflects what tabs will start with
+            self.config.filters = self.format_filters(filter_values)
+
+            # Hostgroups get a row per host below instead, since each one merges its profile's filters
+            if not self.config.hostgroup:
+                self.add_to_debug_options("merged filters", "filters", self.config.filters)
 
         # Use MySQL's my.cnf file for login options if specified
         if os.path.isfile(self.config.mycnf_file):
@@ -685,6 +727,24 @@ Dolphie's config supports these options under [dolphie] section:
             if self.config.hostgroup not in hostgroups:
                 self.exit(f"Hostgroup [red2]{self.config.hostgroup}[/red2] does not exist in Dolphie's config file")
 
+            # Each host merges its credential profile's filters on top of the ones above when its tab
+            # is created, so show what each of them will start with instead of only the merged option
+            if self.debug_options:
+                hostgroup_filters = []
+                for member in hostgroups[self.config.hostgroup]:
+                    member_profile = self.config.credential_profiles.get(member.credential_profile)
+                    hostgroup_filters.append(
+                        (member, merge_filters(filter_values, member_profile.filter_values if member_profile else {}))
+                    )
+
+                if any(member_filters for _, member_filters in hostgroup_filters):
+                    for member, member_filters in hostgroup_filters:
+                        self.add_to_debug_options(
+                            f"hostgroup {self.config.hostgroup}:{member.key}",
+                            "filters",
+                            self.format_filters(member_filters),
+                        )
+
         if self.config.heartbeat_table:
             pattern_match = re.search(r"^(\w+\.\w+)$", self.config.heartbeat_table)
             if pattern_match:
@@ -760,7 +820,9 @@ Dolphie's config supports these options under [dolphie] section:
                 )
 
             hosts.append(
-                HostGroupMember(tab_title=tab_title, host=host, port=port, credential_profile=credential_profile)
+                HostGroupMember(
+                    tab_title=tab_title, host=host, port=port, credential_profile=credential_profile, key=key
+                )
             )
 
         if not hosts:
@@ -786,7 +848,7 @@ Dolphie's config supports these options under [dolphie] section:
         ]
 
         # All options. mycnf_file and login_path are processed instead of directly set
-        supported_options = credential_profile_options + ["tab_title", "mycnf_file", "login_path"]
+        supported_options = credential_profile_options + ["tab_title", "filters", "mycnf_file", "login_path"]
 
         credential_name = section.split("credential_profile_")[1]
         credential = CredentialProfile(name=credential_name)
@@ -799,6 +861,10 @@ Dolphie's config supports these options under [dolphie] section:
                 self.add_to_debug_options(f"cred profile setup - {credential_name}", key, value)
             elif key == "tab_title":
                 credential.tab_title = value
+                self.add_to_debug_options(f"cred profile setup - {credential_name}", key, value)
+            elif key == "filters":
+                credential.filters = value
+                credential.filter_values = self.parse_filters(f"credential profile {credential_name} filters", value)
                 self.add_to_debug_options(f"cred profile setup - {credential_name}", key, value)
             elif key == "mycnf_file":
                 if not os.path.isfile(value):
@@ -855,6 +921,63 @@ Dolphie's config supports these options under [dolphie] section:
             self.add_to_debug_options(f"cred profile setup - {credential_name}", "ssl object", credential.ssl)
 
         self.config.credential_profiles[credential_name] = credential
+
+    def format_filters(self, filters: dict) -> str:
+        # Turns filters back into the format the filters option uses
+        return ",".join(f"{filter_name}={filter_value}" for filter_name, filter_value in filters.items())
+
+    def parse_filters(self, source: str, value: str) -> dict:
+        # Turns the filters option (i.e. user=!azure_superuser,time=5) into the filters Dolphie starts with
+        supported_filters = ("user", "host", "db", "hostgroup", "time", "query")
+
+        filters = {}
+        if not value:
+            return filters
+
+        # A comma starts another filter, unless what follows it isn't a name=value pair - that way
+        # values can have commas in them (i.e. query=select a,b from t) while typos still get caught
+        filter_pairs = []
+        for filter_data in value.split(","):
+            if not filter_data.strip():
+                continue
+
+            if "=" in filter_data or not filter_pairs:
+                filter_pairs.append(filter_data)
+            else:
+                filter_pairs[-1] += f",{filter_data}"
+
+        for filter_data in filter_pairs:
+            filter_name, separator, filter_value = filter_data.partition("=")
+            filter_name = filter_name.strip()
+            filter_value = filter_value.strip()
+
+            if not separator:
+                self.exit(f"{source}: [red2]{filter_data.strip()}[/red2] must be in the format name=value")
+
+            if filter_name not in supported_filters:
+                self.exit(
+                    f"{source}: Invalid filter [red2]{filter_name}[/red2]. "
+                    f"Supported filters are: {', '.join(supported_filters)}"
+                )
+
+            # A bare name= unsets the filter so a more specific source can remove an inherited one
+            if not filter_value:
+                filters[filter_name] = None
+                continue
+
+            # Time is a minimum, so excluding a value from it doesn't mean anything
+            if filter_name == "time" and filter_value.startswith("!"):
+                self.exit(f"{source}: Filter [red2]time[/red2] doesn't support [red2]![/red2] exclusion")
+
+            # Hostgroup can still be prefixed with ! to exclude it
+            if filter_name in ("hostgroup", "time"):
+                pattern = r"^!?\d+$" if filter_name == "hostgroup" else r"^\d+$"
+                if not re.search(pattern, filter_value):
+                    self.exit(f"{source}: Filter [red2]{filter_name}[/red2] must be an integer")
+
+            filters[filter_name] = int(filter_value) if filter_name == "time" else filter_value
+
+        return filters
 
     def create_ssl_object(self, data: dict) -> dict:
         ssl_payload = {}

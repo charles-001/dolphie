@@ -6,6 +6,7 @@ import dolphie.Modules.MetricManager as MetricManager
 from dolphie.DataTypes import ConnectionSource, ConnectionStatus, Panels
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules.ArgumentParser import Config, HostGroupMember
+from dolphie.Modules.Functions import merge_filters
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Widgets.ReplayControls import ReplayControls
@@ -633,6 +634,9 @@ class TabManager:
                     config.socket = credential_profile_data.socket
                 if credential_profile_data.ssl:
                     config.ssl = credential_profile_data.ssl
+                if credential_profile_data.filter_values:
+                    # Merged so the profile only overrides the filters it sets, same as at startup
+                    config.filter_values = merge_filters(config.filter_values, credential_profile_data.filter_values)
                 if not tab.manual_tab_name and credential_profile_data.tab_title:
                     tab.manual_tab_name = credential_profile_data.tab_title
         elif config.credential_profile:

@@ -2,7 +2,7 @@ import sqlite3
 
 import pytest
 
-from dolphie.Modules.Functions import filter_excludes, filter_sql_condition, parse_filter
+from dolphie.Modules.Functions import filter_excludes, filter_sql_condition, merge_filters, parse_filter
 
 
 @pytest.mark.parametrize(
@@ -18,6 +18,24 @@ from dolphie.Modules.Functions import filter_excludes, filter_sql_condition, par
 )
 def test_parse_filter(filter_value, expected):
     assert parse_filter(filter_value) == expected
+
+
+@pytest.mark.parametrize(
+    ("filter_sets", "expected"),
+    [
+        ([], {}),
+        ([{"time": 5}], {"time": 5}),
+        # A more specific set only overrides the filters it has
+        ([{"time": 5}, {"user": "bob"}], {"time": 5, "user": "bob"}),
+        ([{"time": 5, "user": "bob"}, {"user": "alice"}], {"time": 5, "user": "alice"}),
+        # None unsets a filter an earlier set applied
+        ([{"time": 5, "user": "bob"}, {"time": None}], {"user": "bob"}),
+        ([{"time": 5}, {"user": None}], {"time": 5}),  # Unsetting one that isn't set does nothing
+        ([{"time": None}, {"time": 5}], {"time": 5}),  # A later set can put one back
+    ],
+)
+def test_merge_filters(filter_sets, expected):
+    assert merge_filters(*filter_sets) == expected
 
 
 @pytest.mark.parametrize(

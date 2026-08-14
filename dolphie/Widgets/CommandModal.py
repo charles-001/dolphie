@@ -13,7 +13,7 @@ from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem, TargetState
 
 
 class FilterAutoComplete(AutoComplete):
-    """AutoComplete that ignores a leading ! so suggestions still work when excluding a value"""
+    """AutoComplete that ignores a leading ! so suggestions still work when excluding a value."""
 
     def get_search_string(self, target_state: TargetState) -> str:
         value, _ = parse_filter(super().get_search_string(target_state))

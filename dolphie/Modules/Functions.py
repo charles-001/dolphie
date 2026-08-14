@@ -294,6 +294,24 @@ def parse_filter(filter_value: str) -> tuple[str, bool]:
     return filter_value, False
 
 
+def merge_filters(*filter_sets: dict) -> dict:
+    """Merge filters from the least specific source to the most, so each one only overrides
+    the filters it sets.
+
+    Args:
+        *filter_sets (dict): Filters to merge, least specific first. A filter set to None unsets
+                             it, which is how a bare name= removes one an earlier set applied.
+
+    Returns:
+        dict: The filters left in effect.
+    """
+    merged = {}
+    for filters in filter_sets:
+        merged.update(filters)
+
+    return {filter_name: value for filter_name, value in merged.items() if value is not None}
+
+
 def filter_excludes(filter_value: str, thread_value: str, partial: bool = False) -> bool:
     """Determine if a thread should be hidden by a filter, honoring ! negation.
 
@@ -306,11 +324,7 @@ def filter_excludes(filter_value: str, thread_value: str, partial: bool = False)
         bool: True if the thread doesn't pass the filter.
     """
     value, negate = parse_filter(filter_value)
-
-    if partial:
-        matched = value in (thread_value or "")
-    else:
-        matched = value == thread_value
+    matched = value in (thread_value or "") if partial else value == thread_value
 
     return matched if negate else not matched
 
