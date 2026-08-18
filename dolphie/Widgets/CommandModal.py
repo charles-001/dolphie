@@ -101,7 +101,7 @@ class CommandModal(ModalScreen):
         maximize_panel_options: list[tuple[str, str]] | None = None,
         host_cache_data: Mapping[str, str] | None = None,
         max_replay_timestamp: str | None = None,
-        current_filters: Mapping[str, str] | None = None,
+        current_filters: Mapping[str, str | int | None] | None = None,
         filter_dropdown_values: Mapping[str, set] | None = None,
     ):
         super().__init__()

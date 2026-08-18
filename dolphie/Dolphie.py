@@ -121,12 +121,12 @@ class Dolphie:
         # Filters that can be applied. String filters support a leading ! to exclude matches.
         # They start as whatever the filters option is set to, if anything
         filters = self.config.filter_values
-        self.user_filter: str = filters.get("user")
-        self.db_filter: str = filters.get("db")
-        self.host_filter: str = filters.get("host")
-        self.query_filter: str = filters.get("query")
-        self.hostgroup_filter: str = filters.get("hostgroup")
-        self.query_time_filter: int = filters.get("time")
+        self.user_filter: str | None = filters.get("user")
+        self.db_filter: str | None = filters.get("db")
+        self.host_filter: str | None = filters.get("host")
+        self.query_filter: str | None = filters.get("query")
+        self.hostgroup_filter: str | None = filters.get("hostgroup")
+        self.query_time_filter: int | None = filters.get("time")
 
         # Values seen in the processlist, so the filter dropdowns can offer ones being filtered out
         self.filter_dropdown_values: dict[str, set] = {field: set() for field in ("user", "db", "host", "hostgroup")}

@@ -397,7 +397,7 @@ def filter_excludes(filter_value: str, thread_value: str, partial: bool = False)
     return matched if negate else not matched
 
 
-def filter_sql_condition(columns: str | list[str], filter_value: str, pattern: str = None) -> str:
+def filter_sql_condition(columns: str | list[str], filter_value: str, pattern: str | None = None) -> str:
     """Build a WHERE clause condition for a filter value, honoring ! negation.
 
     Args:

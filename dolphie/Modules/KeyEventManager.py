@@ -484,7 +484,7 @@ class KeyEventManager:
                     # Only notify for filters that changed since the rest were already applied
                     if filter_value != current_filter_value:
                         # A value prefixed with ! excludes what matches it instead
-                        value, negate = parse_filter(filter_value)
+                        value, negate = parse_filter(str(filter_value))
                         self.app.notify(
                             f"[b]{filter_name}[/b]: {'not ' if negate else ''}[$b_highlight]{value}[/$b_highlight]",
                             title="Filter applied",
@@ -495,7 +495,7 @@ class KeyEventManager:
                     self.app.notify(
                         ", ".join(f"[$b_highlight]{name}[/$b_highlight]" for name in removed_filters),
                         title="Filter removed",
-                        severity="success",
+                        severity="information",
                     )
 
                 # Refresh data after applying filters

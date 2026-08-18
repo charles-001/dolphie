@@ -86,7 +86,7 @@ class Config:
     hostgroup_hosts: dict[str, list[HostGroupMember]] = field(default_factory=dict)
     show_trxs_only: bool = False
     show_additional_query_columns: bool = False
-    filters: str = None
+    filters: str | None = None
     filter_values: dict = field(default_factory=dict)
     record_for_replay: bool = False
     daemon_mode: bool = False
@@ -627,7 +627,11 @@ Dolphie's config supports these options under [dolphie] section:
 
         # Filters are merged from the least specific source to the most, so each one only
         # overrides the filters it sets instead of replacing the whole set
-        profile = self.config.credential_profiles.get(self.config.credential_profile)
+        profile = (
+            self.config.credential_profiles.get(self.config.credential_profile)
+            if self.config.credential_profile
+            else None
+        )
         filter_values = merge_filters(
             self.parse_filters("filters option", dolphie_config_filters),
             profile.filter_values if profile else {},
@@ -968,7 +972,7 @@ Dolphie's config supports these options under [dolphie] section:
         # Turns filters back into the format the filters option uses
         return ",".join(f"{filter_name}={filter_value}" for filter_name, filter_value in filters.items())
 
-    def parse_filters(self, source: str, value: str) -> dict:
+    def parse_filters(self, source: str, value: str | None) -> dict:
         # Turns the filters option (i.e. user=!azure_superuser,time=5) into the filters Dolphie starts with
         supported_filters = ("user", "host", "db", "hostgroup", "time", "query")
 

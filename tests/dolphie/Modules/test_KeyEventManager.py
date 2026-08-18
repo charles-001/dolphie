@@ -1,8 +1,10 @@
 import asyncio
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
+from dolphie.App import DolphieApp
 from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.KeyEventManager import KeyEventManager
 
@@ -59,7 +61,7 @@ def press_filter_key(dolphie, submitted):
         app=SimpleNamespace(push_screen=push_screen),
     )
 
-    asyncio.run(KeyEventManager(app).process_key_event("f"))
+    asyncio.run(KeyEventManager(cast(DolphieApp, app)).process_key_event("f"))
 
     return SimpleNamespace(
         filters={attribute: getattr(dolphie, attribute) for attribute in FILTER_ATTRIBUTES},
