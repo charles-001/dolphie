@@ -3,7 +3,14 @@ from __future__ import annotations
 from rich.syntax import Syntax
 
 from dolphie.DataTypes import ProcesslistThread, ProxySQLProcesslistThread
-from dolphie.Modules.Functions import coerce_int, coerce_str, format_number, format_query
+from dolphie.Modules.Functions import (
+    coerce_int,
+    coerce_str,
+    filter_excludes,
+    filter_sql_condition,
+    format_number,
+    format_query,
+)
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 
@@ -140,6 +147,9 @@ def create_panel(tab: Tab) -> None:
         column_fields.append(column_data["field"])
         column_format_numbers.append(column_data["format_number"])
 
+    # Has to happen before the filtering below so replays remember the values being filtered out
+    dolphie.record_filter_dropdown_values()
+
     threads_to_render: dict[int, ProcesslistThread | ProxySQLProcesslistThread] = {}
     # We use filter here for replays since the original way requires changing WHERE clause
     if dolphie.replay_file:
@@ -151,19 +161,21 @@ def create_panel(tab: Tab) -> None:
             if dolphie.show_trxs_only and thread.trx_state == "[$dark_gray]N/A":
                 continue
 
-            if dolphie.user_filter and dolphie.user_filter != thread.user:
+            if dolphie.user_filter and filter_excludes(dolphie.user_filter, thread.user):
                 continue
 
-            if dolphie.db_filter and dolphie.db_filter != thread.db:
+            if dolphie.db_filter and filter_excludes(dolphie.db_filter, thread.db):
                 continue
 
-            if dolphie.host_filter and dolphie.host_filter not in thread.host:
+            if dolphie.host_filter and filter_excludes(dolphie.host_filter, thread.host, partial=True):
                 continue
 
             if dolphie.query_time_filter and thread.time < dolphie.query_time_filter:
                 continue
 
-            if dolphie.query_filter and dolphie.query_filter not in thread.formatted_query.code:
+            if dolphie.query_filter and filter_excludes(
+                dolphie.query_filter, thread.formatted_query.code, partial=True
+            ):
                 continue
 
             if dolphie.show_threads_with_concurrency_tickets and thread.trx_concurrency_tickets == "[$dark_gray]0":
@@ -290,20 +302,18 @@ def fetch_data(tab: Tab) -> dict[int, ProcesslistThread | ProxySQLProcesslistThr
     if dolphie.show_threads_with_concurrency_tickets:
         where_clause.append("trx_concurrency_tickets > 0")
     if dolphie.user_filter:
-        where_clause.append(f"{user_col} = '{dolphie.user_filter}'")
+        where_clause.append(filter_sql_condition(user_col, dolphie.user_filter))
     if dolphie.db_filter:
-        where_clause.append(f"{db_col} = '{dolphie.db_filter}'")
+        where_clause.append(filter_sql_condition(db_col, dolphie.db_filter))
     if dolphie.host_filter:
-        where_clause.append(f"{host_col} LIKE '{dolphie.host_filter}%'")
+        where_clause.append(filter_sql_condition(host_col, dolphie.host_filter, "{}%"))
     if dolphie.query_time_filter:
         where_clause.append(f"{time_col} >= '{dolphie.query_time_filter}'")
     if dolphie.query_filter:
         if dolphie.use_performance_schema_for_processlist:
-            where_clause.append(
-                f"({info_col} LIKE '%%{dolphie.query_filter}%%' OR trx_query LIKE '%%{dolphie.query_filter}%%')"
-            )
+            where_clause.append(filter_sql_condition([info_col, "trx_query"], dolphie.query_filter, "%%{}%%"))
         else:
-            where_clause.append(f"{info_col} LIKE '%%{dolphie.query_filter}%%'")
+            where_clause.append(filter_sql_condition(info_col, dolphie.query_filter, "%%{}%%"))
 
     # Add the WHERE clause to the query
     if where_clause:

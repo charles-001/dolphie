@@ -30,6 +30,7 @@ from dolphie.Modules.Functions import (
     format_bytes,
     format_number,
     format_query,
+    parse_filter,
 )
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.Queries import MySQLQueries, ProxySQLQueries
@@ -461,18 +462,41 @@ class KeyEventManager:
 
                 filters = {filter_name: filter_data[index] for index, filter_name in enumerate(filters_mapping)}
 
-                # Apply filters and notify the user for each valid input
+                # The modal is prefilled with the filters in effect, so what it returns is the
+                # complete set of them - a field left empty removes that filter
+                removed_filters = []
                 for filter_name, filter_value in filters.items():
-                    if filter_value:
-                        if filter_name in ["Minimum Query Time", "Hostgroup"]:
-                            filter_value = int(filter_value)
+                    filter_attribute = filters_mapping[filter_name]
+                    current_filter_value = getattr(dolphie, filter_attribute)
 
-                        setattr(dolphie, filters_mapping[filter_name], filter_value)
+                    if not filter_value:
+                        if current_filter_value:
+                            removed_filters.append(filter_name)
+                            setattr(dolphie, filter_attribute, None)
+
+                        continue
+
+                    if filter_name == "Minimum Query Time":
+                        filter_value = int(filter_value)
+
+                    setattr(dolphie, filter_attribute, filter_value)
+
+                    # Only notify for filters that changed since the rest were already applied
+                    if filter_value != current_filter_value:
+                        # A value prefixed with ! excludes what matches it instead
+                        value, negate = parse_filter(filter_value)
                         self.app.notify(
-                            f"[b]{filter_name}[/b]: [$b_highlight]{filter_value}[/$b_highlight]",
+                            f"[b]{filter_name}[/b]: {'not ' if negate else ''}[$b_highlight]{value}[/$b_highlight]",
                             title="Filter applied",
                             severity="information",
                         )
+
+                if removed_filters:
+                    self.app.notify(
+                        ", ".join(f"[$b_highlight]{name}[/$b_highlight]" for name in removed_filters),
+                        title="Filter removed",
+                        severity="success",
+                    )
 
                 # Refresh data after applying filters
                 self.app.force_refresh_for_replay(need_current_data=True)
@@ -484,6 +508,15 @@ class KeyEventManager:
                     processlist_data=self._modal_processlist(dolphie.processlist_threads_snapshot),
                     host_cache_data=dolphie.host_cache,
                     connection_source=dolphie.connection_source,
+                    current_filters={
+                        "username": dolphie.user_filter,
+                        "host": dolphie.host_filter,
+                        "db": dolphie.db_filter,
+                        "hostgroup": dolphie.hostgroup_filter,
+                        "query_time": dolphie.query_time_filter,
+                        "query_text": dolphie.query_filter,
+                    },
+                    filter_dropdown_values=dolphie.filter_dropdown_values,
                 ),
                 apply_filters,
             )

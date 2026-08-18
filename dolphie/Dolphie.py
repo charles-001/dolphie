@@ -118,13 +118,18 @@ class Dolphie:
 
         self.galera_cluster_members: list[dict[str, str]] = []
 
-        # Filters that can be applied
-        self.user_filter: str | None = None
-        self.db_filter: str | None = None
-        self.host_filter: str | None = None
-        self.query_filter: str | None = None
-        self.hostgroup_filter: int | None = None
-        self.query_time_filter: int | None = None
+        # Filters that can be applied. String filters support a leading ! to exclude matches.
+        # They start as whatever the filters option is set to, if anything
+        filters = self.config.filter_values
+        self.user_filter: str = filters.get("user")
+        self.db_filter: str = filters.get("db")
+        self.host_filter: str = filters.get("host")
+        self.query_filter: str = filters.get("query")
+        self.hostgroup_filter: str = filters.get("hostgroup")
+        self.query_time_filter: int = filters.get("time")
+
+        # Values seen in the processlist, so the filter dropdowns can offer ones being filtered out
+        self.filter_dropdown_values: dict[str, set] = {field: set() for field in ("user", "db", "host", "hostgroup")}
 
         # Types of hosts
         self.connection_source: DataTypes.ConnectionSourceType = ConnectionSource.mysql  # mysql, proxysql
@@ -398,6 +403,18 @@ class Dolphie:
             hostname = host
 
         return hostname
+
+    def record_filter_dropdown_values(self):
+        # Filters are applied in the query (or when rendering a replay), so a value that's being
+        # filtered out isn't in the processlist anymore. Remember the values we've seen so the
+        # filter dropdowns can still offer them
+        for thread in self.processlist_threads.values():
+            for field, values in self.filter_dropdown_values.items():
+                value = getattr(thread, field, None)
+
+                # Skip values that aren't real, such as the N/A placeholder threads get when empty
+                if value and not (isinstance(value, str) and value.startswith("[")):
+                    values.add(value)
 
     def determine_proxysql_refresh_interval(self) -> float:
         # If we have a lot of client connections, increase the refresh interval based on the
