@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from dolphie.Modules.Functions import coerce_float, coerce_int, format_bytes, format_number
-from dolphie.Modules.MetricManager import MetricData
+from dolphie.Modules.MetricDefinitions import MetricData
 from dolphie.Modules.MySQL import ConnectionSource
 from dolphie.Modules.TabManager import Tab
 from dolphie.Modules.Theme import ThemedTable as Table

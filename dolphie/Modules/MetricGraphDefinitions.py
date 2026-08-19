@@ -6,7 +6,9 @@ from typing import get_type_hints
 
 from dolphie.DataTypes import ConnectionSource, ConnectionSourceType
 from dolphie.Modules.MetricDefinitions import (
+    COMMAND_STAT_BUCKETS,
     MetricData,
+    MetricInstance,
     MetricInstances,
     create_metric_instances,
     iter_metric_data,
@@ -62,6 +64,14 @@ class MetricKey:
         return f"{self.group}-{self.metric}"
 
 
+def resolve_metric_data(metric_instance: MetricInstance, metric_key: MetricKey) -> MetricData:
+    """Resolve a registry metric key against its typed metric group instance."""
+    metric_data = getattr(metric_instance, metric_key.metric)
+    if not isinstance(metric_data, MetricData):
+        raise TypeError(f"{metric_key.dom_id} does not resolve to MetricData")
+    return metric_data
+
+
 @dataclass(frozen=True)
 class GraphSpec:
     """Declare one graph and the series it renders."""
@@ -102,6 +112,17 @@ class GraphTabSpec:
     def metric_groups(self) -> tuple[str, ...]:
         """Return metric groups in first-use order."""
         return tuple(dict.fromkeys(graph.metric_group for graph in self.graphs))
+
+    @property
+    def unique_series_by_graph(self) -> tuple[tuple[GraphSpec, tuple[MetricKey, ...]], ...]:
+        """Return each graph's series with first-use dedupe across the tab."""
+        seen: set[MetricKey] = set()
+        deduped: list[tuple[GraphSpec, tuple[MetricKey, ...]]] = []
+        for graph in self.graphs:
+            fresh = tuple(metric for metric in graph.series if metric not in seen)
+            seen.update(fresh)
+            deduped.append((graph, fresh))
+        return tuple(deduped)
 
 
 MYSQL = frozenset[ConnectionSourceType]((ConnectionSource.mysql,))
@@ -516,23 +537,7 @@ GRAPH_TABS = (
                     GraphSpec(
                         "graph_proxysql_select_command_stats",
                         "proxysql_select_command_stats",
-                        tuple(
-                            _key("proxysql_select_command_stats", metric)
-                            for metric in (
-                                "cnt_100us",
-                                "cnt_500us",
-                                "cnt_1ms",
-                                "cnt_5ms",
-                                "cnt_10ms",
-                                "cnt_50ms",
-                                "cnt_100ms",
-                                "cnt_500ms",
-                                "cnt_1s",
-                                "cnt_5s",
-                                "cnt_10s",
-                                "cnt_INFs",
-                            )
-                        ),
+                        tuple(_key("proxysql_select_command_stats", metric) for metric in COMMAND_STAT_BUCKETS),
                     ),
                 )
             ),
@@ -548,23 +553,7 @@ GRAPH_TABS = (
                     GraphSpec(
                         "graph_proxysql_total_command_stats",
                         "proxysql_total_command_stats",
-                        tuple(
-                            _key("proxysql_total_command_stats", metric)
-                            for metric in (
-                                "cnt_100us",
-                                "cnt_500us",
-                                "cnt_1ms",
-                                "cnt_5ms",
-                                "cnt_10ms",
-                                "cnt_50ms",
-                                "cnt_100ms",
-                                "cnt_500ms",
-                                "cnt_1s",
-                                "cnt_5s",
-                                "cnt_10s",
-                                "cnt_INFs",
-                            )
-                        ),
+                        tuple(_key("proxysql_total_command_stats", metric) for metric in COMMAND_STAT_BUCKETS),
                     ),
                 )
             ),

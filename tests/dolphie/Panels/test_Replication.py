@@ -355,6 +355,7 @@ def test_failed_port_correlation_does_not_publish_a_partial_snapshot():
     connection.execute.side_effect = execute
     connection.fetchall.return_value = [{"id": 2, "user": "repl", "host": "new-replica:49152", "replica_uuid": "new"}]
     tab = SimpleNamespace(
+        id="tab1",
         dolphie=SimpleNamespace(
             connection_source_alt=ConnectionSource.mysql,
             daemon_mode=False,
@@ -363,7 +364,7 @@ def test_failed_port_correlation_does_not_publish_a_partial_snapshot():
             performance_schema_enabled=True,
             replica_manager=replica_manager,
             replicaset=False,
-        )
+        ),
     )
 
     WorkerDataProcessor(MagicMock())._refresh_replica_discovery(cast(Tab, tab))

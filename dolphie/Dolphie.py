@@ -141,30 +141,9 @@ class Dolphie:
         self.replicaset: bool = False
 
         # Main connection is used for Textual's worker thread so it can run asynchronous
-        self.main_db_connection = Database(
-            app=self.app,
-            host=self.host,
-            user=self.user,
-            password=self.password,
-            socket=self.socket,
-            port=self.port,
-            ssl=self.ssl,
-            auto_connect=False,
-            daemon_mode=self.daemon_mode,
-        )
+        self.main_db_connection = self._create_connection()
         # Secondary connection is for ad-hoc commands that are not a part of the worker thread
-        self.secondary_db_connection = Database(
-            app=self.app,
-            host=self.host,
-            user=self.user,
-            password=self.password,
-            socket=self.socket,
-            port=self.port,
-            ssl=self.ssl,
-            save_connection_id=False,
-            auto_connect=False,
-            daemon_mode=self.daemon_mode,
-        )
+        self.secondary_db_connection = self._create_connection(save_connection_id=False)
 
         # Misc variables
         self.host_distro: str = "MySQL"
@@ -201,6 +180,20 @@ class Dolphie:
                 self.enable_system_utilization = False
         except socket.gaierror:
             self.enable_system_utilization = False
+
+    def _create_connection(self, save_connection_id: bool = True) -> Database:
+        return Database(
+            app=self.app,
+            host=self.host,
+            user=self.user,
+            password=self.password,
+            socket=self.socket,
+            port=self.port,
+            ssl=self.ssl,
+            save_connection_id=save_connection_id,
+            auto_connect=False,
+            daemon_mode=self.daemon_mode,
+        )
 
     def db_connect(self):
         self.main_db_connection.connect()

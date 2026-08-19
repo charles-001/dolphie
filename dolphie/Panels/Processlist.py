@@ -10,6 +10,7 @@ from dolphie.Modules.Functions import (
     filter_sql_condition,
     format_number,
     format_query,
+    host_without_port,
 )
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
@@ -340,8 +341,7 @@ def fetch_data(tab: Tab) -> dict[int, ProcesslistThread | ProxySQLProcesslistThr
 
         # Resolve hostname if possible
         if thread["host"]:
-            host = coerce_str(thread["host"]).split(":")[0]
-            thread["host"] = dolphie.get_hostname(host)
+            thread["host"] = dolphie.get_hostname(host_without_port(coerce_str(thread["host"])))
 
         # We don't need trx_query anymore
         thread.pop("trx_query", None)

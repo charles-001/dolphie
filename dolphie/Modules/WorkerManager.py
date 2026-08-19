@@ -416,10 +416,7 @@ class WorkerManager:
                 if not tab.main_container.display:
                     tab.sync_shared_ui()
 
-                if dolphie.connection_source == ConnectionSource.mysql:
-                    self.app.worker_data_processor.refresh_screen_mysql(tab)
-                elif dolphie.connection_source == ConnectionSource.proxysql:
-                    self.app.worker_data_processor.refresh_screen_proxysql(tab)
+                self.app.worker_data_processor.refresh_screen(tab)
 
                 # Update the topbar with the latest replay file size
                 if dolphie.record_for_replay:
@@ -496,11 +493,9 @@ class WorkerManager:
             if not tab.main_container.display:
                 tab.sync_shared_ui()
 
+            self.app.worker_data_processor.refresh_screen(tab)
             if dolphie.connection_source == ConnectionSource.mysql:
-                self.app.worker_data_processor.refresh_screen_mysql(tab)
                 ReplicationPanel.create_replica_panel(tab)
-            elif dolphie.connection_source == ConnectionSource.proxysql:
-                self.app.worker_data_processor.refresh_screen_proxysql(tab)
 
             tab.toggle_entities_displays()
 

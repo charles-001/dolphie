@@ -4,6 +4,7 @@ from __future__ import annotations
 # ruff: noqa: ANN401
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 from typing import Any
 
 from rich.table import Column
@@ -75,6 +76,7 @@ _THEME_REFERENCE = re.compile(r"\$([a-zA-Z_][\w-]*)")
 _THEME_TAG = re.compile(r"\[[^\]]*\$[a-zA-Z_][\w-]*[^\]]*\]")
 
 
+@lru_cache(maxsize=2048)
 def resolve_theme_markup(markup: str) -> str:
     """Resolve Textual theme references for renderables parsed directly by Rich."""
 
@@ -102,13 +104,7 @@ def themed_text(markup: str) -> Text:
     return Text.from_markup(resolve_theme_markup(markup))
 
 
-def _rich_renderable(renderable: Any) -> Any:
-    if isinstance(renderable, str) and _THEME_TAG.search(renderable):
-        return themed_text(renderable)
-    return renderable
-
-
-def _textual_renderable(renderable: Any) -> Any:
+def _themed_renderable(renderable: Any) -> Any:
     if isinstance(renderable, str) and _THEME_TAG.search(renderable):
         return themed_text(renderable)
     return renderable
@@ -126,7 +122,7 @@ class ThemedTable(RichTable):
     def __init__(self, *headers: Any, **kwargs: Any) -> None:
         for key in ("title", "caption"):
             if key in kwargs:
-                kwargs[key] = _rich_renderable(kwargs[key])
+                kwargs[key] = _themed_renderable(kwargs[key])
         for key in (
             "style",
             "header_style",
@@ -140,7 +136,7 @@ class ThemedTable(RichTable):
 
         resolved_headers = []
         for header in headers:
-            themed_header = _rich_renderable(header)
+            themed_header = _themed_renderable(header)
             resolved_headers.append(Column(header=themed_header) if isinstance(themed_header, Text) else themed_header)
         super().__init__(*resolved_headers, **kwargs)
 
@@ -149,14 +145,14 @@ class ThemedTable(RichTable):
             if key in kwargs:
                 kwargs[key] = _themed_style(kwargs[key])
         super().add_column(
-            _rich_renderable(header),
-            _rich_renderable(footer),
+            _themed_renderable(header),
+            _themed_renderable(footer),
             **kwargs,
         )
 
     def add_row(self, *renderables: Any, style: Any = None, end_section: bool = False) -> None:
         super().add_row(
-            *(_rich_renderable(renderable) for renderable in renderables),
+            *(_themed_renderable(renderable) for renderable in renderables),
             style=_themed_style(style),
             end_section=end_section,
         )
@@ -167,12 +163,12 @@ class ThemedDataTable(TextualDataTable):
 
     @staticmethod
     def normalize_cell(cell: Any) -> Any:
-        return _textual_renderable(cell)
+        return _themed_renderable(cell)
 
     @staticmethod
     def normalize_cells(cells: Iterable[Any]) -> list[Any]:
         """Normalize markup before storing or comparing table cells."""
-        return [_textual_renderable(cell) for cell in cells]
+        return [_themed_renderable(cell) for cell in cells]
 
     def add_column(
         self,

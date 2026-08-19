@@ -312,12 +312,10 @@ class DolphieApp(App):
             tab.sync_shared_ui()
             tab.toggle_entities_displays()
 
+            self.worker_data_processor.refresh_screen(tab)
             if tab.dolphie.connection_source == ConnectionSource.mysql:
-                self.worker_data_processor.refresh_screen_mysql(tab)
                 ReplicationPanel.create_replica_panel(tab)
                 tab.toggle_replication_panel_components()
-            elif tab.dolphie.connection_source == ConnectionSource.proxysql:
-                self.worker_data_processor.refresh_screen_proxysql(tab)
 
             self.force_refresh_for_replay(need_current_data=True)
 
@@ -465,8 +463,7 @@ class DolphieApp(App):
                 self.tab_manager.setup_host_tab(tab)
             elif tab.dolphie.replay_file:
                 tab.replay_manager = ReplayManager(tab.dolphie)
-                replay_manager = tab.replay_manager
-                if replay_manager is None or not replay_manager.verify_replay_file():
+                if not tab.replay_manager.verify_replay_file():
                     tab.replay_manager = None
                     self.tab_manager.setup_host_tab(tab)
                     return

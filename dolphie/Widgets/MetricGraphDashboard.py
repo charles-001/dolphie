@@ -19,6 +19,7 @@ from dolphie.Modules.MetricGraphDefinitions import (
     GraphTabSpec,
     MetricKey,
     TabAvailability,
+    resolve_metric_data,
     swatch_for_metric,
 )
 from dolphie.Widgets.MetricSeriesControl import MetricSeriesControl
@@ -54,14 +55,18 @@ class MetricGraphDashboard(Widget):
         self.control_groups: dict[str, Horizontal] = {}
         self._control_tabs: dict[MetricKey, str] = {}
         self._bound_dolphie: Dolphie | None = None
-        self._catalog = create_metric_instances()
+        # Change guards so per-tick availability syncs only touch the DOM on
+        # actual transitions.
+        self._shown_tabs: dict[str, bool] = {}
+        self._applied_graph_states: dict[str, tuple[bool, int]] = {}
         self.tabs = TabbedContent(id="metric_graph_tabs")
         self._build_widget_registries()
 
     def _build_widget_registries(self) -> None:
+        # A default catalog supplies each control's static presentation defaults.
+        catalog = create_metric_instances()
         for tab_spec in GRAPH_TABS:
-            seen_metrics: set[MetricKey] = set()
-            for graph_spec in tab_spec.graphs:
+            for graph_spec, metric_keys in tab_spec.unique_series_by_graph:
                 graph = Graph(
                     spec=graph_spec,
                     id=graph_spec.id,
@@ -70,11 +75,8 @@ class MetricGraphDashboard(Widget):
                 graph.marker = self.marker
                 self.graphs[graph_spec.id] = graph
 
-                for metric_key in graph_spec.series:
-                    if metric_key in seen_metrics:
-                        continue
-                    seen_metrics.add(metric_key)
-                    metric_data = self._resolve_metric_data(self._catalog, metric_key)
+                for metric_key in metric_keys:
+                    metric_data = self._resolve_metric_data(catalog, metric_key)
                     control = MetricSeriesControl(
                         metric_key=metric_key,
                         label=metric_data.label,
@@ -113,11 +115,8 @@ class MetricGraphDashboard(Widget):
 
     def _control_groups(self, tab_spec: GraphTabSpec) -> list[Horizontal]:
         groups: list[Horizontal] = []
-        seen_metrics: set[MetricKey] = set()
         show_group_labels = len(tab_spec.graphs) > 1
-        for graph_spec in tab_spec.graphs:
-            metric_keys = tuple(metric for metric in graph_spec.series if metric not in seen_metrics)
-            seen_metrics.update(metric_keys)
+        for graph_spec, metric_keys in tab_spec.unique_series_by_graph:
             if not metric_keys:
                 continue
 
@@ -142,6 +141,10 @@ class MetricGraphDashboard(Widget):
         """Atomically bind graph controls, availability, and content to one host."""
         host_changed = self._bound_dolphie is not dolphie
         self._bound_dolphie = dolphie
+        if host_changed:
+            # The new host's metric state must be re-synced even where the
+            # DOM availability state is unchanged.
+            self._applied_graph_states.clear()
         self._sync_availability()
         if host_changed:
             self.sync_controls()
@@ -211,30 +214,40 @@ class MetricGraphDashboard(Widget):
                 tab_spec, dolphie
             )
             if available:
-                self.tabs.show_tab(self._pane_id(tab_spec.id))
                 available_tab_ids.append(tab_spec.id)
-            else:
-                self.tabs.hide_tab(self._pane_id(tab_spec.id))
+            if self._shown_tabs.get(tab_spec.id) != available:
+                self._shown_tabs[tab_spec.id] = available
+                if available:
+                    self.tabs.show_tab(self._pane_id(tab_spec.id))
+                else:
+                    self.tabs.hide_tab(self._pane_id(tab_spec.id))
 
             for row_spec in tab_spec.rows:
+                graph_availability = {graph.id: self._graph_available(graph, dolphie) for graph in row_spec.graphs}
                 optional_graph_hidden = any(
-                    graph.availability is not GraphAvailability.ALWAYS and not self._graph_available(graph, dolphie)
+                    graph.availability is not GraphAvailability.ALWAYS and not graph_availability[graph.id]
                     for graph in row_spec.graphs
                 )
                 for graph_spec in row_spec.graphs:
-                    graph_available = available and self._graph_available(graph_spec, dolphie)
-                    graph = self.graphs[graph_spec.id]
-                    graph.display = graph_available
-                    control_group = self.control_groups.get(graph_spec.id)
-                    if control_group is not None:
-                        control_group.display = graph_available
+                    graph_available = available and graph_availability[graph_spec.id]
                     weight = (
                         graph_spec.expanded_weight
                         if optional_graph_hidden and graph_spec.expanded_weight is not None
                         else graph_spec.weight
                     )
+                    if self._applied_graph_states.get(graph_spec.id) == (graph_available, weight):
+                        continue
+                    self._applied_graph_states[graph_spec.id] = (graph_available, weight)
+
+                    graph = self.graphs[graph_spec.id]
+                    graph.display = graph_available
+                    control_group = self.control_groups.get(graph_spec.id)
+                    if control_group is not None:
+                        control_group.display = graph_available
                     graph.styles.width = f"{weight}fr"
-                    if graph_spec.availability is GraphAvailability.ACTIVE_REDO_LOG:
+                    if graph_spec.availability is not GraphAvailability.ALWAYS:
+                        # Availability-gated series are not user-switchable, so their
+                        # host visibility state follows graph availability.
                         metric_data = self._resolve_metric_data(
                             dolphie.metric_manager.metrics,
                             graph_spec.series[0],
@@ -292,11 +305,7 @@ class MetricGraphDashboard(Widget):
 
     @staticmethod
     def _resolve_metric_data(metrics: MetricInstances, metric_key: MetricKey) -> MetricData:
-        metric_instance = getattr(metrics, metric_key.group)
-        metric_data = getattr(metric_instance, metric_key.metric)
-        if not isinstance(metric_data, MetricData):
-            raise TypeError(f"{metric_key.dom_id} does not resolve to MetricData")
-        return metric_data
+        return resolve_metric_data(getattr(metrics, metric_key.group), metric_key)
 
     @staticmethod
     def _pane_id(tab_id: str) -> str:

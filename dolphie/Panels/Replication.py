@@ -33,13 +33,28 @@ _GTID_PATTERN = re.compile(r"\b(\w+(?:-\w+){4}):(.+)\b")
 _ERRANT_CHECK_INTERVAL_SECONDS = 30
 _MAX_REPLICA_POLL_WORKERS = 4
 _MAX_REPLICA_BACKOFF_SECONDS = 60
+_CLUSTERSET_CHANNEL = "clusterset_replication"
 _MANAGED_REPLICATION_CHANNELS = frozenset(
     {
-        "clusterset_replication",
+        _CLUSTERSET_CHANNEL,
         "group_replication_applier",
         "group_replication_recovery",
     }
 )
+
+# Shared across poll cycles (and tabs) so each refresh doesn't pay pool setup
+# and teardown; idle workers are reclaimed at interpreter exit.
+_replica_poll_executor: ThreadPoolExecutor | None = None
+
+
+def _get_replica_poll_executor() -> ThreadPoolExecutor:
+    global _replica_poll_executor
+    if _replica_poll_executor is None:
+        _replica_poll_executor = ThreadPoolExecutor(
+            max_workers=_MAX_REPLICA_POLL_WORKERS,
+            thread_name_prefix="dolphie-replica",
+        )
+    return _replica_poll_executor
 
 
 def is_managed_replication_channel(status: Mapping[str, DatabaseScalar]) -> bool:
@@ -485,7 +500,7 @@ def create_panel(tab: Tab) -> None:
             (
                 status
                 for status in dolphie.replication_status
-                if coerce_str(status.get("Channel_Name")) == "clusterset_replication"
+                if coerce_str(status.get("Channel_Name")) == _CLUSTERSET_CHANNEL
             ),
             None,
         )
@@ -1283,20 +1298,17 @@ def _poll_replica(tab: Tab, replica: Replica, current_time: float) -> None:
         replica.last_error = None
         replica.consecutive_errors = 0
         replica.next_poll_at = 0
-    except ManualException as error:
-        if replica.connection:
-            replica.connection.close()
-        replica.connection = None
-        replica.replication_status = {}
-        _record_replica_error(replica, error.reason, current_time, dolphie.refresh_interval)
     except Exception as error:
         if replica.connection:
             replica.connection.close()
         replica.connection = None
         replica.replication_status = {}
-        message = str(error) or type(error).__name__
+        if isinstance(error, ManualException):
+            message = error.reason
+        else:
+            message = str(error) or type(error).__name__
+            logger.exception(f"Unexpected replica polling error for {replica.host_with_port}")
         _record_replica_error(replica, message, current_time, dolphie.refresh_interval)
-        logger.exception(f"Unexpected replica polling error for {replica.host_with_port}")
 
 
 def fetch_replicas(tab: Tab) -> None:
@@ -1340,10 +1352,7 @@ def fetch_replicas(tab: Tab) -> None:
         _poll_replica(tab, poll_targets[0], current_time)
         return
 
-    with ThreadPoolExecutor(
-        max_workers=min(_MAX_REPLICA_POLL_WORKERS, len(poll_targets)),
-        thread_name_prefix="dolphie-replica",
-    ) as executor:
-        futures = [executor.submit(_poll_replica, tab, replica, current_time) for replica in poll_targets]
-        for future in futures:
-            future.result()
+    executor = _get_replica_poll_executor()
+    futures = [executor.submit(_poll_replica, tab, replica, current_time) for replica in poll_targets]
+    for future in futures:
+        future.result()

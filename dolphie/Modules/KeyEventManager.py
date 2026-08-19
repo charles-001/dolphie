@@ -460,7 +460,7 @@ class KeyEventManager:
                     "Partial Query Text": "query_filter",
                 }
 
-                filters = {filter_name: filter_data[index] for index, filter_name in enumerate(filters_mapping)}
+                filters = dict(zip(filters_mapping, filter_data, strict=True))
 
                 # The modal is prefilled with the filters in effect, so what it returns is the
                 # complete set of them - a field left empty removes that filter

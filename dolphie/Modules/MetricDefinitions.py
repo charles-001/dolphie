@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from dataclasses import dataclass, field, fields
 from datetime import datetime, timezone
 from enum import Enum
+from functools import lru_cache
 from threading import Lock
 from typing import ClassVar, Final, cast
 
@@ -15,6 +16,9 @@ MetricValue = int | float
 METRIC_DATETIME_FORMAT: Final = "%d/%m/%y %H:%M:%S"
 
 
+# Cached because the same timestamp string is stored per series and re-parsed
+# by every series' rolling-window trim each poll cycle.
+@lru_cache(maxsize=4096)
 def parse_metric_datetime(value: str) -> datetime | None:
     """Parse a stored metric timestamp as an aware UTC datetime."""
     try:
@@ -47,6 +51,15 @@ class MetricColor:
     orange: Final[Color] = (252, 121, 121)
 
 
+class ValueFormat(Enum):
+    """How a metric group's values are formatted for display."""
+
+    NUMBER = "number"
+    BYTES = "bytes"
+    TIME = "time"
+    PERCENT = "percent"
+
+
 @dataclass
 class MetricData:
     """Store one metric's values and matching UTC timestamps."""
@@ -59,7 +72,8 @@ class MetricData:
     last_value: int | float | None = None
     graphable: bool = True
     create_switch: bool = True
-    source_key: str | None = None
+    # Smooth transient extreme samples (sensor glitches) using recent history.
+    smooth_extreme_values: bool = False
     _values: deque[MetricValue] = field(default_factory=deque, init=False, repr=False)
     _datetimes: deque[str] = field(default_factory=deque, init=False, repr=False)
     _polling_intervals: deque[float] = field(default_factory=deque, init=False, repr=False)
@@ -132,6 +146,18 @@ class MetricData:
         with self._lock:
             return self._values[-1] if self._values else None
 
+    def values_snapshot(self) -> list[MetricValue]:
+        """Return an atomic copy of only the stored values."""
+        with self._lock:
+            return list(self._values)
+
+    def recent_values(self, count: int) -> tuple[list[MetricValue], int]:
+        """Return up to the newest count values and the total stored sample count."""
+        with self._lock:
+            total = len(self._values)
+            start = max(total - count, 0)
+            return [self._values[index] for index in range(start, total)], total
+
     def clear_history(self) -> None:
         """Clear values and all matching sample metadata."""
         with self._lock:
@@ -197,6 +223,7 @@ class MetricGroup:
     metric_source: ClassVar[MetricSource]
     connection_source: ClassVar[tuple[ConnectionSourceType, ...]]
     use_with_replay: ClassVar[bool] = True
+    value_format: ClassVar[ValueFormat] = ValueFormat.NUMBER
 
 
 @dataclass
@@ -212,6 +239,7 @@ class SystemMemoryMetrics(MetricGroup):
     Memory_Used: MetricData
     metric_source = MetricSource.SYSTEM_UTILIZATION
     connection_source = (ConnectionSource.mysql, ConnectionSource.proxysql)
+    value_format = ValueFormat.BYTES
 
 
 @dataclass
@@ -220,6 +248,7 @@ class SystemNetworkMetrics(MetricGroup):
     Network_Up: MetricData
     metric_source = MetricSource.SYSTEM_UTILIZATION
     connection_source = (ConnectionSource.mysql, ConnectionSource.proxysql)
+    value_format = ValueFormat.BYTES
 
 
 @dataclass
@@ -249,6 +278,7 @@ class ReplicationLagMetrics(MetricGroup):
     lag: MetricData
     metric_source = MetricSource.NONE
     connection_source = (ConnectionSource.mysql,)
+    value_format = ValueFormat.TIME
 
 
 @dataclass
@@ -256,6 +286,7 @@ class CheckpointMetrics(MetricGroup):
     Innodb_checkpoint_age: MetricData
     metric_source = MetricSource.GLOBAL_STATUS
     connection_source = (ConnectionSource.mysql,)
+    value_format = ValueFormat.BYTES
     checkpoint_age_max: int = 0
     checkpoint_age_sync_flush: int = 0
 
@@ -283,6 +314,7 @@ class AdaptiveHashIndexHitRatio(MetricGroup):
     smoothed_hit_ratio: float | None = None
     metric_source = MetricSource.NONE
     connection_source = (ConnectionSource.mysql,)
+    value_format = ValueFormat.PERCENT
 
 
 @dataclass
@@ -290,6 +322,7 @@ class RedoLogMetrics(MetricGroup):
     Innodb_lsn_current: MetricData
     metric_source = MetricSource.GLOBAL_STATUS
     connection_source = (ConnectionSource.mysql,)
+    value_format = ValueFormat.BYTES
     redo_log_size: int = 0
 
 
@@ -340,6 +373,7 @@ class DiskIOMetrics(MetricGroup):
     io_write: MetricData
     metric_source = MetricSource.DISK_IO_METRICS
     connection_source = (ConnectionSource.mysql,)
+    value_format = ValueFormat.BYTES
 
 
 @dataclass
@@ -378,6 +412,7 @@ class ProxySQLQueriesDataNetwork(MetricGroup):
     Queries_frontends_bytes_sent: MetricData
     metric_source = MetricSource.GLOBAL_STATUS
     connection_source = (ConnectionSource.proxysql,)
+    value_format = ValueFormat.BYTES
 
 
 @dataclass
@@ -392,6 +427,33 @@ class ProxySQLMultiplexEfficiency(MetricGroup):
     proxysql_multiplex_efficiency_ratio: MetricData
     metric_source = MetricSource.GLOBAL_STATUS
     connection_source = (ConnectionSource.proxysql,)
+    value_format = ValueFormat.PERCENT
+
+
+# One entry per ProxySQL latency bucket: (field name, label, color, visible).
+_COMMAND_STAT_BUCKET_STYLES: Final = (
+    ("cnt_100us", "100us", MetricColor.gray, False),
+    ("cnt_500us", "500us", MetricColor.blue, False),
+    ("cnt_1ms", "1ms", MetricColor.green, False),
+    ("cnt_5ms", "5ms", MetricColor.green, False),
+    ("cnt_10ms", "10ms", MetricColor.green, True),
+    ("cnt_50ms", "50ms", MetricColor.yellow, True),
+    ("cnt_100ms", "100ms", MetricColor.yellow, True),
+    ("cnt_500ms", "500ms", MetricColor.orange, True),
+    ("cnt_1s", "1s", MetricColor.orange, True),
+    ("cnt_5s", "5s", MetricColor.red, True),
+    ("cnt_10s", "10s", MetricColor.purple, True),
+    ("cnt_INFs", "10s+", MetricColor.purple, True),
+)
+COMMAND_STAT_BUCKETS: Final = tuple(name for name, _, _, _ in _COMMAND_STAT_BUCKET_STYLES)
+
+
+def _command_stat_metric_data() -> dict[str, MetricData]:
+    """Create one set of latency-bucket series for a command stats group."""
+    return {
+        name: MetricData(label=label, color=color, visible=visible)
+        for name, label, color, visible in _COMMAND_STAT_BUCKET_STYLES
+    }
 
 
 @dataclass
@@ -413,21 +475,8 @@ class ProxySQLSELECTCommandStats(MetricGroup):
 
 
 @dataclass
-class ProxySQLTotalCommandStats(MetricGroup):
-    cnt_100us: MetricData
-    cnt_500us: MetricData
-    cnt_1ms: MetricData
-    cnt_5ms: MetricData
-    cnt_10ms: MetricData
-    cnt_50ms: MetricData
-    cnt_100ms: MetricData
-    cnt_500ms: MetricData
-    cnt_1s: MetricData
-    cnt_5s: MetricData
-    cnt_10s: MetricData
-    cnt_INFs: MetricData
+class ProxySQLTotalCommandStats(ProxySQLSELECTCommandStats):
     metric_source = MetricSource.PROXYSQL_TOTAL_COMMAND_STATS
-    connection_source = (ConnectionSource.proxysql,)
 
 
 MetricInstance = (
@@ -513,6 +562,7 @@ def create_metric_instances() -> MetricInstances:
                 color=MetricColor.blue,
                 per_second_calculation=False,
                 create_switch=False,
+                smooth_extreme_values=True,
             ),
         ),
         system_memory=SystemMemoryMetrics(
@@ -706,42 +756,8 @@ def create_metric_instances() -> MetricInstances:
                 create_switch=False,
             ),
         ),
-        proxysql_select_command_stats=ProxySQLSELECTCommandStats(
-            cnt_100us=MetricData(label="100us", color=MetricColor.gray, visible=False),
-            cnt_500us=MetricData(label="500us", color=MetricColor.blue, visible=False),
-            cnt_1ms=MetricData(label="1ms", color=MetricColor.green, visible=False),
-            cnt_5ms=MetricData(label="5ms", color=MetricColor.green, visible=False),
-            cnt_10ms=MetricData(label="10ms", color=MetricColor.green),
-            cnt_50ms=MetricData(label="50ms", color=MetricColor.yellow),
-            cnt_100ms=MetricData(label="100ms", color=MetricColor.yellow),
-            cnt_500ms=MetricData(label="500ms", color=MetricColor.orange),
-            cnt_1s=MetricData(label="1s", color=MetricColor.orange),
-            cnt_5s=MetricData(label="5s", color=MetricColor.red),
-            cnt_10s=MetricData(label="10s", color=MetricColor.purple),
-            cnt_INFs=MetricData(label="10s+", color=MetricColor.purple),
-        ),
-        proxysql_total_command_stats=ProxySQLTotalCommandStats(
-            cnt_100us=MetricData(label="100us", color=MetricColor.gray, visible=False),
-            cnt_500us=MetricData(label="500us", color=MetricColor.blue, visible=False),
-            cnt_1ms=MetricData(label="1ms", color=MetricColor.green, visible=False),
-            cnt_5ms=MetricData(label="5ms", color=MetricColor.green, visible=False),
-            cnt_10ms=MetricData(label="10ms", color=MetricColor.green),
-            cnt_50ms=MetricData(label="50ms", color=MetricColor.yellow),
-            cnt_100ms=MetricData(label="100ms", color=MetricColor.yellow),
-            cnt_500ms=MetricData(label="500ms", color=MetricColor.orange),
-            cnt_1s=MetricData(label="1s", color=MetricColor.orange),
-            cnt_5s=MetricData(label="5s", color=MetricColor.red),
-            cnt_10s=MetricData(label="10s", color=MetricColor.purple),
-            cnt_INFs=MetricData(label="10s+", color=MetricColor.purple),
-        ),
+        proxysql_select_command_stats=ProxySQLSELECTCommandStats(**_command_stat_metric_data()),
+        proxysql_total_command_stats=ProxySQLTotalCommandStats(**_command_stat_metric_data()),
     )
-
-    # Bind the external source key once when the catalog is created. Most keys
-    # intentionally match their Python field name; exceptional or renamed fields
-    # can declare source_key explicitly without changing processing behavior.
-    for _, metric_instance in iter_metric_instances(metrics):
-        for field_name, metric_data in iter_metric_data(metric_instance):
-            if metric_data.source_key is None:
-                metric_data.source_key = field_name
 
     return metrics

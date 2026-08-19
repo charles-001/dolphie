@@ -193,6 +193,10 @@ class WorkerDataProcessor:
             app: Reference to the main DolphieApp instance
         """
         self.app = app
+        # Reported-replica rows per tab, keyed by the processlist discovery
+        # signature that produced them, so the SHOW REPLICAS round-trip only
+        # reruns when replica membership actually changes.
+        self._reported_replica_cache: dict[str, tuple[Any, list[DatabaseRow]]] = {}
 
     def _refresh_replica_discovery(self, tab: "Tab") -> None:
         """Publish a complete discovery snapshot only after every query succeeds."""
@@ -220,11 +224,27 @@ class WorkerDataProcessor:
         )
         reported_replicas: list[DatabaseRow] = []
         if not dolphie.daemon_mode and not dolphie.replicaset:
-            query = MySQLQueries.show_replicas if use_show_replicas else MySQLQueries.show_slave_hosts
-            dolphie.main_db_connection.execute(query)
-            if not dolphie.main_db_connection.last_execute_successful:
-                return
-            reported_replicas = dolphie.main_db_connection.fetchall()
+            # A replica endpoint change always surfaces as a new binlog dump thread,
+            # so reported rows only need refetching when processlist discovery changes.
+            discovery_signature = (
+                use_show_replicas,
+                tuple(
+                    sorted(
+                        (coerce_int(row.get("id")), coerce_str(row.get("host")), coerce_str(row.get("replica_uuid")))
+                        for row in processlist_replicas
+                    )
+                ),
+            )
+            cached = self._reported_replica_cache.get(tab.id)
+            if cached is not None and cached[0] == discovery_signature:
+                reported_replicas = cached[1]
+            else:
+                query = MySQLQueries.show_replicas if use_show_replicas else MySQLQueries.show_slave_hosts
+                dolphie.main_db_connection.execute(query)
+                if not dolphie.main_db_connection.last_execute_successful:
+                    return
+                reported_replicas = dolphie.main_db_connection.fetchall()
+                self._reported_replica_cache[tab.id] = (discovery_signature, reported_replicas)
 
         normalized_replicas = build_replica_discovery(
             processlist_replicas,
@@ -581,8 +601,8 @@ class WorkerDataProcessor:
                 dolphie.main_db_connection.fetchall(),
             )
 
-    def refresh_screen_proxysql(self, tab: "Tab"):
-        """Refresh the ProxySQL screen for a given tab."""
+    def refresh_screen(self, tab: "Tab"):
+        """Refresh the screen for a given tab, regardless of connection source."""
         dolphie = tab.dolphie
 
         if tab.loading_indicator.display:
@@ -598,41 +618,7 @@ class WorkerDataProcessor:
                 self.app.refresh_panel(tab, panel.name)
 
                 if panel.name == dolphie.panels.dashboard.name:
-                    _, query_values, _ = dolphie.metric_manager.metrics.dml.Queries.snapshot()
-                    if query_values:
-                        # Update the sparkline for queries per second
-                        tab.sparkline.data = query_values
-                        tab.sparkline.refresh()
-
-        # Refresh the shared graph dashboard from this host's latest poll.
-        if tab.panel_graphs.display:
-            tab.graph_dashboard.bind_host(dolphie)
-
-        tab.refresh_replay_dashboard_section()
-
-        # We take a snapshot of the processlist to be used for commands
-        # since the data can change after a key is pressed
-        if not dolphie.daemon_mode:
-            dolphie.processlist_threads_snapshot = dolphie.processlist_threads.copy()
-
-    def refresh_screen_mysql(self, tab: "Tab"):
-        """Refresh the MySQL screen for a given tab."""
-        dolphie = tab.dolphie
-
-        if tab.loading_indicator.display:
-            tab.loading_indicator.display = False
-
-        # Loop each panel and refresh it
-        for panel in dolphie.panels.get_all_panels():
-            if panel.visible:
-                # Skip the graphs panel since it's handled separately
-                if panel.name == dolphie.panels.graphs.name:
-                    continue
-
-                self.app.refresh_panel(tab, panel.name)
-
-                if panel.name == dolphie.panels.dashboard.name:
-                    _, query_values, _ = dolphie.metric_manager.metrics.dml.Queries.snapshot()
+                    query_values = dolphie.metric_manager.metrics.dml.Queries.values_snapshot()
                     if query_values:
                         # Update the sparkline for queries per second
                         tab.sparkline.data = query_values

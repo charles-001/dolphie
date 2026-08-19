@@ -5,48 +5,31 @@ from typing import cast
 
 from loguru import logger
 from rich.text import Text
+from textual.color import Color as TextualColor
 from textual_plotext import PlotextPlot
 
 from dolphie.Modules.Functions import format_bytes, format_number, format_time
 from dolphie.Modules.MetricDefinitions import (
-    AdaptiveHashIndexHitRatio,
     CheckpointMetrics,
-    DiskIOMetrics,
-    MetricData,
+    MetricColor,
     MetricInstance,
-    ProxySQLMultiplexEfficiency,
-    ProxySQLQueriesDataNetwork,
     RedoLogActiveCountMetrics,
     RedoLogMetrics,
-    ReplicationLagMetrics,
     SystemMemoryMetrics,
-    SystemNetworkMetrics,
+    ValueFormat,
 )
-from dolphie.Modules.MetricGraphDefinitions import GraphRenderer, GraphSpec, MetricKey
+from dolphie.Modules.MetricGraphDefinitions import GraphRenderer, GraphSpec, resolve_metric_data
+from dolphie.Modules.Theme import BACKGROUND, FOREGROUND
 
 _REDO_LOG_ACTIVE_MAX = 34
 _SECONDS_PER_HOUR = 3600
 _MIN_RENDER_POINTS = 100
-_BACKGROUND_COLOR = (10, 14, 27)
+_BACKGROUND_COLOR = TextualColor.parse(BACKGROUND).rgb
 _TICK_COLOR = (133, 159, 213)
-_TEXT_COLOR = (233, 233, 233)
+_TEXT_COLOR = TextualColor.parse(FOREGROUND).rgb
 _WARNING_COLOR = (241, 251, 130)
-_CRITICAL_COLOR = (252, 121, 121)
+_CRITICAL_COLOR = MetricColor.orange
 _BAR_COLOR = (46, 124, 175)
-
-
-_FORMAT_TIME_TYPES = frozenset({ReplicationLagMetrics})
-_FORMAT_BYTES_TYPES = frozenset(
-    {
-        CheckpointMetrics,
-        RedoLogMetrics,
-        DiskIOMetrics,
-        ProxySQLQueriesDataNetwork,
-        SystemMemoryMetrics,
-        SystemNetworkMetrics,
-    }
-)
-_FORMAT_PERCENT_TYPES = frozenset({AdaptiveHashIndexHitRatio, ProxySQLMultiplexEfficiency})
 
 
 def _plotext_x(value: str) -> float:
@@ -298,7 +281,7 @@ class Graph(PlotextPlot):
         """Render a graph for any standard metric instance."""
         max_y: int | float = 0
         for metric_key in self.spec.series:
-            metric_data = self._metric_data(metric_instance, metric_key)
+            metric_data = resolve_metric_data(metric_instance, metric_key)
             if metric_data.visible:
                 x, y, _ = metric_data.snapshot()
                 if y and x:
@@ -308,21 +291,13 @@ class Graph(PlotextPlot):
                         max_y = max(max_y, max(y))
         return max_y
 
-    @staticmethod
-    def _metric_data(metric_instance: MetricInstance, metric_key: MetricKey) -> MetricData:
-        """Resolve a registry metric from its typed metric group instance."""
-        metric_data = getattr(metric_instance, metric_key.metric)
-        if not isinstance(metric_data, MetricData):
-            raise TypeError(f"{metric_key.dom_id} does not resolve to MetricData")
-        return metric_data
-
     def _render_by_spec(self, metric_instance: MetricInstance) -> int | float:
         """Dispatch to the renderer explicitly declared by the graph specification."""
         renderer = self.spec.renderer
         if renderer is GraphRenderer.LINE:
             return self._render_default_metrics(metric_instance)
 
-        metric_data = self._metric_data(metric_instance, self.spec.series[0])
+        metric_data = resolve_metric_data(metric_instance, self.spec.series[0])
         x, y, intervals = metric_data.snapshot()
         if renderer is GraphRenderer.REDO_LOG_BAR:
             if not y:
@@ -375,12 +350,12 @@ class Graph(PlotextPlot):
 
 
 def get_number_format_function(data: MetricInstance, color: bool = False) -> Callable[[int | float], str]:
-    """Return the correct formatting function based on the metric type."""
-    data_type = type(data)
-    if data_type in _FORMAT_TIME_TYPES:
+    """Return the formatting function declared by the metric group."""
+    value_format = type(data).value_format
+    if value_format is ValueFormat.TIME:
         return lambda val: format_time(val)
-    if data_type in _FORMAT_BYTES_TYPES:
+    if value_format is ValueFormat.BYTES:
         return lambda val: format_bytes(val, color=color)
-    if data_type in _FORMAT_PERCENT_TYPES:
+    if value_format is ValueFormat.PERCENT:
         return lambda val: f"{round(val)}%"
     return lambda val: format_number(val, color=color)
