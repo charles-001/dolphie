@@ -16,8 +16,9 @@ MetricValue = int | float
 METRIC_DATETIME_FORMAT: Final = "%d/%m/%y %H:%M:%S"
 
 
-# Cached because the same timestamp string is stored per series and re-parsed
-# by every series' rolling-window trim each poll cycle.
+# Cached because every series stores the identical timestamp strings, so replay
+# loads/seeks re-parse the same ~600-entry window once per series (~42k strptime
+# calls) when rebuilding history; rolling-window trims benefit too.
 @lru_cache(maxsize=4096)
 def parse_metric_datetime(value: str) -> datetime | None:
     """Parse a stored metric timestamp as an aware UTC datetime."""
