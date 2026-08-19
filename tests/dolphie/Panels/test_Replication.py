@@ -189,18 +189,22 @@ def test_mysql_discovery_uses_uuid_identity_and_refreshes_same_size_port_changes
     assert second[0].get("port") == 4406
 
 
-def test_mysql_discovery_uses_processlist_host_with_reported_port():
-    # report_host may only be resolvable inside the replica's network, so the
-    # processlist IP is used to connect while the reported port is paired by UUID
+def test_mysql_discovery_pairs_reported_host_with_reported_port():
+    # report_host/report_port exist so a replica behind NAT or on a container-internal
+    # network can advertise the address a monitor should actually connect through —
+    # the processlist-visible peer address (here, a Docker bridge IP) may be
+    # unreachable from outside. Verified against dolphie's own GR docker fixture,
+    # where the primary's processlist shows the replica at its internal bridge IP
+    # while SHOW REPLICAS reports the host-mapped 127.0.0.1:<published-port>.
     discovered = build_replica_discovery(
         [{"id": 10, "user": "repl", "host": "172.28.1.5:49152", "replica_uuid": "replica-uuid"}],
-        [{"Replica_UUID": "replica-uuid", "Host": "internal-only-name", "Port": 3324}],
+        [{"Replica_UUID": "replica-uuid", "Host": "127.0.0.1", "Port": 3324}],
         [],
         mariadb=False,
         use_show_replicas=True,
     )
 
-    assert discovered[0].get("host") == "172.28.1.5"
+    assert discovered[0].get("host") == "127.0.0.1"
     assert discovered[0].get("port") == 3324
 
 

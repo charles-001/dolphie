@@ -89,9 +89,12 @@ def build_replica_discovery(
             else:
                 reported_identity, report_host, port = "", "", 3306
 
-            # Always connect via the processlist IP — report_host can be a name
-            # that is only resolvable/reachable from inside the replica's network.
-            host = host_without_port(raw_host)
+            # report_host/report_port exist precisely so a replica behind NAT or on a
+            # container-internal network (its processlist-visible peer address) can
+            # advertise the address a monitor should actually connect through. Prefer
+            # it, falling back to the processlist host only when nothing was reported.
+            process_host = host_without_port(raw_host)
+            host = host_without_port(report_host) if report_host else process_host
             identity = reported_identity or (
                 f"mysql-uuid:{replica_uuid}" if replica_uuid else f"endpoint:{host.lower()}:{port}:thread:{thread_id}"
             )
