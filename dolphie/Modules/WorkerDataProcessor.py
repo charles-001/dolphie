@@ -89,8 +89,9 @@ def build_replica_discovery(
             else:
                 reported_identity, report_host, port = "", "", 3306
 
-            process_host = host_without_port(raw_host)
-            host = host_without_port(report_host) if report_host else process_host
+            # Always connect via the processlist IP — report_host can be a name
+            # that is only resolvable/reachable from inside the replica's network.
+            host = host_without_port(raw_host)
             identity = reported_identity or (
                 f"mysql-uuid:{replica_uuid}" if replica_uuid else f"endpoint:{host.lower()}:{port}:thread:{thread_id}"
             )
@@ -110,8 +111,11 @@ def build_replica_discovery(
         pending.append((row, thread_id, raw_host, replica_uuid))
 
     # MariaDB does not expose the replica server ID in the binlog dump thread. Preserve
-    # prior same-host correlations, then require an exact report_host match. Never pair
-    # unrelated rows by list position because that can cross-wire replica endpoints.
+    # prior same-host correlations, then require an exact report_host match. When neither
+    # matches (report_host unset, or a hostname while the processlist shows an IP), pair
+    # the report anyway if it's unambiguous — a single replica with a single report —
+    # otherwise a replica on a non-default port silently gets 3306. Ambiguous leftovers
+    # are never paired by list position because that can cross-wire replica endpoints.
     pending.sort(key=lambda item: (host_without_port(item[2]).lower(), item[1]))
     for row, thread_id, raw_host, replica_uuid in pending:
         report_host = ""
@@ -146,10 +150,19 @@ def build_replica_discovery(
             identity, report_host, port = reports[report_index]
             unused_reports.remove(report_index)
             host = host_without_port(report_host) if report_host else process_host
-        else:
-            port = coerce_int(previous.get("port"), 3306) if previous_matches_host and previous else 3306
+        elif previous_matches_host and previous:
+            port = coerce_int(previous.get("port"), 3306)
             host = process_host
             identity = previous_identity or f"endpoint:{host.lower()}:{port}:thread:{thread_id}"
+        elif len(pending) == 1 and len(unused_reports) == 1:
+            report_index = min(unused_reports)
+            identity, report_host, port = reports[report_index]
+            unused_reports.remove(report_index)
+            host = host_without_port(report_host) if report_host else process_host
+        else:
+            port = 3306
+            host = process_host
+            identity = f"endpoint:{host.lower()}:{port}:thread:{thread_id}"
 
         mariadb_replica: ReplicaRow = {
             "id": thread_id,
@@ -193,10 +206,6 @@ class WorkerDataProcessor:
             app: Reference to the main DolphieApp instance
         """
         self.app = app
-        # Reported-replica rows per tab, keyed by the processlist discovery
-        # signature that produced them, so the SHOW REPLICAS round-trip only
-        # reruns when replica membership actually changes.
-        self._reported_replica_cache: dict[str, tuple[Any, list[DatabaseRow]]] = {}
 
     def _refresh_replica_discovery(self, tab: "Tab") -> None:
         """Publish a complete discovery snapshot only after every query succeeds."""
@@ -226,6 +235,7 @@ class WorkerDataProcessor:
         if not dolphie.daemon_mode and not dolphie.replicaset:
             # A replica endpoint change always surfaces as a new binlog dump thread,
             # so reported rows only need refetching when processlist discovery changes.
+            replica_manager = dolphie.replica_manager
             discovery_signature = (
                 use_show_replicas,
                 tuple(
@@ -235,16 +245,18 @@ class WorkerDataProcessor:
                     )
                 ),
             )
-            cached = self._reported_replica_cache.get(tab.id)
-            if cached is not None and cached[0] == discovery_signature:
-                reported_replicas = cached[1]
+            if replica_manager.reported_replica_signature == discovery_signature:
+                reported_replicas = replica_manager.reported_replicas
             else:
                 query = MySQLQueries.show_replicas if use_show_replicas else MySQLQueries.show_slave_hosts
                 dolphie.main_db_connection.execute(query)
-                if not dolphie.main_db_connection.last_execute_successful:
-                    return
-                reported_replicas = dolphie.main_db_connection.fetchall()
-                self._reported_replica_cache[tab.id] = (discovery_signature, reported_replicas)
+                if dolphie.main_db_connection.last_execute_successful:
+                    reported_replicas = dolphie.main_db_connection.fetchall()
+                    replica_manager.reported_replica_signature = discovery_signature
+                    replica_manager.reported_replicas = reported_replicas
+                # On failure (e.g. missing REPLICATION SLAVE privilege), still publish
+                # processlist-based discovery without port correlation, and retry the
+                # reported query next cycle by not caching the signature.
 
         normalized_replicas = build_replica_discovery(
             processlist_replicas,

@@ -998,11 +998,11 @@ Dolphie's config supports these options under [dolphie] section:
             filter_value = filter_value.strip()
 
             if not separator:
-                self.exit(f"{source}: [red2]{filter_data.strip()}[/red2] must be in the format name=value")
+                self.exit(f"{source}: [$red2]{filter_data.strip()}[/$red2] must be in the format name=value")
 
             if filter_name not in supported_filters:
                 self.exit(
-                    f"{source}: Invalid filter [red2]{filter_name}[/red2]. "
+                    f"{source}: Invalid filter [$red2]{filter_name}[/$red2]. "
                     f"Supported filters are: {', '.join(supported_filters)}"
                 )
 
@@ -1013,13 +1013,13 @@ Dolphie's config supports these options under [dolphie] section:
 
             # Time is a minimum, so excluding a value from it doesn't mean anything
             if filter_name == "time" and filter_value.startswith("!"):
-                self.exit(f"{source}: Filter [red2]time[/red2] doesn't support [red2]![/red2] exclusion")
+                self.exit(f"{source}: Filter [$red2]time[/$red2] doesn't support [$red2]![/$red2] exclusion")
 
             # Hostgroup can still be prefixed with ! to exclude it
             if filter_name in ("hostgroup", "time") and not is_valid_integer_filter(
                 filter_value, allow_negation=filter_name == "hostgroup"
             ):
-                self.exit(f"{source}: Filter [red2]{filter_name}[/red2] must be an integer")
+                self.exit(f"{source}: Filter [$red2]{filter_name}[/$red2] must be an integer")
 
             filters[filter_name] = int(filter_value) if filter_name == "time" else filter_value
 
@@ -1081,6 +1081,11 @@ Dolphie's config supports these options under [dolphie] section:
                 return int(value)
             except ValueError:
                 self.exit(f"Error with Dolphie config: [$red2]{option}[/$red2] is an integer and must be a number")
+        elif data_type is float:
+            try:
+                return float(value)
+            except ValueError:
+                self.exit(f"Error with Dolphie config: [$red2]{option}[/$red2] must be a number")
         else:
             return value
 

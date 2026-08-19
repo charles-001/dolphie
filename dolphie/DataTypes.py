@@ -76,6 +76,11 @@ class ReplicaManager:
         self._lock = Lock()
         self._available_replicas: tuple[ReplicaRow, ...] = ()
         self._replicas: dict[str, Replica] = {}
+        # Cached SHOW REPLICAS/SHOW SLAVE HOSTS rows keyed by the processlist
+        # discovery signature that produced them. Only touched by the replicas
+        # worker thread, and discarded with the manager on reconnect.
+        self.reported_replica_signature: object | None = None
+        self.reported_replicas: list[DatabaseRow] = []
 
     @property
     def available_replicas(self) -> list[ReplicaRow]:
@@ -111,6 +116,9 @@ class ReplicaManager:
 
     def upsert_replica(self, identity: str, thread_id: int, host: str, port: int, user: str = "") -> Replica:
         row_key = self.create_replica_row_key(identity)
+        # Closed outside the lock (like remove_replica) so a wedged socket
+        # can't block UI-thread readers of this manager.
+        stale_connection: Database | None = None
         with self._lock:
             replica = self._replicas.get(row_key)
             if replica is None:
@@ -126,8 +134,7 @@ class ReplicaManager:
                 return replica
 
             if replica.host != host or replica.port != port:
-                if replica.connection:
-                    replica.connection.close()
+                stale_connection = replica.connection
                 replica.connection = None
                 replica.host_distro = None
                 replica.connection_source_alt = None
@@ -147,7 +154,9 @@ class ReplicaManager:
             replica.host = host
             replica.port = port
             replica.user = user
-            return replica
+        if stale_connection:
+            stale_connection.close()
+        return replica
 
     def remove_replica(self, row_key: str):
         with self._lock:

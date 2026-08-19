@@ -590,7 +590,9 @@ def create_replica_panel(tab: Tab):
     panels = dolphie.panels
 
     if not replica_manager.active_count:
-        replica_count = replica_manager.discovery_count
+        # Replay tabs never run the replicas worker, so restored discovery data
+        # must not show a loading state that can never resolve.
+        replica_count = 0 if dolphie.replay_file else replica_manager.discovery_count
         tab.replicas_container.display = bool(replica_count)
         tab.replicas_loading_indicator.display = bool(replica_count)
         if replica_count:
@@ -1104,6 +1106,8 @@ def fetch_replication_data(tab: Tab, replica: Replica | None = None) -> Database
             return {}
 
         # For multi-source replicas, find the channel connected to the monitored primary.
+        # Fall back to the first channel when none matches (IO thread reconnecting, or
+        # the replica reaches the primary via a VIP/proxy) instead of failing the poll.
         source_identity_field = "Master_Server_Id" if use_mariadb_status else uuid_field
         if len(all_rows) > 1:
             matching_status = next(
@@ -1114,13 +1118,11 @@ def fetch_replication_data(tab: Tab, replica: Replica | None = None) -> Database
                 ),
                 None,
             )
-            if matching_status is None:
-                return {}
-            replication_status = matching_status
+            replication_status = matching_status if matching_status is not None else all_rows[0]
         else:
             replication_status = all_rows[0]
 
-        lag_source = replica_lag_data if (replica_lag_data and len(all_rows) == 1) else replication_status
+        lag_source = replica_lag_data if replica_lag_data else replication_status
         replica_lag = _replica_lag_value(lag_source, lag_key)
 
         if replication_status:
@@ -1193,8 +1195,17 @@ def _refresh_errant_transactions(tab: Tab, replica: Replica, current_time: float
 
             gtid_data = replica.connection.fetchone()
             monitored_source_uuid = tab.dolphie.server_uuid if isinstance(tab.dolphie.server_uuid, str) else ""
-            unrelated_source_uuids = replica.replication_source_uuids - {monitored_source_uuid}
+            unrelated_source_uuids = (replica.replication_source_uuids | tab.dolphie.replication_source_uuids) - {
+                monitored_source_uuid
+            }
             ignored_uuids = unrelated_source_uuids | {replica.group_replication_view_change_uuid}
+            if not retrieved_gtid_set:
+                # A replica restart clears Retrieved_Gtid_Set, so provenance of the
+                # monitored source's GTIDs can't be proven and a stale gtid_executed
+                # snapshot would misreport the primary's own recent GTIDs as errant.
+                # The Group Replication group UUID has the same race.
+                ignored_uuids.add(monitored_source_uuid)
+                ignored_uuids.add(coerce_str(tab.dolphie.global_variables.get("group_replication_group_name")))
             replica.errant_transactions = (
                 _filter_gtid_sets(
                     coerce_str(gtid_data.get("errant_trxs")),
@@ -1263,9 +1274,8 @@ def _poll_replica(tab: Tab, replica: Replica, current_time: float) -> None:
     dolphie = tab.dolphie
     try:
         if replica.connection is None:
-            if dolphie.user is None or dolphie.password is None:
-                raise ManualException("Replica connection credentials are unavailable")
-
+            # user/password may legitimately be None (auth-socket/passwordless setups);
+            # Database passes them through to pymysql, which accepts None.
             replica.connection = Database(
                 app=dolphie.app,
                 host=replica.host,

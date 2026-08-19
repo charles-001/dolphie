@@ -222,10 +222,13 @@ class WorkerManager:
                     ]
                     dolphie.metric_manager.append_replay_history(new_dt, metric_values, new_dt_parsed)
                 else:
-                    # Non-sequential (backward, seek, or first event): rebuild the rolling window
+                    # Non-sequential (backward, seek, or first event): rebuild the rolling window.
+                    # A disabled window (0) would decompress the entire file on every seek, so
+                    # bound the rebuild to the default and let history accumulate forward.
                     metrics_list = tab.replay_manager.fetch_delta_metrics_for_window(
                         tab.replay_manager.current_replay_id,
-                        window_minutes=dolphie.metric_manager.rolling_window_minutes,
+                        window_minutes=dolphie.metric_manager.rolling_window_minutes
+                        or MetricManager.MetricManager.DEFAULT_ROLLING_WINDOW_MINUTES,
                     )
 
                     # Old format entries contain complete snapshots so skip to the last one

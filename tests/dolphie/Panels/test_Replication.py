@@ -85,6 +85,7 @@ def test_replica_panel_replaces_shared_title_while_replicas_load(monkeypatch: py
             dolphie=SimpleNamespace(
                 app=MagicMock(),
                 panels=SimpleNamespace(replication=SimpleNamespace()),
+                replay_file=None,
                 replica_manager=SimpleNamespace(active_count=0, discovery_count=2),
             ),
             replica_widgets={},
@@ -188,16 +189,18 @@ def test_mysql_discovery_uses_uuid_identity_and_refreshes_same_size_port_changes
     assert second[0].get("port") == 4406
 
 
-def test_mysql_discovery_pairs_reported_host_with_reported_port():
+def test_mysql_discovery_uses_processlist_host_with_reported_port():
+    # report_host may only be resolvable inside the replica's network, so the
+    # processlist IP is used to connect while the reported port is paired by UUID
     discovered = build_replica_discovery(
         [{"id": 10, "user": "repl", "host": "172.28.1.5:49152", "replica_uuid": "replica-uuid"}],
-        [{"Replica_UUID": "replica-uuid", "Host": "127.0.0.1", "Port": 3324}],
+        [{"Replica_UUID": "replica-uuid", "Host": "internal-only-name", "Port": 3324}],
         [],
         mariadb=False,
         use_show_replicas=True,
     )
 
-    assert discovered[0].get("host") == "127.0.0.1"
+    assert discovered[0].get("host") == "172.28.1.5"
     assert discovered[0].get("port") == 3324
 
 
@@ -275,6 +278,22 @@ def test_mariadb_discovery_does_not_pair_unrelated_reported_hosts():
     assert all(coerce_str(row.get("identity")).startswith("endpoint:") for row in discovered)
 
 
+def test_mariadb_discovery_pairs_a_single_unmatched_report_by_rotation():
+    # A lone replica whose report_host doesn't match the processlist IP must still
+    # get its reported port instead of silently defaulting to 3306
+    discovered = build_replica_discovery(
+        [{"id": 10, "user": "repl", "host": "10.0.0.5:49152"}],
+        [{"Server_id": 101, "Host": "replica-a", "Port": 3307}],
+        [],
+        mariadb=True,
+        use_show_replicas=False,
+    )
+
+    assert discovered[0].get("host") == "replica-a"
+    assert discovered[0].get("port") == 3307
+    assert discovered[0].get("identity") == "mariadb-id:101"
+
+
 def test_duplicate_reported_identities_are_disambiguated_by_endpoint():
     discovered = build_replica_discovery(
         [
@@ -343,7 +362,7 @@ def test_read_only_warning_respects_innodb_cluster_role(
     assert ("SHOULD BE READ/WRITE?" in message) is expects_warning
 
 
-def test_failed_port_correlation_does_not_publish_a_partial_snapshot():
+def test_failed_port_correlation_still_publishes_processlist_discovery():
     replica_manager = ReplicaManager()
     original: list[ReplicaRow] = [{"id": 1, "host": "replica", "identity": "mysql-uuid:old", "port": 3306}]
     replica_manager.replace_discovery(original)
@@ -369,7 +388,20 @@ def test_failed_port_correlation_does_not_publish_a_partial_snapshot():
 
     WorkerDataProcessor(MagicMock())._refresh_replica_discovery(cast(Tab, tab))
 
-    assert replica_manager.available_replicas == original
+    # A failing SHOW REPLICAS (e.g. missing REPLICATION SLAVE privilege) must not
+    # block processlist-based discovery — replicas are published without port
+    # correlation and the reported query is retried next cycle (nothing cached)
+    assert replica_manager.available_replicas == [
+        {
+            "id": 2,
+            "user": "repl",
+            "host": "new-replica",
+            "replica_uuid": "new",
+            "identity": "mysql-uuid:new",
+            "port": 3306,
+        }
+    ]
+    assert replica_manager.reported_replica_signature is None
 
 
 def test_replication_source_uuids_are_cleared_when_replication_stops():
@@ -435,6 +467,9 @@ def test_multi_source_replica_sources_are_not_reported_as_errant():
             server_uuid=source_a,
         )
     )
+
+    # Heartbeat lag is preferred over the channel's Seconds_Behind_Source when configured
+    connection.fetchone.return_value = {"Seconds_Behind_Source": 4}
 
     status = fetch_replication_data(cast(Tab, tab), replica)
     assert isinstance(status, dict)
@@ -542,10 +577,12 @@ def test_unknown_replica_lag_is_not_coerced_to_zero():
     assert status["Replica_Speed"] == 0
 
 
-def test_multi_source_without_primary_match_is_rejected():
+def test_multi_source_without_primary_match_falls_back_to_first_channel():
+    # No channel matching the monitored source (IO thread reconnecting, or the
+    # replica reaches the primary via a VIP/proxy) must not fail the poll
     connection = MagicMock()
     connection.fetchall.return_value = [
-        {"Source_UUID": "other-a", "Seconds_Behind_Source": 0},
+        {"Source_UUID": "other-a", "Seconds_Behind_Source": 7},
         {"Source_UUID": "other-b", "Seconds_Behind_Source": 0},
     ]
     replica = Replica(
@@ -566,7 +603,10 @@ def test_multi_source_without_primary_match_is_rejected():
         )
     )
 
-    assert fetch_replication_data(cast(Tab, tab), replica) == {}
+    status = fetch_replication_data(cast(Tab, tab), replica)
+    assert isinstance(status, dict)
+    assert status.get("Source_UUID") == "other-a"
+    assert status.get("Seconds_Behind") == 7
 
 
 def test_innodb_cluster_group_gtids_are_not_reported_as_errant():
@@ -634,6 +674,7 @@ def test_same_source_gtid_divergence_is_reported_as_errant():
     tab = SimpleNamespace(
         dolphie=SimpleNamespace(
             global_variables={"gtid_executed": f"{source_uuid}:1-10"},
+            replication_source_uuids=set(),
             server_uuid=source_uuid,
         )
     )
@@ -647,6 +688,38 @@ def test_same_source_gtid_divergence_is_reported_as_errant():
         f"{source_uuid}:1-10",
     )
     assert replica.errant_transactions == f"{source_uuid}:11-20"
+
+
+def test_cleared_retrieved_gtid_set_does_not_report_source_gtids_as_errant():
+    # A replica restart clears Retrieved_Gtid_Set, so a stale primary gtid_executed
+    # snapshot must not surface the primary's own recent GTIDs as errant
+    source_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    connection = MagicMock()
+    connection.last_execute_successful = True
+    connection.fetchone.return_value = {"errant_trxs": f"{source_uuid}:11-12"}
+    replica = Replica(
+        identity="mysql-uuid:replica",
+        row_key="replica",
+        host="replica",
+        port=3306,
+        connection=connection,
+        replication_source_uuids={source_uuid},
+        replication_status={
+            "Executed_Gtid_Set": f"{source_uuid}:1-12",
+            "Retrieved_Gtid_Set": "",
+        },
+    )
+    tab = SimpleNamespace(
+        dolphie=SimpleNamespace(
+            global_variables={"gtid_executed": f"{source_uuid}:1-10"},
+            replication_source_uuids=set(),
+            server_uuid=source_uuid,
+        )
+    )
+
+    _refresh_errant_transactions(cast(Tab, tab), replica, current_time=100)
+
+    assert replica.errant_transactions is None
 
 
 def test_replica_manager_publishes_detached_snapshots_and_preserves_identity():

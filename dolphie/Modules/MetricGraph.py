@@ -164,7 +164,8 @@ class Graph(PlotextPlot):
         self.plt.hline(metric_instance.checkpoint_age_sync_flush, _WARNING_COLOR)
         self.plt.hline(metric_instance.checkpoint_age_max, _CRITICAL_COLOR)
 
-        max_x = _plotext_x(max(x))
+        # x is chronological; max() would compare day-first date strings lexicographically
+        max_x = _plotext_x(x[-1])
         self.plt.text(
             "Critical",
             y=metric_instance.checkpoint_age_max,
@@ -244,7 +245,7 @@ class Graph(PlotextPlot):
         self.plt.text(
             "Max Count",
             y=_REDO_LOG_ACTIVE_MAX,
-            x=_plotext_x(max(x)),
+            x=_plotext_x(x[-1]),
             alignment="right",
             color=_TEXT_COLOR,
             style="bold",
@@ -267,7 +268,7 @@ class Graph(PlotextPlot):
         self.plt.text(
             "Total",
             y=total_mem,
-            x=_plotext_x(max(x)),
+            x=_plotext_x(x[-1]),
             alignment="right",
             color=_TEXT_COLOR,
             style="bold",

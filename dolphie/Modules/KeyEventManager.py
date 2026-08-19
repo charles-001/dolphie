@@ -1090,8 +1090,6 @@ class KeyEventManager:
                     threads = dolphie.processlist_threads_snapshot.copy()
 
                     for thread_id, thread in threads.items():
-                        if not isinstance(thread, ProcesslistThread):
-                            continue
                         try:
                             # Check if the thread matches all conditions
                             if (

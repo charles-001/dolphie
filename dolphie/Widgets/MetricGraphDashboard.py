@@ -59,6 +59,10 @@ class MetricGraphDashboard(Widget):
         # actual transitions.
         self._shown_tabs: dict[str, bool] = {}
         self._applied_graph_states: dict[str, tuple[bool, int]] = {}
+        # When availability hides the active tab we auto-switch away; remember
+        # the displaced tab so it is restored once it's available again.
+        self._displaced_tab_id: str | None = None
+        self._auto_selected_tab_id: str | None = None
         self.tabs = TabbedContent(id="metric_graph_tabs")
         self._build_widget_registries()
 
@@ -143,8 +147,11 @@ class MetricGraphDashboard(Widget):
         self._bound_dolphie = dolphie
         if host_changed:
             # The new host's metric state must be re-synced even where the
-            # DOM availability state is unchanged.
+            # DOM availability state is unchanged, and a pending tab restore
+            # from the previous host no longer applies.
             self._applied_graph_states.clear()
+            self._displaced_tab_id = None
+            self._auto_selected_tab_id = None
         self._sync_availability()
         if host_changed:
             self.sync_controls()
@@ -256,7 +263,18 @@ class MetricGraphDashboard(Widget):
                         control = self.controls[graph_spec.series[0]]
                         control.update_metric(control.formatted_value, graph_available)
 
-        if self.active_tab_id not in available_tab_ids and available_tab_ids:
+        if not available_tab_ids:
+            return
+        active_tab_id = self.active_tab_id
+        if self._displaced_tab_id in available_tab_ids and active_tab_id == self._auto_selected_tab_id:
+            displaced_tab_id = self._displaced_tab_id
+            self._displaced_tab_id = None
+            self._auto_selected_tab_id = None
+            self.tabs.active = self._pane_id(displaced_tab_id)
+        elif active_tab_id not in available_tab_ids:
+            if self._displaced_tab_id is None:
+                self._displaced_tab_id = active_tab_id
+            self._auto_selected_tab_id = available_tab_ids[0]
             self.tabs.active = self._pane_id(available_tab_ids[0])
 
     @staticmethod
@@ -300,6 +318,10 @@ class MetricGraphDashboard(Widget):
         """Render newly selected graph content from the current host."""
         tab_id = event.pane.name
         if tab_id is not None:
+            if tab_id != self._auto_selected_tab_id:
+                # A manual selection supersedes any pending auto-switch restore.
+                self._displaced_tab_id = None
+                self._auto_selected_tab_id = None
             self.sync_controls(tab_id)
             self.render_tab(tab_id)
 
