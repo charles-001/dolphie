@@ -459,7 +459,7 @@ class TabManager:
                 Container(
                     Label(id="statements_summary_title"),
                     Label(
-                        ":bulb: [$label]Prepared statements are not included in this panel",
+                        "💡 [$label]Prepared statements are not included in this panel",
                         id="statements_summary_info",
                     ),
                     RadioSet(
@@ -503,7 +503,7 @@ class TabManager:
             TabPane(
                 "Table I/O Waits Summary",
                 Label(
-                    ":bulb: [$label]Format for each metric: Wait time (Operations count)",
+                    "💡 [$label]Format for each metric: Wait time (Operations count)",
                     id="pfs_metrics_format",
                 ),
                 DataTable(id="pfs_metrics_table_io_waits_datatable", show_cursor=False),

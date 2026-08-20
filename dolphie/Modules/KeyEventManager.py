@@ -1204,7 +1204,7 @@ class KeyEventManager:
                             # Error 1054 means unknown column which would result in a truncated query
                             # Error 1064 means bad syntax which would result in a truncated query
                             tip = (
-                                ":bulb: [b][$yellow]Tip![/b][/$yellow] If the query is truncated, consider "
+                                "💡 [b][$yellow]Tip![/b][/$yellow] If the query is truncated, consider "
                                 "increasing [$dark_yellow]performance_schema_max_digest_length[/$dark_yellow]/"
                                 "[$dark_yellow]max_digest_length[/$dark_yellow] as a preventive measure. "
                                 "If adjusting those settings isn't an option, then use command "
