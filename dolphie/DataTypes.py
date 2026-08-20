@@ -64,11 +64,21 @@ class Replica:
     errant_check_error: str | None = None
     next_errant_check_at: float = 0
     mariadb_gtid_slave_pos: str = ""
+    # The address MariaDB's own SHOW SLAVE HOSTS advertises for this replica's
+    # server_id, resolved once the replica's own @@server_id is known. Purely
+    # informational — connections keep using host/port so a report_host that's
+    # identical across several replicas (e.g. all published via 127.0.0.1 with
+    # distinct ports) never causes reconnect churn, since discovery can't tell
+    # those replicas apart from the primary side alone.
+    reported_host: str | None = None
+    reported_port: int | None = None
 
     @property
     def host_with_port(self) -> str:
-        host = f"[{self.host}]" if ":" in self.host and not self.host.startswith("[") else self.host
-        return f"{host}:{self.port}" if self.port is not None else host
+        host = self.reported_host or self.host
+        port = self.reported_port if self.reported_port is not None else self.port
+        display_host = f"[{host}]" if ":" in host and not host.startswith("[") else host
+        return f"{display_host}:{port}" if port is not None else display_host
 
 
 class ReplicaManager:
@@ -81,6 +91,21 @@ class ReplicaManager:
         # worker thread, and discarded with the manager on reconnect.
         self.reported_replica_signature: object | None = None
         self.reported_replicas: list[DatabaseRow] = []
+        # MariaDB Server_id -> (Host, Port) from the latest SHOW SLAVE HOSTS, so a
+        # replica's own @@server_id (learned once connected) can resolve its true
+        # advertised address for display even when discovery itself can't tell
+        # same-report-host replicas apart.
+        self._mariadb_reported_ports: dict[int, tuple[str, int]] = {}
+
+    def set_mariadb_reported_ports(self, ports: dict[int, tuple[str, int]]) -> None:
+        """Replace the Server_id -> (Host, Port) map parsed from SHOW SLAVE HOSTS."""
+        with self._lock:
+            self._mariadb_reported_ports = ports
+
+    def get_mariadb_reported_port(self, server_id: int) -> tuple[str, int] | None:
+        """Return the advertised (Host, Port) for a replica's own server_id, if known."""
+        with self._lock:
+            return self._mariadb_reported_ports.get(server_id)
 
     @property
     def available_replicas(self) -> list[ReplicaRow]:

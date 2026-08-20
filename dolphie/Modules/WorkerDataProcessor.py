@@ -261,15 +261,31 @@ class WorkerDataProcessor:
                 # processlist-based discovery without port correlation, and retry the
                 # reported query next cycle by not caching the signature.
 
+        is_mariadb = dolphie.connection_source_alt == ConnectionSource.mariadb
         normalized_replicas = build_replica_discovery(
             processlist_replicas,
             reported_replicas,
             dolphie.replica_manager.available_replicas,
-            mariadb=dolphie.connection_source_alt == ConnectionSource.mariadb,
+            mariadb=is_mariadb,
             use_show_replicas=use_show_replicas,
             replicaset=dolphie.replicaset,
         )
         dolphie.replica_manager.replace_discovery(normalized_replicas)
+
+        if is_mariadb:
+            # MariaDB exposes no correlating key in the processlist (no UUID, no
+            # server_id), so when multiple replicas share a report_host (e.g. all
+            # published via 127.0.0.1 with distinct ports), discovery alone can't
+            # tell them apart and connects via the processlist address instead.
+            # This map lets a replica's own @@server_id (learned once connected)
+            # resolve its true advertised address for display.
+            dolphie.replica_manager.set_mariadb_reported_ports(
+                {
+                    coerce_int(row.get("Server_id")): (coerce_str(row.get("Host")), coerce_int(row.get("Port"), 3306))
+                    for row in reported_replicas
+                    if row.get("Server_id") is not None
+                }
+            )
 
     def process_mysql_data(self, tab: "Tab"):
         """Process MySQL data for a given tab."""

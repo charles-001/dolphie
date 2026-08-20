@@ -1299,6 +1299,12 @@ def _poll_replica(tab: Tab, replica: Replica, current_time: float) -> None:
                 view_change_uuid if view_change_uuid and view_change_uuid != "AUTOMATIC" else ""
             )
 
+            if replica.connection_source_alt == ConnectionSource.mariadb:
+                server_id = coerce_int(global_variables.get("server_id"))
+                reported = dolphie.replica_manager.get_mariadb_reported_port(server_id) if server_id else None
+                if reported is not None:
+                    replica.reported_host, replica.reported_port = reported
+
         replication_status = fetch_replication_data(tab, replica)
         if not isinstance(replication_status, dict) or not replication_status:
             raise ManualException("Replication status is unavailable")
