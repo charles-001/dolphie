@@ -122,7 +122,9 @@ class WorkerManager:
                 dolphie.host_version = dolphie.parse_server_version(coerce_str(dolphie.global_variables.get("version")))
                 dolphie.binlog_status = replay_event_data.binlog_status
                 dolphie.innodb_metrics = {
-                    key: value for key, value in replay_event_data.innodb_metrics.items() if isinstance(value, (int, str))
+                    key: value
+                    for key, value in replay_event_data.innodb_metrics.items()
+                    if isinstance(value, (int, str))
                 }
                 dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
                 dolphie.processlist_threads = dict(replay_event_data.processlist)

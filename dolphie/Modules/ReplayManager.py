@@ -176,6 +176,12 @@ class ReplayManager:
             raise RuntimeError("Replay database is not initialized")
         return self.connection
 
+    def close(self) -> None:
+        """Close the underlying SQLite connection, if open."""
+        if self.connection is not None:
+            self.connection.close()
+            self.connection = None
+
     def _execute_select_one(self, query: str, params: tuple[Any, ...] = ()) -> tuple[Any, ...] | None:
         """Executes a SELECT query and returns a single row.
 

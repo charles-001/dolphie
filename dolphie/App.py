@@ -599,7 +599,18 @@ def main():
     setup_logger(arg_parser.config)
 
     app = DolphieApp(arg_parser.config)
-    app.run(headless=arg_parser.config.daemon_mode)
+    try:
+        app.run(headless=arg_parser.config.daemon_mode)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if arg_parser.config.daemon_mode:
+            logger.info("Shutting down")
+            for tab in app.tab_manager.tabs.values():
+                tab.dolphie.main_db_connection.close()
+                tab.dolphie.secondary_db_connection.close()
+                if tab.replay_manager:
+                    tab.replay_manager.close()
 
 
 if __name__ == "__main__":

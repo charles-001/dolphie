@@ -4,7 +4,6 @@ import re
 import time
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
-from typing import cast
 
 from loguru import logger
 from textual.containers import ScrollableContainer
@@ -927,7 +926,8 @@ def create_group_replication_member_table(tab: Tab) -> dict[str, Table]:
         table.add_row(
             "[b][$label]Applier",
             f"{format_number(coerce_int(row.get('COUNT_TRANSACTIONS_REMOTE_APPLIED')))}"
-            f" [$label]Queue[/$label] {format_number(coerce_int(row.get('COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE')))}",
+            f" [$label]Queue[/$label]"
+            f" {format_number(coerce_int(row.get('COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE')))}",
         )
         table.add_row(
             "[b][$label]Local",
