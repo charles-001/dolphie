@@ -1,7 +1,7 @@
 from collections import Counter
 from collections.abc import Mapping
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 
@@ -311,7 +311,7 @@ class WorkerDataProcessor:
             old_uptime=coerce_int(dolphie.global_status.get("Uptime")),
             new_uptime=coerce_int(global_status.get("Uptime")),
         )
-        dolphie.global_status = global_status
+        dolphie.global_status = dict(global_status)
         # If the server doesn't support Innodb_lsn_current, use Innodb_os_log_written instead
         # which has less precision, but it's good enough. Used for calculating the percentage of redo log used
         if not dolphie.global_status.get("Innodb_lsn_current"):
@@ -357,7 +357,8 @@ class WorkerDataProcessor:
 
         if dolphie.performance_schema_enabled:
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
-            dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
+            # ps_disk_io only selects two CONVERT(..., UNSIGNED) columns, so this is always int.
+            dolphie.disk_io_metrics = cast(dict[str, int | str], dolphie.main_db_connection.fetchone())
 
             # MariaDB uses slave_parallel_threads; MySQL uses replica_parallel_workers
             if dolphie.connection_source_alt == ConnectionSource.mariadb:
@@ -528,10 +529,12 @@ class WorkerDataProcessor:
             old_uptime=coerce_int(dolphie.global_status.get("ProxySQL_Uptime")),
             new_uptime=coerce_int(global_status.get("ProxySQL_Uptime")),
         )
-        dolphie.global_status = global_status
+        dolphie.global_status = dict(global_status)
 
         dolphie.main_db_connection.execute(ProxySQLQueries.command_stats)
-        dolphie.proxysql_command_stats = dolphie.main_db_connection.fetchall()
+        # stats_mysql_commands_counters is Command (str) plus bigint counters, so this
+        # is always int/str even though fetchall() is typed as the generic DatabaseRow.
+        dolphie.proxysql_command_stats = cast(list[dict[str, int | str]], dolphie.main_db_connection.fetchall())
 
         # Here, we're going to format the command stats to match the global status keys of
         # MySQL and get total count of queries

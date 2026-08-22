@@ -318,7 +318,7 @@ def test_duplicate_reported_identities_are_disambiguated_by_endpoint():
 
 
 def test_group_replication_primary_is_computed_from_polled_members():
-    members = [
+    members: list[DatabaseRow] = [
         {"MEMBER_ID": "secondary", "MEMBER_ROLE": "SECONDARY"},
         {"MEMBER_ID": "primary", "MEMBER_ROLE": "PRIMARY"},
     ]

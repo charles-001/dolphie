@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from typing import cast
 
 from loguru import logger
 from rich.text import Text
@@ -33,7 +34,7 @@ _BAR_COLOR = (46, 124, 175)
 
 def _plotext_x(value: str) -> float:
     """Bridge plotext's numeric-only stub for its supported date-string X values."""
-    return value  # type: ignore[return-value]
+    return cast(float, value)
 
 
 def calculate_hourly_rate(values: list[int | float], polling_intervals: list[float]) -> int:

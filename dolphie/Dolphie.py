@@ -97,14 +97,14 @@ class Dolphie:
         self.innodb_metrics: dict[str, int | str] = {}
         self.metadata_locks: list[DataTypes.DatabaseRow] = []
         self.ddl: list[DataTypes.DatabaseRow] = []
-        self.disk_io_metrics: DataTypes.DatabaseRow = {}
+        self.disk_io_metrics: dict[str, int | str] = {}
         self.statements_summary_metrics: dict[str, int | str] = {}
         self.system_utilization: dict[str, int | float | tuple[float, float, float]] = {}
         self.host_cache: dict[str, str] = {}
         self.proxysql_hostgroup_summary: list[DataTypes.DatabaseRow] = []
         self.proxysql_mysql_query_rules: list[DataTypes.DatabaseRow] = []
         self.proxysql_per_second_data: dict[str, dict[str, int]] = {}
-        self.proxysql_command_stats: list[DataTypes.DatabaseRow] = []
+        self.proxysql_command_stats: list[dict[str, int | str]] = []
         self.processlist_threads: dict[int, DataTypes.ProcesslistThread | DataTypes.ProxySQLProcesslistThread] = {}
         self.processlist_threads_snapshot: dict[
             int, DataTypes.ProcesslistThread | DataTypes.ProxySQLProcesslistThread

@@ -7,7 +7,7 @@ from collections import OrderedDict
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import orjson
 import zstandard as zstd
@@ -628,7 +628,8 @@ class ReplayManager:
         """
         compression_dict = zstd.train_dictionary(
             self.COMPRESSION_DICT_SIZE,
-            self.dict_samples,  # type: ignore[arg-type]  # zstandard's stub wants list[bytes | bytearray | memoryview]
+            # zstandard's stub wants list[bytes | bytearray | memoryview]; our samples are always bytes.
+            cast(list[bytes | bytearray | memoryview], self.dict_samples),
             level=self.COMPRESSION_LEVEL,
         )
 

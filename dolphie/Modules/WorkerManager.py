@@ -1,7 +1,7 @@
 from collections.abc import Iterator, Mapping
 from datetime import datetime, timedelta
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from loguru import logger
 from textual.worker import Worker, WorkerState, get_current_worker
@@ -99,14 +99,12 @@ class WorkerManager:
 
             # Common data for refreshing
             dolphie.system_utilization = replay_event_data.system_utilization
-            dolphie.global_variables = {
-                key: value for key, value in replay_event_data.global_variables.items() if isinstance(value, (int, str))
-            }
-            dolphie.global_status = {
-                key: value
-                for key, value in replay_event_data.global_status.items()
-                if isinstance(value, (int, float, str))
-            }
+            # global_variables/global_status/innodb_metrics are always int/float/str: MySQL
+            # curates them (see fetch_status_and_variables), and the replay file round-trips
+            # that same curated data through JSON. Their replay-dataclass fields are typed as
+            # the generic DatabaseRow only because that's what a JSON blob deserializes to.
+            dolphie.global_variables = cast(dict[str, int | str], replay_event_data.global_variables)
+            dolphie.global_status = cast(dict[str, int | float | str], replay_event_data.global_status)
             common_metrics: dict[str, Any] = {
                 "system_utilization": dolphie.system_utilization,
                 "global_variables": dolphie.global_variables,
@@ -121,11 +119,7 @@ class WorkerManager:
 
                 dolphie.host_version = dolphie.parse_server_version(coerce_str(dolphie.global_variables.get("version")))
                 dolphie.binlog_status = replay_event_data.binlog_status
-                dolphie.innodb_metrics = {
-                    key: value
-                    for key, value in replay_event_data.innodb_metrics.items()
-                    if isinstance(value, (int, str))
-                }
+                dolphie.innodb_metrics = cast(dict[str, int | str], replay_event_data.innodb_metrics)
                 dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
                 dolphie.processlist_threads = dict(replay_event_data.processlist)
                 dolphie.replication_status = replay_event_data.replication_status
@@ -160,7 +154,9 @@ class WorkerManager:
                 dolphie.host_version = dolphie.parse_server_version(
                     coerce_str(dolphie.global_variables.get("admin-version"))
                 )
-                dolphie.proxysql_command_stats = replay_event_data.command_stats
+                # stats_mysql_commands_counters is Command (str) plus bigint counters, so this
+                # is always int/str even though command_stats is typed as the generic DatabaseRow.
+                dolphie.proxysql_command_stats = cast(list[dict[str, int | str]], replay_event_data.command_stats)
                 dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
                 dolphie.processlist_threads = dict(replay_event_data.processlist)
 

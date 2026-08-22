@@ -25,7 +25,7 @@ def refresh(
     ahi_misses: int = 10,
 ) -> None:
     """Refresh a manager with the smallest useful MySQL status snapshot."""
-    global_status: dict[str, int | str] = {"Queries": queries} if queries is not None else {}
+    global_status: dict[str, int | float | str] = {"Queries": queries} if queries is not None else {}
     manager.refresh_data(
         at,
         polling_latency=polling_latency,
