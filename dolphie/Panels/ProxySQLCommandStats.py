@@ -1,4 +1,4 @@
-from dolphie.Modules.Functions import coerce_str, format_number
+from dolphie.Modules.Functions import coerce_int, coerce_str, format_number
 from dolphie.Modules.TabManager import Tab
 
 
@@ -70,7 +70,7 @@ def create_panel(tab: Tab) -> None:
 
                 # Calculate the values per second for the following columns
                 if "cnt_" in column_key:
-                    current_value = int(column_value or 0)
+                    current_value = coerce_int(column_value)
                     previous_value = per_second_data.get(row_id, {}).get(column_key, 0)
                     if not previous_value:
                         column_value = 0
@@ -81,7 +81,7 @@ def create_panel(tab: Tab) -> None:
                     per_second_data.setdefault(row_id, {})[column_key] = current_value
 
                 if column_format == "number":
-                    column_value = format_number(0 if column_value is None else column_value)
+                    column_value = format_number(coerce_int(column_value))
 
                 if column_value == "0":
                     column_value = "[$dark_gray]0"

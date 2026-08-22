@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import cast
 
 from loguru import logger
 from rich.text import Text
@@ -34,7 +33,7 @@ _BAR_COLOR = (46, 124, 175)
 
 def _plotext_x(value: str) -> float:
     """Bridge plotext's numeric-only stub for its supported date-string X values."""
-    return cast(float, value)
+    return value  # type: ignore[return-value]
 
 
 def calculate_hourly_rate(values: list[int | float], polling_intervals: list[float]) -> int:
@@ -303,19 +302,24 @@ class Graph(PlotextPlot):
         if renderer is GraphRenderer.REDO_LOG_BAR:
             if not y:
                 return 0
-            return self._render_redo_log_bar_metrics(cast(RedoLogMetrics, metric_instance), y, intervals)
+            assert isinstance(metric_instance, RedoLogMetrics)
+            return self._render_redo_log_bar_metrics(metric_instance, y, intervals)
 
         x, y = self._prepare_series(x, y)
         if not x or not y:
             return 0
         if renderer is GraphRenderer.CHECKPOINT:
-            return self._render_checkpoint_metrics(cast(CheckpointMetrics, metric_instance), x, y)
+            assert isinstance(metric_instance, CheckpointMetrics)
+            return self._render_checkpoint_metrics(metric_instance, x, y)
         if renderer is GraphRenderer.REDO_LOG_LINE:
-            return self._render_redo_log_line_metrics(cast(RedoLogMetrics, metric_instance), x, y)
+            assert isinstance(metric_instance, RedoLogMetrics)
+            return self._render_redo_log_line_metrics(metric_instance, x, y)
         if renderer is GraphRenderer.ACTIVE_REDO_LOG:
-            return self._render_active_redo_log_metrics(cast(RedoLogActiveCountMetrics, metric_instance), x, y)
+            assert isinstance(metric_instance, RedoLogActiveCountMetrics)
+            return self._render_active_redo_log_metrics(metric_instance, x, y)
         if renderer is GraphRenderer.SYSTEM_MEMORY:
-            return self._render_system_memory_metrics(cast(SystemMemoryMetrics, metric_instance), x, y)
+            assert isinstance(metric_instance, SystemMemoryMetrics)
+            return self._render_system_memory_metrics(metric_instance, x, y)
         raise ValueError(f"Unsupported graph renderer: {renderer.value}")
 
     def render_graph(self, metric_instance: MetricInstance | None) -> None:

@@ -282,21 +282,20 @@ def create_panel(tab: Tab) -> None:
                 if not isinstance(raw_channel_data, dict):
                     continue
 
-                channel_data = cast(dict[str, object], raw_channel_data)
-                all_workers_diff = coerce_float(channel_data.get("diff_all"))
-                raw_rows = channel_data.get("data")
+                all_workers_diff = coerce_float(raw_channel_data.get("diff_all"))
+                raw_rows = raw_channel_data.get("data")
                 if not isinstance(raw_rows, list):
                     continue
 
                 for raw_row in raw_rows:
                     if not isinstance(raw_row, dict):
                         continue
-                    row = cast(DatabaseRow, raw_row)
+                    row = raw_row
                     worker_id = row.get("worker_id")
                     thread_id = row.get("thread_id")
 
                     # Calculate the difference in thread events for this worker
-                    worker_diff = coerce_float(cast(dict[str, object], channel_data).get(f"diff_{thread_id}"))
+                    worker_diff = coerce_float(raw_channel_data.get(f"diff_{thread_id}"))
 
                     # Format the last applied transaction
                     last_applied_transaction = coerce_str(row.get("last_applied_transaction"), "N/A")
@@ -328,7 +327,7 @@ def create_panel(tab: Tab) -> None:
                             last_applied_transaction,
                             retries_count,
                             last_error_time,
-                            row.get("applying_transaction_last_transient_error_message", "N/A"),
+                            coerce_str(row.get("applying_transaction_last_transient_error_message"), "N/A"),
                         ]
                     )
                     table_thread_applier_status.add_row(*row_values)
@@ -375,8 +374,8 @@ def create_panel(tab: Tab) -> None:
 
         if is_multi_source:
             tab.replication_status_grid.display = True
-            single_parent = cast(ScrollableContainer | None, tab.replication_status_single.parent)
-            if single_parent:
+            single_parent = tab.replication_status_single.parent
+            if isinstance(single_parent, ScrollableContainer):
                 single_parent.display = False
             tab.replication_status_grid.set_class(True, "multi_source")
             items = {}
@@ -397,8 +396,8 @@ def create_panel(tab: Tab) -> None:
                 dolphie.app,
                 tab.channel_widgets,
             )
-            single_parent = cast(ScrollableContainer | None, tab.replication_status_single.parent)
-            if single_parent:
+            single_parent = tab.replication_status_single.parent
+            if isinstance(single_parent, ScrollableContainer):
                 single_parent.display = True
             tab.replication_status_single.update(create_replication_table(tab, channel_data=replication_statuses[0]))
 
@@ -509,12 +508,12 @@ def create_panel(tab: Tab) -> None:
         cluster_members: dict[str, list[str]] = {}
         cluster_meta: dict[str, dict] = {}
         for inst in clusterset_instances:
-            cname = inst.get("cluster_name", "")
-            cluster_members.setdefault(cname, []).append(inst.get("address", "N/A"))
+            cname = coerce_str(inst.get("cluster_name"))
+            cluster_members.setdefault(cname, []).append(coerce_str(inst.get("address"), "N/A"))
             if cname not in cluster_meta:
                 cluster_meta[cname] = {
-                    "clusterset_name": inst.get("clusterset_name", "N/A"),
-                    "cluster_role": inst.get("cluster_role", "N/A"),
+                    "clusterset_name": coerce_str(inst.get("clusterset_name"), "N/A"),
+                    "cluster_role": coerce_str(inst.get("cluster_role"), "N/A"),
                     "invalidated": inst.get("invalidated", 0),
                 }
 
@@ -921,23 +920,23 @@ def create_group_replication_member_table(tab: Tab) -> dict[str, Table]:
 
         table.add_row(
             "[b][$label]Certifier",
-            f"[$label]Queue[/$label] {format_number(row.get('COUNT_TRANSACTIONS_IN_QUEUE', 'N/A'))}"
-            f" [$label]Checked[/$label] {format_number(row.get('COUNT_TRANSACTIONS_CHECKED', 'N/A'))}"
-            f" [$label]Detected[/$label] {format_number(row.get('COUNT_CONFLICTS_DETECTED', 'N/A'))}",
+            f"[$label]Queue[/$label] {format_number(coerce_int(row.get('COUNT_TRANSACTIONS_IN_QUEUE')))}"
+            f" [$label]Checked[/$label] {format_number(coerce_int(row.get('COUNT_TRANSACTIONS_CHECKED')))}"
+            f" [$label]Detected[/$label] {format_number(coerce_int(row.get('COUNT_CONFLICTS_DETECTED')))}",
         )
         table.add_row(
             "[b][$label]Applier",
-            f"{format_number(row.get('COUNT_TRANSACTIONS_REMOTE_APPLIED', 'N/A'))}"
-            f" [$label]Queue[/$label] {format_number(row.get('COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE', 'N/A'))}",
+            f"{format_number(coerce_int(row.get('COUNT_TRANSACTIONS_REMOTE_APPLIED')))}"
+            f" [$label]Queue[/$label] {format_number(coerce_int(row.get('COUNT_TRANSACTIONS_REMOTE_IN_APPLIER_QUEUE')))}",
         )
         table.add_row(
             "[b][$label]Local",
-            f"[$label]Proposed[/$label] {format_number(row.get('COUNT_TRANSACTIONS_LOCAL_PROPOSED', 'N/A'))}"
-            f" [$label]Rollback[/$label] {format_number(row.get('COUNT_TRANSACTIONS_LOCAL_ROLLBACK', 'N/A'))}",
+            f"[$label]Proposed[/$label] {format_number(coerce_int(row.get('COUNT_TRANSACTIONS_LOCAL_PROPOSED')))}"
+            f" [$label]Rollback[/$label] {format_number(coerce_int(row.get('COUNT_TRANSACTIONS_LOCAL_ROLLBACK')))}",
         )
         table.add_row(
             "[b][$label]Cert Rows",
-            format_number(row.get("COUNT_TRANSACTIONS_ROWS_VALIDATING", "N/A")),
+            format_number(coerce_int(row.get("COUNT_TRANSACTIONS_ROWS_VALIDATING"))),
         )
 
         unsorted.append((member_id, host, table))
@@ -1301,7 +1300,7 @@ def _poll_replica(tab: Tab, replica: Replica, current_time: float) -> None:
 
             if replica.connection_source_alt == ConnectionSource.mariadb:
                 server_id = coerce_int(global_variables.get("server_id"))
-                reported = dolphie.replica_manager.get_mariadb_reported_port(server_id) if server_id else None
+                reported = dolphie.replica_manager.mariadb_reported_ports.get(server_id) if server_id else None
                 if reported is not None:
                     replica.reported_host, replica.reported_port = reported
 

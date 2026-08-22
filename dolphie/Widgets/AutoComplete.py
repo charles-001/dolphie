@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from operator import itemgetter
 from re import IGNORECASE, escape, finditer, search
-from typing import ClassVar, NamedTuple, cast
+from typing import ClassVar, NamedTuple
 
 from rich.text import Text
 from textual import events, on
@@ -256,7 +256,8 @@ class AutoComplete(Widget):
 
         option_list = self.option_list
         highlighted = option_index
-        option = cast(DropdownItem, option_list.get_option_at_index(highlighted))
+        option = option_list.get_option_at_index(highlighted)
+        assert isinstance(option, DropdownItem)
         highlighted_value = option.value
         with self.prevent(Input.Changed):
             self.apply_completion(highlighted_value, self._get_target_state())

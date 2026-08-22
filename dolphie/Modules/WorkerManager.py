@@ -1,18 +1,13 @@
 from collections.abc import Iterator, Mapping
 from datetime import datetime, timedelta
 from functools import partial
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 from textual.worker import Worker, WorkerState, get_current_worker
 
 import dolphie.Modules.MetricManager as MetricManager
-from dolphie.DataTypes import (
-    ConnectionSource,
-    ConnectionStatus,
-    ProcesslistThread,
-    ProxySQLProcesslistThread,
-)
+from dolphie.DataTypes import ConnectionSource, ConnectionStatus
 from dolphie.Modules.Functions import coerce_float, coerce_str
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Modules.MetricDefinitions import MetricData, MetricValue, parse_metric_datetime
@@ -104,8 +99,14 @@ class WorkerManager:
 
             # Common data for refreshing
             dolphie.system_utilization = replay_event_data.system_utilization
-            dolphie.global_variables = cast(dict[str, int | str], replay_event_data.global_variables)
-            dolphie.global_status = cast(dict[str, int | str], replay_event_data.global_status)
+            dolphie.global_variables = {
+                key: value for key, value in replay_event_data.global_variables.items() if isinstance(value, (int, str))
+            }
+            dolphie.global_status = {
+                key: value
+                for key, value in replay_event_data.global_status.items()
+                if isinstance(value, (int, float, str))
+            }
             common_metrics: dict[str, Any] = {
                 "system_utilization": dolphie.system_utilization,
                 "global_variables": dolphie.global_variables,
@@ -119,32 +120,19 @@ class WorkerManager:
                     raise TypeError("MySQL replay returned a non-MySQL payload")
 
                 dolphie.host_version = dolphie.parse_server_version(coerce_str(dolphie.global_variables.get("version")))
-                dolphie.binlog_status = cast(dict[str, int | str], replay_event_data.binlog_status)
-                dolphie.innodb_metrics = cast(dict[str, int | str], replay_event_data.innodb_metrics)
+                dolphie.binlog_status = replay_event_data.binlog_status
+                dolphie.innodb_metrics = {
+                    key: value for key, value in replay_event_data.innodb_metrics.items() if isinstance(value, (int, str))
+                }
                 dolphie.replica_manager.available_replicas = replay_event_data.replica_manager
-                dolphie.processlist_threads = cast(
-                    dict[int, ProcesslistThread | ProxySQLProcesslistThread],
-                    replay_event_data.processlist,
-                )
+                dolphie.processlist_threads = dict(replay_event_data.processlist)
                 dolphie.replication_status = replay_event_data.replication_status
-                dolphie.replication_applier_status = cast(
-                    dict[str, list[dict[str, int | str]] | int],
-                    replay_event_data.replication_applier_status,
-                )
+                dolphie.replication_applier_status = replay_event_data.replication_applier_status
                 dolphie.metadata_locks = replay_event_data.metadata_locks
-                dolphie.group_replication_members = cast(
-                    list[dict[str, str]],
-                    replay_event_data.group_replication_members,
-                )
+                dolphie.group_replication_members = replay_event_data.group_replication_members
                 dolphie.group_replication_data = replay_event_data.group_replication_data
-                dolphie.clusterset_instances = cast(
-                    list[dict[str, str]],
-                    replay_event_data.clusterset_instances,
-                )
-                dolphie.galera_cluster_members = cast(
-                    list[dict[str, str]],
-                    replay_event_data.galera_cluster_members,
-                )
+                dolphie.clusterset_instances = replay_event_data.clusterset_instances
+                dolphie.galera_cluster_members = replay_event_data.galera_cluster_members
                 dolphie.file_io_data = replay_event_data.file_io_data
                 dolphie.table_io_waits_data = replay_event_data.table_io_waits_data
                 dolphie.statements_summary_data = replay_event_data.statements_summary_data
@@ -170,18 +158,9 @@ class WorkerManager:
                 dolphie.host_version = dolphie.parse_server_version(
                     coerce_str(dolphie.global_variables.get("admin-version"))
                 )
-                dolphie.proxysql_command_stats = cast(
-                    list[dict[str, int | str]],
-                    replay_event_data.command_stats,
-                )
-                dolphie.proxysql_hostgroup_summary = cast(
-                    list[dict[str, str]],
-                    replay_event_data.hostgroup_summary,
-                )
-                dolphie.processlist_threads = cast(
-                    dict[int, ProcesslistThread | ProxySQLProcesslistThread],
-                    replay_event_data.processlist,
-                )
+                dolphie.proxysql_command_stats = replay_event_data.command_stats
+                dolphie.proxysql_hostgroup_summary = replay_event_data.hostgroup_summary
+                dolphie.processlist_threads = dict(replay_event_data.processlist)
 
                 connection_source_metrics = {"proxysql_command_stats": dolphie.proxysql_command_stats}
             else:

@@ -7,7 +7,7 @@ from collections import OrderedDict
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar
 
 import orjson
 import zstandard as zstd
@@ -30,7 +30,7 @@ from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 @dataclass
 class MySQLReplayData:
     timestamp: str
-    system_utilization: dict[str, Any]
+    system_utilization: dict[str, int | float | tuple[float, float, float]]
     global_status: DatabaseRow
     global_variables: DatabaseRow
     binlog_status: DatabaseRow
@@ -53,7 +53,7 @@ class MySQLReplayData:
 @dataclass
 class ProxySQLReplayData:
     timestamp: str
-    system_utilization: dict[str, Any]
+    system_utilization: dict[str, int | float | tuple[float, float, float]]
     global_status: DatabaseRow
     global_variables: DatabaseRow
     command_stats: list[DatabaseRow]
@@ -622,7 +622,7 @@ class ReplayManager:
         """
         compression_dict = zstd.train_dictionary(
             self.COMPRESSION_DICT_SIZE,
-            cast(Any, self.dict_samples),
+            self.dict_samples,  # type: ignore[arg-type]  # zstandard's stub wants list[bytes | bytearray | memoryview]
             level=self.COMPRESSION_LEVEL,
         )
 

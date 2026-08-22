@@ -5,7 +5,7 @@ import re
 import threading
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from rich import box
 from rich.align import Align
@@ -39,7 +39,7 @@ from dolphie.Modules.Theme import themed_text
 from dolphie.Widgets.CommandModal import CommandModal
 from dolphie.Widgets.CommandScreen import CommandScreen
 from dolphie.Widgets.DolphieScreen import ScreenContext
-from dolphie.Widgets.EventLogScreen import EventLog, EventLogDatabase
+from dolphie.Widgets.EventLogScreen import EventLog
 from dolphie.Widgets.ProxySQLThreadScreen import ProxySQLThreadScreen
 from dolphie.Widgets.ThreadScreen import ThreadScreen
 
@@ -410,7 +410,7 @@ class KeyEventManager:
                     self.app.app.push_screen(
                         EventLog(
                             self._screen_context(dolphie),
-                            cast(EventLogDatabase, dolphie.secondary_db_connection),
+                            dolphie.secondary_db_connection,
                         )
                     )
                 else:

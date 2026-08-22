@@ -70,7 +70,7 @@ class MetricManager:
         self.initialized: bool = False
         self.polling_latency: float = 0
         self.global_variables: dict[str, int | str] = {}
-        self.global_status: dict[str, int | str] = {}
+        self.global_status: dict[str, int | float | str] = {}
         self.redo_log_size: int = 0
         # Use a deque for O(1) appends and pops
         self.datetimes: deque[str] = deque()
@@ -279,7 +279,7 @@ class MetricManager:
         polling_latency: float = 0,
         system_utilization: dict[str, int | float | tuple[float, float, float]] | None = None,
         global_variables: dict[str, int | str] | None = None,
-        global_status: dict[str, int | str] | None = None,
+        global_status: dict[str, int | float | str] | None = None,
         innodb_metrics: dict[str, int | str] | None = None,
         proxysql_command_stats: list[dict[str, int | str]] | None = None,
         disk_io_metrics: dict[str, int | str] | None = None,

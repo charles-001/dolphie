@@ -154,7 +154,7 @@ def create_panel(tab: Tab) -> None:
                     if not previous_value:
                         column_value = "[$dark_gray]0"
                     else:
-                        current_value = int(column_value or 0)
+                        current_value = coerce_int(column_value)
                         value_diff = current_value - previous_value
                         column_value = round(value_diff / polling_latency) if polling_latency > 0 else 0
 
@@ -164,7 +164,7 @@ def create_panel(tab: Tab) -> None:
                     column_value = "Yes" if column_value == "1" else "No"
 
                 if column_format == "number":
-                    column_value = format_number(0 if column_value is None else column_value)
+                    column_value = format_number(coerce_int(column_value))
 
                 if column_value is None:
                     column_value = "[$dark_gray]N/A"

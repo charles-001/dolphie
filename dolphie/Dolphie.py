@@ -5,7 +5,7 @@ import os
 import socket
 import time
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import psutil
 from loguru import logger
@@ -90,21 +90,21 @@ class Dolphie:
         self.connection_status: DataTypes.ConnectionStatusType | None = None
 
         self.global_variables: dict[str, int | str] = {}
-        self.global_status: dict[str, int | str] = {}
-        self.binlog_status: dict[str, int | str] = {}
+        self.global_status: dict[str, int | float | str] = {}
+        self.binlog_status: DataTypes.DatabaseRow = {}
         self.replication_status: list[DataTypes.DatabaseRow] = []
-        self.replication_applier_status: dict[str, list[dict[str, int | str]] | int] = {}
+        self.replication_applier_status: dict[str, dict[str, Any]] = {}
         self.innodb_metrics: dict[str, int | str] = {}
         self.metadata_locks: list[DataTypes.DatabaseRow] = []
         self.ddl: list[DataTypes.DatabaseRow] = []
-        self.disk_io_metrics: dict[str, int | str] = {}
+        self.disk_io_metrics: DataTypes.DatabaseRow = {}
         self.statements_summary_metrics: dict[str, int | str] = {}
         self.system_utilization: dict[str, int | float | tuple[float, float, float]] = {}
         self.host_cache: dict[str, str] = {}
-        self.proxysql_hostgroup_summary: list[dict[str, str]] = []
-        self.proxysql_mysql_query_rules: list[dict[str, str]] = []
+        self.proxysql_hostgroup_summary: list[DataTypes.DatabaseRow] = []
+        self.proxysql_mysql_query_rules: list[DataTypes.DatabaseRow] = []
         self.proxysql_per_second_data: dict[str, dict[str, int]] = {}
-        self.proxysql_command_stats: list[dict[str, int | str]] = []
+        self.proxysql_command_stats: list[DataTypes.DatabaseRow] = []
         self.processlist_threads: dict[int, DataTypes.ProcesslistThread | DataTypes.ProxySQLProcesslistThread] = {}
         self.processlist_threads_snapshot: dict[
             int, DataTypes.ProcesslistThread | DataTypes.ProxySQLProcesslistThread
@@ -113,10 +113,10 @@ class Dolphie:
         # These are for group replication in replication panel
         self.is_group_replication_primary: bool = False
         self.group_replication_data: DataTypes.DatabaseRow = {}
-        self.group_replication_members: list[dict[str, str]] = []
-        self.clusterset_instances: list[dict[str, str]] = []
+        self.group_replication_members: list[DataTypes.DatabaseRow] = []
+        self.clusterset_instances: list[DataTypes.DatabaseRow] = []
 
-        self.galera_cluster_members: list[dict[str, str]] = []
+        self.galera_cluster_members: list[DataTypes.DatabaseRow] = []
 
         # Filters that can be applied. String filters support a leading ! to exclude matches.
         # They start as whatever the filters option is set to, if anything

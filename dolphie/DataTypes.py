@@ -91,21 +91,11 @@ class ReplicaManager:
         # worker thread, and discarded with the manager on reconnect.
         self.reported_replica_signature: object | None = None
         self.reported_replicas: list[DatabaseRow] = []
-        # MariaDB Server_id -> (Host, Port) from the latest SHOW SLAVE HOSTS, so a
-        # replica's own @@server_id (learned once connected) can resolve its true
-        # advertised address for display even when discovery itself can't tell
-        # same-report-host replicas apart.
-        self._mariadb_reported_ports: dict[int, tuple[str, int]] = {}
-
-    def set_mariadb_reported_ports(self, ports: dict[int, tuple[str, int]]) -> None:
-        """Replace the Server_id -> (Host, Port) map parsed from SHOW SLAVE HOSTS."""
-        with self._lock:
-            self._mariadb_reported_ports = ports
-
-    def get_mariadb_reported_port(self, server_id: int) -> tuple[str, int] | None:
-        """Return the advertised (Host, Port) for a replica's own server_id, if known."""
-        with self._lock:
-            return self._mariadb_reported_ports.get(server_id)
+        # Server_id -> (Host, Port) from the latest SHOW SLAVE HOSTS; see
+        # Replica.reported_host for why this exists. Written only by the
+        # replicas worker thread and replaced wholesale (never mutated in
+        # place), so poll threads can read it without a lock.
+        self.mariadb_reported_ports: dict[int, tuple[str, int]] = {}
 
     @property
     def available_replicas(self) -> list[ReplicaRow]:

@@ -1,10 +1,6 @@
 from functools import partial
-from typing import TYPE_CHECKING, cast
 
 from textual.command import DiscoveryHit, Hit, Provider
-
-if TYPE_CHECKING:
-    from dolphie.App import DolphieApp
 
 
 class CommandPaletteCommands(Provider):
@@ -12,7 +8,11 @@ class CommandPaletteCommands(Provider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.dolphie_app = cast("DolphieApp", self.app)
+
+        from dolphie.App import DolphieApp
+
+        assert isinstance(self.app, DolphieApp)
+        self.dolphie_app = self.app
 
     def async_command(self, key: str):
         """Helper function to call the process_key_event command asynchronously."""

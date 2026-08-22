@@ -1,7 +1,7 @@
 from collections import Counter
 from collections.abc import Mapping
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -190,7 +190,7 @@ def build_replica_discovery(
     return sorted(discovered, key=lambda row: (row.get("identity", ""), row.get("id", 0)))
 
 
-def is_group_replication_primary(members: list[dict[str, str]], server_uuid: str | int | None) -> bool:
+def is_group_replication_primary(members: list[DatabaseRow], server_uuid: str | int | None) -> bool:
     """Return whether the current server is the reported Group Replication primary."""
     return any(row.get("MEMBER_ID") == server_uuid and row.get("MEMBER_ROLE") == "PRIMARY" for row in members)
 
@@ -211,7 +211,11 @@ class WorkerDataProcessor:
         self.app = app
 
     def _refresh_replica_discovery(self, tab: "Tab") -> None:
-        """Publish a complete discovery snapshot only after every query succeeds."""
+        """Refresh replica discovery.
+
+        Skips entirely if the processlist query fails. Still publishes (without
+        report-host correlation) if the SHOW REPLICAS/SHOW SLAVE HOSTS query fails.
+        """
         dolphie = tab.dolphie
         if dolphie.replicaset:
             find_replicas_query = MySQLQueries.replicaset_find_replicas
@@ -273,19 +277,14 @@ class WorkerDataProcessor:
         dolphie.replica_manager.replace_discovery(normalized_replicas)
 
         if is_mariadb:
-            # MariaDB exposes no correlating key in the processlist (no UUID, no
-            # server_id), so when multiple replicas share a report_host (e.g. all
-            # published via 127.0.0.1 with distinct ports), discovery alone can't
-            # tell them apart and connects via the processlist address instead.
-            # This map lets a replica's own @@server_id (learned once connected)
-            # resolve its true advertised address for display.
-            dolphie.replica_manager.set_mariadb_reported_ports(
-                {
-                    coerce_int(row.get("Server_id")): (coerce_str(row.get("Host")), coerce_int(row.get("Port"), 3306))
-                    for row in reported_replicas
-                    if row.get("Server_id") is not None
-                }
-            )
+            # See Replica.reported_host: MariaDB exposes no correlating key in the
+            # processlist, so record each replica's advertised (host, port) by
+            # server_id here for later resolution once connected.
+            dolphie.replica_manager.mariadb_reported_ports = {
+                coerce_int(row.get("Server_id")): (coerce_str(row.get("Host")), coerce_int(row.get("Port"), 3306))
+                for row in reported_replicas
+                if row.get("Server_id") is not None
+            }
 
     def process_mysql_data(self, tab: "Tab"):
         """Process MySQL data for a given tab."""
@@ -320,17 +319,11 @@ class WorkerDataProcessor:
             if fallback_lsn is not None:
                 dolphie.global_status["Innodb_lsn_current"] = fallback_lsn
 
-        dolphie.innodb_metrics = cast(
-            dict[str, int | str],
-            dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics"),
-        )
+        dolphie.innodb_metrics = dolphie.main_db_connection.fetch_status_and_variables("innodb_metrics")
 
         if dolphie.galera_cluster and dolphie.panels.replication.visible:
             dolphie.main_db_connection.execute(MySQLQueries.get_galera_cluster_members)
-            dolphie.galera_cluster_members = cast(
-                list[dict[str, str]],
-                dolphie.main_db_connection.fetchall(),
-            )
+            dolphie.galera_cluster_members = dolphie.main_db_connection.fetchall()
 
         replication_status = ReplicationPanel.fetch_replication_data(tab)
         dolphie.replication_status = replication_status if isinstance(replication_status, list) else []
@@ -343,7 +336,7 @@ class WorkerDataProcessor:
             dolphie.main_db_connection.execute(MySQLQueries.show_master_status)
 
         previous_position_value = dolphie.binlog_status.get("Position")
-        dolphie.binlog_status = cast(dict[str, int | str], dolphie.main_db_connection.fetchone())
+        dolphie.binlog_status = dolphie.main_db_connection.fetchone()
         current_position = coerce_int(dolphie.binlog_status.get("Position"))
 
         if previous_position_value is None:
@@ -358,19 +351,13 @@ class WorkerDataProcessor:
 
         if dolphie.panels.replication.visible and (dolphie.innodb_cluster or dolphie.innodb_cluster_read_replica):
             dolphie.main_db_connection.execute(MySQLQueries.get_clusterset_instances)
-            dolphie.clusterset_instances = cast(
-                list[dict[str, str]],
-                dolphie.main_db_connection.fetchall(),
-            )
+            dolphie.clusterset_instances = dolphie.main_db_connection.fetchall()
         else:
             dolphie.clusterset_instances = []
 
         if dolphie.performance_schema_enabled:
             dolphie.main_db_connection.execute(MySQLQueries.ps_disk_io)
-            dolphie.disk_io_metrics = cast(
-                dict[str, int | str],
-                dolphie.main_db_connection.fetchone(),
-            )
+            dolphie.disk_io_metrics = dolphie.main_db_connection.fetchone()
 
             # MariaDB uses slave_parallel_threads; MySQL uses replica_parallel_workers
             if dolphie.connection_source_alt == ConnectionSource.mariadb:
@@ -426,10 +413,7 @@ class WorkerDataProcessor:
                     )
                     ch[f"previous_{thread_id}"] = total_thread_events
 
-                dolphie.replication_applier_status = cast(
-                    dict[str, list[dict[str, int | str]] | int],
-                    channels,
-                )
+                dolphie.replication_applier_status = channels
             else:
                 dolphie.replication_applier_status = {}
 
@@ -459,10 +443,7 @@ class WorkerDataProcessor:
                         dolphie.group_replication_data.pop("write_concurrency", None)
 
                 dolphie.main_db_connection.execute(MySQLQueries.get_group_replication_members)
-                dolphie.group_replication_members = cast(
-                    list[dict[str, str]],
-                    dolphie.main_db_connection.fetchall(),
-                )
+                dolphie.group_replication_members = dolphie.main_db_connection.fetchall()
                 dolphie.is_group_replication_primary = is_group_replication_primary(
                     dolphie.group_replication_members,
                     dolphie.server_uuid,
@@ -550,10 +531,7 @@ class WorkerDataProcessor:
         dolphie.global_status = global_status
 
         dolphie.main_db_connection.execute(ProxySQLQueries.command_stats)
-        dolphie.proxysql_command_stats = cast(
-            list[dict[str, int | str]],
-            dolphie.main_db_connection.fetchall(),
-        )
+        dolphie.proxysql_command_stats = dolphie.main_db_connection.fetchall()
 
         # Here, we're going to format the command stats to match the global status keys of
         # MySQL and get total count of queries
@@ -576,7 +554,7 @@ class WorkerDataProcessor:
 
         client_connections = coerce_float(dolphie.global_status.get("Client_Connections_connected"))
         if client_connections > 0:
-            cast(DatabaseRow, dolphie.global_status)["proxysql_multiplex_efficiency_ratio"] = round(
+            dolphie.global_status["proxysql_multiplex_efficiency_ratio"] = round(
                 100 - ((coerce_float(data.get("connection_pool_connections")) / client_connections) * 100),
                 2,
             )
@@ -601,7 +579,7 @@ class WorkerDataProcessor:
 
             # Fetch the updated hostgroup summary
             hostgroup_summary = dolphie.main_db_connection.fetchall()
-            dolphie.proxysql_hostgroup_summary = cast(list[dict[str, str]], hostgroup_summary)
+            dolphie.proxysql_hostgroup_summary = hostgroup_summary
 
             # Calculate the values per second
             for row in hostgroup_summary:
@@ -627,10 +605,7 @@ class WorkerDataProcessor:
 
         if dolphie.panels.proxysql_mysql_query_rules.visible:
             dolphie.main_db_connection.execute(ProxySQLQueries.query_rules_summary)
-            dolphie.proxysql_mysql_query_rules = cast(
-                list[dict[str, str]],
-                dolphie.main_db_connection.fetchall(),
-            )
+            dolphie.proxysql_mysql_query_rules = dolphie.main_db_connection.fetchall()
 
     def refresh_screen(self, tab: "Tab"):
         """Refresh the screen for a given tab, regardless of connection source."""

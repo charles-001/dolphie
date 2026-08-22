@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol, cast
+from typing import Protocol, runtime_checkable
 
 from textual import on
 from textual.app import ComposeResult
@@ -9,6 +9,7 @@ from textual.reactive import reactive
 from textual.widgets import Button, ProgressBar, Static
 
 
+@runtime_checkable
 class ReplayControlsApp(Protocol):
     """Replay actions supplied by Dolphie's Textual app."""
 
@@ -64,18 +65,23 @@ class ReplayControls(Container):
         self.query_one("#back_button", Button).disabled = at_start
         self.query_one("#forward_button", Button).disabled = at_end
 
+    def _replay_app(self) -> ReplayControlsApp:
+        app = self.app
+        assert isinstance(app, ReplayControlsApp)
+        return app
+
     @on(Button.Pressed, "#back_button")
     def _back_pressed(self) -> None:
-        cast(ReplayControlsApp, cast(object, self.app)).action_replay_back()
+        self._replay_app().action_replay_back()
 
     @on(Button.Pressed, "#forward_button")
     def _forward_pressed(self) -> None:
-        cast(ReplayControlsApp, cast(object, self.app)).action_replay_forward()
+        self._replay_app().action_replay_forward()
 
     @on(Button.Pressed, "#pause_button")
     def _pause_pressed(self) -> None:
-        cast(ReplayControlsApp, cast(object, self.app)).action_replay_pause()
+        self._replay_app().action_replay_pause()
 
     @on(Button.Pressed, "#seek_button")
     def _seek_pressed(self) -> None:
-        cast(ReplayControlsApp, cast(object, self.app)).action_replay_seek()
+        self._replay_app().action_replay_seek()

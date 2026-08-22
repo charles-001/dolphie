@@ -206,9 +206,12 @@ def create_panel(tab: Tab) -> None:
         )
         table_primary.add_row(
             "[$label]Size",
-            format_bytes(binlog_status["Position"]),
+            format_bytes(coerce_int(binlog_status["Position"])),
         )
-        table_primary.add_row("[$label]Diff", format_bytes(binlog_status["Diff_Position"]))
+        diff_position = binlog_status.get("Diff_Position", 0)
+        if not isinstance(diff_position, (int, str)):
+            diff_position = 0
+        table_primary.add_row("[$label]Diff", format_bytes(diff_position))
         table_primary.add_row("[$label]Cache Hit", f"{binlog_cache}%")
 
         binlog_format = global_variables.get("binlog_format", "N/A")

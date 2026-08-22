@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from textual import on
 from textual.app import ComposeResult
@@ -190,7 +190,8 @@ class MetricGraphDashboard(Widget):
                 graph.render_graph(None)
                 continue
             metric_instance = getattr(dolphie.metric_manager.metrics, graph_spec.metric_group)
-            graph.render_graph(cast(MetricInstance, metric_instance))
+            assert isinstance(metric_instance, MetricInstance)
+            graph.render_graph(metric_instance)
 
     def sync_controls(self, tab_id: str | None = None) -> None:
         """Synchronize shared controls from the bound host without emitting events."""
@@ -202,8 +203,9 @@ class MetricGraphDashboard(Widget):
             if tab_id is not None and self._control_tabs[metric_key] != tab_id:
                 continue
             metric_instance = getattr(dolphie.metric_manager.metrics, metric_key.group)
+            assert isinstance(metric_instance, MetricInstance)
             metric_data = self._resolve_metric_data(dolphie.metric_manager.metrics, metric_key)
-            number_format = get_number_format_function(cast(MetricInstance, metric_instance))
+            number_format = get_number_format_function(metric_instance)
             value = metric_data.latest_value()
             formatted_value = "—" if value is None else number_format(value)
             if value is not None and metric_data.per_second_calculation:

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from functools import lru_cache
 from threading import Lock
-from typing import ClassVar, Final, cast
+from typing import ClassVar, Final
 
 from dolphie.DataTypes import ConnectionSource, ConnectionSourceType
 
@@ -543,7 +543,9 @@ class MetricInstances:
 def iter_metric_instances(metrics: MetricInstances) -> Iterator[tuple[str, MetricInstance]]:
     """Yield metric catalog field names and their typed instances."""
     for metric_field in fields(metrics):
-        yield metric_field.name, cast(MetricInstance, getattr(metrics, metric_field.name))
+        value = getattr(metrics, metric_field.name)
+        assert isinstance(value, MetricInstance)
+        yield metric_field.name, value
 
 
 def iter_metric_data(metric_instance: MetricInstance) -> Iterator[tuple[str, MetricData]]:

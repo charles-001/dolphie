@@ -263,7 +263,7 @@ def round_num(n: NumericInput, decimal: int = 2) -> Decimal:
 
 
 # This is from https://pypi.org/project/numerize
-def format_number(n: NumericInput, decimal: int = 2, color: bool = True) -> str:
+def format_number(n: NumericInput | None, decimal: int = 2, color: bool = True) -> str:
     if not n or n == "0":
         return "0"
 

@@ -1,4 +1,4 @@
-from dolphie.Modules.Functions import coerce_str, format_bytes, format_number
+from dolphie.Modules.Functions import coerce_int, coerce_str, format_bytes, format_number
 from dolphie.Modules.TabManager import Tab
 
 
@@ -85,13 +85,13 @@ def create_panel(tab: Tab) -> None:
                 column_value = row.get(column_key, 0)
 
                 if column_format == "time":
-                    column_value = f"{round(int(column_value) / 1000, 2)}"
+                    column_value = f"{round(coerce_int(column_value) / 1000, 2)}"
                 elif column_format == "bytes":
-                    column_value = format_bytes(column_value)
+                    column_value = format_bytes(coerce_int(column_value))
                 elif column_format == "number":
-                    column_value = format_number(column_value)
+                    column_value = format_number(coerce_int(column_value))
                 elif column_key == "hostgroup":
-                    column_value = int(column_value)
+                    column_value = coerce_int(column_value)
                 elif column_key == "srv_host":
                     column_value = dolphie.get_hostname(coerce_str(column_value))
                 elif column_key == "status":

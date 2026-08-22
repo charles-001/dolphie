@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import cast
 
 from textual import on
 from textual.app import ComposeResult
@@ -21,6 +20,7 @@ from textual.widgets import (
 )
 
 from dolphie.Modules.ArgumentParser import CredentialProfile
+from dolphie.Modules.Functions import coerce_str
 from dolphie.Modules.ManualException import ManualException
 from dolphie.Widgets.AutoComplete import AutoComplete, DropdownItem
 
@@ -197,9 +197,9 @@ class TabSetupModal(ModalScreen):
                 ssl_mode = "VERIFY_IDENTITY"
 
             self.query_one(f"#{ssl_mode}", RadioButton).value = True
-            self.query_one("#ssl_ca", Input).value = cast(str, self.ssl.get("ca", ""))
-            self.query_one("#ssl_cert", Input).value = cast(str, self.ssl.get("cert", ""))
-            self.query_one("#ssl_key", Input).value = cast(str, self.ssl.get("key", ""))
+            self.query_one("#ssl_ca", Input).value = coerce_str(self.ssl.get("ca"))
+            self.query_one("#ssl_cert", Input).value = coerce_str(self.ssl.get("cert"))
+            self.query_one("#ssl_key", Input).value = coerce_str(self.ssl.get("key"))
         else:
             self.query_one("#container_ssl", Container).display = False
 
@@ -299,7 +299,7 @@ class TabSetupModal(ModalScreen):
                 set_field(
                     field,
                     getattr(credential_profile, f"ssl_{ssl_key}"),
-                    default=cast(str, self.ssl.get(ssl_key, "")),
+                    default=coerce_str(self.ssl.get(ssl_key)),
                 )
         else:
             self.query_one("#ssl", Checkbox).value = False
@@ -381,10 +381,10 @@ class TabSetupModal(ModalScreen):
         if event.button.id == "submit":
             error_message = None
 
-            credential_profile = cast(Select[str], self.query_one("#credential_profile", Select))
-            replay_file = cast(Select[str], self.query_one("#replay_file", Select))
+            credential_profile = self.query_one("#credential_profile", Select[str])
+            replay_file = self.query_one("#replay_file", Select[str])
             host = self.query_one("#host", Input)
-            hostgroup = cast(Select[str], self.query_one("#hostgroup", Select))
+            hostgroup = self.query_one("#hostgroup", Select[str])
             username = self.query_one("#username", Input)
             password = self.query_one("#password", Input)
             record_for_replay = self.query_one("#record_for_replay", Checkbox)
