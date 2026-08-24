@@ -426,6 +426,18 @@ class WorkerManager:
 
                         self.app.tab_manager.setup_host_tab(tab)
                         self.app.bell()
+            elif event.state == WorkerState.ERROR:
+                # An unhandled exception (anything but ManualException, which
+                # is handled above via CANCELLED) would otherwise leave this
+                # tab's polling loop dead forever with no retry. Back off and
+                # retry like the replicas worker does, instead of silently
+                # stopping.
+                refresh_interval = dolphie.refresh_interval
+                if dolphie.connection_source == ConnectionSource.proxysql:
+                    refresh_interval = dolphie.determine_proxysql_refresh_interval()
+                retry_interval = min(max(refresh_interval * 2, 5), 30)
+                logger.error(f"Main worker failed for {dolphie.host_with_port}: {event.worker.error}")
+                tab.worker_timer = self.app.set_timer(retry_interval, partial(self.app.run_worker_main, tab.id))
         elif event.worker.group == "replicas":
             if event.state == WorkerState.SUCCESS:
                 # Skip this if the conditions are right

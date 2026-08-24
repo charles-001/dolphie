@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from threading import Lock
@@ -87,14 +87,16 @@ class ReplicaManager:
         self._available_replicas: tuple[ReplicaRow, ...] = ()
         self._replicas: dict[str, Replica] = {}
         # Cached SHOW REPLICAS/SHOW SLAVE HOSTS rows keyed by the processlist
-        # discovery signature that produced them. Only touched by the replicas
-        # worker thread, and discarded with the manager on reconnect.
+        # discovery signature that produced them. Only touched by the main
+        # worker thread's discovery cycle, and discarded with the manager on
+        # reconnect.
         self.reported_replica_signature: object | None = None
         self.reported_replicas: list[DatabaseRow] = []
         # Server_id -> (Host, Port) from the latest SHOW SLAVE HOSTS; see
-        # Replica.reported_host for why this exists. Written only by the
-        # replicas worker thread and replaced wholesale (never mutated in
-        # place), so poll threads can read it without a lock.
+        # Replica.reported_host for why this exists. Written only by the main
+        # worker thread's discovery cycle and replaced wholesale (never
+        # mutated in place), so the replicas worker thread can read it without
+        # a lock while polling.
         self.mariadb_reported_ports: dict[int, tuple[str, int]] = {}
 
     @property
@@ -150,25 +152,20 @@ class ReplicaManager:
 
             if replica.host != host or replica.port != port:
                 stale_connection = replica.connection
-                replica.connection = None
-                replica.host_distro = None
-                replica.connection_source_alt = None
-                replica.mysql_version = None
-                replica.replication_status = {}
-                replica.replication_source_uuids = set()
-                replica.group_replication_view_change_uuid = ""
-                replica.last_error = None
-                replica.consecutive_errors = 0
-                replica.next_poll_at = 0
-                replica.next_errant_check_at = 0
-                replica.errant_transactions = None
-                replica.errant_check_error = None
-                replica.mariadb_gtid_slave_pos = ""
-
-            replica.thread_id = thread_id
-            replica.host = host
-            replica.port = port
-            replica.user = user
+                # Reset every field to its dataclass default (driven by the
+                # dataclass itself, not a hand-kept list, so newly added fields
+                # can't be forgotten here) while keeping this the same object,
+                # since callers rely on identity surviving an upsert.
+                defaults = Replica(
+                    identity=identity, row_key=row_key, user=user, thread_id=thread_id, host=host, port=port
+                )
+                for f in fields(Replica):
+                    setattr(replica, f.name, getattr(defaults, f.name))
+            else:
+                replica.thread_id = thread_id
+                replica.host = host
+                replica.port = port
+                replica.user = user
         if stale_connection:
             stale_connection.close()
         return replica

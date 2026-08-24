@@ -32,6 +32,10 @@ _GTID_PATTERN = re.compile(r"\b(\w+(?:-\w+){4}):(.+)\b")
 _ERRANT_CHECK_INTERVAL_SECONDS = 30
 _MAX_REPLICA_POLL_WORKERS = 4
 _MAX_REPLICA_BACKOFF_SECONDS = 60
+# Bounds a stuck socket read/write (e.g. the replica accepted the TCP handshake
+# but stopped responding) so it can't hold a slot in the shared poll executor
+# forever and starve every other tab's replica polling.
+_REPLICA_QUERY_TIMEOUT_SECONDS = 10
 _CLUSTERSET_CHANNEL = "clusterset_replication"
 _MANAGED_REPLICATION_CHANNELS = frozenset(
     {
@@ -42,18 +46,15 @@ _MANAGED_REPLICATION_CHANNELS = frozenset(
 )
 
 # Shared across poll cycles (and tabs) so each refresh doesn't pay pool setup
-# and teardown; idle workers are reclaimed at interpreter exit.
-_replica_poll_executor: ThreadPoolExecutor | None = None
-
-
-def _get_replica_poll_executor() -> ThreadPoolExecutor:
-    global _replica_poll_executor
-    if _replica_poll_executor is None:
-        _replica_poll_executor = ThreadPoolExecutor(
-            max_workers=_MAX_REPLICA_POLL_WORKERS,
-            thread_name_prefix="dolphie-replica",
-        )
-    return _replica_poll_executor
+# and teardown; idle workers are reclaimed at interpreter exit. Constructing a
+# ThreadPoolExecutor doesn't start any threads until work is submitted, so
+# building it eagerly at import time (instead of lazily on first use) avoids
+# a double-checked-locking dance for what would otherwise be a check-then-act
+# race between concurrently starting tabs (e.g. --hostgroup).
+_replica_poll_executor = ThreadPoolExecutor(
+    max_workers=_MAX_REPLICA_POLL_WORKERS,
+    thread_name_prefix="dolphie-replica",
+)
 
 
 def is_managed_replication_channel(status: Mapping[str, DatabaseScalar]) -> bool:
@@ -1284,6 +1285,7 @@ def _poll_replica(tab: Tab, replica: Replica, current_time: float) -> None:
                 socket=None,
                 ssl=dolphie.ssl,
                 save_connection_id=False,
+                read_timeout=_REPLICA_QUERY_TIMEOUT_SECONDS,
             )
             global_variables = replica.connection.fetch_status_and_variables("variables")
             if not global_variables:
@@ -1367,7 +1369,6 @@ def fetch_replicas(tab: Tab) -> None:
         _poll_replica(tab, poll_targets[0], current_time)
         return
 
-    executor = _get_replica_poll_executor()
-    futures = [executor.submit(_poll_replica, tab, replica, current_time) for replica in poll_targets]
+    futures = [_replica_poll_executor.submit(_poll_replica, tab, replica, current_time) for replica in poll_targets]
     for future in futures:
         future.result()

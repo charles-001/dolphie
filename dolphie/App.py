@@ -20,7 +20,8 @@ from rich.emoji import Emoji
 from rich.traceback import Traceback
 from textual import events, on, work
 from textual.app import App
-from textual.widgets import RadioSet, Tabs
+from textual.binding import Binding
+from textual.widgets import Footer, RadioSet, Tabs
 from textual.worker import Worker
 
 from dolphie.DataTypes import ConnectionSource, ConnectionStatus, HotkeyCommands
@@ -61,6 +62,7 @@ class DolphieApp(App):
     CSS_PATH = "Dolphie.tcss"
     COMMANDS = {CommandPaletteCommands}
     COMMAND_PALETTE_BINDING = "question_mark"
+    BINDINGS = [Binding("escape", "exit_maximized_panel", "Exit maximized panel", show=True)]
     PANEL_MAPPING = {
         "replication": {ConnectionSource.mysql: ReplicationPanel},
         "dashboard": {
@@ -182,7 +184,9 @@ class DolphieApp(App):
             tab = await self.tab_manager.create_tab(hostgroup_member=hostgroup_member, switch_tab=switch_tab)
 
             self.run_worker_main(tab.id)
-            self.run_worker_replicas(tab.id)
+
+            if not self.config.daemon_mode:
+                self.run_worker_replicas(tab.id)
 
         # Wait for all workers to finish before notifying the user
         await asyncio.sleep(0.2)
@@ -480,6 +484,28 @@ class DolphieApp(App):
         self.check_for_new_version()
 
         self.set_timer(5.0, self._monitor_terminal_disconnect)
+
+        self.watch(self.screen, "maximized", self._update_maximized_footer)
+
+    def _update_maximized_footer(self) -> None:
+        is_maximized = self.screen.maximized is not None
+        footer = self.screen.query(Footer)
+
+        if is_maximized and not footer:
+            self.screen.mount(Footer(compact=True, show_command_palette=False))
+            self.screen.call_after_refresh(self.screen.refresh_bindings)
+        elif not is_maximized and footer:
+            footer.first().remove()
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if action == "exit_maximized_panel":
+            return self.screen.maximized is not None
+
+        return True
+
+    def action_exit_maximized_panel(self) -> None:
+        if self.screen.maximized is not None:
+            self.screen.minimize()
 
     def compose(self):
         yield TopBar(

@@ -32,6 +32,7 @@ class Database:
         save_connection_id: bool = True,
         auto_connect: bool = True,
         daemon_mode: bool = False,
+        read_timeout: float | None = None,
     ):
         self.app = app
         self.host = host
@@ -42,6 +43,9 @@ class Database:
         self.ssl = ssl
         self.save_connection_id = save_connection_id
         self.daemon_mode = daemon_mode
+        # None preserves pymysql's default (no read/write timeout) for callers
+        # like the main connection, where some legitimate queries can be slow.
+        self.read_timeout = read_timeout
 
         self._PRIVILEGE_ERROR_CODES = {
             1227,  # Access denied; SUPER privilege
@@ -85,6 +89,8 @@ class Database:
                 ssl=self.ssl or None,
                 autocommit=True,
                 connect_timeout=5,
+                read_timeout=self.read_timeout,
+                write_timeout=self.read_timeout,
                 program_name="Dolphie",
             )
             self.connection = connection
