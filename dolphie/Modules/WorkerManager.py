@@ -365,6 +365,11 @@ class WorkerManager:
         if event.state not in [WorkerState.SUCCESS, WorkerState.CANCELLED, WorkerState.ERROR]:
             return
 
+        # A worker that finishes as the app shuts down still delivers this message while the
+        # widgets it would render into are being removed
+        if not self.app.is_running:
+            return
+
         tab = self.app.tab_manager.get_tab(event.worker.name)
         if not tab:
             return
