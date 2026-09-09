@@ -244,7 +244,7 @@ Example log messages in daemon mode:
 [INFO] Replay SQLite file: /var/lib/dolphie/replays/localhost/daemon.db (24 hours retention)
 [INFO] Connected to SQLite
 [INFO] Replay database metadata - Host: localhost, Port: 3306, Source: MySQL (Percona Server), Dolphie: 6.3.0
-[INFO] ZSTD compression dictionary trained with 10 samples (size: 52.56KB)
+[INFO] ZSTD compression dictionary built from 3 samples (size: 142.20KB)
 [WARNING] Read-only mode changed: R/W -> RO
 [INFO] Global variable innodb_io_capacity changed: 1000 -> 2000
 ```

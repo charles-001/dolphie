@@ -132,10 +132,15 @@ class DolphieHarness:
         *,
         timeout: float = DEFAULT_TIMEOUT,
         message: str = "condition",
+        expect_errors: bool = False,
     ) -> None:
+        """Poll ``predicate``. With ``expect_errors`` only a crash fails the wait, not a reported error."""
         deadline = time.monotonic() + timeout
         while True:
-            self.fail_on_errors()
+            if expect_errors:
+                assert self.app.errors == [], "Dolphie raised inside the app:\n" + "\n".join(self.app.errors)
+            else:
+                self.fail_on_errors()
             if predicate():
                 return
             if time.monotonic() > deadline:
@@ -158,6 +163,11 @@ class DolphieHarness:
             return tab.replay_manager.max_replay_id >= 1 and bool(tab.dolphie.global_status)
 
         await self.wait_for(applied, timeout=timeout, message="first replay frame")
+
+    async def wait_for_worker_idle(self, *, timeout: float = DEFAULT_TIMEOUT) -> None:
+        """Wait until the active tab's worker finished. A replay step while one runs is dropped."""
+        tab = self.tab
+        await self.wait_for(lambda: tab.worker is None or not tab.worker.is_running, timeout=timeout, message="worker")
 
     async def press(self, *keys: str) -> None:
         """Press keys and wait until the app has processed them.

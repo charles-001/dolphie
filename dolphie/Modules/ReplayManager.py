@@ -7,11 +7,15 @@ from collections import OrderedDict
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, TypeVar, cast
+from pathlib import Path
+from typing import Any, TypeVar
 
 import orjson
 import zstandard as zstd
 from loguru import logger
+from packaging.version import InvalidVersion
+from packaging.version import parse as parse_version
+from textual.notifications import SeverityLevel
 
 from dolphie.DataTypes import (
     ConnectionSource,
@@ -70,9 +74,11 @@ class ReplayManager:
 
     # Constants
     PURGE_CHECK_INTERVAL_HOURS = 1
-    COMPRESSION_DICT_SIZE = 10 * 1024 * 1024  # 10MB
     COMPRESSION_LEVEL = 5
-    COMPRESSION_DICT_SAMPLES = 10
+    COMPRESSION_DICT_SAMPLES = 3
+    PAGE_SIZE = 16384
+    # Cap on unreadable rows skipped in one step, so one refresh cannot scan a whole corrupt stretch
+    MAX_SKIPPED_ROWS = 100
     # Floor for the number of decompressed metric_manager payloads kept in memory to
     # speed up backward/seek navigation. The effective cap scales with the rolling
     # window so a single window always fits (see fetch_delta_metrics_for_window).
@@ -121,6 +127,8 @@ class ReplayManager:
         hostname = f"{dolphie.host}_{dolphie.port}"
         if dolphie.replay_file:
             self.replay_file = dolphie.replay_file
+            self._open_for_playback()
+            return
         elif dolphie.daemon_mode:
             self.replay_file = f"{dolphie.replay_dir}/{hostname}/daemon.db"
         elif dolphie.record_for_replay:
@@ -314,6 +322,15 @@ class ReplayManager:
             )
             raise
 
+    def _open_for_playback(self):
+        """Opens the replay file read-only so playback can never modify a file a daemon is still writing."""
+        uri = f"{Path(self.replay_file).resolve().as_uri()}?mode=ro"
+        try:
+            self.connection = sqlite3.connect(uri, uri=True, isolation_level=None, check_same_thread=False)
+        except sqlite3.Error as e:
+            logger.error(f"Error opening replay file {self.replay_file}: {e}")
+            self._notify_error(str(e), "Error opening replay file")
+
     def _initialize_sqlite(self):
         """Initializes the SQLite database and creates the necessary tables."""
         database_exists = bool(os.path.exists(self.replay_file))
@@ -324,6 +341,9 @@ class ReplayManager:
         os.chmod(self.replay_file, 0o660)
 
         if not database_exists:
+            # Rows are about 1.25 KB. With 4 KB pages a leaf holds three rows and wastes a quarter of
+            # the file; 16 KB pages bring that under a tenth. Only takes effect before the first table.
+            self._execute_modify(f"PRAGMA page_size = {self.PAGE_SIZE}")
             logger.info("Created new SQLite database and connected to it")
         else:
             logger.info("Connected to SQLite")
@@ -552,20 +572,29 @@ class ReplayManager:
                 f"Dolphie: {app_version}"
             )
 
+            # Keep the writer's version current so a replay of this file can tell when it was written by a
+            # newer Dolphie than the one reading it
+            if app_version != self.dolphie.app_version:
+                self._execute_modify("UPDATE metadata SET dolphie_version = ?", (self.dolphie.app_version,))
+
             if compress_dict:
                 self.compression_dict = zstd.ZstdCompressionDict(compress_dict)
                 logger.info(
                     f"ZSTD compression dictionary loaded (size: {format_bytes(len(compress_dict), color=False)})"
                 )
 
-    def verify_replay_file(self):
-        """Verifies that the replay file has data to replay and that the schema version matches."""
-        if not self.dolphie.replay_file:
-            return
+    def verify_replay_file(self) -> bool:
+        """Verifies that the replay file opened, has data to replay, and that the schema version matches."""
+        if not self.dolphie.replay_file or self.connection is None:
+            return False
 
-        return self._get_replay_file_metadata() and self._verify_replay_has_data()
+        try:
+            return self._get_replay_file_metadata() and self._verify_replay_has_data()
+        except sqlite3.Error:
+            # _execute_select_* already logged and notified; a corrupt or non-SQLite file must not crash startup
+            return False
 
-    def _get_replay_file_metadata(self):
+    def _get_replay_file_metadata(self) -> bool:
         """Retrieves the replay's metadata from the metadata table.
 
         Returns:
@@ -593,10 +622,27 @@ class ReplayManager:
         ) = row[1:5]
         self.dolphie.host_with_port = f"{self.dolphie.host}:{self.dolphie.port}"
 
+        file_version = row[5]
+        if self._is_newer_version(file_version, self.dolphie.app_version):
+            self._notify_error(
+                f"Recorded by Dolphie {file_version}, which is newer than this version ({self.dolphie.app_version}). "
+                "Upgrade Dolphie if the replay does not render correctly",
+                "Replay recorded by a newer Dolphie",
+                severity="warning",
+            )
+
         if row[6]:
             self.compression_dict = zstd.ZstdCompressionDict(row[6])
 
         return True
+
+    @staticmethod
+    def _is_newer_version(file_version: object, app_version: str) -> bool:
+        """Return True when both values parse as versions and the file's is the newer one."""
+        try:
+            return parse_version(str(file_version)) > parse_version(app_version)
+        except InvalidVersion:
+            return False
 
     def _verify_replay_has_data(self):
         """Verifies that the replay file has data to replay.
@@ -611,30 +657,31 @@ class ReplayManager:
 
         return True
 
-    def _notify_error(self, message, title):
-        """Helper method to display error notifications."""
+    def _notify_error(self, message: str, title: str, severity: SeverityLevel = "error"):
+        """Displays a notification about the replay file."""
         self.dolphie.app.notify(
             f"[b]Replay file[/b]: [$highlight]{self.replay_file}[/$highlight]\n{message}",
             title=title,
-            severity="error",
+            severity=severity,
             timeout=10,
         )
 
-    def _train_compression_dict(self) -> zstd.ZstdCompressionDict:
-        """Creates a compression dictionary based on sample data to help with better compression.
+    def _build_compression_dict(self) -> zstd.ZstdCompressionDict:
+        """Builds the compression dictionary from the sampled rows.
+
+        The samples are used verbatim as a raw-content prefix. Consecutive rows repeat nearly all of
+        their content (global variables alone are half of a row), and long matches into the prefix
+        compress a row about five times smaller than a dictionary trained from the same samples.
+        Readers load the bytes with ZstdCompressionDict's auto-detection, so this stays compatible
+        with files that hold a trained dictionary.
 
         Returns:
-            bytes: The created compression dictionary.
+            zstd.ZstdCompressionDict: The created compression dictionary.
         """
-        compression_dict = zstd.train_dictionary(
-            self.COMPRESSION_DICT_SIZE,
-            # zstandard's stub wants list[bytes | bytearray | memoryview]; our samples are always bytes.
-            cast(list[bytes | bytearray | memoryview], self.dict_samples),
-            level=self.COMPRESSION_LEVEL,
-        )
+        compression_dict = zstd.ZstdCompressionDict(b"".join(self.dict_samples), dict_type=zstd.DICT_TYPE_RAWCONTENT)
 
         logger.info(
-            f"ZSTD compression dictionary trained with {len(self.dict_samples)} samples "
+            f"ZSTD compression dictionary built from {len(self.dict_samples)} samples "
             f"(size: {format_bytes(len(compression_dict), color=False)})"
         )
 
@@ -797,9 +844,9 @@ class ReplayManager:
             if len(self.dict_samples) < self.COMPRESSION_DICT_SAMPLES:
                 self.dict_samples.append(data_dict_bytes)
             else:
-                self.compression_dict = self._train_compression_dict()
-                # Remove the samples to save memory
-                del self.dict_samples
+                self.compression_dict = self._build_compression_dict()
+                # Release the samples; a rotated file starts sampling again from an empty list
+                self.dict_samples = []
 
     def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes) -> None:
         """Inserts the replay data into the database and handles variable change linkage.
@@ -835,9 +882,12 @@ class ReplayManager:
             self._commit_transaction()
 
         except Exception as e:
-            # Rollback on any error
-            self._rollback_transaction()
             logger.error(f"Error inserting replay data: {e}")
+            # A failed BEGIN leaves no transaction to roll back; the original error is the one to surface
+            try:
+                self._rollback_transaction()
+            except sqlite3.Error:
+                pass
             raise
 
         self.purge_old_data()
@@ -921,37 +971,51 @@ class ReplayManager:
         Returns:
             Optional[Tuple[str, dict]]: A tuple of (timestamp, data_dict) or None if no data available.
         """
-        # Get the next row
-        row = self._execute_select_one(
-            "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
-            (self.current_replay_id,),
-        )
-        if not row:
-            return None
+        # A row a daemon could not finish writing, or one another version wrote in a shape this one
+        # cannot read, must not end playback: skip it and move on to the next row.
+        skipped = 0
+        while skipped < self.MAX_SKIPPED_ROWS:
+            row = self._execute_select_one(
+                "SELECT id, timestamp, data FROM replay_data WHERE id > ? ORDER BY id LIMIT 1",
+                (self.current_replay_id,),
+            )
+            if not row:
+                return None
 
-        self.current_replay_id = row[0]
-        self.current_replay_timestamp = row[1]
+            self.current_replay_id = row[0]
+            self.current_replay_timestamp = row[1]
 
-        # Decompress and parse the JSON data
-        try:
-            data = orjson.loads(self._decompressor.decompress(row[2]))
+            try:
+                data = orjson.loads(self._decompressor.decompress(row[2]))
+                if not isinstance(data, dict):
+                    raise TypeError(f"expected a JSON object, got {type(data).__name__}")
+            except (zstd.ZstdError, orjson.JSONDecodeError, TypeError) as e:
+                skipped += 1
+                logger.error(f"Skipping unreadable replay row {row[0]} ({row[1]}): {e}")
+                if skipped == 1:
+                    self.dolphie.app.notify(
+                        f"Row {row[0]} at [$light_blue]{row[1]}[/$light_blue] could not be read and was skipped\n{e}",
+                        title="Unreadable replay data",
+                        severity="error",
+                        timeout=10,
+                    )
+                continue
 
             # Warm the window cache with this row's metric_manager so a later backward or
             # seek over rows we've already played (e.g. after forward auto-play) reuses
             # this decompression instead of redoing it. Only delta rows are small enough
             # to be worth keeping; full-snapshot rows (interactive recordings) are skipped.
             metric_manager = data.get("metric_manager")
-            if metric_manager and metric_manager.get("_delta"):
+            if isinstance(metric_manager, dict) and metric_manager.get("_delta"):
                 self._remember_metric_manager(self.current_replay_id, metric_manager)
 
             return row[1], data
-        except Exception as e:
-            self.dolphie.app.notify(str(e), title="Error parsing replay data", severity="error")
-            return None
+
+        return None
 
     def _build_processlist_from_data(
         self,
-        processlist_data: list[DatabaseRow],
+        processlist_data: list[Any],
         thread_class: type[ProcesslistThreadType],
     ) -> dict[int, ProcesslistThreadType]:
         """Builds a processlist dictionary from raw data using the specified thread class.
@@ -963,10 +1027,25 @@ class ReplayManager:
         Returns:
             dict: Dictionary mapping thread IDs to thread objects.
         """
-        return {coerce_int(thread_data["id"]): thread_class(thread_data) for thread_data in processlist_data}
+        return {
+            coerce_int(thread_data["id"]): thread_class(thread_data)
+            for thread_data in processlist_data
+            if isinstance(thread_data, dict) and thread_data.get("id") is not None
+        }
+
+    @staticmethod
+    def _as_dict(value: object) -> dict[str, Any]:
+        return value if isinstance(value, dict) else {}
+
+    @staticmethod
+    def _as_list(value: object) -> list[Any]:
+        return value if isinstance(value, list) else []
 
     def _create_mysql_replay_data(self, timestamp: str, data: dict[str, Any]) -> MySQLReplayData:
         """Creates a MySQLReplayData object from parsed replay data.
+
+        Every field is coerced to the container type the panels expect. A row written by another
+        Dolphie version may hold a different shape, and a panel must never crash on one.
 
         Args:
             timestamp: The timestamp of the replay data.
@@ -975,55 +1054,53 @@ class ReplayManager:
         Returns:
             MySQLReplayData: The constructed replay data object.
         """
-        processlist = self._build_processlist_from_data(data["processlist"], ProcesslistThread)
+        processlist = self._build_processlist_from_data(self._as_list(data.get("processlist")), ProcesslistThread)
 
         # Create Performance Schema metrics objects
         file_io_data = PerformanceSchemaMetrics([], "file_io", "FILE_NAME")
-        file_io_data.filtered_data = data.get("file_io_data", {})
+        file_io_data.filtered_data = self._as_dict(data.get("file_io_data"))
 
         table_io_waits = PerformanceSchemaMetrics([], "table_io", "OBJECT_TABLE")
-        table_io_waits.filtered_data = data.get("table_io_waits_data", {})
+        table_io_waits.filtered_data = self._as_dict(data.get("table_io_waits_data"))
 
         statements_summary_data = PerformanceSchemaMetrics([], "statements_summary", "digest")
-        statements_summary_data.filtered_data = data.get("statements_summary_data", {})
+        statements_summary_data.filtered_data = self._as_dict(data.get("statements_summary_data"))
 
         return MySQLReplayData(
             timestamp=timestamp,
-            system_utilization=data.get("system_utilization", {}),
-            global_status=data.get("global_status", {}),
-            global_variables=data.get("global_variables", {}),
-            metric_manager=data.get("metric_manager", {}),
-            binlog_status=data.get("binlog_status", {}),
-            innodb_metrics=data.get("innodb_metrics", {}),
-            replica_manager=data.get("replica_manager", []),
-            replication_status=self._migrate_replication_status(data.get("replication_status", [])),
-            replication_applier_status=self._migrate_replication_applier_status(
-                data.get("replication_applier_status", {})
-            ),
-            metadata_locks=data.get("metadata_locks", []),
+            system_utilization=self._as_dict(data.get("system_utilization")),
+            global_status=self._as_dict(data.get("global_status")),
+            global_variables=self._as_dict(data.get("global_variables")),
+            metric_manager=self._as_dict(data.get("metric_manager")),
+            binlog_status=self._as_dict(data.get("binlog_status")),
+            innodb_metrics=self._as_dict(data.get("innodb_metrics")),
+            replica_manager=self._as_list(data.get("replica_manager")),
+            replication_status=self._migrate_replication_status(data.get("replication_status")),
+            replication_applier_status=self._migrate_replication_applier_status(data.get("replication_applier_status")),
+            metadata_locks=self._as_list(data.get("metadata_locks")),
             processlist=processlist,
-            group_replication_data=data.get("group_replication_data", {}),
-            group_replication_members=data.get("group_replication_members", []),
-            clusterset_instances=data.get("clusterset_instances", []),
-            galera_cluster_members=data.get("galera_cluster_members", []),
+            group_replication_data=self._as_dict(data.get("group_replication_data")),
+            group_replication_members=self._as_list(data.get("group_replication_members")),
+            clusterset_instances=self._as_list(data.get("clusterset_instances")),
+            galera_cluster_members=self._as_list(data.get("galera_cluster_members")),
             file_io_data=file_io_data,
             table_io_waits_data=table_io_waits,
             statements_summary_data=statements_summary_data,
         )
 
-    @staticmethod
-    def _migrate_replication_applier_status(value: object) -> dict[str, dict[str, Any]]:
+    @classmethod
+    def _migrate_replication_applier_status(cls, value: object) -> dict[str, dict[str, Any]]:
         """Handle backward compatibility: old replay files store applier status as a flat dict."""
         if isinstance(value, dict) and "data" in value:
             return {"": value}
-        return value if isinstance(value, dict) else {}
+        return cls._as_dict(value)
 
-    @staticmethod
-    def _migrate_replication_status(value: object) -> list[DatabaseRow]:
+    @classmethod
+    def _migrate_replication_status(cls, value: object) -> list[DatabaseRow]:
         """Handle backward compatibility: old replay files store replication_status as a dict."""
         if isinstance(value, dict):
             return [value] if value else []
-        return value if isinstance(value, list) else []
+        return cls._as_list(value)
 
     def _create_proxysql_replay_data(self, timestamp: str, data: dict[str, Any]) -> ProxySQLReplayData:
         """Creates a ProxySQLReplayData object from parsed replay data.
@@ -1035,16 +1112,18 @@ class ReplayManager:
         Returns:
             ProxySQLReplayData: The constructed replay data object.
         """
-        processlist = self._build_processlist_from_data(data["processlist"], ProxySQLProcesslistThread)
+        processlist = self._build_processlist_from_data(
+            self._as_list(data.get("processlist")), ProxySQLProcesslistThread
+        )
 
         return ProxySQLReplayData(
             timestamp=timestamp,
-            system_utilization=data.get("system_utilization", {}),
-            global_status=data.get("global_status", {}),
-            global_variables=data.get("global_variables", {}),
-            metric_manager=data.get("metric_manager", {}),
-            command_stats=data.get("command_stats", []),
-            hostgroup_summary=data.get("hostgroup_summary", []),
+            system_utilization=self._as_dict(data.get("system_utilization")),
+            global_status=self._as_dict(data.get("global_status")),
+            global_variables=self._as_dict(data.get("global_variables")),
+            metric_manager=self._as_dict(data.get("metric_manager")),
+            command_stats=self._as_list(data.get("command_stats")),
+            hostgroup_summary=self._as_list(data.get("hostgroup_summary")),
             processlist=processlist,
         )
 
@@ -1094,14 +1173,25 @@ class ReplayManager:
             return []
 
         # Fetch only the row ids in the window first. Selecting just the id lets SQLite
-        # answer from the timestamp index without reading the (large) data blobs, so rows
-        # we've already decompressed on a previous step cost nothing here.
+        # answer without reading the (large) data blobs, so rows we've already decompressed
+        # on a previous step cost nothing here. The window start is resolved to an id through
+        # the timestamp index and the rows are then ranged on the primary key: given a
+        # timestamp predicate plus `id <= ?` ordered by id, SQLite's planner walks the rowid
+        # from the first row of the file instead, which costs hundreds of milliseconds per
+        # seek on a multi-day daemon file. Timestamps are wall-clock, so the start lookup
+        # keeps `id <= ?` to skip later rows written after the clock stepped back (DST).
         if window_minutes > 0:
             target_dt = datetime.fromisoformat(self.current_replay_timestamp)
             window_start = (target_dt - timedelta(minutes=window_minutes)).strftime("%Y-%m-%d %H:%M:%S")
-            id_rows = self._execute_select_all(
-                "SELECT id FROM replay_data WHERE timestamp >= ? AND id <= ? ORDER BY id",
+            first_row = self._execute_select_one(
+                "SELECT id FROM replay_data WHERE timestamp >= ? AND id <= ? ORDER BY timestamp LIMIT 1",
                 (window_start, target_id),
+            )
+            if not first_row:
+                return []
+            id_rows = self._execute_select_all(
+                "SELECT id FROM replay_data WHERE id >= ? AND id <= ? ORDER BY id",
+                (first_row[0], target_id),
             )
         else:
             id_rows = self._execute_select_all(
@@ -1171,7 +1261,8 @@ class ReplayManager:
                     data = orjson.loads(self._decompressor.decompress(data_blob))
                 except Exception:
                     continue
-                self._remember_metric_manager(replay_id, data.get("metric_manager"))
+                if isinstance(data, dict) and isinstance(data.get("metric_manager"), dict):
+                    self._remember_metric_manager(replay_id, data["metric_manager"])
 
     def fetch_global_variable_changes_for_current_replay_id(self):
         """Fetches global variable changes for the current replay ID."""

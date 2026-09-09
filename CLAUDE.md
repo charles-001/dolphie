@@ -37,6 +37,7 @@ Textual TUI for real-time MySQL, MariaDB, and ProxySQL monitoring. Python 3.10+,
 ## Replay
 
 - Replay files are SQLite with ZSTD-compressed orjson rows. `ReplayManager.schema_version` is the compatibility gate. Bump it for any incompatible table or payload change. Daemon mode renames a mismatched file and starts fresh. Playback refuses it.
+- Playback opens the file with `mode=ro` and never runs DDL, `VACUUM`, `chmod`, or a purge. A daemon may be writing the same file. The compression dictionary is raw content loaded through `ZstdCompressionDict` auto-detection, so old and new files read with one code path.
 - Daemon recordings store latest-only `_delta` metrics, so a seek rebuilds a window. Live recordings store full history snapshots.
 - A daemon file holds one host and one connection source. Never mix MySQL and ProxySQL data in one file.
 

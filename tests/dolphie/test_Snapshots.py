@@ -34,18 +34,12 @@ def show_panels(app: SnapshotApp, *keys: str) -> Callable[[Pilot[Any]], Any]:
         harness = DolphieHarness(app, pilot)
         await harness.wait_for_replay_frame()
         await harness.click_button("#pause_button")
-        tab = harness.tab
         replay_manager = harness.replay_manager
 
-        # The replay worker is exclusive: starting one while another is still applying a frame
-        # cancels the first mid-frame. Every step below waits for the worker to finish first.
-        async def worker_idle() -> None:
-            await harness.wait_for(lambda: tab.worker is None or not tab.worker.is_running, message="replay worker")
-
-        await worker_idle()
+        await harness.wait_for_worker_idle()
         for key in keys:
             await harness.press(key)
-            await worker_idle()
+            await harness.wait_for_worker_idle()
 
         # Seek through the app's own replay actions. The bracket keys are debounced and accelerate
         # when repeated quickly, so key presses cannot land on an exact frame.
@@ -55,7 +49,7 @@ def show_panels(app: SnapshotApp, *keys: str) -> Callable[[Pilot[Any]], Any]:
             assert replay_manager.seek_relative(frame - replay_manager.current_replay_id), f"no frame {frame}"
             app.force_refresh_for_replay()
             await harness.wait_for(lambda: replay_manager.current_replay_id == frame, message=f"frame {frame}")
-            await worker_idle()
+            await harness.wait_for_worker_idle()
 
         for frame in range(1, FRAME + 1):
             await seek(frame)
