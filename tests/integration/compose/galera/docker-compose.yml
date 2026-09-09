@@ -63,6 +63,12 @@ services:
     networks:
       galera:
         ipv4_address: 172.28.0.3
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -uroot -proot -e \"SHOW STATUS LIKE 'wsrep_local_state_comment'\" | grep -q Synced"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   galera-node3:
     image: mariadb:11.4
@@ -93,6 +99,12 @@ services:
     networks:
       galera:
         ipv4_address: 172.28.0.4
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -uroot -proot -e \"SHOW STATUS LIKE 'wsrep_local_state_comment'\" | grep -q Synced"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
 
   write-load:
     image: mariadb:11.4

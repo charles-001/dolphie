@@ -91,7 +91,9 @@ async def test_galera_cluster_nodes(topology: Topology, tmp_path: Path) -> None:
     async with run_dolphie(make_config(node, tmp_path)) as harness:
         await harness.wait_for_polls(2)
         assert harness.dolphie.galera_cluster
-        assert harness.dolphie.global_status.get("wsrep_cluster_size") == 3
+        await harness.wait_for(
+            lambda: harness.dolphie.global_status.get("wsrep_cluster_size") == 3, message="3 galera nodes"
+        )
         assert harness.dolphie.global_status.get("wsrep_ready") == "ON"
         await open_replication_panel(harness)
 
