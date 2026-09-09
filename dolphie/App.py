@@ -12,6 +12,7 @@ import os
 import sys
 import time
 from importlib import metadata
+from pathlib import Path
 
 import requests
 from loguru import logger
@@ -59,7 +60,8 @@ except Exception:
 
 class DolphieApp(App):
     TITLE = "Dolphie"
-    CSS_PATH = "Dolphie.tcss"
+    # Absolute, so a subclass defined in another module (tests) still loads the stylesheet.
+    CSS_PATH = Path(__file__).parent / "Dolphie.tcss"
     COMMANDS = {CommandPaletteCommands}
     COMMAND_PALETTE_BINDING = "question_mark"
     BINDINGS = [Binding("escape", "exit_maximized_panel", "Exit maximized panel", show=True)]
@@ -510,7 +512,7 @@ class DolphieApp(App):
     def compose(self):
         yield TopBar(
             host="",
-            app_version=__version__,
+            app_version=self.config.app_version,
             help="press [$b_highlight]?[/] for help",
         )
         yield Tabs(id="host_tabs")

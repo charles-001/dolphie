@@ -1,0 +1,37 @@
+datadir="/var/lib/proxysql"
+
+admin_variables=
+{
+    # admin is restricted to localhost by ProxySQL. radmin is the remote admin user the tests use.
+    admin_credentials="admin:admin;radmin:radmin"
+    mysql_ifaces="0.0.0.0:6032"
+}
+
+mysql_variables=
+{
+    threads=2
+    max_connections=512
+    interfaces="0.0.0.0:6033"
+    default_schema="information_schema"
+    server_version="8.4.0"
+    monitor_username="root"
+    monitor_password="root"
+    monitor_connect_interval=5000
+    monitor_ping_interval=5000
+}
+
+mysql_servers=
+(
+    { address="mysql84", port=3306, hostgroup=0, max_connections=50 }
+)
+
+mysql_users=
+(
+    { username="root", password="root", default_hostgroup=0, active=1 }
+)
+
+mysql_query_rules=
+(
+    { rule_id=1, active=1, match_pattern="^SELECT .* FOR UPDATE$", destination_hostgroup=0, apply=1 },
+    { rule_id=2, active=1, match_pattern="^SELECT", destination_hostgroup=0, apply=1 }
+)

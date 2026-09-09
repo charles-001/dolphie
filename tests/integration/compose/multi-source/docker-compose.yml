@@ -1,0 +1,127 @@
+services:
+  primary-a:
+    image: mysql:8.4
+    tmpfs:
+      - /var/lib/mysql
+    container_name: ms-primary-a
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --server-id=1
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --report-host=172.28.3.2
+      - --report-port=3306
+    ports:
+      - "3331:3306"
+    networks:
+      ms:
+        ipv4_address: 172.28.3.2
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  primary-b:
+    image: mysql:8.4
+    tmpfs:
+      - /var/lib/mysql
+    container_name: ms-primary-b
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --server-id=2
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --report-host=172.28.3.3
+      - --report-port=3306
+    ports:
+      - "3332:3306"
+    networks:
+      ms:
+        ipv4_address: 172.28.3.3
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  replica:
+    image: mysql:8.4
+    tmpfs:
+      - /var/lib/mysql
+    container_name: ms-replica
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --server-id=100
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --read-only=ON
+      - --report-host=172.28.3.4
+      - --report-port=3306
+    ports:
+      - "3333:3306"
+    networks:
+      ms:
+        ipv4_address: 172.28.3.4
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  bootstrap:
+    image: mysql:8.4
+    container_name: ms-bootstrap
+    depends_on:
+      primary-a:
+        condition: service_healthy
+      primary-b:
+        condition: service_healthy
+      replica:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/bootstrap.sh"]
+    volumes:
+      - ./bootstrap.sh:/bootstrap.sh
+    networks:
+      ms:
+        ipv4_address: 172.28.3.5
+    healthcheck:
+      test: ["CMD-SHELL", "mysql -h172.28.3.4 -uroot -proot -N -e \"SELECT COUNT(*) FROM performance_schema.replication_connection_status WHERE SERVICE_STATE='ON'\" 2>/dev/null | grep -q 2"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 3s
+
+  write-load:
+    image: mysql:8.4
+    container_name: ms-write-load
+    depends_on:
+      bootstrap:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/write-load.sh"]
+    volumes:
+      - ./write-load.sh:/write-load.sh
+    networks:
+      ms:
+        ipv4_address: 172.28.3.10
+    restart: unless-stopped
+
+networks:
+  ms:
+    driver: bridge
+    enable_ipv6: false
+    ipam:
+      config:
+        - subnet: 172.28.3.0/24

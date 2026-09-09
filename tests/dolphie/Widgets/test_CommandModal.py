@@ -1,5 +1,3 @@
-import asyncio
-
 import pytest
 from textual.app import App
 from textual.widgets import Button, Input
@@ -26,7 +24,7 @@ CURRENT_FILTERS = {
 }
 
 
-async def _open_filter_modal(current_filters, field_values):
+async def submit_filter_modal(current_filters=None, field_values=None):
     """Open the filter modal prefilled with current_filters, apply field_values, then submit it."""
     app = App()
     dismissed = []
@@ -38,14 +36,14 @@ async def _open_filter_modal(current_filters, field_values):
             processlist_data=PROCESSLIST_DATA,
             host_cache_data={},
             connection_source=ConnectionSource.mysql,
-            current_filters=current_filters,
+            current_filters=current_filters or {},
         )
         app.push_screen(modal, dismissed.append)
         await pilot.pause()
 
         prefilled = {field: modal.query_one(f"#filter_by_{field}_input", Input).value for field in FILTER_FIELDS}
 
-        for field, value in field_values.items():
+        for field, value in (field_values or {}).items():
             modal.query_one(f"#filter_by_{field}_input", Input).value = value
 
         modal.query_one("#submit", Button).press()
@@ -58,12 +56,8 @@ async def _open_filter_modal(current_filters, field_values):
     return prefilled, dismissed[0] if dismissed else None, error
 
 
-def submit_filter_modal(current_filters=None, field_values=None):
-    return asyncio.run(_open_filter_modal(current_filters or {}, field_values or {}))
-
-
-def test_filters_in_effect_are_prefilled():
-    prefilled, _, _ = submit_filter_modal(CURRENT_FILTERS)
+async def test_filters_in_effect_are_prefilled():
+    prefilled, _, _ = await submit_filter_modal(CURRENT_FILTERS)
 
     assert prefilled == {
         "username": "!azure_superuser",
@@ -75,8 +69,8 @@ def test_filters_in_effect_are_prefilled():
     }
 
 
-def test_prefilled_filters_submit_unchanged():
-    _, dismissed, error = submit_filter_modal(CURRENT_FILTERS)
+async def test_prefilled_filters_submit_unchanged():
+    _, dismissed, error = await submit_filter_modal(CURRENT_FILTERS)
 
     assert dismissed == ["!azure_superuser", "", "mydb", "", "5", ""]
     assert error is None
@@ -90,24 +84,24 @@ def test_prefilled_filters_submit_unchanged():
         ("query_time", ["!azure_superuser", "", "mydb", "", "", ""]),
     ],
 )
-def test_clearing_a_prefilled_field_returns_it_empty(cleared_field, expected):
-    _, dismissed, error = submit_filter_modal(CURRENT_FILTERS, {cleared_field: ""})
+async def test_clearing_a_prefilled_field_returns_it_empty(cleared_field, expected):
+    _, dismissed, error = await submit_filter_modal(CURRENT_FILTERS, {cleared_field: ""})
 
     assert dismissed == expected
     assert error is None
 
 
-def test_clearing_every_prefilled_field_is_allowed():
+async def test_clearing_every_prefilled_field_is_allowed():
     # Submitting nothing is how every filter gets removed at once
-    _, dismissed, error = submit_filter_modal(CURRENT_FILTERS, dict.fromkeys(FILTER_FIELDS, ""))
+    _, dismissed, error = await submit_filter_modal(CURRENT_FILTERS, dict.fromkeys(FILTER_FIELDS, ""))
 
     assert dismissed == [""] * len(FILTER_FIELDS)
     assert error is None
 
 
-def test_a_field_is_required_when_no_filters_are_in_effect():
+async def test_a_field_is_required_when_no_filters_are_in_effect():
     # With nothing prefilled there's nothing to remove, so an empty submit is a mistake
-    _, dismissed, error = submit_filter_modal()
+    _, dismissed, error = await submit_filter_modal()
 
     assert dismissed is None
     assert error == "At least one field must be provided"

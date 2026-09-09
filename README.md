@@ -76,7 +76,7 @@ options:
   --panels              What panels to display on startup separated by a comma. Supports: ['dashboard', 'processlist', 'graphs', 'replication', 'metadata_locks', 'ddl', 'pfs_metrics', 'statements_summary', 'proxysql_hostgroup_summary', 'proxysql_mysql_query_rules', 'proxysql_command_stats'], [default: ['dashboard', 'processlist']]
   --graph-marker        What marker to use for graphs (available options: https://tinyurl.com/dolphie-markers) [default: braille]
   --pypi-repo           What PyPi repository to use when checking for a new version default: [https://pypi.org/pypi/dolphie/json]
-  -H , --hostgroup      This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=host (keys have no meaning). Hosts support optional port (default is whatever port parameter is) in the format host:port. You can also name the tabs by suffixing ~tab_name to the host (i.e. 1=host~tab_name)
+  -H , --hostgroup      This is used for creating tabs and connecting to them for hosts you specify in Dolphie's config file under a hostgroup section. As an example, you'll have a section called [cluster1] then below it you will list each host on a new line in the format key=<json> (keys have no meaning), i.e. 1={"host": "host1:3307", "tab_title": "production", "credential_profile": "prod"}. host is required and supports an optional port (default is whatever port parameter is). tab_title and credential_profile are optional
   -R, --record          Enables recording of Dolphie's data to a replay file. Note: This can use significant disk space. Monitor accordingly!
   -D, --daemon          Starts Dolphie in daemon mode. This will not show the TUI and is designed be put into the background with whatever solution you decide to use. Automatically enables --record. This mode is solely used for recording data to a replay file
   --daemon-log-file     Full path of the log file for daemon mode
@@ -330,6 +330,26 @@ uv run pytest
 ```
 
 BasedPyright runs without a baseline; new diagnostics must be fixed rather than suppressed as accepted debt.
+
+### Integration tests
+
+`uv run pytest` runs the unit tests only. The integration suite in `tests/integration` runs the real application against Docker servers and needs `docker compose`. It covers server detection, every panel, display commands, daemon mode through the `dolphie` executable, replay playback, and the TUI under a pseudo-terminal.
+
+```shell
+# Every server: MySQL 5.7, 8.0, 8.4, 9.7, Percona 8.4, MariaDB 10.11, 11.4, 11.8, 12.3, ProxySQL 3.0
+uv run pytest tests/integration -m integration
+
+# A subset
+DOLPHIE_IT_SERVERS=mysql84,proxysql uv run pytest tests/integration -m integration
+
+# Multi-node topologies: MariaDB replication, Group Replication, Galera, multi-source, InnoDB ClusterSet
+uv run pytest tests/integration/topologies -m topology
+DOLPHIE_IT_TOPOLOGIES=gr,galera uv run pytest tests/integration/topologies -m topology
+```
+
+`tests/dolphie/test_Snapshots.py` runs with the unit tests and needs no Docker. It plays the small daemon recordings in `tests/dolphie/replays` back through the real application and compares an SVG screenshot of each panel against `tests/dolphie/__snapshots__`. When a rendering change is intended, run `uv run pytest tests/dolphie/test_Snapshots.py --snapshot-update` and commit the new snapshots. A failure writes `snapshot_report.html` with both images side by side.
+
+Containers start in parallel at the beginning of the session and stop at the end. Set `DOLPHIE_IT_KEEP=1` to leave them running between runs. Data directories live on tmpfs, so nothing accumulates on disk. The `mysql:5.7` image is amd64 only, and its tests skip on a host that cannot emulate it. Compose files live in `tests/integration/compose`.
 
 ## Feedback
 

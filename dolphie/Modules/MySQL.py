@@ -82,7 +82,7 @@ class Database:
             connection = pymysql.connect(
                 host=self.host,
                 user=self.user,
-                passwd=self.password,
+                password=self.password or "",
                 unix_socket=self.socket,
                 port=int(self.port),
                 use_unicode=False,
