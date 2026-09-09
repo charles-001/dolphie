@@ -6,7 +6,8 @@ is intended, run `uv run pytest tests/dolphie/test_Snapshots.py --snapshot-updat
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +63,17 @@ def show_panels(app: SnapshotApp, *keys: str) -> Callable[[Pilot[Any]], Any]:
     return run_before
 
 
+@pytest.fixture
+def pinned_rendering(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Textual renders monochrome under NO_COLOR, and the graph's time axis follows the local zone."""
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
 @pytest.mark.parametrize(
     ("source", "keys"),
     [
@@ -76,6 +88,7 @@ def show_panels(app: SnapshotApp, *keys: str) -> Callable[[Pilot[Any]], Any]:
     ],
     ids=lambda value: ("".join(value) or "dashboard") if isinstance(value, tuple) else value,
 )
+@pytest.mark.usefixtures("pinned_rendering")
 def test_panel_snapshot(snap_compare: Any, source: str, keys: tuple[str, ...]) -> None:
     # A paused replay still re-arms a worker timer every refresh interval. A long interval keeps
     # that timer from racing the seeks in show_panels, and nothing renders the interval itself.
