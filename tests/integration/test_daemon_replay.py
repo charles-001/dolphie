@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 from pathlib import Path
 
@@ -105,9 +106,12 @@ async def test_daemon_recording_plays_back_in_the_tui(server: Server, tmp_path: 
         await harness.press("left_square_bracket")
         await harness.wait_for(lambda: replay_manager.current_replay_id == current, message="step back")
 
-        # Seeking past the start warns instead of failing.
+        # Presses this close together count as a held key, which runs off the start silently.
+        # A tap after the key rests warns instead of failing.
         for _ in range(replay_manager.max_replay_id + 1):
             await harness.press("left_square_bracket")
+        await asyncio.sleep(harness.app.key_event_manager.replay_release_threshold.total_seconds() + 0.1)
+        await harness.press("left_square_bracket")
         assert harness.notifications_with("already at the beginning")
 
         # Every MySQL panel toggles on in replay mode, including metadata locks.
