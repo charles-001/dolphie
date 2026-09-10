@@ -5,15 +5,19 @@ from __future__ import annotations
 import asyncio
 import shutil
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 import orjson
 import pytest
 import zstandard as zstd
+from textual import events
 from textual.widgets import Button
 
 from dolphie.Modules.ArgumentParser import Config
+from dolphie.Modules.KeyEventManager import KeyEventManager
+from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Panels import Dashboard
 from tests.integration.harness import UNREACHABLE_PYPI, DolphieHarness, HarnessApp
 
@@ -92,6 +96,85 @@ async def test_forward_and_back_step_one_frame_and_rebuild_the_metric_window() -
         assert replay_manager.current_replay_id == FRAMES
 
     assert harness.error_notifications == []
+
+
+async def test_a_held_key_scrubs_the_cursor_and_renders_one_frame_when_released(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loaded_frames: list[int] = []
+    load_frame = ReplayManager.get_next_refresh_interval
+
+    def counting_load(self: ReplayManager) -> Any:
+        data = load_frame(self)
+        loaded_frames.append(self.current_replay_id)
+        return data
+
+    monkeypatch.setattr(ReplayManager, "get_next_refresh_interval", counting_load)
+
+    app = HarnessApp(replay_config(REPLAYS / "mysql.db", refresh_interval=3600))
+    async with app.run_test(size=(180, 55)) as pilot:
+        harness = DolphieHarness(app, pilot)
+        await harness.wait_for_replay_frame()
+        await harness.click_button("#pause_button")
+        await harness.wait_for_worker_idle()
+        replay_manager = harness.replay_manager
+        last_timestamp = replay_manager.max_replay_timestamp
+        assert last_timestamp
+        loaded_frames.clear()
+
+        # Key auto-repeat: an event every 33 ms for about a second, which runs off the end
+        # of the eight-frame file and keeps going
+        for _ in range(30):
+            app.post_message(events.Key("right_square_bracket", "]"))
+            await asyncio.sleep(0.033)
+        await pilot._wait_for_screen()  # pyright: ignore[reportPrivateUsage]
+
+        # The first event is a tap and loads its frame. The repeats only move the cursor and
+        # the replay section, so the panels never paint a frame nobody sees
+        assert loaded_frames == [2]
+        assert replay_manager.current_replay_timestamp == last_timestamp
+        assert str(harness.tab.dashboard_replay_start_end.content).count(last_timestamp) == 2
+        assert harness.notifications_with("already at the end") == []
+
+        await harness.wait_for(lambda: loaded_frames == [2, FRAMES], message="the frame under the cursor")
+        await harness.wait_for_worker_idle()
+        assert harness.dolphie.global_status
+        assert app.query_one("#forward_button", Button).disabled
+
+    assert harness.error_notifications == []
+
+
+def test_a_held_key_doubles_its_step_up_to_a_share_of_the_file() -> None:
+    app = HarnessApp(replay_config(REPLAYS / "mysql.db"))
+
+    def hold(direction: int, actions: int, total_rows: int) -> list[int]:
+        return [app._replay_nav_step(True, direction, total_rows) for _ in range(actions)]  # pyright: ignore[reportPrivateUsage]
+
+    # Four actions per doubling, capped at 25 rows for a small file
+    assert hold(1, 20, 1_000) == [1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 8, 8, 8, 8, 16, 16, 16, 16, 25]
+    # A five-day daemon recording caps at 1% of its rows
+    assert hold(1, 40, 200_000)[-1] == 2_000
+    # Reversing direction or releasing the key restarts the ramp
+    assert hold(-1, 4, 200_000) == [1, 1, 1, 2]
+    assert app._replay_nav_step(False, -1, 200_000) == 1  # pyright: ignore[reportPrivateUsage]
+    assert hold(-1, 4, 200_000) == [1, 1, 1, 2]
+
+
+def test_a_tap_after_a_scrub_is_not_held() -> None:
+    app = HarnessApp(replay_config(REPLAYS / "mysql.db"))
+    manager = KeyEventManager(app)
+    start = datetime(2026, 9, 9, 22, 0, tzinfo=timezone.utc)
+
+    def event_at(milliseconds: int) -> bool:
+        manager._update_replay_held_state(  # pyright: ignore[reportPrivateUsage]
+            "right_square_bracket", start + timedelta(milliseconds=milliseconds)
+        )
+        return manager._replay_key_held  # pyright: ignore[reportPrivateUsage]
+
+    assert event_at(0) is False
+    assert [event_at(ms) for ms in (33, 66, 99)] == [True, True, True]
+    # The rest between releasing and tapping again is longer than any auto-repeat gap
+    assert event_at(99 + 200) is False
 
 
 async def test_a_frame_that_fails_to_render_pauses_the_replay_instead_of_crashing(
