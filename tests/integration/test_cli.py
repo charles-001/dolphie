@@ -12,6 +12,8 @@ import termios
 import time
 from pathlib import Path
 
+import pytest
+
 from tests.integration.cli import dolphie_command, isolated_env, write_config
 from tests.integration.servers import Server
 
@@ -36,6 +38,7 @@ def read_until(fd: int, needle: bytes, timeout: float) -> bytes:
     return output
 
 
+@pytest.mark.flavor_agnostic
 def test_tui_starts_renders_the_host_and_quits(server: Server, tmp_path: Path) -> None:
     config = write_config(server, tmp_path)
     controller, terminal = pty.openpty()

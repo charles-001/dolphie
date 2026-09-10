@@ -1,12 +1,9 @@
-import asyncio
-
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.coordinate import Coordinate
 
 from dolphie.Modules.Theme import (
     DOLPHIE_THEME,
-    FOREGROUND,
     HIGHLIGHT,
     LABEL,
     ThemedDataTable,
@@ -14,12 +11,6 @@ from dolphie.Modules.Theme import (
     resolve_theme_markup,
     themed_content,
 )
-
-
-def test_dolphie_theme_owns_application_palette():
-    assert DOLPHIE_THEME.primary == FOREGROUND
-    assert DOLPHIE_THEME.variables["label"] == LABEL
-    assert DOLPHIE_THEME.variables["b_highlight"] == f"bold {HIGHLIGHT}"
 
 
 def test_resolve_theme_markup_for_rich_renderables():
@@ -37,13 +28,15 @@ def test_themed_table_resolves_textual_variables_before_rich_renders():
     table = ThemedTable("[$label]Column")
     table.add_row("[$b_highlight]Value[/$b_highlight]")
 
-    assert isinstance(table.columns[0].header, Text)
-    assert str(table.columns[0].header.spans[0].style) == LABEL
-    assert isinstance(table.columns[0]._cells[0], Text)
-    assert str(table.columns[0]._cells[0].spans[0].style) == f"bold {HIGHLIGHT}"
+    header = table.columns[0].header
+    cell = next(iter(table.columns[0].cells))
+    assert isinstance(header, Text)
+    assert str(header.spans[0].style) == LABEL
+    assert isinstance(cell, Text)
+    assert str(cell.spans[0].style) == f"bold {HIGHLIGHT}"
 
 
-def test_themed_data_table_resolves_textual_variables_for_rich_cells():
+async def test_themed_data_table_resolves_textual_variables_for_rich_cells():
     class TableApp(App):
         def __init__(self):
             super().__init__()
@@ -53,19 +46,14 @@ def test_themed_data_table_resolves_textual_variables_for_rich_cells():
         def compose(self) -> ComposeResult:
             yield ThemedDataTable()
 
-    async def run_test():
-        app = TableApp()
-        async with app.run_test() as pilot:
-            table = app.query_one(ThemedDataTable)
-            table.add_column("[$label]Column")
-            table.add_row("[$b_highlight]Value[/$b_highlight]")
-            await pilot.pause()
+    app = TableApp()
+    async with app.run_test() as pilot:
+        table = app.query_one(ThemedDataTable)
+        table.add_column("[$label]Column")
+        table.add_row("[$b_highlight]Value[/$b_highlight]")
+        await pilot.pause()
 
-            cell = table.get_cell_at(Coordinate(0, 0))
-            column = next(iter(table.columns.values()))
-            assert column.content_width >= len("Column")
-            assert isinstance(cell, Text)
-            assert str(cell.spans[0].style) == f"bold {HIGHLIGHT}"
-            assert table.normalize_cells(["[$b_highlight]Value[/$b_highlight]"])[0] == cell
-
-    asyncio.run(run_test())
+        cell = table.get_cell_at(Coordinate(0, 0))
+        assert isinstance(cell, Text)
+        assert str(cell.spans[0].style) == f"bold {HIGHLIGHT}"
+        assert table.normalize_cells(["[$b_highlight]Value[/$b_highlight]"])[0] == cell

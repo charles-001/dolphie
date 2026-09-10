@@ -23,6 +23,9 @@ from tests.integration.servers import (
 
 INTEGRATION_ROOT = Path(__file__).parent
 TOPOLOGY_ROOT = INTEGRATION_ROOT / "topologies"
+# Tests marked flavor_agnostic exercise no code that branches on the server version, so they run
+# against one MySQL and one MariaDB only. With neither selected they are deselected, not skipped.
+FLAVOR_AGNOSTIC_SERVERS = {"mysql84", "mariadb123"}
 
 # Filled during collection so the session fixture can start every needed container in one go.
 NEEDED_PROFILES = pytest.StashKey[set[str]]()
@@ -73,6 +76,9 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                 continue
             if server.platform and not host_can_run(server.image, server.platform):
                 item.add_marker(pytest.mark.skip(reason=f"this Docker host cannot run {server.platform} images"))
+                continue
+            if item.get_closest_marker("flavor_agnostic") and server.id not in FLAVOR_AGNOSTIC_SERVERS:
+                deselected.append(item)
                 continue
             profiles.add(server.id)
         if "proxysql_server" in getattr(item, "fixturenames", ()):

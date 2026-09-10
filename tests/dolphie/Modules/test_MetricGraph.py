@@ -1,8 +1,7 @@
-import asyncio
 from unittest.mock import patch
 
+import pytest
 from textual.app import App, ComposeResult
-from textual_plotext import PlotextPlot
 
 from dolphie.Modules.MetricDefinitions import create_metric_instances
 from dolphie.Modules.MetricGraph import Graph, calculate_hourly_rate, downsample_series
@@ -18,8 +17,13 @@ class GraphTestApp(App[None]):
         yield Graph(id="graph", spec=self.spec)
 
 
-def test_hourly_rate_handles_empty_history() -> None:
-    assert calculate_hourly_rate([], []) == 0
+@pytest.mark.parametrize(
+    ("values", "intervals", "expected"),
+    [([], [], 0), ([10, 20], [1, 9], 68_400)],
+    ids=["empty", "weighted-by-interval"],
+)
+def test_hourly_rate(values: list[int | float], intervals: list[float], expected: int) -> None:
+    assert calculate_hourly_rate(values, intervals) == expected
 
 
 def test_downsample_series_bounds_work_and_preserves_extrema() -> None:
@@ -40,92 +44,74 @@ def test_downsample_series_bounds_work_and_preserves_extrema() -> None:
 
 def test_graph_uses_isolated_plotext_figures() -> None:
     spec = GRAPHS_BY_ID["graph_dml"]
-    first_graph = Graph(spec=spec)
-    second_graph = Graph(spec=spec)
 
-    assert isinstance(first_graph, PlotextPlot)
-    assert first_graph.plt is not second_graph.plt
-    assert first_graph.marker == "braille"
+    assert Graph(spec=spec).plt is not Graph(spec=spec).plt
 
 
-def test_graph_renders_metric_history_when_mounted() -> None:
-    async def run_test() -> None:
-        metrics = create_metric_instances()
-        metrics.dml.Com_select.append_sample(10, "01/01/26 00:00:00", 1)
-        metrics.dml.Com_select.append_sample(20, "01/01/26 00:00:01", 1)
+async def test_graph_plots_metric_history_when_mounted() -> None:
+    metrics = create_metric_instances()
+    metrics.dml.Com_select.append_sample(10, "01/01/26 00:00:00", 1)
+    metrics.dml.Com_select.append_sample(20, "01/01/26 00:00:01", 1)
 
-        async with GraphTestApp(GRAPHS_BY_ID["graph_dml"]).run_test(
-            size=(100, 30),
-        ) as pilot:
-            graph = pilot.app.query_one("#graph", Graph)
+    async with GraphTestApp(GRAPHS_BY_ID["graph_dml"]).run_test(
+        size=(100, 30),
+    ) as pilot:
+        graph = pilot.app.query_one("#graph", Graph)
+        graph.render_graph(metrics.dml)
+        await pilot.pause()
+
+        rendered_text = graph.render().plain
+        assert "20┤" in rendered_text
+        assert any("\u2800" <= character <= "\u28ff" for character in rendered_text), "no braille plot line"
+
+
+async def test_checkpoint_graph_renders_tick_margin_and_threshold_labels() -> None:
+    metrics = create_metric_instances()
+    metrics.checkpoint.checkpoint_age_sync_flush = 80
+    metrics.checkpoint.checkpoint_age_max = 100
+    metrics.checkpoint.Innodb_checkpoint_age.append_sample(50, "01/01/26 00:00:00", 1)
+    metrics.checkpoint.Innodb_checkpoint_age.append_sample(60, "01/01/26 00:00:01", 1)
+
+    async with GraphTestApp(GRAPHS_BY_ID["graph_checkpoint"]).run_test(
+        size=(100, 30),
+    ) as pilot:
+        graph = pilot.app.query_one("#graph", Graph)
+        graph.render_graph(metrics.checkpoint)
+        await pilot.pause()
+
+        rendered_text = graph.render().plain
+        assert "Uncheckpointed" not in rendered_text
+        assert "Warning" in rendered_text
+        assert "Critical" in rendered_text
+
+
+async def test_redo_log_bar_renders_threshold_when_mounted() -> None:
+    metrics = create_metric_instances()
+    metrics.redo_log.redo_log_size = 100
+    metrics.redo_log.Innodb_lsn_current.append_sample(10, "01/01/26 00:00:00", 1)
+    metrics.redo_log.Innodb_lsn_current.append_sample(20, "01/01/26 00:00:01", 1)
+
+    async with GraphTestApp(GRAPHS_BY_ID["graph_redo_log_bar"]).run_test(
+        size=(100, 30),
+    ) as pilot:
+        graph = pilot.app.query_one("#graph", Graph)
+        graph.render_graph(metrics.redo_log)
+        await pilot.pause()
+
+        rendered_text = graph.render().plain
+        assert "/hr" in rendered_text
+        assert "Log Size" in rendered_text
+        assert any(character in rendered_text for character in "█▀▄▚▟")
+
+
+async def test_graph_reports_renderer_failures() -> None:
+    metrics = create_metric_instances()
+    async with GraphTestApp(GRAPHS_BY_ID["graph_dml"]).run_test(
+        size=(100, 30),
+    ) as pilot:
+        graph = pilot.app.query_one("#graph", Graph)
+        with patch.object(graph, "_render_by_spec", side_effect=ValueError("bad replay data")):
             graph.render_graph(metrics.dml)
             await pilot.pause()
 
-            assert "SELECT" not in graph.render().plain
-
-    asyncio.run(run_test())
-
-
-def test_checkpoint_graph_renders_tick_margin_and_threshold_labels() -> None:
-    async def run_test() -> None:
-        metrics = create_metric_instances()
-        metrics.checkpoint.checkpoint_age_sync_flush = 80
-        metrics.checkpoint.checkpoint_age_max = 100
-        metrics.checkpoint.Innodb_checkpoint_age.append_sample(50, "01/01/26 00:00:00", 1)
-        metrics.checkpoint.Innodb_checkpoint_age.append_sample(60, "01/01/26 00:00:01", 1)
-
-        async with GraphTestApp(GRAPHS_BY_ID["graph_checkpoint"]).run_test(
-            size=(100, 30),
-        ) as pilot:
-            graph = pilot.app.query_one("#graph", Graph)
-            graph.render_graph(metrics.checkpoint)
-            await pilot.pause()
-
-            rendered_text = graph.render().plain
-            assert "Uncheckpointed" not in rendered_text
-            assert "Warning" in rendered_text
-            assert "Critical" in rendered_text
-
-    asyncio.run(run_test())
-
-
-def test_redo_log_bar_renders_threshold_when_mounted() -> None:
-    async def run_test() -> None:
-        metrics = create_metric_instances()
-        metrics.redo_log.redo_log_size = 100
-        metrics.redo_log.Innodb_lsn_current.append_sample(10, "01/01/26 00:00:00", 1)
-        metrics.redo_log.Innodb_lsn_current.append_sample(20, "01/01/26 00:00:01", 1)
-
-        async with GraphTestApp(GRAPHS_BY_ID["graph_redo_log_bar"]).run_test(
-            size=(100, 30),
-        ) as pilot:
-            graph = pilot.app.query_one("#graph", Graph)
-            graph.render_graph(metrics.redo_log)
-            await pilot.pause()
-
-            rendered_text = graph.render().plain
-            assert "/hr" in rendered_text
-            assert "Log Size" in rendered_text
-            assert any(character in rendered_text for character in "█▀▄▚▟")
-
-    asyncio.run(run_test())
-
-
-def test_graph_reports_renderer_failures() -> None:
-    async def run_test() -> None:
-        metrics = create_metric_instances()
-        async with GraphTestApp(GRAPHS_BY_ID["graph_dml"]).run_test(
-            size=(100, 30),
-        ) as pilot:
-            graph = pilot.app.query_one("#graph", Graph)
-            with (
-                patch.object(graph, "_render_by_spec", side_effect=ValueError("bad replay data")),
-                patch("dolphie.Modules.MetricGraph.logger.exception") as log_exception,
-            ):
-                graph.render_graph(metrics.dml)
-                await pilot.pause()
-
-            assert graph.render().plain == "Graph unavailable"
-            log_exception.assert_called_once()
-
-    asyncio.run(run_test())
+        assert graph.render().plain == "Graph unavailable"

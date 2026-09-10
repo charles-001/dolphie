@@ -2,7 +2,13 @@ import sqlite3
 
 import pytest
 
-from dolphie.Modules.Functions import filter_excludes, filter_sql_condition, merge_filters, parse_filter
+from dolphie.Modules.Functions import (
+    filter_excludes,
+    filter_sql_condition,
+    host_without_port,
+    merge_filters,
+    parse_filter,
+)
 
 
 @pytest.mark.parametrize(
@@ -118,3 +124,18 @@ def test_filter_sql_condition_results(columns, filter_value, pattern, expected_i
     rows = connection.execute(f"SELECT id FROM processlist WHERE {condition} ORDER BY id").fetchall()
 
     assert [row[0] for row in rows] == expected_ids
+
+
+@pytest.mark.parametrize(
+    ("address", "host"),
+    [
+        ("db.example.com:3306", "db.example.com"),
+        ("10.0.0.1:49152", "10.0.0.1"),
+        ("[2001:db8::1]:3306", "2001:db8::1"),
+        ("2001:db8::1", "2001:db8::1"),
+        ("db.example.com", "db.example.com"),
+    ],
+    ids=["hostname", "ipv4", "bracketed-ipv6", "bare-ipv6", "no-port"],
+)
+def test_host_without_port(address: str, host: str):
+    assert host_without_port(address) == host

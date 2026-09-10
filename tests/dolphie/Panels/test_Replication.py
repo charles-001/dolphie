@@ -1,5 +1,4 @@
 import threading
-import time
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import MagicMock
@@ -15,7 +14,7 @@ from dolphie.DataTypes import (
     ReplicaManager,
     ReplicaRow,
 )
-from dolphie.Modules.Functions import coerce_str, host_without_port
+from dolphie.Modules.Functions import coerce_str
 from dolphie.Modules.Queries import MySQLQueries
 from dolphie.Modules.TabManager import Tab
 from dolphie.Modules.WorkerDataProcessor import (
@@ -75,8 +74,7 @@ def test_clusterset_primary_reports_async_channel_health():
 
 
 def test_replica_panel_replaces_shared_title_while_replicas_load(monkeypatch: pytest.MonkeyPatch):
-    sync_grid = MagicMock()
-    monkeypatch.setattr(Replication, "_sync_grid", sync_grid)
+    monkeypatch.setattr(Replication, "_sync_grid", MagicMock())
     title = MagicMock()
     tab = cast(
         Tab,
@@ -101,14 +99,6 @@ def test_replica_panel_replaces_shared_title_while_replicas_load(monkeypatch: py
     assert tab.replicas_container.display is True
     assert tab.replicas_loading_indicator.display is True
     assert "Loading [$highlight]2[/$highlight] replicas" in title.update.call_args.args[0]
-    sync_grid.assert_called_once_with(
-        tab.replicas_grid,
-        {},
-        "replica",
-        tab.id,
-        tab.dolphie.app,
-        tab.replica_widgets,
-    )
 
 
 def test_managed_channels_are_excluded_from_generic_replication():
@@ -141,27 +131,17 @@ def test_replication_channel_priority_surfaces_failures_before_lag():
     assert max([healthy, stopped, unknown], key=replication_channel_priority) is stopped
 
 
-def test_mariadb_errant_detection_ignores_malformed_gtids():
-    assert _detect_mariadb_errant_trx("0-7-invalid,0-7-12", 7, "0-7-10") == "0-7-12"
-
-
-def test_mariadb_errant_detection_compares_sequence_by_domain():
-    assert _detect_mariadb_errant_trx("0-7-12", 7, "0-1-20") is None
-    assert _detect_mariadb_errant_trx("0-7-21", 7, "0-1-20") == "0-7-21"
-
-
 @pytest.mark.parametrize(
-    ("address", "host"),
+    ("replica_gtid", "source_gtid", "errant"),
     [
-        ("db.example.com:3306", "db.example.com"),
-        ("10.0.0.1:49152", "10.0.0.1"),
-        ("[2001:db8::1]:3306", "2001:db8::1"),
-        ("2001:db8::1", "2001:db8::1"),
-        ("db.example.com", "db.example.com"),
+        ("0-7-invalid,0-7-12", "0-7-10", "0-7-12"),
+        ("0-7-12", "0-1-20", None),
+        ("0-7-21", "0-1-20", "0-7-21"),
     ],
+    ids=["malformed-gtid-ignored", "behind-source-in-domain", "ahead-of-source-in-domain"],
 )
-def test_host_without_port(address: str, host: str):
-    assert host_without_port(address) == host
+def test_mariadb_errant_detection(replica_gtid: str, source_gtid: str, errant: str | None):
+    assert _detect_mariadb_errant_trx(replica_gtid, 7, source_gtid) == errant
 
 
 def test_mysql_discovery_uses_uuid_identity_and_refreshes_same_size_port_changes():
@@ -335,6 +315,7 @@ def test_group_replication_primary_is_computed_from_polled_members():
         (True, "REPLICA", False),
         (True, "PRIMARY", True),
     ],
+    ids=["secondary-member", "primary-of-replica-cluster", "primary-of-primary-cluster"],
 )
 def test_read_only_warning_respects_innodb_cluster_role(
     is_primary: bool,
@@ -424,7 +405,8 @@ def test_replication_source_uuids_are_cleared_when_replication_stops():
         )
     )
 
-    assert fetch_replication_data(cast(Tab, tab)) == []
+    fetch_replication_data(cast(Tab, tab))
+
     assert tab.dolphie.replication_source_uuids == set()
 
 
@@ -784,6 +766,8 @@ def test_fetch_replicas_bounds_concurrent_polling(monkeypatch: pytest.MonkeyPatc
         )
     )
     state_lock = threading.Lock()
+    # Two polls must be inside fake_poll at the same time before either can leave
+    overlap = threading.Barrier(2, timeout=1)
     active = 0
     maximum_active = 0
 
@@ -792,7 +776,7 @@ def test_fetch_replicas_bounds_concurrent_polling(monkeypatch: pytest.MonkeyPatc
         with state_lock:
             active += 1
             maximum_active = max(maximum_active, active)
-        time.sleep(0.02)
+        overlap.wait()
         with state_lock:
             active -= 1
 

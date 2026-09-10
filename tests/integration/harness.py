@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import os
 import threading
 import time
 import traceback
@@ -151,11 +152,11 @@ class DolphieHarness:
             # to settle, which is slow while a spinner or loading indicator animates.
             await asyncio.sleep(0.05)
 
-    async def wait_for_polls(self, count: int, *, timeout: float = DEFAULT_TIMEOUT) -> None:
+    async def wait_for_polls(self, count: int) -> None:
         """Wait until the active tab has completed at least ``count`` polls with metric history."""
-        await self.wait_for(lambda: self.poll_count >= count, timeout=timeout, message=f"{count} polls")
+        await self.wait_for(lambda: self.poll_count >= count, message=f"{count} polls")
 
-    async def wait_for_replay_frame(self, *, timeout: float = DEFAULT_TIMEOUT) -> None:
+    async def wait_for_replay_frame(self) -> None:
         """Wait until replay playback has applied at least one frame to the tab."""
 
         def applied() -> bool:
@@ -164,24 +165,24 @@ class DolphieHarness:
                 return False
             return tab.replay_manager.max_replay_id >= 1 and bool(tab.dolphie.global_status)
 
-        await self.wait_for(applied, timeout=timeout, message="first replay frame")
+        await self.wait_for(applied, message="first replay frame")
 
-    async def wait_for_worker_idle(self, *, timeout: float = DEFAULT_TIMEOUT) -> None:
+    async def wait_for_worker_idle(self) -> None:
         """Wait until the active tab's worker finished. A replay step while one runs is dropped."""
         tab = self.tab
-        await self.wait_for(lambda: tab.worker is None or not tab.worker.is_running, timeout=timeout, message="worker")
+        await self.wait_for(lambda: tab.worker is None or not tab.worker.is_running, message="worker")
 
     async def press(self, *keys: str) -> None:
         """Press keys and wait until the app has processed them.
 
-        Pilot.press waits for the process to go CPU-idle after every key, up to one second twice
-        over. Dolphie polls and renders continuously, so that wait always hits the cap. Posting the
-        key event directly and draining the screen's message queues is the same delivery path
-        without the idle heuristic.
+        Pilot.press and Pilot.pause() wait for the process to go CPU-idle after every key, up to
+        one second twice over. Dolphie polls and renders continuously, so that wait always hits
+        the cap. Posting the key event directly and pausing with an explicit delay drains the
+        screen's message queues over the same delivery path without the idle heuristic.
         """
         for key in keys:
             self.app.post_message(events.Key(key, key_to_character(key)))
-            await self.pilot._wait_for_screen()  # pyright: ignore[reportPrivateUsage]
+            await self.pilot.pause(0)
         await self._settle()
 
     async def click_button(self, selector: str) -> None:
@@ -191,7 +192,7 @@ class DolphieHarness:
 
     async def _settle(self) -> None:
         await asyncio.sleep(0.05)
-        await self.pilot._wait_for_screen()  # pyright: ignore[reportPrivateUsage]
+        await self.pilot.pause(0)
         self.fail_on_errors()
 
     async def open_command_screen(self, key: str) -> None:
@@ -205,10 +206,10 @@ class DolphieHarness:
         assert failures == [], (key, failures)
         assert len(self.app.screen_stack) > 1, key
 
-    async def next_poll(self, *, timeout: float = DEFAULT_TIMEOUT) -> None:
+    async def next_poll(self) -> None:
         """Wait for one more main worker cycle to complete."""
         before = self.poll_count
-        await self.wait_for(lambda: self.poll_count > before, timeout=timeout, message="next poll")
+        await self.wait_for(lambda: self.poll_count > before, message="next poll")
 
     async def run_for(self, seconds: float) -> int:
         """Let the app keep polling for ``seconds``, failing fast on any error. Returns the polls completed."""
@@ -251,9 +252,16 @@ def replay_config(replay_file: Path, **overrides: Any) -> Config:
         "replay_file": str(replay_file),
         "pypi_repository": UNREACHABLE_PYPI,
         "refresh_interval": 0.2,
+        # The default is ~/dolphie_host_cache, and an entry there would rename hosts in the render
+        "host_cache_file": os.devnull,
         **overrides,
     }
     return Config(**values)
+
+
+def playback_config(server: Server, tmp_path: Path, replay_file: Path) -> Config:
+    """A Config that plays back a file recorded from ``server``. The file's metadata wins over the host."""
+    return make_config(server, tmp_path, host="replay-ignored", port=1, replay_file=str(replay_file), replay_dir=None)
 
 
 @asynccontextmanager
@@ -286,7 +294,7 @@ def query(server: Server, sql: str, database: str | None = None) -> list[dict[st
 
 
 @contextmanager
-def traffic(server: Server, sql: str, database: str | None = None, interval: float = 0.2) -> Iterator[None]:
+def traffic(server: Server, sql: str, database: str | None = None) -> Iterator[None]:
     """Repeat ``sql`` on its own connection in a thread, so the app's event loop never blocks on it."""
     stop = threading.Event()
     failure: list[pymysql.Error] = []
@@ -294,7 +302,7 @@ def traffic(server: Server, sql: str, database: str | None = None, interval: flo
     def run() -> None:
         try:
             with connect(server, database) as connection, connection.cursor() as cursor:
-                while not stop.wait(interval):
+                while not stop.wait(0.2):
                     cursor.execute(sql)
                     cursor.fetchall()
         except pymysql.Error as error:

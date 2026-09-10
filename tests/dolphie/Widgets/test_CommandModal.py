@@ -56,8 +56,8 @@ async def submit_filter_modal(current_filters=None, field_values=None):
     return prefilled, dismissed[0] if dismissed else None, error
 
 
-async def test_filters_in_effect_are_prefilled():
-    prefilled, _, _ = await submit_filter_modal(CURRENT_FILTERS)
+async def test_filters_in_effect_are_prefilled_and_submit_unchanged():
+    prefilled, dismissed, error = await submit_filter_modal(CURRENT_FILTERS)
 
     assert prefilled == {
         "username": "!azure_superuser",
@@ -67,35 +67,23 @@ async def test_filters_in_effect_are_prefilled():
         "query_time": "5",  # Stored as an int, so it has to be rendered as text
         "query_text": "",
     }
-
-
-async def test_prefilled_filters_submit_unchanged():
-    _, dismissed, error = await submit_filter_modal(CURRENT_FILTERS)
-
     assert dismissed == ["!azure_superuser", "", "mydb", "", "5", ""]
     assert error is None
 
 
 @pytest.mark.parametrize(
-    ("cleared_field", "expected"),
+    ("cleared", "expected"),
     [
-        ("username", ["", "", "mydb", "", "5", ""]),
-        ("db", ["!azure_superuser", "", "", "", "5", ""]),
-        ("query_time", ["!azure_superuser", "", "mydb", "", "", ""]),
+        ({"query_time": ""}, ["!azure_superuser", "", "mydb", "", "", ""]),
+        # Submitting nothing is how every filter gets removed at once
+        (dict.fromkeys(FILTER_FIELDS, ""), [""] * len(FILTER_FIELDS)),
     ],
+    ids=["one-field", "every-field"],
 )
-async def test_clearing_a_prefilled_field_returns_it_empty(cleared_field, expected):
-    _, dismissed, error = await submit_filter_modal(CURRENT_FILTERS, {cleared_field: ""})
+async def test_clearing_a_prefilled_field_returns_it_empty(cleared, expected):
+    _, dismissed, error = await submit_filter_modal(CURRENT_FILTERS, cleared)
 
     assert dismissed == expected
-    assert error is None
-
-
-async def test_clearing_every_prefilled_field_is_allowed():
-    # Submitting nothing is how every filter gets removed at once
-    _, dismissed, error = await submit_filter_modal(CURRENT_FILTERS, dict.fromkeys(FILTER_FIELDS, ""))
-
-    assert dismissed == [""] * len(FILTER_FIELDS)
     assert error is None
 
 

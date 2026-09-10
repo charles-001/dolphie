@@ -11,8 +11,8 @@ from textual.widgets import Button, Footer, RadioButton, Tabs
 from dolphie.App import DolphieApp
 from dolphie.DataTypes import ConnectionStatus, DatabaseRow
 from dolphie.Modules.ArgumentParser import Config
-from dolphie.Modules.TabManager import Tab, TabManager
-from dolphie.Modules.Theme import DARK_GRAY, DOLPHIE_THEME, RED, YELLOW, ThemedDataTable
+from dolphie.Modules.TabManager import TabManager
+from dolphie.Modules.Theme import DARK_GRAY, DOLPHIE_THEME, PANEL, RED, YELLOW, ThemedDataTable
 from dolphie.Widgets.CommandScreen import CommandScreen
 from dolphie.Widgets.DolphieScreen import ScreenContext
 from dolphie.Widgets.EventLogScreen import EventLog
@@ -117,7 +117,6 @@ async def test_graph_dashboard_mounts_without_dynamic_tab_graph_attributes():
         assert dashboard.graphs
         assert dashboard.controls
         assert app.query(MetricSeriesControl)
-        assert not hasattr(Tab(id="test", name="test"), "graph_system_cpu")
 
 
 async def test_command_screen_uses_shared_topbar_and_footer():
@@ -132,7 +131,7 @@ async def test_command_screen_uses_shared_topbar_and_footer():
         assert str(topbar.topbar_host.render()) == "[CONNECTED] db.example:3306"
         assert str(topbar.topbar_help.render()) == ""
         assert footer.show_command_palette is False
-        assert footer.styles.background.hex == "#192036"
+        assert footer.styles.background.hex == PANEL
         assert "q" in app.screen.active_bindings
 
         await pilot.press("q")

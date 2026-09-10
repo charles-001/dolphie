@@ -11,7 +11,7 @@ import orjson
 import pytest
 import zstandard as zstd
 
-from dolphie.DataTypes import ConnectionSource
+from dolphie.DataTypes import ConnectionSource, ProcesslistThread, ProxySQLProcesslistThread
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules.Functions import coerce_int
 from dolphie.Modules.ReplayManager import MySQLReplayData, ReplayManager
@@ -298,15 +298,43 @@ def test_payload_fields_are_coerced_to_the_containers_panels_expect() -> None:
     assert proxysql_data.command_stats == []
     assert proxysql_data.hostgroup_summary == []
 
-    # Threads without an id, or that are not objects, are dropped rather than raising
+    # Thread ids are keyed as integers however the file spelled them. Threads without an id, or
+    # that are not objects, are dropped rather than raising
     partial = manager._create_mysql_replay_data(
         "2026-01-01 00:00:00",
-        {"processlist": [{"id": 7, "query": "SELECT 1"}, {"query": "SELECT 2"}, "SELECT 3", None]},
+        {"processlist": [{"id": "7", "query": "SELECT 1"}, {"query": "SELECT 2"}, "SELECT 3", None]},
     )
     assert list(partial.processlist) == [7]
+    assert isinstance(partial.processlist[7], ProcesslistThread)
+    proxysql_partial = manager._create_proxysql_replay_data(
+        "2026-01-01 00:00:00", {"processlist": [{"id": "8", "hostgroup": None, "time": None, "query": None}]}
+    )
+    assert isinstance(proxysql_partial.processlist[8], ProxySQLProcesslistThread)
 
     empty = manager._create_mysql_replay_data("2026-01-01 00:00:00", {})
     assert empty.processlist == {}
+
+
+def test_metadata_refreshes_after_the_daemon_purges_the_head_of_the_file(tmp_path: Path) -> None:
+    replay_file = tmp_path / "daemon.db"
+    write_replay_file(replay_file, row_count=3)
+    dolphie, _ = make_dolphie(replay_file)
+    manager = ReplayManager(dolphie)
+    try:
+        assert manager._update_replay_metadata_cache()
+        assert (manager.min_replay_id, manager.max_replay_id, manager.total_replay_rows) == (1, 3, 3)
+
+        writer = sqlite3.connect(replay_file)
+        try:
+            writer.execute("DELETE FROM replay_data WHERE id = 1")
+            writer.commit()
+        finally:
+            writer.close()
+
+        assert manager._update_replay_metadata_cache()
+        assert (manager.min_replay_id, manager.max_replay_id, manager.total_replay_rows) == (2, 3, 2)
+    finally:
+        manager.close()
 
 
 def test_insert_failure_surfaces_the_original_error(tmp_path: Path) -> None:

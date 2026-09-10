@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from dolphie.DataTypes import ConnectionSource
 from tests.integration.harness import frontend_traffic, make_config, run_dolphie
 from tests.integration.servers import Server
@@ -38,6 +36,11 @@ async def test_runs_with_every_panel_open(proxysql_server: Server, tmp_path: Pat
                 "proxysql_command_stats",
             ):
                 assert getattr(harness.dolphie.panels, panel).visible, panel
+
+            # The MySQL-only panel keys are refused
+            await harness.press("7", "8")
+            assert not harness.dolphie.panels.pfs_metrics.visible
+            assert not harness.dolphie.panels.statements_summary.visible
 
             assert await harness.run_for(5) >= 5
 
@@ -100,20 +103,11 @@ async def test_processlist_shows_frontend_sessions(proxysql_server: Server, tmp_
             assert harness.tab.processlist_datatable.row_count >= 1
 
 
-@pytest.mark.parametrize("key", ["u", "e"])
-async def test_display_commands_open_a_screen(proxysql_server: Server, tmp_path: Path, key: str) -> None:
+async def test_display_commands_open_a_screen(proxysql_server: Server, tmp_path: Path) -> None:
     async with run_dolphie(make_config(proxysql_server, tmp_path)) as harness:
         await harness.wait_for_polls(2)
         with frontend_traffic():
-            await harness.open_command_screen(key)
-        await harness.press("escape")
-        assert len(harness.app.screen_stack) == 1
-
-
-async def test_mysql_only_panels_are_refused(proxysql_server: Server, tmp_path: Path) -> None:
-    async with run_dolphie(make_config(proxysql_server, tmp_path)) as harness:
-        await harness.wait_for_polls(2)
-        for key in ("7", "8"):
-            await harness.press(key)
-        assert not harness.dolphie.panels.pfs_metrics.visible
-        assert not harness.dolphie.panels.statements_summary.visible
+            for key in ("u", "e"):
+                await harness.open_command_screen(key)
+                await harness.press("escape")
+                assert len(harness.app.screen_stack) == 1, key

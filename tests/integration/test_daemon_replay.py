@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 import sqlite3
 from pathlib import Path
 
-from dolphie.DataTypes import ConnectionSource
+import pytest
+
+from dolphie.DataTypes import ConnectionSource, ConnectionSourceType
 from tests.integration.cli import daemon, daemon_replay_file, replay_row_count, run_daemon, wait_for_rows
-from tests.integration.harness import frontend_traffic, make_config, query, run_dolphie
+from tests.integration.harness import frontend_traffic, make_config, playback_config, query, run_dolphie
 from tests.integration.servers import Server
 
 
@@ -34,6 +35,7 @@ def test_daemon_mode_records_polls_to_a_replay_file(server: Server, tmp_path: Pa
     assert rows[1] < rows[2]
 
 
+@pytest.mark.flavor_agnostic
 def test_daemon_records_global_variable_changes(server: Server, tmp_path: Path) -> None:
     """A variable flipped while the daemon runs lands in variable_changes with old and new values."""
     original = int(query(server, "SELECT @@GLOBAL.max_connections AS v")[0]["v"])
@@ -53,6 +55,7 @@ def test_daemon_records_global_variable_changes(server: Server, tmp_path: Path) 
     assert (str(original), str(changed)) in {(old, new) for old, new in changes}, changes
 
 
+@pytest.mark.flavor_agnostic
 def test_daemon_replaces_a_file_with_an_old_schema(server: Server, tmp_path: Path) -> None:
     replay_file = daemon_replay_file(server, tmp_path)
     replay_file.parent.mkdir(parents=True)
@@ -83,8 +86,7 @@ def test_daemon_replaces_a_file_with_an_old_schema(server: Server, tmp_path: Pat
 async def test_daemon_recording_plays_back_in_the_tui(server: Server, tmp_path: Path) -> None:
     replay_file = run_daemon(server, tmp_path, min_rows=8)
 
-    config = make_config(server, tmp_path, host="replay-ignored", port=1, replay_file=str(replay_file), replay_dir=None)
-    async with run_dolphie(config) as harness:
+    async with run_dolphie(playback_config(server, tmp_path, replay_file)) as harness:
         await harness.wait_for_replay_frame()
         replay_manager = harness.replay_manager
         dolphie = harness.dolphie
@@ -98,6 +100,8 @@ async def test_daemon_recording_plays_back_in_the_tui(server: Server, tmp_path: 
         assert replay_manager.max_replay_timestamp
         assert replay_manager.max_replay_id >= 8
 
+        # Stepping, seeking, and panel toggles are covered on committed recordings in
+        # tests/dolphie. Here the file is fresh from this server, so one step each way is enough.
         await harness.click_button("#pause_button")
         assert dolphie.pause_refresh
         current = replay_manager.current_replay_id
@@ -105,22 +109,6 @@ async def test_daemon_recording_plays_back_in_the_tui(server: Server, tmp_path: 
         await harness.wait_for(lambda: replay_manager.current_replay_id == current + 1, message="step forward")
         await harness.press("left_square_bracket")
         await harness.wait_for(lambda: replay_manager.current_replay_id == current, message="step back")
-
-        # Presses this close together count as a held key, which runs off the start silently.
-        # A tap after the key rests warns instead of failing.
-        for _ in range(replay_manager.max_replay_id + 1):
-            await harness.press("left_square_bracket")
-        await asyncio.sleep(harness.app.key_event_manager.replay_release_threshold.total_seconds() + 0.1)
-        await harness.press("left_square_bracket")
-        assert harness.notifications_with("already at the beginning")
-
-        # Every MySQL panel toggles on in replay mode, including metadata locks.
-        for key in ("3", "5", "7", "8"):
-            await harness.press(key)
-        assert dolphie.panels.graphs.visible
-        assert dolphie.panels.metadata_locks.visible
-        assert dolphie.panels.pfs_metrics.visible
-        assert dolphie.panels.statements_summary.visible
 
         await harness.click_button("#pause_button")
         assert not dolphie.pause_refresh
@@ -132,7 +120,7 @@ async def test_daemon_recording_plays_back_in_the_tui(server: Server, tmp_path: 
         assert not dolphie.main_db_connection.is_connected()
 
 
-async def test_live_recording_round_trip(server: Server, tmp_path: Path) -> None:
+async def record_then_play_back(server: Server, tmp_path: Path, source: ConnectionSourceType) -> None:
     """Record from the TUI, then play the file back and find the same metric history."""
     async with run_dolphie(make_config(server, tmp_path, record_for_replay=True)) as harness:
         await harness.wait_for_polls(5)
@@ -142,10 +130,11 @@ async def test_live_recording_round_trip(server: Server, tmp_path: Path) -> None
 
     assert replay_row_count(replay_file) >= 5
 
-    config = make_config(server, tmp_path, replay_file=str(replay_file), replay_dir=None)
-    async with run_dolphie(config) as harness:
+    async with run_dolphie(playback_config(server, tmp_path, replay_file)) as harness:
         await harness.wait_for_replay_frame()
         replay_manager = harness.replay_manager
+        assert harness.dolphie.connection_source == source
+        assert harness.dolphie.host == server.host
         await harness.wait_for(
             lambda: replay_manager.current_replay_id >= replay_manager.max_replay_id,
             message="replay to reach the last frame",
@@ -156,6 +145,11 @@ async def test_live_recording_round_trip(server: Server, tmp_path: Path) -> None
         assert replay_manager.min_replay_timestamp < replay_manager.max_replay_timestamp
         # Live recordings store the full history, so the graph has every recorded point.
         assert harness.poll_count >= polls
+
+
+@pytest.mark.flavor_agnostic
+async def test_live_recording_round_trip(server: Server, tmp_path: Path) -> None:
+    await record_then_play_back(server, tmp_path, ConnectionSource.mysql)
 
 
 async def test_proxysql_daemon_recording_plays_back_in_the_tui(proxysql_server: Server, tmp_path: Path) -> None:
@@ -177,10 +171,7 @@ async def test_proxysql_daemon_recording_plays_back_in_the_tui(proxysql_server: 
         ConnectionSource.proxysql,
     )
 
-    config = make_config(
-        proxysql_server, tmp_path, host="replay-ignored", port=1, replay_file=str(replay_file), replay_dir=None
-    )
-    async with run_dolphie(config) as harness:
+    async with run_dolphie(playback_config(proxysql_server, tmp_path, replay_file)) as harness:
         await harness.wait_for_replay_frame()
         replay_manager = harness.replay_manager
         dolphie = harness.dolphie
@@ -212,25 +203,4 @@ async def test_proxysql_daemon_recording_plays_back_in_the_tui(proxysql_server: 
 
 
 async def test_proxysql_live_recording_round_trip(proxysql_server: Server, tmp_path: Path) -> None:
-    async with run_dolphie(make_config(proxysql_server, tmp_path, record_for_replay=True)) as harness:
-        await harness.wait_for_polls(5)
-        assert harness.notifications_with("Recording data")
-        replay_file = Path(harness.replay_manager.replay_file)
-        polls = harness.poll_count
-
-    assert replay_row_count(replay_file) >= 5
-
-    config = make_config(
-        proxysql_server, tmp_path, host="replay-ignored", port=1, replay_file=str(replay_file), replay_dir=None
-    )
-    async with run_dolphie(config) as harness:
-        await harness.wait_for_replay_frame()
-        replay_manager = harness.replay_manager
-        assert harness.dolphie.connection_source == ConnectionSource.proxysql
-        assert harness.dolphie.host == proxysql_server.host
-        await harness.wait_for(
-            lambda: replay_manager.current_replay_id >= replay_manager.max_replay_id,
-            message="replay to reach the last frame",
-        )
-        assert replay_manager.max_replay_id >= polls
-        assert harness.poll_count >= polls
+    await record_then_play_back(proxysql_server, tmp_path, ConnectionSource.proxysql)

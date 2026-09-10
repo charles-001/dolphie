@@ -122,7 +122,7 @@ async def test_a_held_key_scrubs_the_cursor_and_renders_one_frame_when_released(
             assert time.monotonic() < deadline, "the held key never reached the last frame"
             await repeat(1)
         await repeat(6)
-        await pilot._wait_for_screen()  # pyright: ignore[reportPrivateUsage]
+        await pilot.pause(0)
 
         # The first event is a tap and loads its frame. The repeats only move the cursor and
         # the replay section, so the panels never paint a frame nobody sees

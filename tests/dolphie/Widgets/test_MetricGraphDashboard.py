@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -58,108 +57,93 @@ def make_host(
     )
 
 
-def test_dashboard_composes_registry_rows_controls_and_graphs() -> None:
-    async def run_test() -> None:
-        async with DashboardTestApp().run_test(size=(120, 50)) as pilot:
-            dashboard = pilot.app.query_one(MetricGraphDashboard)
-            await pilot.pause()
+async def test_dashboard_composes_registry_rows_controls_and_graphs() -> None:
+    async with DashboardTestApp().run_test(size=(120, 50)) as pilot:
+        dashboard = pilot.app.query_one(MetricGraphDashboard)
+        await pilot.pause()
 
-            assert set(dashboard.graphs) == set(GRAPHS_BY_ID)
-            assert len(dashboard.controls) == len(set(dashboard.controls))
-            assert len(dashboard.query(".metric-graph-row")) == sum(len(tab.rows) for tab in GRAPH_TABS)
-            assert dashboard.query(".metric-control-group-label")
-            assert dashboard.query(".metric-controls-overflow")
-
-    asyncio.run(run_test())
+        assert set(dashboard.graphs) == set(GRAPHS_BY_ID)
+        assert len(dashboard.controls) == len(set(dashboard.controls))
+        assert len(dashboard.query(".metric-graph-row")) == sum(len(tab.rows) for tab in GRAPH_TABS)
+        assert dashboard.query(".metric-control-group-label")
+        assert dashboard.query(".metric-controls-overflow")
 
 
-def test_dashboard_binds_two_hosts_before_first_poll_without_visibility_leakage() -> None:
-    async def run_test() -> None:
-        first = make_host(system_utilization=False)
-        second = make_host(system_utilization=False)
-        first.metric_manager.metrics.dml.Com_select.visible = False
+async def test_dashboard_binds_two_hosts_before_first_poll_without_visibility_leakage() -> None:
+    first = make_host(system_utilization=False)
+    second = make_host(system_utilization=False)
+    first.metric_manager.metrics.dml.Com_select.visible = False
 
-        async with DashboardTestApp().run_test(size=(120, 40)) as pilot:
-            dashboard = pilot.app.query_one(MetricGraphDashboard)
-            control = dashboard.controls[MetricKey("dml", "Com_select")]
+    async with DashboardTestApp().run_test(size=(120, 40)) as pilot:
+        dashboard = pilot.app.query_one(MetricGraphDashboard)
+        control = dashboard.controls[MetricKey("dml", "Com_select")]
 
-            dashboard.bind_host(first)
-            await pilot.pause()
-            assert control.series_visible is False
-            assert control.toggle is not None
-            assert control.toggle.value is False
+        dashboard.bind_host(first)
+        await pilot.pause()
+        assert control.series_visible is False
+        assert control.toggle is not None
+        assert control.toggle.value is False
 
-            dashboard.bind_host(second)
-            await pilot.pause()
-            assert control.series_visible is True
-            assert control.toggle is not None
-            assert control.toggle.value is True
-
-    asyncio.run(run_test())
+        dashboard.bind_host(second)
+        await pilot.pause()
+        assert control.series_visible is True
+        assert control.toggle is not None
+        assert control.toggle.value is True
 
 
-def test_dashboard_routes_typed_visibility_and_ignores_unrelated_switches() -> None:
-    async def run_test() -> None:
-        host = make_host(system_utilization=False)
-        async with DashboardTestApp().run_test(size=(120, 40)) as pilot:
-            dashboard = pilot.app.query_one(MetricGraphDashboard)
-            dashboard.bind_host(host)
-            dashboard.tabs.active = "graph-tab-dml"
-            await pilot.pause()
+async def test_dashboard_routes_typed_visibility_and_ignores_unrelated_switches() -> None:
+    host = make_host(system_utilization=False)
+    async with DashboardTestApp().run_test(size=(120, 40)) as pilot:
+        dashboard = pilot.app.query_one(MetricGraphDashboard)
+        dashboard.bind_host(host)
+        dashboard.tabs.active = "graph-tab-dml"
+        await pilot.pause()
 
-            unrelated = pilot.app.query_one("#unrelated-switch", Switch)
-            unrelated.value = False
-            await pilot.pause()
-            assert host.metric_manager.metrics.dml.Com_select.visible is True
+        unrelated = pilot.app.query_one("#unrelated-switch", Switch)
+        unrelated.value = False
+        await pilot.pause()
+        assert host.metric_manager.metrics.dml.Com_select.visible is True
 
-            control = dashboard.controls[MetricKey("dml", "Com_select")]
-            assert control.toggle is not None
-            control.toggle.value = False
-            await pilot.pause()
-            assert host.metric_manager.metrics.dml.Com_select.visible is False
-
-    asyncio.run(run_test())
+        control = dashboard.controls[MetricKey("dml", "Com_select")]
+        assert control.toggle is not None
+        control.toggle.value = False
+        await pilot.pause()
+        assert host.metric_manager.metrics.dml.Com_select.visible is False
 
 
-def test_redo_availability_updates_widths_and_clears_stale_control() -> None:
-    async def run_test() -> None:
-        host = make_host(active_redo=True)
-        async with DashboardTestApp().run_test(size=(120, 40)) as pilot:
-            dashboard = pilot.app.query_one(MetricGraphDashboard)
-            dashboard.bind_host(host)
-            await pilot.pause()
+async def test_redo_availability_updates_widths_and_clears_stale_control() -> None:
+    host = make_host(active_redo=True)
+    async with DashboardTestApp().run_test(size=(120, 40)) as pilot:
+        dashboard = pilot.app.query_one(MetricGraphDashboard)
+        dashboard.bind_host(host)
+        await pilot.pause()
 
-            active_graph = dashboard.graphs["graph_redo_log_active_count"]
-            data_graph = dashboard.graphs["graph_redo_log_data_written"]
-            active_control = dashboard.controls[MetricKey("redo_log_active_count", "Active_redo_log_count")]
-            assert active_graph.display
-            assert str(data_graph.styles.width) == "55fr"
-            assert active_control.series_visible
+        active_graph = dashboard.graphs["graph_redo_log_active_count"]
+        data_graph = dashboard.graphs["graph_redo_log_data_written"]
+        active_control = dashboard.controls[MetricKey("redo_log_active_count", "Active_redo_log_count")]
+        assert active_graph.display
+        assert str(data_graph.styles.width) == "55fr"
+        assert active_control.series_visible
 
-            host.global_status.clear()
-            dashboard.refresh_active()
-            await pilot.pause()
-            assert not active_graph.display
-            assert str(data_graph.styles.width) == "88fr"
-            assert not active_control.display
-            assert not dashboard.control_groups["graph_redo_log_active_count"].display
-            assert host.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible is False
-
-    asyncio.run(run_test())
+        host.global_status.clear()
+        dashboard.refresh_active()
+        await pilot.pause()
+        assert not active_graph.display
+        assert str(data_graph.styles.width) == "88fr"
+        assert not active_control.display
+        assert not dashboard.control_groups["graph_redo_log_active_count"].display
+        assert host.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible is False
 
 
-def test_replay_never_exposes_active_redo_graph() -> None:
-    async def run_test() -> None:
-        host = make_host(active_redo=True, replay=True)
-        async with DashboardTestApp().run_test(size=(120, 40)) as pilot:
-            dashboard = pilot.app.query_one(MetricGraphDashboard)
-            dashboard.bind_host(host)
-            await pilot.pause()
+async def test_replay_never_exposes_active_redo_graph() -> None:
+    host = make_host(active_redo=True, replay=True)
+    async with DashboardTestApp().run_test(size=(120, 40)) as pilot:
+        dashboard = pilot.app.query_one(MetricGraphDashboard)
+        dashboard.bind_host(host)
+        await pilot.pause()
 
-            assert not dashboard.graphs["graph_redo_log_active_count"].display
-            assert str(dashboard.graphs["graph_redo_log_data_written"].styles.width) == "88fr"
-
-    asyncio.run(run_test())
+        assert not dashboard.graphs["graph_redo_log_active_count"].display
+        assert str(dashboard.graphs["graph_redo_log_data_written"].styles.width) == "88fr"
 
 
 def test_control_strip_has_keyboard_horizontal_scrolling() -> None:

@@ -87,7 +87,8 @@ def daemon(server: Server, tmp_path: Path, *extra_args: str) -> Iterator[tuple[s
     assert process.returncode == 0, f"dolphie --daemon exited with {process.returncode}:\n{_output(process)}"
 
 
-def wait_for_rows(process: subprocess.Popen[str], replay_file: Path, count: int, timeout: float = 90.0) -> None:
+def wait_for_rows(process: subprocess.Popen[str], replay_file: Path, count: int) -> None:
+    timeout = 90.0
     deadline = time.monotonic() + timeout
     while replay_row_count(replay_file) < count:
         if process.poll() is not None:

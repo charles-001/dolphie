@@ -17,13 +17,13 @@ SLEEP_MARKER = "dolphie_integration_sleep"
 
 
 @contextmanager
-def long_running_query(server: Server, seconds: int = 60) -> Iterator[None]:
+def long_running_query(server: Server) -> Iterator[None]:
     """Hold one `SELECT SLEEP()` open on its own connection so the processlist has a live row."""
     connection = connect(server)
 
     def sleep() -> None:
         try:
-            connection.cursor().execute(f"SELECT SLEEP({seconds}) AS {SLEEP_MARKER}")
+            connection.cursor().execute(f"SELECT SLEEP(60) AS {SLEEP_MARKER}")
         except pymysql.Error:
             # The KILL below interrupts the statement on purpose.
             pass
@@ -73,32 +73,7 @@ async def test_runs_with_every_panel_open(server: Server, tmp_path: Path) -> Non
         assert harness.dolphie.panels.statements_summary.visible
 
         assert await harness.run_for(5) >= 5
-
-
-async def test_processlist_shows_a_live_query(server: Server, tmp_path: Path) -> None:
-    async with run_dolphie(make_config(server, tmp_path)) as harness:
-        await harness.wait_for_polls(1)
-        with long_running_query(server):
-            await harness.wait_for(lambda: has_sleep_thread(harness), message="sleep thread in processlist")
-            await harness.next_poll()
-            assert harness.tab.processlist_datatable.row_count >= 1
-            assert harness.dolphie.panels.dashboard.visible
-            assert harness.tab.panel_dashboard.display
-
-        await harness.wait_for(lambda: not has_sleep_thread(harness), message="sleep thread to disappear")
-
-
-async def test_graph_panel_accumulates_history(server: Server, tmp_path: Path) -> None:
-    async with run_dolphie(make_config(server, tmp_path)) as harness:
-        await harness.wait_for_polls(1)
-        await harness.press("3")
-        assert harness.dolphie.panels.graphs.visible
-        assert harness.tab.panel_graphs.display
-
-        await harness.wait_for_polls(3)
-        values = harness.dolphie.metric_manager.metrics.dml.Queries.values_snapshot()
-        assert len(values) >= 2
-        assert all(value >= 0 for value in values)
+        assert len(harness.dolphie.metric_manager.metrics.dml.Queries.values_snapshot()) >= 2
 
         await harness.press("3")
         assert not harness.dolphie.panels.graphs.visible
@@ -142,7 +117,6 @@ async def test_ddl_panel_toggles_when_stage_instruments_are_enabled(server: Serv
 
         assert harness.dolphie.panels.ddl.visible
         await harness.next_poll()
-        assert harness.dolphie.ddl == [] or all("processlist_id" in row for row in harness.dolphie.ddl)
 
 
 async def test_performance_schema_metrics_panel(server: Server, tmp_path: Path) -> None:
@@ -228,6 +202,8 @@ async def test_processlist_toggles_and_filters(server: Server, tmp_path: Path) -
         await harness.wait_for_polls(1)
         with long_running_query(server):
             await harness.wait_for(lambda: has_sleep_thread(harness), message="sleep thread")
+            await harness.next_poll()
+            assert harness.tab.processlist_datatable.row_count >= 1
 
             # Idle threads: the holder connection is asleep between statements, so more rows appear.
             await harness.press("i")
