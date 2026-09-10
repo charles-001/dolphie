@@ -5,7 +5,6 @@ import re
 from decimal import Decimal
 from math import isfinite
 
-import charset_normalizer
 from pygments.style import Style
 from pygments.token import (
     Comment,
@@ -242,21 +241,6 @@ def load_host_cache_file(host_cache_file: str) -> dict[str, str]:
     return host_cache
 
 
-def detect_encoding(text: bytes | bytearray) -> str:
-    # Since BLOB/BINARY data can be involved, we need to auto-detect what the encoding is
-    # for queries since it can be anything. If I let pymsql use unicode by default I got
-    # consistent crashes due to unicode errors for utf8 so we have to go this route
-    result = charset_normalizer.detect(bytes(text))
-    encoding = result["encoding"]
-
-    if encoding is None:
-        encoding = "latin1"
-    elif encoding == "utf-16be":
-        encoding = "utf-8"
-
-    return encoding
-
-
 def round_num(n: NumericInput, decimal: int = 2) -> Decimal:
     n = Decimal(n)
     return n.to_integral() if n == n.to_integral() else round(n.normalize(), decimal)
@@ -301,23 +285,6 @@ def format_number(n: NumericInput | None, decimal: int = 2, color: bool = True) 
                 return f"{num}{sufix}" if sufix else num
 
     return str(round_num(n, decimal))
-
-
-def format_sys_table_memory(data: str) -> str:
-    parsed_data = data.strip().split(" ")
-    if len(parsed_data) == 2:
-        value, suffix = parsed_data[0], parsed_data[1][:1]
-
-        if value == "0":
-            suffix = ""
-        elif suffix != "b":
-            suffix += "B"
-        elif suffix == "b":
-            suffix = "B"
-
-        return f"{value}[$highlight]{suffix}"
-
-    return data
 
 
 def escape_markup(text: str) -> str:

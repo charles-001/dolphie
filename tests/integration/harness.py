@@ -31,6 +31,8 @@ from tests.integration.servers import PROXYSQL_FRONTEND, Server
 DEFAULT_TIMEOUT = 60.0
 # An unreachable local port makes the PyPI version check fail instantly.
 UNREACHABLE_PYPI = "http://127.0.0.1:1/"
+# Committed daemon recordings, eight frames each, two seconds apart
+REPLAYS = Path(__file__).parents[1] / "dolphie" / "replays"
 
 # Worker failures and replay write errors are logged rather than raised, and the TUI installs no
 # log sink of its own. One process-wide sink collects them; each app remembers where its own start.
@@ -240,6 +242,18 @@ def make_config(server: Server, tmp_path: Path, **overrides: Any) -> Config:
         **overrides,
     }
     return Config(app_version="integration", **values)
+
+
+def replay_config(replay_file: Path, **overrides: Any) -> Config:
+    """A Config that plays ``replay_file`` back with no server."""
+    values: dict[str, Any] = {
+        "app_version": "test",
+        "replay_file": str(replay_file),
+        "pypi_repository": UNREACHABLE_PYPI,
+        "refresh_interval": 0.2,
+        **overrides,
+    }
+    return Config(**values)
 
 
 @asynccontextmanager

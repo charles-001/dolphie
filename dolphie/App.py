@@ -271,13 +271,9 @@ class DolphieApp(App):
         if not tab or not tab.dolphie.replay_file or tab.replay_manager is None:
             return
 
-        if tab.replay_manager.current_replay_id >= tab.replay_manager.max_replay_id:
-            if not accelerate:
-                self.notify("You're already at the end of the replay", severity="warning")
-            return
-
         step = self._replay_nav_step(accelerate, 1, tab.replay_manager.total_replay_rows)
-        self._replay_step(tab, step, accelerate)
+        if not self._replay_step(tab, step, accelerate) and not accelerate:
+            self.notify("You're already at the end of the replay", severity="warning")
 
     def action_replay_pause(self):
         tab = self.tab_manager.active_tab

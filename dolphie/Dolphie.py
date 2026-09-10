@@ -98,7 +98,6 @@ class Dolphie:
         self.metadata_locks: list[DataTypes.DatabaseRow] = []
         self.ddl: list[DataTypes.DatabaseRow] = []
         self.disk_io_metrics: dict[str, int | str] = {}
-        self.statements_summary_metrics: dict[str, int | str] = {}
         self.system_utilization: dict[str, int | float | tuple[float, float, float]] = {}
         self.host_cache: dict[str, str] = {}
         self.proxysql_hostgroup_summary: list[DataTypes.DatabaseRow] = []

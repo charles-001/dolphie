@@ -558,18 +558,6 @@ class MetricManager:
             color_code = "$red"
         return f"[{color_code}]{smoothed_hit_ratio:.2f}%[/{color_code}]"
 
-    def trim_datetimes_to_window(self, reference_time: datetime) -> bool:
-        """Trim datetimes and metric values to the rolling window.
-
-        Args:
-            reference_time: The reference time to calculate the window from.
-
-        Returns:
-            True if any entries were trimmed, False otherwise.
-        """
-        with self._state_lock:
-            return self._trim_datetimes_to_window(reference_time)
-
     def _trim_datetimes_to_window(self, reference_time: datetime) -> bool:
         """Trim history while the manager lock is held."""
         threshold = self._as_utc(reference_time) - timedelta(minutes=self.rolling_window_minutes)

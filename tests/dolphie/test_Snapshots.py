@@ -8,16 +8,13 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Iterator
-from pathlib import Path
 from typing import Any
 
 import pytest
 from textual.pilot import Pilot
 
-from dolphie.Modules.ArgumentParser import Config
-from tests.integration.harness import UNREACHABLE_PYPI, DolphieHarness, HarnessApp
+from tests.integration.harness import REPLAYS, DolphieHarness, HarnessApp, replay_config
 
-REPLAYS = Path(__file__).parent / "replays"
 TERMINAL_SIZE = (180, 55)
 # The frame the screenshot shows. Earlier frames are applied first so delta-based panels have data.
 FRAME = 3
@@ -86,11 +83,5 @@ def pinned_rendering(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
 def test_panel_snapshot(snap_compare: Any, source: str, keys: tuple[str, ...]) -> None:
     # A paused replay still re-arms a worker timer every refresh interval. A long interval keeps
     # that timer from racing the seeks in show_panels, and nothing renders the interval itself.
-    config = Config(
-        app_version="snapshot",
-        replay_file=str(REPLAYS / f"{source}.db"),
-        pypi_repository=UNREACHABLE_PYPI,
-        refresh_interval=3600,
-    )
-    app = SnapshotApp(config)
+    app = SnapshotApp(replay_config(REPLAYS / f"{source}.db", app_version="snapshot", refresh_interval=3600))
     assert snap_compare(app, terminal_size=TERMINAL_SIZE, run_before=show_panels(app, *keys))

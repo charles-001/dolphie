@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 import sqlite3
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -15,25 +16,12 @@ import zstandard as zstd
 from textual import events
 from textual.widgets import Button
 
-from dolphie.Modules.ArgumentParser import Config
 from dolphie.Modules.KeyEventManager import KeyEventManager
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Panels import Dashboard
-from tests.integration.harness import UNREACHABLE_PYPI, DolphieHarness, HarnessApp
+from tests.integration.harness import REPLAYS, DolphieHarness, HarnessApp, replay_config
 
-REPLAYS = Path(__file__).parent / "replays"
-# The committed recordings hold eight frames, two seconds apart
 FRAMES = 8
-
-
-def replay_config(replay_file: Path, **overrides: Any) -> Config:
-    values: dict[str, Any] = {
-        "replay_file": str(replay_file),
-        "pypi_repository": UNREACHABLE_PYPI,
-        "refresh_interval": 0.2,
-        **overrides,
-    }
-    return Config(app_version="test", **values)
 
 
 def metric_datetimes(replay_file: Path) -> list[list[str]]:
@@ -122,11 +110,18 @@ async def test_a_held_key_scrubs_the_cursor_and_renders_one_frame_when_released(
         assert last_timestamp
         loaded_frames.clear()
 
-        # Key auto-repeat: an event every 33 ms for about a second, which runs off the end
-        # of the eight-frame file and keeps going
-        for _ in range(30):
-            app.post_message(events.Key("right_square_bracket", "]"))
-            await asyncio.sleep(0.033)
+        # Key auto-repeat: an event every 33 ms until the cursor runs off the end of the
+        # eight-frame file, then a few more with the key still down
+        async def repeat(count: int) -> None:
+            for _ in range(count):
+                app.post_message(events.Key("right_square_bracket", "]"))
+                await asyncio.sleep(0.033)
+
+        deadline = time.monotonic() + 10
+        while replay_manager.current_replay_timestamp != last_timestamp:
+            assert time.monotonic() < deadline, "the held key never reached the last frame"
+            await repeat(1)
+        await repeat(6)
         await pilot._wait_for_screen()  # pyright: ignore[reportPrivateUsage]
 
         # The first event is a tap and loads its frame. The repeats only move the cursor and
