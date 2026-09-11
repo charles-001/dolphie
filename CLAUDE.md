@@ -10,6 +10,14 @@ Textual TUI for real-time MySQL, MariaDB, and ProxySQL monitoring. Python 3.10+,
 - The version lives only in `pyproject.toml`. Runtime reads it with `importlib.metadata`.
 - Conventional commits. No AI or tool attribution. Do not commit or push unless the request asks for it.
 
+## Release
+
+- Only release when the request asks for it. Release from `main` after the version bump in `pyproject.toml`.
+- `uv build`, then check that the wheel contains `dolphie/` only. `tests/`, replays, or snapshots in the wheel mean the hatch `packages` or `only-include` settings regressed.
+- Publish with `uv publish`. Pass the PyPI token through `UV_PUBLISH_TOKEN`, never on the command line.
+- Tags have no `v` prefix. The GitHub release copies the section layout of the previous release and credits external contributors by handle.
+- The Docker image is `ghcr.io/charles-001/dolphie:<version>` and `:latest`, `linux/amd64`, built from the root `Dockerfile` after the PyPI upload. `pip` in the build reads the PyPI simple index, which can lag the upload by a minute.
+
 ## Threads and tabs
 
 - Main, replica, and replay pollers are `@work(thread=True)` workers in `WorkerManager`. A worker may mutate `dolphie.*` state. Any widget mutation, mount, or `notify` from a worker must go through `self.app.call_from_thread`. The main thread refreshes the UI in `on_worker_state_changed`.

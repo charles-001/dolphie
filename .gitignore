@@ -2,6 +2,7 @@ __pycache__/
 .venv/
 dist/
 docker-release.sh
+CLAUDE.local.md
 snapshot_report.html
 
 .idea
