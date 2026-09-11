@@ -12,6 +12,7 @@ import os
 import sys
 import time
 from importlib import metadata
+from pathlib import Path
 
 import requests
 from loguru import logger
@@ -21,6 +22,7 @@ from rich.traceback import Traceback
 from textual import events, on, work
 from textual.app import App
 from textual.binding import Binding
+from textual.timer import Timer
 from textual.widgets import Footer, RadioSet, Tabs
 from textual.worker import Worker
 
@@ -59,7 +61,8 @@ except Exception:
 
 class DolphieApp(App):
     TITLE = "Dolphie"
-    CSS_PATH = "Dolphie.tcss"
+    # Absolute, so a subclass defined in another module (tests) still loads the stylesheet.
+    CSS_PATH = Path(__file__).parent / "Dolphie.tcss"
     COMMANDS = {CommandPaletteCommands}
     COMMAND_PALETTE_BINDING = "question_mark"
     BINDINGS = [Binding("escape", "exit_maximized_panel", "Exit maximized panel", show=True)]
@@ -98,6 +101,8 @@ class DolphieApp(App):
         # auto-repeat in KeyEventManager), the step ramps up so scrubbing covers ground
         # without a render per row. Manual clicks/taps stay at a single row.
         self._replay_nav_streak = 0
+        self._replay_nav_direction = 0
+        self._replay_scrub_timer: Timer | None = None
 
         self.console.set_window_title(self.TITLE or "Dolphie")
 
@@ -202,28 +207,63 @@ class DolphieApp(App):
 
     # Replay playback actions. Both the ReplayControls buttons and the keyboard
     # shortcuts in KeyEventManager route through these so there's a single code path.
-    def _replay_nav_step(self, accelerate: bool) -> int:
+    REPLAY_NAV_MIN_STEP_CAP = 25
+    # Seconds without a held-key step before the frame under the cursor is loaded and rendered
+    REPLAY_SCRUB_SETTLE_SECONDS = 0.15
+
+    def _replay_nav_step(self, accelerate: bool, direction: int, total_rows: int) -> int:
         """Returns how many rows a single Back/Forward should move.
 
-        Returns 1 unless [ or ] is being held (``accelerate``), in which case the step
-        ramps up the longer it's held so fast scrubbing covers ground without a render
-        per row. Manual clicks/taps and the ReplayControls buttons always move one row.
+        Returns 1 unless [ or ] is being held (``accelerate``). A held key doubles the step
+        every four actions, capped at 1% of the file so any recording is crossed in about
+        the same time held. A release or a change of direction restarts the ramp, so a tap
+        after a scrub moves one row.
         """
-        if not accelerate:
+        if not accelerate or direction != self._replay_nav_direction:
             self._replay_nav_streak = 0
+            self._replay_nav_direction = direction
+        if not accelerate:
             return 1
 
         self._replay_nav_streak += 1
-        return min(1 + self._replay_nav_streak // 2, 25)
+        cap = max(self.REPLAY_NAV_MIN_STEP_CAP, total_rows // 100)
+        return min(2 ** (self._replay_nav_streak // 4), cap)
+
+    def _replay_step(self, tab: Tab, offset: int, accelerate: bool) -> bool:
+        replay_manager = tab.replay_manager
+        if replay_manager is None or not replay_manager.seek_relative(offset):
+            return False
+
+        if not accelerate:
+            self.force_refresh_for_replay()
+            return True
+
+        # While the key is held only the replay section follows the cursor. Loading and
+        # painting a frame costs 50 to 100 ms on the main thread, so intermediate frames
+        # nobody sees are skipped and the frame under the cursor renders once the key rests.
+        tab.refresh_replay_dashboard_section()
+        if self._replay_scrub_timer is not None:
+            self._replay_scrub_timer.stop()
+        self._replay_scrub_timer = self.set_timer(self.REPLAY_SCRUB_SETTLE_SECONDS, self._finish_replay_scrub)
+        return True
+
+    def _finish_replay_scrub(self) -> None:
+        tab = self.tab_manager.active_tab
+        if tab is not None and tab.worker and tab.worker.is_running:
+            # force_refresh_for_replay drops a request while a worker runs, so wait it out
+            self._replay_scrub_timer = self.set_timer(0.05, self._finish_replay_scrub)
+            return
+
+        self._replay_scrub_timer = None
+        self.force_refresh_for_replay()
 
     def action_replay_back(self, accelerate: bool = False):
         tab = self.tab_manager.active_tab
         if not tab or not tab.dolphie.replay_file or tab.replay_manager is None:
             return
 
-        if tab.replay_manager.seek_relative(-self._replay_nav_step(accelerate)):
-            self.force_refresh_for_replay()
-        else:
+        step = self._replay_nav_step(accelerate, -1, tab.replay_manager.total_replay_rows)
+        if not self._replay_step(tab, -step, accelerate) and not accelerate:
             self.notify("You're already at the beginning of the replay", severity="warning")
 
     def action_replay_forward(self, accelerate: bool = False):
@@ -231,12 +271,9 @@ class DolphieApp(App):
         if not tab or not tab.dolphie.replay_file or tab.replay_manager is None:
             return
 
-        if tab.replay_manager.current_replay_id >= tab.replay_manager.max_replay_id:
+        step = self._replay_nav_step(accelerate, 1, tab.replay_manager.total_replay_rows)
+        if not self._replay_step(tab, step, accelerate) and not accelerate:
             self.notify("You're already at the end of the replay", severity="warning")
-            return
-
-        tab.replay_manager.seek_relative(self._replay_nav_step(accelerate))
-        self.force_refresh_for_replay()
 
     def action_replay_pause(self):
         tab = self.tab_manager.active_tab
@@ -510,7 +547,7 @@ class DolphieApp(App):
     def compose(self):
         yield TopBar(
             host="",
-            app_version=__version__,
+            app_version=self.config.app_version,
             help="press [$b_highlight]?[/] for help",
         )
         yield Tabs(id="host_tabs")

@@ -1,6 +1,6 @@
 [project]
 name = "dolphie"
-version = "6.15.0"
+version = "6.16.0"
 description = "Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL"
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -17,7 +17,7 @@ dependencies = [
     "pymysql>=1.2.0,<2",
     "requests>=2.32.5,<3",
     "rich>=15.0.0,<16",
-    "sqlparse>=0.5.5,<0.6",
+    "sqlparse>=0.6.0,<0.7",
     "textual>=8.2.7,<9",
     "textual-plotext>=1.0.1,<2",
     "zstandard>=0.25.0,<0.26",
@@ -40,11 +40,24 @@ build-backend = "hatchling.build"
 dev = [
     "basedpyright>=1.39.9,<2",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-textual-snapshot>=1.0.0",
     "ruff>=0.15.21",
 ]
 
-[tool.pytest.ini_options]
+[tool.pytest]
+minversion = "9.1"
 testpaths = ["tests"]
+addopts = ["-m", "not integration and not topology"]
+strict = true
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error::DeprecationWarning:dolphie"]
+markers = [
+    "integration: runs Dolphie against Docker MySQL, MariaDB, and ProxySQL servers (tests/integration)",
+    "topology: runs Dolphie against multi-node Docker topologies (tests/integration/topologies)",
+    "flavor_agnostic: integration test with no version-specific code path, run on one MySQL and one MariaDB",
+]
 
 [tool.basedpyright]
 failOnWarnings = true

@@ -109,11 +109,6 @@ class GraphTabSpec:
         return tuple(graph for row in self.rows for graph in row.graphs)
 
     @property
-    def metric_groups(self) -> tuple[str, ...]:
-        """Return metric groups in first-use order."""
-        return tuple(dict.fromkeys(graph.metric_group for graph in self.graphs))
-
-    @property
     def unique_series_by_graph(self) -> tuple[tuple[GraphSpec, tuple[MetricKey, ...]], ...]:
         """Return each graph's series with first-use dedupe across the tab."""
         seen: set[MetricKey] = set()

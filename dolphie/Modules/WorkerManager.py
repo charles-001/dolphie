@@ -365,6 +365,11 @@ class WorkerManager:
         if event.state not in [WorkerState.SUCCESS, WorkerState.CANCELLED, WorkerState.ERROR]:
             return
 
+        # A worker that finishes as the app shuts down still delivers this message while the
+        # widgets it would render into are being removed
+        if not self.app.is_running:
+            return
+
         tab = self.app.tab_manager.get_tab(event.worker.name)
         if not tab:
             return
@@ -485,11 +490,28 @@ class WorkerManager:
             if not tab.main_container.display:
                 tab.sync_shared_ui()
 
-            self.app.worker_data_processor.refresh_screen(tab)
-            if dolphie.connection_source == ConnectionSource.mysql:
-                ReplicationPanel.create_replica_panel(tab)
+            # A frame another Dolphie version recorded can hold data a panel here cannot render.
+            # Pause on the frame with the error shown instead of taking the whole app down; the user
+            # can still step around it or resume. Manual steps onto further bad frames only log, so
+            # holding a step key does not mount a toast per frame.
+            try:
+                self.app.worker_data_processor.refresh_screen(tab)
+                if dolphie.connection_source == ConnectionSource.mysql:
+                    ReplicationPanel.create_replica_panel(tab)
 
-            tab.toggle_entities_displays()
+                tab.toggle_entities_displays()
+            except Exception as e:
+                frame = tab.replay_manager.current_replay_id if tab.replay_manager else "?"
+                logger.exception(f"Failed to render replay frame {frame}")
+                if not dolphie.pause_refresh:
+                    dolphie.pause_refresh = True
+                    tab.replay_controls.paused = True
+                    self.app.notify(
+                        f"Replay paused on a frame this version of Dolphie could not render: {e}",
+                        title="Replay Error",
+                        severity="error",
+                        timeout=10,
+                    )
 
             tab.worker_timer = self.app.set_timer(
                 dolphie.refresh_interval,

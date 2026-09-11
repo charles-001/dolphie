@@ -1,0 +1,133 @@
+services:
+  primary:
+    image: mariadb:11.4
+    tmpfs:
+      - /var/lib/mysql
+    container_name: mariadb-primary
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: test
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --server-id=101
+      - --log-bin=mariadb-bin
+      - --binlog-format=ROW
+      - --gtid-strict-mode=ON
+      - --report-host=127.0.0.1
+      - --report-port=3341
+    ports:
+      - "3341:3306"
+    networks:
+      mariadb:
+        ipv4_address: 172.28.4.2
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  replica-1:
+    image: mariadb:11.4
+    tmpfs:
+      - /var/lib/mysql
+    container_name: mariadb-replica-1
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --server-id=102
+      - --log-bin=mariadb-bin
+      - --relay-log=mariadb-relay-bin
+      - --binlog-format=ROW
+      - --gtid-strict-mode=ON
+      - --log-slave-updates=ON
+      - --read-only=ON
+      - --report-host=127.0.0.1
+      - --report-port=3342
+    ports:
+      - "3342:3306"
+    networks:
+      mariadb:
+        ipv4_address: 172.28.4.3
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  replica-2:
+    image: mariadb:11.4
+    tmpfs:
+      - /var/lib/mysql
+    container_name: mariadb-replica-2
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+    command:
+      - --innodb-buffer-pool-size=128M
+      - --server-id=103
+      - --log-bin=mariadb-bin
+      - --relay-log=mariadb-relay-bin
+      - --binlog-format=ROW
+      - --gtid-strict-mode=ON
+      - --log-slave-updates=ON
+      - --read-only=ON
+      - --report-host=127.0.0.1
+      - --report-port=3343
+    ports:
+      - "3343:3306"
+    networks:
+      mariadb:
+        ipv4_address: 172.28.4.4
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 5s
+
+  bootstrap:
+    image: mariadb:11.4
+    container_name: mariadb-bootstrap
+    depends_on:
+      primary:
+        condition: service_healthy
+      replica-1:
+        condition: service_healthy
+      replica-2:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/bootstrap.sh"]
+    volumes:
+      - ./bootstrap.sh:/bootstrap.sh
+    networks:
+      mariadb:
+        ipv4_address: 172.28.4.5
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/replication-ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 3s
+
+  write-load:
+    image: mariadb:11.4
+    container_name: mariadb-write-load
+    depends_on:
+      bootstrap:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "/write-load.sh"]
+    volumes:
+      - ./write-load.sh:/write-load.sh
+    networks:
+      mariadb:
+        ipv4_address: 172.28.4.10
+    restart: unless-stopped
+
+networks:
+  mariadb:
+    driver: bridge
+    enable_ipv6: false
+    ipam:
+      config:
+        - subnet: 172.28.4.0/24

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import cast
 
@@ -40,27 +39,24 @@ class MetricControlTestApp(App[None]):
         self.visibility_messages.append(event)
 
 
-def test_metric_series_control_combines_identity_value_and_switch() -> None:
-    async def run_test() -> None:
-        async with MetricControlTestApp().run_test() as pilot:
-            app = cast(MetricControlTestApp, pilot.app)
-            control = pilot.app.query_one(MetricSeriesControl)
-            control.update_metric("1.2K/s", visible=True)
-            await pilot.pause()
+async def test_metric_series_control_combines_identity_value_and_switch() -> None:
+    async with MetricControlTestApp().run_test() as pilot:
+        app = cast(MetricControlTestApp, pilot.app)
+        control = pilot.app.query_one(MetricSeriesControl)
+        control.update_metric("1.2K/s", visible=True)
+        await pilot.pause()
 
-            assert str(control.value_label.render()) == "━━ SELECT 1.2K/s"
-            assert control.query_one(Switch).value is True
-            assert control.tooltip is None
-            assert control.query_one(Switch).tooltip is None
+        assert str(control.value_label.render()) == "━━ SELECT 1.2K/s"
+        assert control.query_one(Switch).value is True
+        assert control.tooltip is None
+        assert control.query_one(Switch).tooltip is None
 
-            control.update_metric("900/s", visible=False)
-            await pilot.pause()
-            assert str(control.value_label.render()) == "━━ SELECT 900/s OFF"
-            assert control.query_one(Switch).value is False
-            assert control.display
-            assert app.visibility_messages == []
-
-    asyncio.run(run_test())
+        control.update_metric("900/s", visible=False)
+        await pilot.pause()
+        assert str(control.value_label.render()) == "━━ SELECT 900/s OFF"
+        assert control.query_one(Switch).value is False
+        assert control.display
+        assert app.visibility_messages == []
 
 
 def test_fixed_hidden_metric_control_is_not_displayed() -> None:
@@ -77,16 +73,13 @@ def test_fixed_hidden_metric_control_is_not_displayed() -> None:
     assert str(control._render_label()) == "██ Total — OFF"
 
 
-def test_control_body_emits_typed_visibility_message() -> None:
-    async def run_test() -> None:
-        async with MetricControlTestApp().run_test() as pilot:
-            app = cast(MetricControlTestApp, pilot.app)
-            await pilot.click("#metric-control-dml-Com_select")
-            await pilot.pause()
+async def test_control_body_emits_typed_visibility_message() -> None:
+    async with MetricControlTestApp().run_test() as pilot:
+        app = cast(MetricControlTestApp, pilot.app)
+        await pilot.click("#metric-control-dml-Com_select")
+        await pilot.pause()
 
-            assert len(app.visibility_messages) == 1
-            message = app.visibility_messages[0]
-            assert message.metric_key == MetricKey("dml", "Com_select")
-            assert message.visible is False
-
-    asyncio.run(run_test())
+        assert len(app.visibility_messages) == 1
+        message = app.visibility_messages[0]
+        assert message.metric_key == MetricKey("dml", "Com_select")
+        assert message.visible is False

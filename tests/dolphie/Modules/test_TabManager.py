@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import Mock
@@ -8,20 +7,8 @@ from unittest.mock import Mock
 from dolphie.App import DolphieApp
 from dolphie.DataTypes import ConnectionSource, ConnectionStatus
 from dolphie.Dolphie import Dolphie
-from dolphie.Modules.MetricManager import MetricManager
 from dolphie.Modules.TabManager import Tab, TabManager
 from dolphie.Panels import Replication as ReplicationPanel
-
-
-def test_metric_reset_preserves_per_host_visibility() -> None:
-    first_manager = MetricManager(None)
-    second_manager = MetricManager(None)
-    first_manager.metrics.dml.Com_select.visible = False
-
-    first_manager.reset()
-
-    assert first_manager.metrics.dml.Com_select.visible is False
-    assert second_manager.metrics.dml.Com_select.visible is True
 
 
 def test_switch_tab_binds_dashboard_before_first_worker_poll() -> None:
@@ -104,7 +91,7 @@ def test_sync_replication_ui_renders_selected_hosts_cached_snapshot(monkeypatch)
     toggle_replication_panel_components.assert_called_once_with()
 
 
-def test_daemon_disconnect_skips_uninitialized_ui_references() -> None:
+async def test_daemon_disconnect_skips_uninitialized_ui_references() -> None:
     class Connection:
         def __init__(self) -> None:
             self.closed = False
@@ -119,29 +106,26 @@ def test_daemon_disconnect_skips_uninitialized_ui_references() -> None:
         def remove_all_replicas(self) -> None:
             self.removed = True
 
-    async def run_test() -> None:
-        main_connection = Connection()
-        secondary_connection = Connection()
-        replica_manager = ReplicaManager()
-        dolphie = cast(
-            Dolphie,
-            SimpleNamespace(
-                daemon_mode=True,
-                main_db_connection=main_connection,
-                secondary_db_connection=secondary_connection,
-                replica_manager=replica_manager,
-                connection_status=None,
-            ),
-        )
-        tab = Tab(id="daemon", name="daemon", dolphie=dolphie)
-        manager = cast(TabManager, object.__new__(TabManager))
-        manager.active_tab = tab
+    main_connection = Connection()
+    secondary_connection = Connection()
+    replica_manager = ReplicaManager()
+    dolphie = cast(
+        Dolphie,
+        SimpleNamespace(
+            daemon_mode=True,
+            main_db_connection=main_connection,
+            secondary_db_connection=secondary_connection,
+            replica_manager=replica_manager,
+            connection_status=None,
+        ),
+    )
+    tab = Tab(id="daemon", name="daemon", dolphie=dolphie)
+    manager = cast(TabManager, object.__new__(TabManager))
+    manager.active_tab = tab
 
-        await manager.disconnect_tab(tab, update_topbar=False, wait_for_workers=False)
+    await manager.disconnect_tab(tab, update_topbar=False, wait_for_workers=False)
 
-        assert main_connection.closed
-        assert secondary_connection.closed
-        assert replica_manager.removed
-        assert dolphie.connection_status == ConnectionStatus.disconnected
-
-    asyncio.run(run_test())
+    assert main_connection.closed
+    assert secondary_connection.closed
+    assert replica_manager.removed
+    assert dolphie.connection_status == ConnectionStatus.disconnected

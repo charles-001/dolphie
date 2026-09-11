@@ -357,3 +357,16 @@ def test_update_internal_data_statements_summary(
 
     assert p_s.internal_data == expected_internal_data
     assert p_s.filtered_data == expected_filtered_data
+
+
+def test_rows_without_a_key_are_skipped_and_keys_are_strings() -> None:
+    metrics = PerformanceSchemaMetrics(
+        [
+            {"FILE_NAME": None, "COUNT_READ": 1},
+            {"FILE_NAME": 123, "COUNT_READ": 2},
+        ],
+        "file_io",
+        "FILE_NAME",
+    )
+
+    assert list(metrics.internal_data) == ["123"]

@@ -71,11 +71,13 @@ class KeyEventManager:
         # so we track the raw inter-event interval to distinguish a held key from manual
         # clicking. Only a held key accelerates replay Back/Forward. Measured on the raw
         # stream because the debounce below would otherwise mask the timing difference.
+        # Auto-repeat runs at 30 to 50 ms, so a gap past the release threshold is a new
+        # press: a tap right after a scrub must move one row, not the scrub's last step.
         self._replay_repeat_keys = {"left_square_bracket", "right_square_bracket"}
         self._replay_repeat_last_time: datetime | None = None
         self._replay_key_held = False
         self.replay_repeat_threshold = timedelta(milliseconds=90)
-        self.replay_release_threshold = timedelta(milliseconds=400)
+        self.replay_release_threshold = timedelta(milliseconds=150)
 
         # Custom debounce intervals for specific keys that trigger expensive operations
         self.key_debounce_intervals = {

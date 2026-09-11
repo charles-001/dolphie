@@ -77,12 +77,14 @@ def test_processlist_time_colors_use_textual_theme_variables(query_time: int, co
 def test_hostgroup_without_host_exits_cleanly():
     parser = object.__new__(ArgumentParser)
     parser.config = Config("test")
-    parser.console = Console(file=StringIO())
+    parser.console = Console(file=StringIO(), record=True)
     config = RawConfigParser()
     config.read_dict({"cluster": {"primary": '{"port": 3306}'}})
 
     with pytest.raises(SystemExit):
         parser.parse_hostgroup(config, "cluster", "dolphie.cnf")
+
+    assert "dolphie.cnf: Hostgroup cluster, key primary must specify a non-empty host" in parser.console.export_text()
 
 
 def test_hostgroup_port_and_profile_are_typed_values():

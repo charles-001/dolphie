@@ -1,0 +1,162 @@
+# Single-node servers for the integration suite, one compose profile per flavor.
+# MySQL: 5.7, 8.0, and both LTS lines (8.4, 9.7). MariaDB: every maintained LTS series.
+# Data directories live on tmpfs so a run leaves nothing on disk, and the
+# InnoDB footprint is kept small so several flavors can run side by side.
+#
+#   docker compose --profile mysql84 up --wait
+#   docker compose --profile all up --wait
+#   docker compose --profile all down -v --remove-orphans
+
+x-mysql-common: &mysql-common
+  environment:
+    MYSQL_ROOT_PASSWORD: root
+    MYSQL_ROOT_HOST: "%"
+  tmpfs:
+    - /var/lib/mysql
+  healthcheck:
+    test: ["CMD-SHELL", "mysql -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+    interval: 2s
+    timeout: 2s
+    retries: 45
+    start_period: 5s
+
+x-mariadb-common: &mariadb-common
+  environment:
+    MARIADB_ROOT_PASSWORD: root
+  tmpfs:
+    - /var/lib/mysql
+  healthcheck:
+    test: ["CMD-SHELL", "mariadb -uroot -proot -e 'SELECT 1' 2>/dev/null"]
+    interval: 2s
+    timeout: 2s
+    retries: 45
+    start_period: 5s
+
+# Flags shared by every MySQL 8.0.30+ server.
+x-mysql8-command: &mysql8-command
+  - --server-id=1
+  - --log-bin=binlog
+  - --gtid-mode=ON
+  - --enforce-gtid-consistency=ON
+  - --binlog-expire-logs-seconds=600
+  - --performance-schema=ON
+  - --innodb-buffer-pool-size=128M
+  - --innodb-redo-log-capacity=32M
+  - --skip-name-resolve
+
+x-mariadb-command: &mariadb-command
+  - --server-id=1
+  - --log-bin=mariadb-bin
+  - --binlog-format=ROW
+  - --binlog-expire-logs-seconds=600
+  - --performance-schema=ON
+  - --innodb-buffer-pool-size=128M
+  - --innodb-log-file-size=32M
+  - --skip-name-resolve
+
+services:
+  mysql57:
+    <<: *mysql-common
+    image: mysql:5.7
+    # The 5.7 image is amd64 only. Apple Silicon runs it under emulation.
+    platform: linux/amd64
+    profiles: [mysql57, all]
+    command:
+      - --server-id=1
+      - --log-bin=binlog
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --expire-logs-days=1
+      - --performance-schema=ON
+      - --innodb-buffer-pool-size=128M
+      - --innodb-log-file-size=32M
+      - --skip-name-resolve
+    ports:
+      - "33057:3306"
+
+  mysql80:
+    <<: *mysql-common
+    image: mysql:8.0
+    profiles: [mysql80, all]
+    command: *mysql8-command
+    ports:
+      - "33080:3306"
+
+  mysql84:
+    <<: *mysql-common
+    image: mysql:8.4
+    profiles: [mysql84, proxysql, all]
+    command: *mysql8-command
+    ports:
+      - "33084:3306"
+
+  mysql97:
+    <<: *mysql-common
+    image: mysql:9.7
+    profiles: [mysql97, all]
+    command: *mysql8-command
+    ports:
+      - "33097:3306"
+
+  percona84:
+    <<: *mysql-common
+    image: percona/percona-server:8.4
+    profiles: [percona84, all]
+    command: *mysql8-command
+    # Percona runs mysqld as an unprivileged user, so its tmpfs must be world-writable.
+    tmpfs:
+      - /var/lib/mysql:mode=1777
+    ports:
+      - "33184:3306"
+
+  mariadb1011:
+    <<: *mariadb-common
+    image: mariadb:10.11
+    profiles: [mariadb1011, all]
+    command: *mariadb-command
+    ports:
+      - "33111:3306"
+
+  mariadb114:
+    <<: *mariadb-common
+    image: mariadb:11.4
+    profiles: [mariadb114, all]
+    command: *mariadb-command
+    ports:
+      - "33114:3306"
+
+  mariadb118:
+    <<: *mariadb-common
+    image: mariadb:11.8
+    profiles: [mariadb118, all]
+    command: *mariadb-command
+    ports:
+      - "33118:3306"
+
+  mariadb123:
+    <<: *mariadb-common
+    image: mariadb:12.3
+    profiles: [mariadb123, all]
+    command: *mariadb-command
+    ports:
+      - "33123:3306"
+
+  proxysql:
+    image: proxysql/proxysql:3.0
+    profiles: [proxysql, all]
+    depends_on:
+      mysql84:
+        condition: service_healthy
+    volumes:
+      - ./proxysql.cnf:/etc/proxysql.cnf:ro
+    tmpfs:
+      - /var/lib/proxysql
+    ports:
+      - "36032:6032"
+      - "36033:6033"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/6032'"]
+      interval: 2s
+      timeout: 2s
+      retries: 45
+      start_period: 5s

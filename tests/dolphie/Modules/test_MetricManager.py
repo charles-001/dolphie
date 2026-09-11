@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import fields
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from threading import Thread
+from threading import Lock, Thread
 
 import pytest
 
 from dolphie.DataTypes import ConnectionSource
 from dolphie.Modules.MetricDefinitions import MetricData, MetricValue
-from dolphie.Modules.MetricGraph import calculate_hourly_rate
 from dolphie.Modules.MetricManager import MetricManager
 
 BASE_TIME = datetime(2026, 1, 1, tzinfo=timezone.utc)
@@ -141,23 +140,15 @@ def test_clear_history_clears_global_and_per_metric_sample_metadata() -> None:
     assert manager.metrics.dml.Queries.last_value is None
 
 
-def test_metric_group_processing_metadata_is_shared_and_not_dataclass_state() -> None:
-    first = MetricManager(None)
-    second = MetricManager(None)
+def test_reset_preserves_per_host_visibility() -> None:
+    first_manager = MetricManager(None)
+    second_manager = MetricManager(None)
+    first_manager.metrics.dml.Com_select.visible = False
 
-    field_names = {metric_field.name for metric_field in fields(first.metrics.dml)}
-    assert field_names == {
-        "Queries",
-        "Com_select",
-        "Com_insert",
-        "Com_update",
-        "Com_delete",
-        "Com_replace",
-        "Com_commit",
-        "Com_rollback",
-    }
-    assert first.metrics.dml.connection_source is second.metrics.dml.connection_source
-    assert not hasattr(first.metrics.dml, "graphs")
+    first_manager.reset()
+
+    assert first_manager.metrics.dml.Com_select.visible is False
+    assert second_manager.metrics.dml.Com_select.visible is True
 
 
 def test_replay_replacement_clears_metrics_missing_from_new_snapshot() -> None:
@@ -196,10 +187,6 @@ def test_proxysql_command_stats_aggregate_numeric_buckets() -> None:
     assert manager.proxysql_total_command_stats == {"cnt_1ms": 6, "cnt_10ms": 3}
 
 
-def test_hourly_redo_rate_is_weighted_by_observed_intervals() -> None:
-    assert calculate_hourly_rate([10, 20], [1, 9]) == 68_400
-
-
 def test_naive_worker_timestamp_is_consistently_treated_as_utc() -> None:
     manager = MetricManager(None)
     naive_time = BASE_TIME.replace(tzinfo=None)
@@ -211,43 +198,25 @@ def test_naive_worker_timestamp_is_consistently_treated_as_utc() -> None:
     assert manager.metrics.dml.Queries.snapshot()[0] == ["01/01/26 00:00:01"]
 
 
-def test_metric_snapshot_remains_aligned_during_concurrent_appends() -> None:
+def assert_waits_for_writer(lock: Lock, read: Callable[[], object]) -> None:
+    """The reader must block while a writer holds the lock, and finish once it is released."""
+    reader = Thread(target=read)
+    with lock:
+        reader.start()
+        reader.join(timeout=0.05)
+        assert reader.is_alive()
+    reader.join(timeout=1)
+    assert not reader.is_alive()
+
+
+def test_snapshots_wait_for_a_writer_holding_the_lock() -> None:
     metric = MetricData(label="Concurrent", color=(1, 2, 3))
+    assert_waits_for_writer(metric._lock, metric.snapshot)
 
-    def append_samples() -> None:
-        for second in range(1_000):
-            metric.append_sample(second, f"01/01/26 00:{second // 60:02}:{second % 60:02}", 1)
-
-    writer = Thread(target=append_samples)
-    writer.start()
-    while writer.is_alive():
-        datetimes, values, intervals = metric.snapshot()
-        assert len(datetimes) == len(values) == len(intervals)
-    writer.join()
-
-    datetimes, values, intervals = metric.snapshot()
-    assert len(datetimes) == len(values) == len(intervals) == 1_000
-
-
-def test_manager_snapshot_remains_aligned_during_replay_appends() -> None:
     manager = MetricManager("replay.db")
-    query_metric = manager.metrics.dml.Queries
-
-    def append_samples() -> None:
-        for second in range(1_000):
-            timestamp = f"01/01/26 00:{second // 60:02}:{second % 60:02}"
-            manager.append_replay_history(timestamp, [(query_metric, second)])
-
-    writer = Thread(target=append_samples)
-    writer.start()
-
-    while writer.is_alive():
-        datetimes, metric_history = manager.snapshot_history(ConnectionSource.mysql, latest_only=False)
-        dml_history = dict(metric_history)["dml"]
-        query_values = dict(dml_history).get("Queries", [])
-        assert len(datetimes) == len(query_values)
-
-    writer.join()
+    assert_waits_for_writer(
+        manager._state_lock, lambda: manager.snapshot_history(ConnectionSource.mysql, latest_only=False)
+    )
 
 
 def test_returning_counter_establishes_new_baseline_after_missing_sample() -> None:

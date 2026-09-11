@@ -1,0 +1,25 @@
+[credential_profile_docker]
+user = root
+password = root
+
+[docker]
+galera_node_1 = {"host": "127.0.0.1:3307", "tab_title": "Galera 1", "credential_profile": "docker"}
+galera_node_2 = {"host": "127.0.0.1:3308", "tab_title": "Galera 2", "credential_profile": "docker"}
+galera_node_3 = {"host": "127.0.0.1:3309", "tab_title": "Galera 3", "credential_profile": "docker"}
+galera_async = {"host": "127.0.0.1:3310", "tab_title": "Galera Async", "credential_profile": "docker"}
+clusterset_node_1 = {"host": "127.0.0.1:3311", "tab_title": "ClusterSet 1", "credential_profile": "docker"}
+clusterset_node_2 = {"host": "127.0.0.1:3312", "tab_title": "ClusterSet 2", "credential_profile": "docker"}
+clusterset_node_3 = {"host": "127.0.0.1:3313", "tab_title": "ClusterSet 3", "credential_profile": "docker"}
+clusterset_node_4 = {"host": "127.0.0.1:3314", "tab_title": "ClusterSet 4", "credential_profile": "docker"}
+clusterset_node_5 = {"host": "127.0.0.1:3315", "tab_title": "ClusterSet 5", "credential_profile": "docker"}
+clusterset_node_6 = {"host": "127.0.0.1:3316", "tab_title": "ClusterSet 6", "credential_profile": "docker"}
+gr_node_1 = {"host": "127.0.0.1:3321", "tab_title": "GR 1", "credential_profile": "docker"}
+gr_node_2 = {"host": "127.0.0.1:3322", "tab_title": "GR 2", "credential_profile": "docker"}
+gr_node_3 = {"host": "127.0.0.1:3323", "tab_title": "GR 3", "credential_profile": "docker"}
+gr_async = {"host": "127.0.0.1:3324", "tab_title": "GR Async", "credential_profile": "docker"}
+multi_source_a = {"host": "127.0.0.1:3331", "tab_title": "Multi-source A", "credential_profile": "docker"}
+multi_source_b = {"host": "127.0.0.1:3332", "tab_title": "Multi-source B", "credential_profile": "docker"}
+multi_source_replica = {"host": "127.0.0.1:3333", "tab_title": "Multi-source Replica", "credential_profile": "docker"}
+mariadb_primary = {"host": "127.0.0.1:3341", "tab_title": "MariaDB Primary (Errant Replica Test)", "credential_profile": "docker"}
+mariadb_replica_1 = {"host": "127.0.0.1:3342", "tab_title": "MariaDB Replica 1", "credential_profile": "docker"}
+mariadb_replica_2 = {"host": "127.0.0.1:3343", "tab_title": "MariaDB Replica 2", "credential_profile": "docker"}

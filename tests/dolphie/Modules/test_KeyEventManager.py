@@ -1,4 +1,3 @@
-import asyncio
 from types import SimpleNamespace
 from typing import cast
 
@@ -39,7 +38,7 @@ def create_dolphie(**filters):
     return dolphie
 
 
-def press_filter_key(dolphie, submitted):
+async def press_filter_key(dolphie, submitted):
     """Run the filter command, answer its modal with submitted, and report what it did."""
     notifications = []
     prefilled = []
@@ -61,7 +60,7 @@ def press_filter_key(dolphie, submitted):
         app=SimpleNamespace(push_screen=push_screen),
     )
 
-    asyncio.run(KeyEventManager(cast(DolphieApp, app)).process_key_event("f"))
+    await KeyEventManager(cast(DolphieApp, app)).process_key_event("f")
 
     return SimpleNamespace(
         filters={attribute: getattr(dolphie, attribute) for attribute in FILTER_ATTRIBUTES},
@@ -71,10 +70,10 @@ def press_filter_key(dolphie, submitted):
     )
 
 
-def test_submitted_filters_are_applied():
+async def test_submitted_filters_are_applied():
     dolphie = create_dolphie()
 
-    result = press_filter_key(dolphie, ["!azure_superuser", "", "mydb", "", "5", ""])
+    result = await press_filter_key(dolphie, ["!azure_superuser", "", "mydb", "", "5", ""])
 
     assert result.filters == {
         "user_filter": "!azure_superuser",
@@ -89,25 +88,10 @@ def test_submitted_filters_are_applied():
     assert result.notifications[0][1] == "[b]User[/b]: not [$b_highlight]azure_superuser[/$b_highlight]"
 
 
-def test_filters_in_effect_are_given_to_the_modal():
+async def test_resubmitting_filters_unchanged_notifies_nothing():
     dolphie = create_dolphie(user_filter="!azure_superuser", db_filter="mydb", query_time_filter=5)
 
-    result = press_filter_key(dolphie, NO_FILTERS_SUBMITTED)
-
-    assert result.prefilled == {
-        "username": "!azure_superuser",
-        "host": None,
-        "db": "mydb",
-        "hostgroup": None,
-        "query_time": 5,
-        "query_text": None,
-    }
-
-
-def test_resubmitting_filters_unchanged_notifies_nothing():
-    dolphie = create_dolphie(user_filter="!azure_superuser", db_filter="mydb", query_time_filter=5)
-
-    result = press_filter_key(dolphie, ["!azure_superuser", "", "mydb", "", "5", ""])
+    result = await press_filter_key(dolphie, ["!azure_superuser", "", "mydb", "", "5", ""])
 
     assert result.filters["user_filter"] == "!azure_superuser"
     assert result.filters["db_filter"] == "mydb"
@@ -123,24 +107,33 @@ def test_resubmitting_filters_unchanged_notifies_nothing():
         (["!azure_superuser", "", "mydb", "", "", ""], ("!azure_superuser", "mydb", None)),
         (["!azure_superuser", "", "", "", "", ""], ("!azure_superuser", None, None)),
     ],
+    ids=["clear-db", "clear-user", "clear-query-time", "clear-db-and-query-time"],
 )
-def test_clearing_a_field_removes_that_filter(submitted, expected):
+async def test_clearing_a_field_removes_that_filter(submitted, expected):
     # The modal is prefilled with what's in effect, so an empty field means "remove this one"
     applied_filters = ("user_filter", "db_filter", "query_time_filter")
     dolphie = create_dolphie(user_filter="!azure_superuser", db_filter="mydb", query_time_filter=5)
 
-    result = press_filter_key(dolphie, submitted)
+    result = await press_filter_key(dolphie, submitted)
 
     assert tuple(result.filters[attribute] for attribute in applied_filters) == expected
     # However many filters were removed, they're reported in one notification
     assert [title for title, _ in result.notifications] == ["Filter removed"]
 
 
-def test_clearing_every_field_removes_all_filters():
+async def test_the_modal_is_prefilled_and_clearing_every_field_removes_all_filters():
     dolphie = create_dolphie(user_filter="!azure_superuser", db_filter="mydb", query_time_filter=5)
 
-    result = press_filter_key(dolphie, NO_FILTERS_SUBMITTED)
+    result = await press_filter_key(dolphie, NO_FILTERS_SUBMITTED)
 
+    assert result.prefilled == {
+        "username": "!azure_superuser",
+        "host": None,
+        "db": "mydb",
+        "hostgroup": None,
+        "query_time": 5,
+        "query_text": None,
+    }
     assert result.filters == dict.fromkeys(FILTER_ATTRIBUTES, None)
     assert result.refreshes == [True]
 
@@ -150,10 +143,10 @@ def test_clearing_every_field_removes_all_filters():
         assert filter_name in message
 
 
-def test_changing_a_filter_only_notifies_the_one_that_changed():
+async def test_changing_a_filter_only_notifies_the_one_that_changed():
     dolphie = create_dolphie(user_filter="!azure_superuser", db_filter="mydb")
 
-    result = press_filter_key(dolphie, ["!azure_superuser", "", "otherdb", "", "", ""])
+    result = await press_filter_key(dolphie, ["!azure_superuser", "", "otherdb", "", "", ""])
 
     assert result.filters["db_filter"] == "otherdb"
     assert result.notifications == [("Filter applied", "[b]Database[/b]: [$b_highlight]otherdb[/$b_highlight]")]
