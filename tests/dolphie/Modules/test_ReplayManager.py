@@ -767,7 +767,7 @@ def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
 
 
 def test_playback_opens_a_closed_file_in_a_directory_it_cannot_write(tmp_path: Path) -> None:
-    """A read-only mount or another user's directory: WAL needs a -shm to read, so the file opens as immutable."""
+    """A read-only mount or another user's directory: a stopped daemon's file must need no -shm to read."""
     replay_file = record_replay(tmp_path, polls=3)
     replay_file.parent.chmod(0o555)
     try:

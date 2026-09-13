@@ -379,16 +379,8 @@ class ReplayManager:
             raise
 
     def _open_for_playback(self):
-        """Opens the replay file read-only so playback can never modify a file a daemon is still writing.
-
-        A WAL file needs a -shm next to it even to read. Where the directory cannot be written (a
-        read-only mount, another user's directory) and no -wal exists, so no daemon has the file open,
-        the file is complete and is opened as immutable instead.
-        """
-        path = Path(self.replay_file).resolve()
-        uri = f"{path.as_uri()}?mode=ro"
-        if not os.access(path.parent, os.W_OK) and not path.with_name(f"{path.name}-wal").exists():
-            uri = f"{path.as_uri()}?immutable=1"
+        """Opens the replay file read-only so playback can never modify a file a daemon is still writing."""
+        uri = f"{Path(self.replay_file).resolve().as_uri()}?mode=ro"
         try:
             self.connection = sqlite3.connect(uri, uri=True, isolation_level=None, check_same_thread=False)
         except sqlite3.Error as e:
