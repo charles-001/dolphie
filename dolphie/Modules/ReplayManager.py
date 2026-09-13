@@ -75,9 +75,18 @@ class ReplayManager:
 
     # Constants
     PURGE_CHECK_INTERVAL_HOURS = 1
-    COMPRESSION_LEVEL = 5
+    # With the raw-content prefix dictionary, level 9 writes rows 7% smaller than level 5 at 0.1 ms a
+    # row. Level 19 takes another 10% but costs 30 ms on a 1000-thread row
+    COMPRESSION_LEVEL = 9
     COMPRESSION_DICT_SAMPLES = 3
     PAGE_SIZE = 16384
+    # The WAL is reused from its start after each checkpoint but never shrinks by itself. This caps it
+    # at the next checkpoint, and the purge truncates it to zero
+    WAL_SIZE_LIMIT_BYTES = 4 * 1024 * 1024
+    # A connection that holds a read open (a sqlite3 shell or GUI left inside a query) blocks every
+    # checkpoint, and the WAL then takes every new row. Past this size the daemon stops writing rows
+    # until the reader lets go, so disk use stays bounded by retention plus this cap
+    WAL_MAX_BYTES = 64 * 1024 * 1024
     # Cap on unreadable rows skipped in one step, so one refresh cannot scan a whole corrupt stretch
     MAX_SKIPPED_ROWS = 100
     # Floor for the number of decompressed metric_manager payloads kept in memory to
@@ -134,6 +143,8 @@ class ReplayManager:
         )  # Initialize to an hour ago
         self.replay_file_size: int = 0
         self.dict_samples: list[bytes] = []
+        self.summary_samples: list[bytes] = []
+        self.wal_pinned: bool = False
         self.global_variable_change_ids: list[int] = []
         self.has_summary: bool = False
 
@@ -370,11 +381,20 @@ class ReplayManager:
 
         if not database_exists:
             # Rows are about 1.25 KB. With 4 KB pages a leaf holds three rows and wastes a quarter of
-            # the file; 16 KB pages bring that under a tenth. Only takes effect before the first table.
+            # the file; 16 KB pages bring that under a tenth. Only takes effect before the first table,
+            # and before WAL mode fixes the page size for good.
             self._execute_modify(f"PRAGMA page_size = {self.PAGE_SIZE}")
             logger.info("Created new SQLite database and connected to it")
         else:
             logger.info("Connected to SQLite")
+
+        # A rollback journal costs four fsyncs and a journal unlink for every poll, and a reader that
+        # holds a statement open makes the daemon's commit fail. WAL appends one frame per poll, fsyncs
+        # at checkpoint, and never blocks on readers. NORMAL survives a crash with at most the last
+        # un-synced commits lost, never a corrupt file. The size limit is per connection.
+        self._execute_select_one("PRAGMA journal_mode = WAL")
+        self._execute_modify("PRAGMA synchronous = NORMAL")
+        self._execute_modify(f"PRAGMA journal_size_limit = {self.WAL_SIZE_LIMIT_BYTES}")
 
         # Create replay_data table if it doesn't exist
         self._execute_modify(
@@ -456,8 +476,38 @@ class ReplayManager:
 
         self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
         self._execute_modify("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
+        # Fold the WAL into the file and truncate it, so the purge frees disk instead of moving it
+        self._truncate_wal()
 
         self.last_purge_time = current_time
+
+    def _truncate_wal(self) -> bool:
+        """Checkpoint and truncate the WAL. False when a reader's open snapshot pins frames in it.
+
+        A PASSIVE checkpoint never waits, and reports how many frames a reader kept it from folding
+        in. Only when it folded them all is TRUNCATE asked to reset the file, so a pinned reader
+        costs a probe rather than the connection's busy timeout on every poll.
+        """
+        result = self._execute_select_one("PRAGMA wal_checkpoint(PASSIVE)")
+        if result is None or result[0] == 1 or result[1] != result[2]:
+            return False
+        result = self._execute_select_one("PRAGMA wal_checkpoint(TRUNCATE)")
+        return result is not None and result[0] == 0
+
+    def _wal_within_cap(self) -> bool:
+        """Whether a row may be written: the WAL is under WAL_MAX_BYTES or can be truncated now."""
+        wal_file = Path(f"{self.replay_file}-wal")
+        within = not wal_file.exists() or wal_file.stat().st_size < self.WAL_MAX_BYTES or self._truncate_wal()
+        if within and self.wal_pinned:
+            logger.info("The connection holding the replay file open has closed. Recording resumes")
+        elif not within and not self.wal_pinned:
+            logger.error(
+                f"The replay file's WAL reached {format_bytes(wal_file.stat().st_size, color=False)} and cannot be "
+                "checkpointed because another connection holds the replay file open. Recording is paused until "
+                f"the sqlite3 shell or GUI tool that has {self.replay_file} open closes"
+            )
+        self.wal_pinned = not within
+        return within
 
     def seek_relative(self, offset: int) -> bool:
         """Moves the replay cursor by ``offset`` rows. Gap-safe and range-clamped.
@@ -712,13 +762,17 @@ class ReplayManager:
         The samples are used verbatim as a raw-content prefix. Consecutive rows repeat nearly all of
         their content (global variables alone are half of a row), and long matches into the prefix
         compress a row about five times smaller than a dictionary trained from the same samples.
-        Readers load the bytes with ZstdCompressionDict's auto-detection, so this stays compatible
-        with files that hold a trained dictionary.
+        Summaries have their own shape, so their samples follow the rows in the same prefix and
+        compress 15% smaller than against rows alone, at no cost to the rows. Readers load the bytes
+        with ZstdCompressionDict's auto-detection, so this stays compatible with files that hold a
+        trained dictionary.
 
         Returns:
             zstd.ZstdCompressionDict: The created compression dictionary.
         """
-        compression_dict = zstd.ZstdCompressionDict(b"".join(self.dict_samples), dict_type=zstd.DICT_TYPE_RAWCONTENT)
+        compression_dict = zstd.ZstdCompressionDict(
+            b"".join(self.dict_samples + self.summary_samples), dict_type=zstd.DICT_TYPE_RAWCONTENT
+        )
 
         logger.info(
             f"ZSTD compression dictionary built from {len(self.dict_samples)} samples "
@@ -913,19 +967,23 @@ class ReplayManager:
 
         return [keep(row) for row in value] if isinstance(value, list) else keep(value)
 
-    def _handle_compression_training(self, data_dict_bytes: bytes) -> None:
+    def _handle_compression_training(self, data_dict_bytes: bytes, summary_bytes: bytes | None = None) -> None:
         """Handles compression dictionary training by collecting samples and training when ready.
 
         Args:
             data_dict_bytes: The serialized data to use as a training sample.
+            summary_bytes: The serialized row summary, sampled alongside when the summary column is enabled.
         """
         if not self.compression_dict:
             if len(self.dict_samples) < self.COMPRESSION_DICT_SAMPLES:
                 self.dict_samples.append(data_dict_bytes)
+                if summary_bytes is not None:
+                    self.summary_samples.append(summary_bytes)
             else:
                 self.compression_dict = self._build_compression_dict()
                 # Release the samples; a rotated file starts sampling again from an empty list
                 self.dict_samples = []
+                self.summary_samples = []
 
     def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes, summary_bytes: bytes | None = None) -> None:
         """Inserts the replay data into the database and handles variable change linkage.
@@ -981,7 +1039,7 @@ class ReplayManager:
     def capture_state(self):
         """Captures the current state of the Dolphie instance and stores it in the SQLite database."""
         # Don't capture when not recording, or when loading a replay file (read-only mode)
-        if not self.dolphie.record_for_replay or self.dolphie.replay_file:
+        if not self.dolphie.record_for_replay or self.dolphie.replay_file or not self._wal_within_cap():
             return
 
         # Prepare processlist data
@@ -1004,8 +1062,8 @@ class ReplayManager:
 
         # Serialize and compress the data
         data_dict_bytes = self._serialize_data_dict(data_dict)
-        self._handle_compression_training(data_dict_bytes)
         summary_bytes = self._serialize_data_dict(self._summarize(data_dict)) if self.dolphie.replay_summary else None
+        self._handle_compression_training(data_dict_bytes, summary_bytes)
 
         # Insert into database
         self._insert_replay_data(timestamp, data_dict_bytes, summary_bytes)

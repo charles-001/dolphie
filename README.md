@@ -255,6 +255,12 @@ Example log messages in daemon mode:
 
 A replay file is a SQLite database that any SQLite client can open. Open it read-only (`sqlite3 -readonly` or a `file:...?mode=ro` URI) so a daemon writing to it is never blocked.
 
+The file is written in WAL mode, so a running daemon keeps `daemon.db-wal` and `daemon.db-shm` next to it. Three rules follow from that:
+
+- Copy the file only after the daemon stops, or copy `daemon.db-wal` with it. The main file alone is missing everything since the last checkpoint, up to about 4 MB of the newest rows.
+- Do not leave a `sqlite3` shell or a GUI tool sitting inside a query on a live file. An open read blocks every checkpoint, so the WAL takes every new row instead of the database file. Once the WAL reaches 64 MB the daemon logs an error and stops writing rows until the reader closes, so disk use never exceeds the retention window plus 64 MB. Recording resumes on its own.
+- Apple's `/usr/bin/sqlite3 -readonly` cannot open a WAL file that has no `-shm` next to it (a copied or cleanly closed file). Use the `file:...?immutable=1` URI or open it without `-readonly`. Linux builds and Python's `sqlite3` module do not have this limit.
+
 - `metadata` has one row: `schema_version` (currently 2), `host`, `port`, `host_distro`, `connection_source`, `dolphie_version`, and `compression_dict`.
 - `replay_data` has one row per poll: `id`, `timestamp` (`YYYY-MM-DD HH:MM:SS` in the host's local time), `data`, and, when `replay_summary` is on, `summary`.
 - `variable_changes` records global variable changes, linked to `replay_data.id` through `replay_id`.

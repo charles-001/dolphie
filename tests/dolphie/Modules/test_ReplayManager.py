@@ -653,6 +653,110 @@ def test_recording_is_unchanged_without_replay_summary(tmp_path: Path) -> None:
     assert columns == ["id", "timestamp", "data"]
 
 
+def test_recording_writes_in_wal_mode_and_playback_reads_it_read_only(tmp_path: Path) -> None:
+    replay_file = record_replay(tmp_path, polls=2)
+
+    connection = sqlite3.connect(replay_file)
+    try:
+        # WAL is stored in the file. The page size must have been set before the switch, or it stays 4 KB
+        assert connection.execute("PRAGMA journal_mode").fetchone() == ("wal",)
+        assert connection.execute("PRAGMA page_size").fetchone() == (ReplayManager.PAGE_SIZE,)
+    finally:
+        connection.close()
+    # A clean close folds the WAL into the file and removes the sidecars
+    assert not Path(f"{replay_file}-wal").exists()
+
+    dolphie, notifications = make_dolphie(replay_file)
+    playback = ReplayManager(dolphie)
+    try:
+        assert playback.verify_replay_file(), notifications
+        assert isinstance(playback.get_next_refresh_interval(), MySQLReplayData)
+        assert isinstance(playback.get_next_refresh_interval(), MySQLReplayData)
+    finally:
+        playback.close()
+
+
+def force_purge(manager: ReplayManager) -> None:
+    """Run the hourly purge now, with every row older than this second expired."""
+    manager.dolphie.replay_retention_hours = 0
+    manager.last_purge_time = datetime.now().astimezone() - timedelta(hours=2)
+    manager.purge_old_data()
+
+
+def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loguru import logger
+
+    logged: list[str] = []
+    sink = logger.add(lambda message: logged.append(str(message)), level="INFO", format="{level} {message}")
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    wal_file = Path(f"{manager.replay_file}-wal")
+
+    def rows() -> int:
+        row = manager._execute_select_one("SELECT count(*) FROM replay_data")
+        assert row is not None
+        return row[0]
+
+    try:
+        for _ in range(5):
+            manager.capture_state()
+        assert wal_file.stat().st_size > 0
+        force_purge(manager)
+        assert wal_file.stat().st_size == 0
+
+        # A sqlite3 shell or GUI left inside a query holds a read transaction open, which blocks every checkpoint
+        reader = sqlite3.connect(manager.replay_file, isolation_level=None)
+        cursor = reader.execute("SELECT id FROM replay_data")
+        cursor.fetchone()
+        for _ in range(3):
+            manager.capture_state()
+        force_purge(manager)
+        pinned_size = wal_file.stat().st_size
+        assert pinned_size > 0
+        written = rows()
+
+        # Past the cap the daemon stops writing rows, so disk use is bounded, and says so once
+        monkeypatch.setattr(ReplayManager, "WAL_MAX_BYTES", 1)
+        for _ in range(3):
+            manager.capture_state()
+        assert rows() == written
+        assert wal_file.stat().st_size == pinned_size
+        errors = [line for line in logged if line.startswith("ERROR")]
+        assert len(errors) == 1
+        assert "Recording is paused" in errors[0]
+
+        # Once the reader lets go, the next poll truncates the WAL and recording resumes
+        cursor.close()
+        reader.close()
+        manager.capture_state()
+        assert rows() == written + 1
+        assert [line for line in logged if "Recording resumes" in line]
+        assert wal_file.stat().st_size < pinned_size
+        force_purge(manager)
+        assert wal_file.stat().st_size == 0
+    finally:
+        logger.remove(sink)
+        manager.close()
+
+
+def test_compression_dictionary_samples_summaries_alongside_rows(tmp_path: Path) -> None:
+    polls = ReplayManager.COMPRESSION_DICT_SAMPLES + 1
+    replay_file = record_replay(tmp_path, polls, replay_summary=True)
+
+    connection = sqlite3.connect(replay_file)
+    try:
+        (dictionary,) = connection.execute("SELECT compression_dict FROM metadata").fetchone()
+    finally:
+        connection.close()
+    rows = read_rows(replay_file)
+    # The prefix is the sampled rows followed by their summaries, verbatim
+    expected = b"".join(orjson.dumps(data) for _, data, _ in rows[:-1]) + b"".join(
+        orjson.dumps(summary) for _, _, summary in rows[:-1]
+    )
+    assert dictionary == expected
+
+
 def test_replay_summary_keeps_the_timeline_subset_of_every_row(tmp_path: Path) -> None:
     # Past the dictionary samples, so both columns are compressed with the dictionary
     polls = ReplayManager.COMPRESSION_DICT_SAMPLES + 2
