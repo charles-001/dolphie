@@ -62,8 +62,10 @@ def _output(process: subprocess.Popen[str]) -> str:
 
 
 @contextmanager
-def daemon(server: Server, tmp_path: Path, *extra_args: str) -> Iterator[tuple[subprocess.Popen[str], Path]]:
-    """Run `dolphie --daemon` from the real CLI, then stop it with SIGINT and require a clean exit."""
+def daemon(
+    server: Server, tmp_path: Path, *extra_args: str, stop_signal: signal.Signals = signal.SIGINT
+) -> Iterator[tuple[subprocess.Popen[str], Path]]:
+    """Run `dolphie --daemon` from the real CLI, then stop it with ``stop_signal`` and require a clean exit."""
     config = write_config(server, tmp_path)
     process = subprocess.Popen(
         dolphie_command(config, "--daemon", *extra_args),
@@ -77,7 +79,7 @@ def daemon(server: Server, tmp_path: Path, *extra_args: str) -> Iterator[tuple[s
         yield process, daemon_replay_file(server, tmp_path)
     finally:
         if process.poll() is None:
-            process.send_signal(signal.SIGINT)
+            process.send_signal(stop_signal)
             try:
                 process.wait(timeout=30)
             except subprocess.TimeoutExpired:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import sys
 import time
 from importlib import metadata
@@ -488,6 +489,11 @@ class DolphieApp(App):
         self.set_timer(5.0, self._monitor_terminal_disconnect)
 
     async def on_mount(self):
+        if self.config.daemon_mode:
+            # systemd stops the daemon with SIGTERM. Left to Python's default handler it ends the process
+            # on the spot, and the shutdown in main() that closes the replay file never runs
+            asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, self.exit)
+
         self.tab_manager = TabManager(app=self, config=self.config)
         await self.tab_manager.create_ui_widgets()
 

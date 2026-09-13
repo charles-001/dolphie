@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import signal
 import sqlite3
 from pathlib import Path
 
@@ -33,6 +34,20 @@ def test_daemon_mode_records_polls_to_a_replay_file(server: Server, tmp_path: Pa
     assert metadata[4] == ConnectionSource.mysql
     assert rows[0] >= 5
     assert rows[1] < rows[2]
+
+
+@pytest.mark.flavor_agnostic
+def test_daemon_stopped_by_systemd_closes_the_replay_file(server: Server, tmp_path: Path) -> None:
+    """SIGTERM, which systemd sends, must end in the same clean close as SIGINT: WAL folded, no sidecars."""
+    with daemon(server, tmp_path, stop_signal=signal.SIGTERM) as (process, replay_file):
+        wait_for_rows(process, replay_file, 3)
+        assert replay_file.with_name("daemon.db-wal").exists()
+
+    assert "Shutting down" in (tmp_path / "daemon.log").read_text()
+    assert sorted(path.name for path in replay_file.parent.iterdir()) == ["daemon.db"]
+    with sqlite3.connect(f"file:{replay_file}?mode=ro", uri=True) as connection:
+        assert connection.execute("PRAGMA journal_mode").fetchone() == ("delete",)
+        assert connection.execute("SELECT COUNT(*) FROM replay_data").fetchone()[0] >= 3
 
 
 @pytest.mark.flavor_agnostic

@@ -397,8 +397,8 @@ class ReplayManager:
         self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
         if recovered_bytes:
             logger.warning(
-                f"The last run did not close the replay file. Recovered {format_bytes(recovered_bytes, color=False)} "
-                "of rows from its write-ahead log"
+                "The last run did not close the replay file. Recovering its "
+                f"{format_bytes(recovered_bytes, color=False)} write-ahead log"
             )
 
         # Lock down the permissions of the replay file
