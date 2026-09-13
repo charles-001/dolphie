@@ -345,21 +345,23 @@ class Dolphie:
 
         # The filesystem holding the data directory, named by its mount so a reader can tell a
         # dedicated volume from the root filesystem. Variables arrive after the first poll, and a
-        # data directory Dolphie cannot see (a container's private mount) is left out.
+        # data directory Dolphie cannot see (a container's private mount) is left out. Usage is
+        # read at the mount point because the data directory itself is normally mysql-only.
         datadir = str(self.global_variables.get("datadir") or "")
         if datadir:
+            # The mount table does not change under a running server, so it is read once per datadir
+            if self._datadir_mount[0] != datadir:
+                self._datadir_mount = (datadir, mount_holding(datadir))
+            mount = self._datadir_mount[1]
             try:
-                usage = psutil.disk_usage(datadir)
+                usage = psutil.disk_usage(mount or datadir)
             except OSError:
                 pass
             else:
                 self.system_utilization["Datadir_Total"] = usage.total
                 self.system_utilization["Datadir_Used"] = usage.used
-                # The mount table does not change under a running server, so it is read once per datadir
-                if self._datadir_mount[0] != datadir:
-                    self._datadir_mount = (datadir, mount_holding(datadir))
-                if self._datadir_mount[1] is not None:
-                    self.system_utilization["Datadir_Mount"] = self._datadir_mount[1]
+                if mount is not None:
+                    self.system_utilization["Datadir_Mount"] = mount
 
     def get_group_replication_metadata(self):
         # Check to get information on what cluster/instance type it is

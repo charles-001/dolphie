@@ -255,13 +255,12 @@ Example log messages in daemon mode:
 
 A replay file is a SQLite database that any SQLite client can open. Open it read-only (`sqlite3 -readonly` or a `file:...?mode=ro` URI) so a daemon writing to it is never blocked.
 
-The file is written in WAL mode, so a running daemon keeps `daemon.db-wal` and `daemon.db-shm` next to it. These rules follow from that:
+While it records, the daemon keeps the file in WAL mode with `daemon.db-wal` and `daemon.db-shm` next to it. A clean stop folds the WAL back into the file and switches it to a plain rollback-journal database, so a stopped daemon's file has no sidecars and opens read-only from anywhere, including a directory the reader cannot write. These rules follow from that:
 
 - Copy the file only after the daemon stops, or copy `daemon.db-wal` with it. The main file alone is missing everything since the last checkpoint, up to about 4 MB of the newest rows.
 - Do not leave a `sqlite3` shell or a GUI tool sitting inside a query on a live file. An open read blocks every checkpoint, so the WAL takes every new row instead of the database file. Once the WAL reaches 64 MB the daemon logs an error and stops writing rows until the reader closes, so disk use never exceeds the retention window plus 64 MB. Recording resumes on its own.
-- Apple's `/usr/bin/sqlite3 -readonly` cannot open a WAL file that has no `-shm` next to it (a copied or cleanly closed file). Use the `file:...?immutable=1` URI or open it without `-readonly`. Linux builds and Python's `sqlite3` module do not have this limit.
-- A read-only opener, Dolphie's own replay mode included, creates an empty `-wal` and a `-shm` next to a stopped daemon's file and cannot remove them. They are harmless, and the next daemon start reuses them.
-- Reading a WAL file needs write access to its directory for the `-shm`. On a read-only mount or in a directory you cannot write, Dolphie's replay mode opens a file that has no `-wal` next to it as immutable instead. Other clients need the `immutable=1` URI there.
+- A reader that is still inside a query when the daemon stops keeps the file in WAL mode with its sidecars, the same state an unclean stop leaves. The next start recovers it. Readers open that state as long as they can read the `-shm`, which Dolphie creates with the same group permissions as the file.
+- Apple's `/usr/bin/sqlite3 -readonly` cannot open a WAL file that has no `-shm` next to it, such as a `daemon.db` copied together with its `-wal`. Use the `file:...?immutable=1` URI or open it without `-readonly`.
 
 The daemon logs a warning when it recovers rows from a `-wal` that the previous run left behind (an unclean stop), and when the filesystem refuses WAL mode (NFS).
 

@@ -653,18 +653,28 @@ def test_recording_is_unchanged_without_replay_summary(tmp_path: Path) -> None:
     assert columns == ["id", "timestamp", "data"]
 
 
-def test_recording_writes_in_wal_mode_and_playback_reads_it_read_only(tmp_path: Path) -> None:
-    replay_file = record_replay(tmp_path, polls=2)
-
-    connection = sqlite3.connect(replay_file)
+def journal_mode(replay_file: Path) -> str:
+    connection = sqlite3.connect(f"file:{replay_file}?mode=ro", uri=True)
     try:
-        # WAL is stored in the file. The page size must have been set before the switch, or it stays 4 KB
-        assert connection.execute("PRAGMA journal_mode").fetchone() == ("wal",)
-        assert connection.execute("PRAGMA page_size").fetchone() == (ReplayManager.PAGE_SIZE,)
+        return connection.execute("PRAGMA journal_mode").fetchone()[0]
     finally:
         connection.close()
-    # A clean close folds the WAL into the file and removes the sidecars
-    assert not Path(f"{replay_file}-wal").exists()
+
+
+def test_recording_writes_in_wal_mode_and_playback_reads_it_read_only(tmp_path: Path) -> None:
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    replay_file = Path(manager.replay_file)
+    for _ in range(2):
+        manager.capture_state()
+    # The page size must have been set before the switch to WAL, or it stays 4 KB
+    assert journal_mode(replay_file) == "wal"
+    assert manager._execute_select_one("PRAGMA page_size") == (ReplayManager.PAGE_SIZE,)
+
+    # A clean close folds the WAL into the file, removes the sidecars, and leaves a rollback-journal
+    # file that any reader opens without creating a -shm, so a stopped daemon's file reads from anywhere
+    manager.close()
+    assert journal_mode(replay_file) == "delete"
+    assert sorted(p.name for p in replay_file.parent.iterdir()) == [replay_file.name]
 
     dolphie, notifications = make_dolphie(replay_file)
     playback = ReplayManager(dolphie)
@@ -735,6 +745,22 @@ def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
         assert wal_file.stat().st_size < pinned_size
         force_purge(manager)
         assert wal_file.stat().st_size == 0
+
+        # A reader that stays inside a query through the close keeps the file in WAL mode with its
+        # sidecars, which the next start recovers. The close must not fail on it
+        reader = sqlite3.connect(manager.replay_file, isolation_level=None, timeout=0)
+        cursor = reader.execute("SELECT id FROM replay_data")
+        cursor.fetchone()
+        manager.close()
+        assert journal_mode(Path(manager.replay_file)) == "wal"
+        assert wal_file.exists()
+        cursor.close()
+        reader.close()
+        manager = ReplayManager(manager.dolphie)
+        manager.capture_state()
+        assert rows() == written + 2
+        manager.close()
+        assert not wal_file.exists()
     finally:
         logger.remove(sink)
         manager.close()

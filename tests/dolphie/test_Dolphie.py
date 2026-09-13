@@ -45,7 +45,8 @@ def test_records_the_filesystem_holding_the_data_directory(monkeypatch: pytest.M
     Dolphie.collect_system_utilization(dolphie)
     Dolphie.collect_system_utilization(dolphie)
 
-    assert asked == [datadir, datadir]
+    # Usage is read at the mount, which stays readable when the data directory is mysql-only
+    assert asked == [str(volume), str(volume)]
     assert dolphie.system_utilization["Datadir_Total"] == 1000
     assert dolphie.system_utilization["Datadir_Used"] == 250
     assert dolphie.system_utilization["Datadir_Mount"] == str(volume)
@@ -60,6 +61,7 @@ def test_leaves_disk_usage_out_before_variables_arrive_or_when_the_path_is_unrea
         raise FileNotFoundError(path)
 
     monkeypatch.setattr("dolphie.Dolphie.psutil.disk_usage", missing)
+    monkeypatch.setattr("dolphie.Dolphie.psutil.disk_partitions", lambda **_: [])
 
     first_poll = make_dolphie({})
     Dolphie.collect_system_utilization(first_poll)

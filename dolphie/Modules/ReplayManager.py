@@ -89,6 +89,9 @@ class ReplayManager:
     # checkpoint, and the WAL then takes every new row. Past this size the daemon stops writing rows
     # until the reader lets go, so disk use stays bounded by retention plus this cap
     WAL_MAX_BYTES = 64 * 1024 * 1024
+    # How long a close waits for a reader inside a query before it leaves the file in WAL mode. Long
+    # enough for one of Trident's reads, short enough that a stuck sqlite3 shell does not delay shutdown
+    CLOSE_BUSY_TIMEOUT_MS = 250
     # Cap on unreadable rows skipped in one step, so one refresh cannot scan a whole corrupt stretch
     MAX_SKIPPED_ROWS = 100
     # Floor for the number of decompressed metric_manager payloads kept in memory to
@@ -226,8 +229,20 @@ class ReplayManager:
         return self.connection
 
     def close(self) -> None:
-        """Close the underlying SQLite connection, if open."""
+        """Close the underlying SQLite connection, if open.
+
+        A recording leaves the file in rollback-journal mode. A WAL file needs a -shm even to read, and
+        a reader that cannot create one (Trident's ``sqlite3 -readonly`` in a directory it cannot write,
+        a read-only mount) would fail on a stopped daemon's file. The switch waits for readers inside a
+        query and gives up on one that stays, which leaves the WAL sidecars in place for the next start.
+        """
         if self.connection is not None:
+            if self.dolphie.record_for_replay and not self.dolphie.replay_file:
+                try:
+                    self.connection.execute(f"PRAGMA busy_timeout = {self.CLOSE_BUSY_TIMEOUT_MS}")
+                    self.connection.execute("PRAGMA journal_mode = DELETE")
+                except sqlite3.Error:
+                    pass
             self.connection.close()
             self.connection = None
 
