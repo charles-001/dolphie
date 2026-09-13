@@ -783,6 +783,51 @@ def test_playback_opens_a_closed_file_in_a_directory_it_cannot_write(tmp_path: P
         replay_file.parent.chmod(0o770)
 
 
+def test_close_waits_for_a_poll_in_flight_on_the_worker_thread(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """App exit does not wait for the poll thread, so a close during a poll must wait for the row, not race it."""
+    import threading
+
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    replay_file = Path(manager.replay_file)
+    manager.capture_state()
+
+    inside_poll = threading.Event()
+    release_poll = threading.Event()
+    real_insert = manager._insert_replay_data
+
+    def slow_insert(*args: Any, **kwargs: Any) -> None:
+        inside_poll.set()
+        assert release_poll.wait(5)
+        real_insert(*args, **kwargs)
+
+    monkeypatch.setattr(manager, "_insert_replay_data", slow_insert)
+    poll = threading.Thread(target=manager.capture_state)
+    poll.start()
+    assert inside_poll.wait(5)
+
+    closer = threading.Thread(target=manager.close)
+    closer.start()
+    closer.join(0.5)
+    assert closer.is_alive(), "close returned while the poll still held the connection"
+
+    release_poll.set()
+    poll.join(5)
+    closer.join(5)
+    assert not poll.is_alive()
+    assert not closer.is_alive()
+
+    # Both rows landed, the file is back in rollback mode, and nothing is left next to it
+    assert journal_mode(replay_file) == "delete"
+    assert sorted(p.name for p in replay_file.parent.iterdir()) == [replay_file.name]
+    connection = sqlite3.connect(f"file:{replay_file}?mode=ro", uri=True)
+    try:
+        assert connection.execute("SELECT count(*) FROM replay_data").fetchone() == (2,)
+    finally:
+        connection.close()
+    # A poll that arrives after the close is a no-op rather than an error
+    manager.capture_state()
+
+
 def test_schema_rotation_closes_the_old_wal_file_before_renaming_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

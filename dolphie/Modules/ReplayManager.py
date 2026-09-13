@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 from collections import OrderedDict
 from contextlib import closing
 from dataclasses import dataclass
@@ -150,6 +151,7 @@ class ReplayManager:
         self.dict_samples: list[bytes] = []
         self.summary_samples: list[bytes] = []
         self.wal_pinned: bool = False
+        self._write_lock = threading.Lock()
         self.global_variable_change_ids: list[int] = []
         self.has_summary: bool = False
 
@@ -236,7 +238,9 @@ class ReplayManager:
         mount) would fail on a stopped daemon's file. The switch waits for readers inside a
         query and gives up on one that stays, which leaves the WAL sidecars in place for the next start.
         """
-        if self.connection is not None:
+        with self._write_lock:
+            if self.connection is None:
+                return
             if self.dolphie.record_for_replay and not self.dolphie.replay_file:
                 try:
                     self.connection.execute(f"PRAGMA busy_timeout = {self.CLOSE_BUSY_TIMEOUT_MS}")
@@ -1078,9 +1082,17 @@ class ReplayManager:
     def capture_state(self):
         """Captures the current state of the Dolphie instance and stores it in the SQLite database."""
         # Don't capture when not recording, or when loading a replay file (read-only mode)
-        if not self.dolphie.record_for_replay or self.dolphie.replay_file or not self._wal_within_cap():
+        if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
+        # The poll worker is a thread that app exit does not wait for, so a close from the main thread
+        # can land in the middle of a poll. The lock makes the close wait for the row instead
+        with self._write_lock:
+            if self.connection is None or not self._wal_within_cap():
+                return
+            self._capture_state()
+
+    def _capture_state(self):
         # Prepare processlist data
         processlist = self._prepare_processlist()
         timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
@@ -1516,10 +1528,13 @@ class ReplayManager:
 
         timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
-        last_row_id = self._execute_insert(
-            "INSERT INTO variable_changes (timestamp, variable_name, old_value, new_value) VALUES (?, ?, ?, ?)",
-            (timestamp, variable_name, old_value, new_value),
-        )
+        with self._write_lock:
+            if self.connection is None:
+                return
+            last_row_id = self._execute_insert(
+                "INSERT INTO variable_changes (timestamp, variable_name, old_value, new_value) VALUES (?, ?, ?, ?)",
+                (timestamp, variable_name, old_value, new_value),
+            )
 
         # Keep track of the primary key of the global variable change so we can link it to the replay data
         self.global_variable_change_ids.append(last_row_id)
