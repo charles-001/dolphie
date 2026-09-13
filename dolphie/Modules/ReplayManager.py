@@ -80,8 +80,10 @@ class ReplayManager:
     COMPRESSION_LEVEL = 9
     COMPRESSION_DICT_SAMPLES = 3
     PAGE_SIZE = 16384
-    # The WAL is reused from its start after each checkpoint but never shrinks by itself. This caps it
-    # at the next checkpoint, and the purge truncates it to zero
+    # The WAL is reused from its start after each checkpoint but never shrinks by itself. A checkpoint
+    # every 256 pages (4 MB at PAGE_SIZE) keeps it small and bounds what a copy without the -wal loses,
+    # the size limit trims it back to that on reset, and the purge truncates it to zero
+    WAL_CHECKPOINT_PAGES = 256
     WAL_SIZE_LIMIT_BYTES = 4 * 1024 * 1024
     # A connection that holds a read open (a sqlite3 shell or GUI left inside a query) blocks every
     # checkpoint, and the WAL then takes every new row. Past this size the daemon stops writing rows
@@ -391,9 +393,10 @@ class ReplayManager:
         # A rollback journal costs four fsyncs and a journal unlink for every poll, and a reader that
         # holds a statement open makes the daemon's commit fail. WAL appends one frame per poll, fsyncs
         # at checkpoint, and never blocks on readers. NORMAL survives a crash with at most the last
-        # un-synced commits lost, never a corrupt file. The size limit is per connection.
+        # un-synced commits lost, never a corrupt file. Only the journal mode is stored in the file.
         self._execute_select_one("PRAGMA journal_mode = WAL")
         self._execute_modify("PRAGMA synchronous = NORMAL")
+        self._execute_modify(f"PRAGMA wal_autocheckpoint = {self.WAL_CHECKPOINT_PAGES}")
         self._execute_modify(f"PRAGMA journal_size_limit = {self.WAL_SIZE_LIMIT_BYTES}")
 
         # Create replay_data table if it doesn't exist
@@ -595,6 +598,9 @@ class ReplayManager:
     def _create_new_replay_file(self, new_replay_file: str):
         logger.info(f"Renaming replay file to: {new_replay_file}")
 
+        # Closing first folds the WAL into the file and removes the -wal and -shm sidecars, which are named
+        # after the file. Renamed while open, the old file's sidecars would carry the new file's name
+        self.close()
         os.rename(self.replay_file, new_replay_file)
 
         # Reset compression dict if it's already been set or else the replay file will be corrupted

@@ -740,6 +740,39 @@ def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
         manager.close()
 
 
+def test_schema_rotation_closes_the_old_wal_file_before_renaming_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host_dir = tmp_path / "db1_3306"
+    monkeypatch.setattr(ReplayManager, "schema_version", 1)
+    record_replay(tmp_path, polls=10)
+    monkeypatch.setattr(ReplayManager, "schema_version", 2)
+
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    try:
+        for _ in range(5):
+            manager.capture_state()
+        # The sidecars belong to the new file. The renamed file was closed first, so it has none
+        assert {p.name for p in host_dir.iterdir()} == {
+            "daemon.db",
+            "daemon.db-wal",
+            "daemon.db-shm",
+            "daemon.db_old_schema_v1",
+        }
+    finally:
+        manager.close()
+    assert {p.name for p in host_dir.iterdir()} == {"daemon.db", "daemon.db_old_schema_v1"}
+
+    for name, schema_version, rows in (("daemon.db_old_schema_v1", 1, 10), ("daemon.db", 2, 5)):
+        connection = sqlite3.connect(f"{(host_dir / name).resolve().as_uri()}?mode=ro", uri=True)
+        try:
+            assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+            assert connection.execute("SELECT schema_version FROM metadata").fetchone() == (schema_version,)
+            assert connection.execute("SELECT count(*) FROM replay_data").fetchone() == (rows,)
+        finally:
+            connection.close()
+
+
 def test_compression_dictionary_samples_summaries_alongside_rows(tmp_path: Path) -> None:
     polls = ReplayManager.COMPRESSION_DICT_SAMPLES + 1
     replay_file = record_replay(tmp_path, polls, replay_summary=True)
