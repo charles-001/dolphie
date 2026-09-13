@@ -364,8 +364,17 @@ class ReplayManager:
             raise
 
     def _open_for_playback(self):
-        """Opens the replay file read-only so playback can never modify a file a daemon is still writing."""
-        uri = f"{Path(self.replay_file).resolve().as_uri()}?mode=ro"
+        """Opens the replay file read-only so playback can never modify a file a daemon is still writing.
+
+        A WAL file needs a -shm next to it even to read. Where the directory cannot be written (a
+        read-only mount, another user's directory) and no -wal exists, so no daemon has the file open,
+        the file is complete and is opened as immutable instead.
+        """
+        path = Path(self.replay_file).resolve()
+        uri = f"{path.as_uri()}?mode=ro"
+        if not os.access(path.parent, os.W_OK) and not path.with_name(f"{path.name}-wal").exists():
+            uri = f"{path.as_uri()}?immutable=1"
+            logger.info(f"Replay directory is not writable and no daemon has {path.name} open. Opening it as immutable")
         try:
             self.connection = sqlite3.connect(uri, uri=True, isolation_level=None, check_same_thread=False)
         except sqlite3.Error as e:
@@ -375,8 +384,16 @@ class ReplayManager:
     def _initialize_sqlite(self):
         """Initializes the SQLite database and creates the necessary tables."""
         database_exists = bool(os.path.exists(self.replay_file))
+        # A -wal left behind means the last run did not close the file. Opening it replays those rows
+        wal_left_behind = Path(f"{self.replay_file}-wal")
+        recovered_bytes = wal_left_behind.stat().st_size if wal_left_behind.exists() else 0
 
         self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
+        if recovered_bytes:
+            logger.warning(
+                f"The last run did not close the replay file. Recovered {format_bytes(recovered_bytes, color=False)} "
+                "of rows from its write-ahead log"
+            )
 
         # Lock down the permissions of the replay file
         os.chmod(self.replay_file, 0o660)
@@ -394,7 +411,13 @@ class ReplayManager:
         # holds a statement open makes the daemon's commit fail. WAL appends one frame per poll, fsyncs
         # at checkpoint, and never blocks on readers. NORMAL survives a crash with at most the last
         # un-synced commits lost, never a corrupt file. Only the journal mode is stored in the file.
-        self._execute_select_one("PRAGMA journal_mode = WAL")
+        journal_mode = self._execute_select_one("PRAGMA journal_mode = WAL")
+        if journal_mode != ("wal",):
+            # SQLite refuses WAL on a filesystem without shared memory, such as NFS
+            logger.warning(
+                f"SQLite could not switch the replay file to WAL mode and uses {journal_mode} journaling. Every poll "
+                "now costs several fsyncs, and a reader can block the daemon's writes"
+            )
         self._execute_modify("PRAGMA synchronous = NORMAL")
         self._execute_modify(f"PRAGMA wal_autocheckpoint = {self.WAL_CHECKPOINT_PAGES}")
         self._execute_modify(f"PRAGMA journal_size_limit = {self.WAL_SIZE_LIMIT_BYTES}")
@@ -477,12 +500,22 @@ class ReplayManager:
             "%Y-%m-%d %H:%M:%S"
         )
 
-        self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
+        purged_rows = self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
         self._execute_modify("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
         # Fold the WAL into the file and truncate it, so the purge frees disk instead of moving it
         self._truncate_wal()
 
         self.last_purge_time = current_time
+        if purged_rows:
+            logger.info(
+                f"Purged {purged_rows:,} rows older than {retention_date}. Replay file is "
+                f"{format_bytes(self.disk_usage(), color=False)}"
+            )
+
+    def disk_usage(self) -> int:
+        """Bytes the replay file takes on disk, its write-ahead log included."""
+        wal_file = Path(f"{self.replay_file}-wal")
+        return os.path.getsize(self.replay_file) + (wal_file.stat().st_size if wal_file.exists() else 0)
 
     def _truncate_wal(self) -> bool:
         """Checkpoint and truncate the WAL. False when a reader's open snapshot pins frames in it.
@@ -1040,7 +1073,7 @@ class ReplayManager:
         self.purge_old_data()
 
         if not self.dolphie.daemon_mode:
-            self.replay_file_size = os.path.getsize(self.replay_file)
+            self.replay_file_size = self.disk_usage()
 
     def capture_state(self):
         """Captures the current state of the Dolphie instance and stores it in the SQLite database."""

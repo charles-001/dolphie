@@ -271,6 +271,8 @@ class WorkerManager:
                     connection_status=ConnectionStatus.connecting,
                 )
 
+                if tab.replay_manager:
+                    tab.replay_manager.close()
                 tab.replay_manager = None
                 if not dolphie.daemon_mode and tab == self.app.tab_manager.active_tab:
                     # Display property triggers UI updates, must be called from main thread

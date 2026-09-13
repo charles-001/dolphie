@@ -751,6 +751,8 @@ class TabManager:
                 # Reset all runtime state with the new connection details
                 dolphie.reset_runtime_variables()
                 tab.worker_cancel_error = None
+                if tab.replay_manager:
+                    tab.replay_manager.close()
                 tab.replay_manager = None
 
                 tab.loading_indicator.display = True

@@ -505,6 +505,7 @@ class DolphieApp(App):
             elif tab.dolphie.replay_file:
                 tab.replay_manager = ReplayManager(tab.dolphie)
                 if not tab.replay_manager.verify_replay_file():
+                    tab.replay_manager.close()
                     tab.replay_manager = None
                     self.tab_manager.setup_host_tab(tab)
                     return

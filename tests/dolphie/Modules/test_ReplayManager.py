@@ -676,9 +676,9 @@ def test_recording_writes_in_wal_mode_and_playback_reads_it_read_only(tmp_path: 
         playback.close()
 
 
-def force_purge(manager: ReplayManager) -> None:
-    """Run the hourly purge now, with every row older than this second expired."""
-    manager.dolphie.replay_retention_hours = 0
+def force_purge(manager: ReplayManager, retention_hours: int = 0) -> None:
+    """Run the hourly purge now. Retention 0 expires every row older than this second, -1 expires them all."""
+    manager.dolphie.replay_retention_hours = retention_hours
     manager.last_purge_time = datetime.now().astimezone() - timedelta(hours=2)
     manager.purge_old_data()
 
@@ -735,9 +735,32 @@ def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
         assert wal_file.stat().st_size < pinned_size
         force_purge(manager)
         assert wal_file.stat().st_size == 0
+
+        # The hourly purge reports what it removed and the size on disk, WAL included
+        assert not [line for line in logged if line.startswith("INFO Purged")]
+        force_purge(manager, retention_hours=-1)
+        assert rows() == 0
+        assert [line for line in logged if line.startswith("INFO Purged") and "Replay file is" in line]
     finally:
         logger.remove(sink)
         manager.close()
+
+
+def test_playback_opens_a_closed_file_in_a_directory_it_cannot_write(tmp_path: Path) -> None:
+    """A read-only mount or another user's directory: WAL needs a -shm to read, so the file opens as immutable."""
+    replay_file = record_replay(tmp_path, polls=3)
+    replay_file.parent.chmod(0o555)
+    try:
+        dolphie, notifications = make_dolphie(replay_file)
+        manager = ReplayManager(dolphie)
+        try:
+            assert manager.verify_replay_file(), notifications
+            assert sum(manager.get_next_refresh_interval() is not None for _ in range(3)) == 3
+        finally:
+            manager.close()
+        assert sorted(p.name for p in replay_file.parent.iterdir()) == [replay_file.name]
+    finally:
+        replay_file.parent.chmod(0o770)
 
 
 def test_schema_rotation_closes_the_old_wal_file_before_renaming_it(
