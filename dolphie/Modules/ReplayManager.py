@@ -513,11 +513,6 @@ class ReplayManager:
 
         self.last_purge_time = current_time
 
-    def disk_usage(self) -> int:
-        """Bytes the replay file takes on disk, its write-ahead log included."""
-        wal_file = Path(f"{self.replay_file}-wal")
-        return os.path.getsize(self.replay_file) + (wal_file.stat().st_size if wal_file.exists() else 0)
-
     def _truncate_wal(self) -> bool:
         """Checkpoint and truncate the WAL. False when a reader's open snapshot pins frames in it.
 
@@ -1074,7 +1069,11 @@ class ReplayManager:
         self.purge_old_data()
 
         if not self.dolphie.daemon_mode:
-            self.replay_file_size = self.disk_usage()
+            # The newest rows sit in the -wal until a checkpoint, so the size shown counts it too
+            wal_file = Path(f"{self.replay_file}-wal")
+            self.replay_file_size = os.path.getsize(self.replay_file) + (
+                wal_file.stat().st_size if wal_file.exists() else 0
+            )
 
     def capture_state(self):
         """Captures the current state of the Dolphie instance and stores it in the SQLite database."""
