@@ -263,7 +263,7 @@ The file is written in WAL mode, so a running daemon keeps `daemon.db-wal` and `
 - A read-only opener, Dolphie's own replay mode included, creates an empty `-wal` and a `-shm` next to a stopped daemon's file and cannot remove them. They are harmless, and the next daemon start reuses them.
 - Reading a WAL file needs write access to its directory for the `-shm`. On a read-only mount or in a directory you cannot write, Dolphie's replay mode opens a file that has no `-wal` next to it as immutable instead. Other clients need the `immutable=1` URI there.
 
-The daemon logs a warning when it recovers rows from a `-wal` that the previous run left behind (an unclean stop), and when the filesystem refuses WAL mode (NFS). The hourly purge logs the rows it removed and the size of the file on disk.
+The daemon logs a warning when it recovers rows from a `-wal` that the previous run left behind (an unclean stop), and when the filesystem refuses WAL mode (NFS).
 
 When a new Dolphie version changes the replay schema, the daemon closes the old file, renames it to `daemon.db_old_schema_v<N>`, and starts a new `daemon.db`. The renamed file is complete and has no sidecars. Replay it with the Dolphie version that wrote it.
 

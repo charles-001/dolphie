@@ -676,9 +676,9 @@ def test_recording_writes_in_wal_mode_and_playback_reads_it_read_only(tmp_path: 
         playback.close()
 
 
-def force_purge(manager: ReplayManager, retention_hours: int = 0) -> None:
-    """Run the hourly purge now. Retention 0 expires every row older than this second, -1 expires them all."""
-    manager.dolphie.replay_retention_hours = retention_hours
+def force_purge(manager: ReplayManager) -> None:
+    """Run the hourly purge now, with every row older than this second expired."""
+    manager.dolphie.replay_retention_hours = 0
     manager.last_purge_time = datetime.now().astimezone() - timedelta(hours=2)
     manager.purge_old_data()
 
@@ -735,12 +735,6 @@ def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
         assert wal_file.stat().st_size < pinned_size
         force_purge(manager)
         assert wal_file.stat().st_size == 0
-
-        # The hourly purge reports what it removed and the size on disk, WAL included
-        assert not [line for line in logged if line.startswith("INFO Purged")]
-        force_purge(manager, retention_hours=-1)
-        assert rows() == 0
-        assert [line for line in logged if line.startswith("INFO Purged") and "Replay file is" in line]
     finally:
         logger.remove(sink)
         manager.close()

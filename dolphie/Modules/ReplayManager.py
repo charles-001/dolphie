@@ -374,7 +374,6 @@ class ReplayManager:
         uri = f"{path.as_uri()}?mode=ro"
         if not os.access(path.parent, os.W_OK) and not path.with_name(f"{path.name}-wal").exists():
             uri = f"{path.as_uri()}?immutable=1"
-            logger.info(f"Replay directory is not writable and no daemon has {path.name} open. Opening it as immutable")
         try:
             self.connection = sqlite3.connect(uri, uri=True, isolation_level=None, check_same_thread=False)
         except sqlite3.Error as e:
@@ -500,17 +499,12 @@ class ReplayManager:
             "%Y-%m-%d %H:%M:%S"
         )
 
-        purged_rows = self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
+        self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
         self._execute_modify("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
         # Fold the WAL into the file and truncate it, so the purge frees disk instead of moving it
         self._truncate_wal()
 
         self.last_purge_time = current_time
-        if purged_rows:
-            logger.info(
-                f"Purged {purged_rows:,} rows older than {retention_date}. Replay file is "
-                f"{format_bytes(self.disk_usage(), color=False)}"
-            )
 
     def disk_usage(self) -> int:
         """Bytes the replay file takes on disk, its write-ahead log included."""
