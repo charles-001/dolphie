@@ -140,3 +140,12 @@ def test_debug_options_shows_the_filters_each_hostgroup_host_starts_with(parse_c
 
     # The rows above cover every host, so the merged option on its own would only be noise
     assert not [row for row in rows if row.startswith("merged filters")]
+
+
+def test_replay_summary_is_off_unless_asked_for(parse_config, tmp_path):
+    assert parse_config().replay_summary is False
+    assert parse_config("--replay-summary").replay_summary is True
+
+    config_file = tmp_path / "summary.cnf"
+    config_file.write_text("[dolphie]\nreplay_summary = true\n")
+    assert parse_config("--config-file", str(config_file)).replay_summary is True

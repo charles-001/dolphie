@@ -39,6 +39,7 @@ class GraphAvailability(Enum):
 
     ALWAYS = "always"
     ACTIVE_REDO_LOG = "active_redo_log"
+    METADATA_LOCKS = "metadata_locks"
 
 
 class TabAvailability(Enum):
@@ -48,7 +49,6 @@ class TabAvailability(Enum):
     SYSTEM_UTILIZATION = "system_utilization"
     ADAPTIVE_HASH_INDEX = "adaptive_hash_index"
     REPLICATION = "replication"
-    LOCKS = "locks"
 
 
 @dataclass(frozen=True, order=True)
@@ -194,6 +194,87 @@ GRAPH_TABS = (
                             _key("dml", "Com_update"),
                             _key("dml", "Com_delete"),
                         ),
+                    ),
+                )
+            ),
+        ),
+    ),
+    GraphTabSpec(
+        id="workload",
+        title="Workload",
+        connection_sources=MYSQL,
+        rows=(
+            GraphRowSpec(
+                (
+                    GraphSpec(
+                        "graph_connections",
+                        "connections",
+                        (
+                            _key("connections", "Connections"),
+                            _key("connections", "Threads_created"),
+                        ),
+                        control_label="New",
+                    ),
+                    GraphSpec(
+                        "graph_slow_queries",
+                        "slow_queries",
+                        (_key("slow_queries", "Slow_queries"),),
+                        control_label="Slow",
+                    ),
+                )
+            ),
+            GraphRowSpec(
+                (
+                    GraphSpec(
+                        "graph_select_types",
+                        "select_types",
+                        (
+                            _key("select_types", "Select_full_join"),
+                            _key("select_types", "Select_scan"),
+                            _key("select_types", "Select_range"),
+                        ),
+                        control_label="Selects",
+                    ),
+                    GraphSpec(
+                        "graph_sorts",
+                        "sorts",
+                        (
+                            _key("sorts", "Sort_merge_passes"),
+                            _key("sorts", "Sort_scan"),
+                            _key("sorts", "Sort_rows"),
+                        ),
+                        control_label="Sorts",
+                    ),
+                )
+            ),
+        ),
+    ),
+    GraphTabSpec(
+        id="throughput",
+        title="Throughput",
+        connection_sources=MYSQL,
+        rows=(
+            GraphRowSpec(
+                (
+                    GraphSpec(
+                        "graph_innodb_rows",
+                        "innodb_rows",
+                        (
+                            _key("innodb_rows", "Innodb_rows_read"),
+                            _key("innodb_rows", "Innodb_rows_inserted"),
+                            _key("innodb_rows", "Innodb_rows_updated"),
+                            _key("innodb_rows", "Innodb_rows_deleted"),
+                        ),
+                        control_label="Rows",
+                    ),
+                    GraphSpec(
+                        "graph_mysql_network",
+                        "mysql_network",
+                        (
+                            _key("mysql_network", "Bytes_received"),
+                            _key("mysql_network", "Bytes_sent"),
+                        ),
+                        control_label="Network",
                     ),
                 )
             ),
@@ -405,6 +486,18 @@ GRAPH_TABS = (
                         "graph_disk_io",
                         "disk_io",
                         (_key("disk_io", "io_read"), _key("disk_io", "io_write")),
+                        control_label="Bytes",
+                    ),
+                    GraphSpec(
+                        "graph_innodb_io_ops",
+                        "innodb_io_ops",
+                        (
+                            _key("innodb_io_ops", "Innodb_data_reads"),
+                            _key("innodb_io_ops", "Innodb_data_writes"),
+                            _key("innodb_io_ops", "Innodb_data_fsyncs"),
+                            _key("innodb_io_ops", "Innodb_log_writes"),
+                        ),
+                        control_label="Operations",
                     ),
                 )
             ),
@@ -414,14 +507,40 @@ GRAPH_TABS = (
         id="locks",
         title="Locks",
         connection_sources=MYSQL,
-        availability=TabAvailability.LOCKS,
         rows=(
             GraphRowSpec(
                 (
                     GraphSpec(
+                        "graph_row_locks",
+                        "row_locks",
+                        (_key("row_locks", "Innodb_row_lock_waits"),),
+                        control_label="Row Lock Waits",
+                    ),
+                    GraphSpec(
+                        "graph_row_lock_wait",
+                        "row_lock_wait",
+                        (_key("row_lock_wait", "avg_wait_ms"),),
+                        control_label="Avg Wait",
+                    ),
+                )
+            ),
+            GraphRowSpec(
+                (
+                    GraphSpec(
+                        "graph_lock_failures",
+                        "lock_failures",
+                        (
+                            _key("lock_failures", "lock_deadlocks"),
+                            _key("lock_failures", "lock_timeouts"),
+                        ),
+                        control_label="Failures",
+                    ),
+                    GraphSpec(
                         "graph_locks",
                         "locks",
                         (_key("locks", "metadata_lock_count"),),
+                        availability=GraphAvailability.METADATA_LOCKS,
+                        control_label="Metadata",
                     ),
                 )
             ),

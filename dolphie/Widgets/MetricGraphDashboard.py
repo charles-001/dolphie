@@ -290,10 +290,6 @@ class MetricGraphDashboard(Widget):
             return dolphie.global_variables.get("innodb_adaptive_hash_index") != "OFF"
         if availability is TabAvailability.REPLICATION:
             return bool(dolphie.replication_status)
-        if availability is TabAvailability.LOCKS:
-            return bool(
-                (dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible) or dolphie.replay_file
-            )
         return False
 
     @staticmethod
@@ -302,6 +298,10 @@ class MetricGraphDashboard(Widget):
             return True
         if graph_spec.availability is GraphAvailability.ACTIVE_REDO_LOG:
             return "Active_redo_log_count" in dolphie.global_status and not dolphie.replay_file
+        if graph_spec.availability is GraphAvailability.METADATA_LOCKS:
+            return bool(
+                (dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible) or dolphie.replay_file
+            )
         return False
 
     @on(MetricSeriesControl.VisibilityChanged)

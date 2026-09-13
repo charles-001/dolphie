@@ -385,6 +385,91 @@ class LocksMetrics(MetricGroup):
 
 
 @dataclass
+class RowLockMetrics(MetricGroup):
+    Innodb_row_lock_waits: MetricData
+    Innodb_row_lock_time: MetricData
+    metric_source = MetricSource.GLOBAL_STATUS
+    connection_source = (ConnectionSource.mysql,)
+
+
+@dataclass
+class RowLockWaitMetrics(MetricGroup):
+    avg_wait_ms: MetricData
+    metric_source = MetricSource.NONE
+    connection_source = (ConnectionSource.mysql,)
+
+
+@dataclass
+class LockFailureMetrics(MetricGroup):
+    lock_deadlocks: MetricData
+    lock_timeouts: MetricData
+    metric_source = MetricSource.INNODB_METRICS
+    connection_source = (ConnectionSource.mysql,)
+
+
+@dataclass
+class ConnectionMetrics(MetricGroup):
+    Connections: MetricData
+    Threads_created: MetricData
+    metric_source = MetricSource.GLOBAL_STATUS
+    connection_source = (ConnectionSource.mysql,)
+
+
+@dataclass
+class SlowQueryMetrics(MetricGroup):
+    Slow_queries: MetricData
+    metric_source = MetricSource.GLOBAL_STATUS
+    connection_source = (ConnectionSource.mysql,)
+
+
+@dataclass
+class SelectTypeMetrics(MetricGroup):
+    Select_full_join: MetricData
+    Select_scan: MetricData
+    Select_range: MetricData
+    metric_source = MetricSource.GLOBAL_STATUS
+    connection_source = (ConnectionSource.mysql,)
+
+
+@dataclass
+class SortMetrics(MetricGroup):
+    Sort_merge_passes: MetricData
+    Sort_scan: MetricData
+    Sort_rows: MetricData
+    metric_source = MetricSource.GLOBAL_STATUS
+    connection_source = (ConnectionSource.mysql,)
+
+
+@dataclass
+class InnoDBRowOperationMetrics(MetricGroup):
+    Innodb_rows_read: MetricData
+    Innodb_rows_inserted: MetricData
+    Innodb_rows_updated: MetricData
+    Innodb_rows_deleted: MetricData
+    metric_source = MetricSource.GLOBAL_STATUS
+    connection_source = (ConnectionSource.mysql,)
+
+
+@dataclass
+class MySQLNetworkMetrics(MetricGroup):
+    Bytes_received: MetricData
+    Bytes_sent: MetricData
+    metric_source = MetricSource.GLOBAL_STATUS
+    connection_source = (ConnectionSource.mysql,)
+    value_format = ValueFormat.BYTES
+
+
+@dataclass
+class InnoDBIOOperationMetrics(MetricGroup):
+    Innodb_data_reads: MetricData
+    Innodb_data_writes: MetricData
+    Innodb_data_fsyncs: MetricData
+    Innodb_log_writes: MetricData
+    metric_source = MetricSource.GLOBAL_STATUS
+    connection_source = (ConnectionSource.mysql,)
+
+
+@dataclass
 class HistoryListLength(MetricGroup):
     trx_rseg_history_len: MetricData
     metric_source = MetricSource.INNODB_METRICS
@@ -499,6 +584,16 @@ MetricInstance = (
     | AbortedConnectionsMetrics
     | DiskIOMetrics
     | LocksMetrics
+    | RowLockMetrics
+    | RowLockWaitMetrics
+    | LockFailureMetrics
+    | ConnectionMetrics
+    | SlowQueryMetrics
+    | SelectTypeMetrics
+    | SortMetrics
+    | InnoDBRowOperationMetrics
+    | MySQLNetworkMetrics
+    | InnoDBIOOperationMetrics
     | HistoryListLength
     | ProxySQLConnectionsMetrics
     | ProxySQLQueriesDataNetwork
@@ -530,7 +625,17 @@ class MetricInstances:
     temporary_objects: TemporaryObjectMetrics
     aborted_connections: AbortedConnectionsMetrics
     disk_io: DiskIOMetrics
+    innodb_io_ops: InnoDBIOOperationMetrics
     locks: LocksMetrics
+    row_locks: RowLockMetrics
+    row_lock_wait: RowLockWaitMetrics
+    lock_failures: LockFailureMetrics
+    connections: ConnectionMetrics
+    slow_queries: SlowQueryMetrics
+    select_types: SelectTypeMetrics
+    sorts: SortMetrics
+    innodb_rows: InnoDBRowOperationMetrics
+    mysql_network: MySQLNetworkMetrics
     replication_lag: ReplicationLagMetrics
     proxysql_active_trx: ProxySQLActiveTRX
     proxysql_multiplex_efficiency: ProxySQLMultiplexEfficiency
@@ -705,12 +810,71 @@ def create_metric_instances() -> MetricInstances:
             io_read=MetricData(label="Read", color=MetricColor.blue),
             io_write=MetricData(label="Write", color=MetricColor.yellow),
         ),
+        innodb_io_ops=InnoDBIOOperationMetrics(
+            Innodb_data_reads=MetricData(label="Data Reads", color=MetricColor.blue),
+            Innodb_data_writes=MetricData(label="Data Writes", color=MetricColor.yellow),
+            Innodb_data_fsyncs=MetricData(label="Fsyncs", color=MetricColor.red),
+            Innodb_log_writes=MetricData(label="Log Writes", color=MetricColor.green),
+        ),
         locks=LocksMetrics(
             metadata_lock_count=MetricData(
                 label="Metadata",
                 color=MetricColor.red,
                 per_second_calculation=False,
+                create_switch=False,
             ),
+        ),
+        row_locks=RowLockMetrics(
+            Innodb_row_lock_waits=MetricData(label="Waits", color=MetricColor.blue, create_switch=False),
+            # Baseline for the average wait. Milliseconds waited per second is not a number a DBA reads.
+            Innodb_row_lock_time=MetricData(
+                label="Wait Time",
+                color=MetricColor.gray,
+                save_history=False,
+                graphable=False,
+                create_switch=False,
+            ),
+        ),
+        row_lock_wait=RowLockWaitMetrics(
+            avg_wait_ms=MetricData(
+                label="Avg Wait (ms)",
+                color=MetricColor.yellow,
+                per_second_calculation=False,
+                create_switch=False,
+            ),
+        ),
+        lock_failures=LockFailureMetrics(
+            lock_deadlocks=MetricData(label="Deadlocks", color=MetricColor.red),
+            lock_timeouts=MetricData(label="Timeouts", color=MetricColor.orange),
+        ),
+        connections=ConnectionMetrics(
+            Connections=MetricData(label="Connections", color=MetricColor.blue),
+            Threads_created=MetricData(label="Threads Created", color=MetricColor.yellow),
+        ),
+        slow_queries=SlowQueryMetrics(
+            Slow_queries=MetricData(label="Slow Queries", color=MetricColor.red, create_switch=False),
+        ),
+        select_types=SelectTypeMetrics(
+            Select_full_join=MetricData(label="Full Join", color=MetricColor.red),
+            Select_scan=MetricData(label="Full Scan", color=MetricColor.yellow),
+            Select_range=MetricData(label="Range", color=MetricColor.blue),
+        ),
+        sorts=SortMetrics(
+            Sort_merge_passes=MetricData(label="Merge Passes", color=MetricColor.red),
+            Sort_scan=MetricData(label="Scans", color=MetricColor.blue),
+            # Rows sorted runs far above the pass and scan counts and would flatten them.
+            Sort_rows=MetricData(label="Rows", color=MetricColor.gray, visible=False),
+        ),
+        innodb_rows=InnoDBRowOperationMetrics(
+            # Rows read runs orders of magnitude above the writes and would flatten them.
+            Innodb_rows_read=MetricData(label="Read", color=MetricColor.gray, visible=False),
+            Innodb_rows_inserted=MetricData(label="Inserted", color=MetricColor.green),
+            Innodb_rows_updated=MetricData(label="Updated", color=MetricColor.yellow),
+            Innodb_rows_deleted=MetricData(label="Deleted", color=MetricColor.red),
+        ),
+        mysql_network=MySQLNetworkMetrics(
+            Bytes_received=MetricData(label="Received", color=MetricColor.blue),
+            Bytes_sent=MetricData(label="Sent", color=MetricColor.green),
         ),
         proxysql_connections=ProxySQLConnectionsMetrics(
             Client_Connections_aborted=MetricData(label="FE (aborted)", color=MetricColor.gray),

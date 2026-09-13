@@ -135,6 +135,27 @@ async def test_redo_availability_updates_widths_and_clears_stale_control() -> No
         assert host.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible is False
 
 
+async def test_locks_tab_stays_available_when_metadata_locks_are_off() -> None:
+    host = make_host()
+    host.metadata_locks_enabled = False
+    async with DashboardTestApp().run_test(size=(120, 40)) as pilot:
+        dashboard = pilot.app.query_one(MetricGraphDashboard)
+        dashboard.bind_host(host)
+        await pilot.pause()
+
+        assert dashboard._shown_tabs["locks"]
+        assert dashboard.graphs["graph_row_locks"].display
+        assert dashboard.graphs["graph_lock_failures"].display
+        assert not dashboard.graphs["graph_locks"].display
+        assert host.metric_manager.metrics.locks.metadata_lock_count.visible is False
+
+        host.metadata_locks_enabled = True
+        dashboard.refresh_active()
+        await pilot.pause()
+        assert dashboard.graphs["graph_locks"].display
+        assert host.metric_manager.metrics.locks.metadata_lock_count.visible is True
+
+
 async def test_replay_never_exposes_active_redo_graph() -> None:
     host = make_host(active_redo=True, replay=True)
     async with DashboardTestApp().run_test(size=(120, 40)) as pilot:

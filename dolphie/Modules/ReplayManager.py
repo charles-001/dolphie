@@ -24,6 +24,7 @@ from dolphie.DataTypes import (
     ProcesslistThread,
     ProxySQLProcesslistThread,
     ReplicaRow,
+    SystemUtilization,
 )
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
@@ -34,7 +35,7 @@ from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 @dataclass
 class MySQLReplayData:
     timestamp: str
-    system_utilization: dict[str, int | float | tuple[float, float, float]]
+    system_utilization: SystemUtilization
     global_status: DatabaseRow
     global_variables: DatabaseRow
     binlog_status: DatabaseRow
@@ -57,7 +58,7 @@ class MySQLReplayData:
 @dataclass
 class ProxySQLReplayData:
     timestamp: str
-    system_utilization: dict[str, int | float | tuple[float, float, float]]
+    system_utilization: SystemUtilization
     global_status: DatabaseRow
     global_variables: DatabaseRow
     command_stats: list[DatabaseRow]
@@ -83,6 +84,34 @@ class ReplayManager:
     # speed up backward/seek navigation. The effective cap scales with the rolling
     # window so a single window always fits (see fetch_delta_metrics_for_window).
     METRIC_WINDOW_CACHE_SIZE = 1500
+    # We will increment this to force a new replay file if the schema changes in future versions
+    schema_version: int = 2
+    # A row a daemon could not finish writing, or one another version wrote in a shape this one cannot read
+    UNREADABLE_ROW_ERRORS = (zstd.ZstdError, orjson.JSONDecodeError, TypeError)
+    # What a row summary keeps besides metric_manager. The README documents the contract for other readers.
+    # The summary keeps whole every flat section the recorder already filters at its query, so a
+    # new status counter or system sample reaches readers with no change here. Only two kinds of
+    # section are cut: `global_variables`, the one flat section fetched unfiltered (about 25 KB a
+    # row), and the per-entity lists, whose rows carry query text and dozens of columns. A reader
+    # that needs a variable the summary lacks reads it from `data` at the instant it inspects.
+    SUMMARY_WHOLE_KEYS = ("global_status", "system_utilization", "innodb_metrics", "binlog_status")
+    SUMMARY_FIELDS: dict[str, tuple[str, ...]] = {
+        "global_variables": ("version", "read_only", "super_read_only", "max_connections"),
+        "processlist": ("time", "command"),
+        "metadata_locks": ("LOCK_TYPE", "LOCK_STATUS"),
+        "replication_status": (
+            "Channel_Name",
+            "Source_Host",
+            "Master_Host",
+            "Replica_IO_Running",
+            "Slave_IO_Running",
+            "Replica_SQL_Running",
+            "Slave_SQL_Running",
+            "Seconds_Behind",
+            "Last_IO_Error",
+            "Last_SQL_Error",
+        ),
+    }
 
     def __init__(self, dolphie: Dolphie):
         """Initializes the ReplayManager with Dolphie instance and SQLite database settings.
@@ -91,8 +120,6 @@ class ReplayManager:
             dolphie: The Dolphie instance.
         """
         self.dolphie = dolphie
-        # We will increment this to force a new replay file if the schema changes in future versions
-        self.schema_version: int = 2
         self.connection: sqlite3.Connection | None = None
         self.current_replay_id: int = 0  # This is used to keep track of the last primary key read from the database
         self.min_replay_id: int = 0
@@ -108,6 +135,7 @@ class ReplayManager:
         self.replay_file_size: int = 0
         self.dict_samples: list[bytes] = []
         self.global_variable_change_ids: list[int] = []
+        self.has_summary: bool = False
 
         # Cache of decompressed metric_manager payloads keyed by replay id. Row data is
         # immutable for a given id, so entries never go stale; consecutive backward/seek
@@ -359,6 +387,12 @@ class ReplayManager:
         )
         self._execute_modify("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
 
+        # The summary column is additive: readers select columns by name, so a file with it stays
+        # readable by versions that never heard of it, and rows written before it was added stay NULL
+        if self.dolphie.replay_summary and not self._has_summary_column():
+            self._execute_modify("ALTER TABLE replay_data ADD COLUMN summary BLOB")
+            logger.info("Added the summary column to replay_data")
+
         # Create metadata table if it doesn't exist
         self._execute_modify(
             """
@@ -399,6 +433,10 @@ class ReplayManager:
             self._execute_modify("VACUUM")
 
         self.purge_old_data()
+
+    def _has_summary_column(self) -> bool:
+        columns = self._execute_select_all("PRAGMA table_info(replay_data)")
+        return any(column[1] == "summary" for column in columns)
 
     def purge_old_data(self):
         """Purges data older than the retention period specified by hours_of_retention.
@@ -634,6 +672,8 @@ class ReplayManager:
         if row[6]:
             self.compression_dict = zstd.ZstdCompressionDict(row[6])
 
+        self.has_summary = self._has_summary_column()
+
         return True
 
     @staticmethod
@@ -834,6 +874,45 @@ class ReplayManager:
                 return json.dumps(data_dict).encode()
             raise
 
+    @classmethod
+    def _summarize(cls, data_dict: dict[str, Any]) -> dict[str, Any]:
+        """The subset of a row a timeline reads, in the row's own shape so one reader serves both.
+
+        Every metric in metric_manager is kept at its latest value. Per-server tables named in
+        SUMMARY_WHOLE_KEYS are kept whole. Per-entity collections are cut to the fields listed for
+        them. Any other key is left out.
+        """
+        # A delta row already holds one value per metric, so its metric_manager is passed by reference
+        metric_manager = data_dict["metric_manager"]
+        if not metric_manager.get("_delta"):
+            metric_manager = cls._latest(metric_manager)
+        summary: dict[str, Any] = {"metric_manager": metric_manager}
+        for key in cls.SUMMARY_WHOLE_KEYS:
+            if key in data_dict:
+                summary[key] = data_dict[key]
+        for key, fields in cls.SUMMARY_FIELDS.items():
+            if key in data_dict:
+                summary[key] = cls._project(data_dict[key], fields)
+        return summary
+
+    @classmethod
+    def _latest(cls, value: object) -> object:
+        """Cut every history list, however deeply nested, to its last value. Anything else passes through."""
+        if isinstance(value, dict):
+            return {key: cls._latest(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return value[-1:]
+        return value
+
+    @staticmethod
+    def _project(value: object, fields: tuple[str, ...]) -> object:
+        """Keep only ``fields`` of a row, or of each row in a list. Anything else passes through."""
+
+        def keep(row: object) -> object:
+            return {field: row[field] for field in fields if field in row} if isinstance(row, dict) else row
+
+        return [keep(row) for row in value] if isinstance(value, list) else keep(value)
+
     def _handle_compression_training(self, data_dict_bytes: bytes) -> None:
         """Handles compression dictionary training by collecting samples and training when ready.
 
@@ -848,25 +927,29 @@ class ReplayManager:
                 # Release the samples; a rotated file starts sampling again from an empty list
                 self.dict_samples = []
 
-    def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes) -> None:
+    def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes, summary_bytes: bytes | None = None) -> None:
         """Inserts the replay data into the database and handles variable change linkage.
 
         Args:
             timestamp: The timestamp of the capture.
-            data_dict_bytes: The serialized and compressed data to insert.
+            data_dict_bytes: The serialized data to insert; compressed here.
+            summary_bytes: The serialized row summary, when the summary column is enabled.
         """
         try:
             # Begin transaction for atomic insert and update
             self._begin_transaction()
 
             # Execute the SQL insert using the constructed dictionary
-            self.current_replay_id = self._execute_insert(
-                "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
-                (
-                    timestamp,
-                    self._compressor.compress(data_dict_bytes),
-                ),
-            )
+            if summary_bytes is None:
+                self.current_replay_id = self._execute_insert(
+                    "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
+                    (timestamp, self._compressor.compress(data_dict_bytes)),
+                )
+            else:
+                self.current_replay_id = self._execute_insert(
+                    "INSERT INTO replay_data (timestamp, data, summary) VALUES (?, ?, ?)",
+                    (timestamp, self._compressor.compress(data_dict_bytes), self._compressor.compress(summary_bytes)),
+                )
 
             # Update the variable_changes table with the data of the replay row so they're linked
             if self.global_variable_change_ids:
@@ -922,9 +1005,10 @@ class ReplayManager:
         # Serialize and compress the data
         data_dict_bytes = self._serialize_data_dict(data_dict)
         self._handle_compression_training(data_dict_bytes)
+        summary_bytes = self._serialize_data_dict(self._summarize(data_dict)) if self.dolphie.replay_summary else None
 
         # Insert into database
-        self._insert_replay_data(timestamp, data_dict_bytes)
+        self._insert_replay_data(timestamp, data_dict_bytes, summary_bytes)
 
     def _update_replay_metadata_cache(self) -> bool:
         """Updates the replay metadata (min/max timestamps and IDs, total rows).
@@ -986,10 +1070,8 @@ class ReplayManager:
             self.current_replay_timestamp = row[1]
 
             try:
-                data = orjson.loads(self._decompressor.decompress(row[2]))
-                if not isinstance(data, dict):
-                    raise TypeError(f"expected a JSON object, got {type(data).__name__}")
-            except (zstd.ZstdError, orjson.JSONDecodeError, TypeError) as e:
+                data = self._decode_row(row[2])
+            except self.UNREADABLE_ROW_ERRORS as e:
                 skipped += 1
                 logger.error(f"Skipping unreadable replay row {row[0]} ({row[1]}): {e}")
                 if skipped == 1:
@@ -1247,22 +1329,46 @@ class ReplayManager:
         Args:
             replay_ids: The replay ids whose metric_manager data should be loaded.
         """
+        # A delta row's summary carries the same metric_manager as the row at a tenth of the decode
+        # cost, so a window rebuild decodes it first. A full-snapshot row (interactive recording) has
+        # its history cut in the summary, so that row is decoded whole. A file holds one kind of row,
+        # so the first full-snapshot summary seen turns the summary path off for the rest.
+        columns = "id, data, summary" if self.has_summary else "id, data, NULL"
+        try_summary = self.has_summary
         # SQLite caps the number of bound parameters per statement, so fetch in chunks.
         chunk_size = 900
         for start in range(0, len(replay_ids), chunk_size):
             chunk = replay_ids[start : start + chunk_size]
             placeholders = ",".join("?" * len(chunk))
             rows = self._execute_select_all(
-                f"SELECT id, data FROM replay_data WHERE id IN ({placeholders})",
+                f"SELECT {columns} FROM replay_data WHERE id IN ({placeholders})",
                 tuple(chunk),
             )
-            for replay_id, data_blob in rows:
-                try:
-                    data = orjson.loads(self._decompressor.decompress(data_blob))
-                except Exception:
-                    continue
-                if isinstance(data, dict) and isinstance(data.get("metric_manager"), dict):
-                    self._remember_metric_manager(replay_id, data["metric_manager"])
+            for replay_id, data_blob, summary_blob in rows:
+                metric_manager = None
+                if try_summary and summary_blob is not None:
+                    metric_manager = self._decode_metric_manager(summary_blob)
+                    if metric_manager is not None and not metric_manager.get("_delta"):
+                        try_summary = False
+                        metric_manager = None
+                if metric_manager is None:
+                    metric_manager = self._decode_metric_manager(data_blob)
+                if metric_manager is not None:
+                    self._remember_metric_manager(replay_id, metric_manager)
+
+    def _decode_row(self, blob: bytes) -> dict[str, Any]:
+        """Decompress and parse one stored row. Raises one of UNREADABLE_ROW_ERRORS when it cannot."""
+        data = orjson.loads(self._decompressor.decompress(blob))
+        if not isinstance(data, dict):
+            raise TypeError(f"expected a JSON object, got {type(data).__name__}")
+        return data
+
+    def _decode_metric_manager(self, blob: bytes) -> dict[str, Any] | None:
+        try:
+            metric_manager = self._decode_row(blob).get("metric_manager")
+        except self.UNREADABLE_ROW_ERRORS:
+            return None
+        return metric_manager if isinstance(metric_manager, dict) else None
 
     def fetch_global_variable_changes_for_current_replay_id(self):
         """Fetches global variable changes for the current replay ID."""

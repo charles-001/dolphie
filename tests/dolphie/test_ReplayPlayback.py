@@ -10,30 +10,22 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-import orjson
 import pytest
-import zstandard as zstd
 from textual import events
 from textual.widgets import Button
 
 from dolphie.Modules.KeyEventManager import KeyEventManager
 from dolphie.Modules.ReplayManager import ReplayManager
 from dolphie.Panels import Dashboard
+from tests.dolphie.replay_files import read_replay_rows
 from tests.integration.harness import REPLAYS, DolphieHarness, HarnessApp, replay_config
 
 FRAMES = 8
 
 
 def metric_datetimes(replay_file: Path) -> list[list[str]]:
-    """The graph timestamps each frame recorded, read without the code under test."""
-    connection = sqlite3.connect(f"{replay_file.resolve().as_uri()}?mode=ro", uri=True)
-    try:
-        (dictionary,) = connection.execute("SELECT compression_dict FROM metadata").fetchone()
-        decompressor = zstd.ZstdDecompressor(dict_data=zstd.ZstdCompressionDict(dictionary) if dictionary else None)
-        rows = connection.execute("SELECT data FROM replay_data ORDER BY id").fetchall()
-    finally:
-        connection.close()
-    return [orjson.loads(decompressor.decompress(blob))["metric_manager"]["datetimes"] for (blob,) in rows]
+    """The graph timestamps each frame recorded."""
+    return [data["metric_manager"]["datetimes"] for (data,) in read_replay_rows(replay_file, "data")]
 
 
 async def test_forward_and_back_step_one_frame_and_rebuild_the_metric_window() -> None:

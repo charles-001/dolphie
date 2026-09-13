@@ -16,6 +16,8 @@ ConnectionSourceType = Literal["MySQL", "ProxySQL", "MariaDB"]
 ConnectionStatusType = Literal["CONNECTING", "CONNECTED", "DISCONNECTED", "R/W", "RO"]
 DatabaseScalar = str | int | float | Decimal | date | datetime | timedelta | None
 DatabaseRow = dict[str, DatabaseScalar]
+# Host samples: counters and sizes, the load average triple, and the mount holding the data directory.
+SystemUtilization = dict[str, int | float | str | tuple[float, float, float]]
 
 
 class ConnectionSource:

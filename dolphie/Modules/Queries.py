@@ -546,7 +546,11 @@ class MySQLQueries:
         FROM
             information_schema.INNODB_METRICS
         WHERE
-            name IN ('adaptive_hash_searches', 'adaptive_hash_searches_btree', 'trx_rseg_history_len')
+            name IN (
+                'adaptive_hash_searches', 'adaptive_hash_searches_btree', 'trx_rseg_history_len',
+                'lock_deadlocks', 'lock_timeouts',
+                'ibuf_merges', 'ibuf_merges_insert', 'ibuf_merges_delete', 'ibuf_merges_delete_mark', 'ibuf_size'
+            )
     """
     active_redo_logs: str = """
         SELECT
@@ -694,18 +698,28 @@ class MySQLQueries:
         SHOW GLOBAL STATUS
         WHERE Variable_name IN (
             'Aborted_clients', 'Aborted_connects',
-            'Binlog_cache_disk_use', 'Binlog_cache_use',
+            'Binlog_cache_disk_use', 'Binlog_cache_use', 'Bytes_received', 'Bytes_sent',
             'Com_commit', 'Com_delete', 'Com_insert', 'Com_replace',
-            'Com_rollback', 'Com_select', 'Com_update',
+            'Com_rollback', 'Com_select', 'Com_update', 'Connections',
             'Created_tmp_disk_tables', 'Created_tmp_files', 'Created_tmp_tables',
             'Innodb_buffer_pool_bytes_data', 'Innodb_buffer_pool_bytes_dirty',
+            'Innodb_buffer_pool_pages_data', 'Innodb_buffer_pool_pages_free', 'Innodb_buffer_pool_pages_misc',
+            'Innodb_buffer_pool_read_ahead', 'Innodb_buffer_pool_read_ahead_evicted',
+            'Innodb_buffer_pool_read_ahead_rnd',
             'Innodb_buffer_pool_read_requests', 'Innodb_buffer_pool_reads',
-            'Innodb_buffer_pool_write_requests',
+            'Innodb_buffer_pool_wait_free', 'Innodb_buffer_pool_write_requests',
             'Innodb_checkpoint_age', 'Innodb_lsn_current', 'Innodb_os_log_written',
-            'Open_tables', 'Opened_tables',
+            'Innodb_data_fsyncs', 'Innodb_data_reads', 'Innodb_data_writes', 'Innodb_log_writes',
+            'Innodb_pages_created', 'Innodb_pages_read', 'Innodb_pages_written',
+            'Innodb_row_lock_time', 'Innodb_row_lock_waits',
+            'Innodb_rows_deleted', 'Innodb_rows_inserted', 'Innodb_rows_read', 'Innodb_rows_updated',
+            'Max_used_connections', 'Open_tables', 'Opened_tables',
             'Queries',
+            'Select_full_join', 'Select_range', 'Select_scan', 'Slow_queries',
+            'Sort_merge_passes', 'Sort_rows', 'Sort_scan',
+            'Table_locks_waited',
             'Table_open_cache_hits', 'Table_open_cache_misses', 'Table_open_cache_overflows',
-            'Threads_cached', 'Threads_connected', 'Threads_running',
+            'Threads_cached', 'Threads_connected', 'Threads_created', 'Threads_running',
             'Uptime',
             'wsrep_gcomm_uuid', 'wsrep_provider_version',
             'wsrep_cluster_size', 'wsrep_cluster_status', 'wsrep_connected',

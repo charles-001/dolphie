@@ -25,6 +25,13 @@ if TYPE_CHECKING:
     from dolphie.App import DolphieApp
 
 
+def mount_holding(path: str) -> str | None:
+    """The longest mount point that contains ``path``, after resolving symlinks."""
+    real = os.path.realpath(path)
+    mounts = sorted((partition.mountpoint for partition in psutil.disk_partitions(all=True)), key=len, reverse=True)
+    return next((mount for mount in mounts if real == mount or real.startswith(f"{mount.rstrip('/')}/")), None)
+
+
 class Dolphie:
     def __init__(self, config: Config, app: DolphieApp) -> None:
         self.config = config
@@ -59,6 +66,7 @@ class Dolphie:
         self.replay_file = config.replay_file  # This denotes that we're replaying a file
         self.replay_dir = config.replay_dir
         self.replay_retention_hours = config.replay_retention_hours
+        self.replay_summary = config.replay_summary
         self.exclude_notify_global_vars = config.exclude_notify_global_vars
 
         # Set the default panels based on startup_panels to be visible
@@ -98,7 +106,8 @@ class Dolphie:
         self.metadata_locks: list[DataTypes.DatabaseRow] = []
         self.ddl: list[DataTypes.DatabaseRow] = []
         self.disk_io_metrics: dict[str, int | str] = {}
-        self.system_utilization: dict[str, int | float | tuple[float, float, float]] = {}
+        self.system_utilization: DataTypes.SystemUtilization = {}
+        self._datadir_mount: tuple[str, str | None] = ("", None)
         self.host_cache: dict[str, str] = {}
         self.proxysql_hostgroup_summary: list[DataTypes.DatabaseRow] = []
         self.proxysql_mysql_query_rules: list[DataTypes.DatabaseRow] = []
@@ -333,6 +342,24 @@ class Dolphie:
             self.system_utilization["CPU_Load_Avg"] = psutil.getloadavg()  # 1, 5, and 15 minute load averages
         except AttributeError:
             pass
+
+        # The filesystem holding the data directory, named by its mount so a reader can tell a
+        # dedicated volume from the root filesystem. Variables arrive after the first poll, and a
+        # data directory Dolphie cannot see (a container's private mount) is left out.
+        datadir = str(self.global_variables.get("datadir") or "")
+        if datadir:
+            try:
+                usage = psutil.disk_usage(datadir)
+            except OSError:
+                pass
+            else:
+                self.system_utilization["Datadir_Total"] = usage.total
+                self.system_utilization["Datadir_Used"] = usage.used
+                # The mount table does not change under a running server, so it is read once per datadir
+                if self._datadir_mount[0] != datadir:
+                    self._datadir_mount = (datadir, mount_holding(datadir))
+                if self._datadir_mount[1] is not None:
+                    self.system_utilization["Datadir_Mount"] = self._datadir_mount[1]
 
     def get_group_replication_metadata(self):
         # Check to get information on what cluster/instance type it is

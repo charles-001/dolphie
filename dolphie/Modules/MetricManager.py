@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import TypeVar
 
-from dolphie.DataTypes import ConnectionSource, ConnectionSourceType, DatabaseRow
+from dolphie.DataTypes import ConnectionSource, ConnectionSourceType, DatabaseRow, SystemUtilization
 from dolphie.Modules.Functions import coerce_int, coerce_str
 from dolphie.Modules.MetricDefinitions import (
     METRIC_DATETIME_FORMAT,
@@ -58,7 +58,7 @@ class MetricManager:
         # Cached formatted worker_start_time so each metric appended in one
         # poll cycle doesn't re-run astimezone/strftime.
         self._worker_start_timestamp: str | None = None
-        self.system_utilization: dict[str, int | float | tuple[float, float, float]] = {}
+        self.system_utilization: SystemUtilization = {}
         self.innodb_metrics: dict[str, int | str] = {}
         self.disk_io_metrics: dict[str, int | str] = {}
         self.metadata_lock_metrics: list[DatabaseRow] = []
@@ -277,7 +277,7 @@ class MetricManager:
         self,
         worker_start_time: datetime,
         polling_latency: float = 0,
-        system_utilization: dict[str, int | float | tuple[float, float, float]] | None = None,
+        system_utilization: SystemUtilization | None = None,
         global_variables: dict[str, int | str] | None = None,
         global_status: dict[str, int | float | str] | None = None,
         innodb_metrics: dict[str, int | str] | None = None,
@@ -331,6 +331,7 @@ class MetricManager:
                 self.update_metrics_replication_lag()
                 self.update_metrics_adaptive_hash_index_hit_ratio()
                 self.update_metrics_locks()
+                self.update_metrics_row_lock_wait()
                 self.update_metrics_last_value()  # Must be last
 
             self.update_metrics_checkpoint()
@@ -472,6 +473,26 @@ class MetricManager:
     def update_metrics_locks(self) -> None:
         """Update the metadata lock count metric."""
         self.add_metric(self.metrics.locks.metadata_lock_count, len(self.metadata_lock_metrics))
+
+    def update_metrics_row_lock_wait(self) -> None:
+        """Update the average row lock wait from the waits and milliseconds added since the last poll."""
+        avg_wait_ms = self.calculate_row_lock_wait_avg()
+        if avg_wait_ms is not None:
+            self.add_metric(self.metrics.row_lock_wait.avg_wait_ms, avg_wait_ms)
+
+    def calculate_row_lock_wait_avg(self) -> float | None:
+        """Milliseconds per row lock wait over the last poll, or None before a baseline exists."""
+        last_waits = self.metrics.row_locks.Innodb_row_lock_waits.last_value
+        last_time = self.metrics.row_locks.Innodb_row_lock_time.last_value
+        if last_waits is None or last_time is None:
+            return None
+
+        waits = coerce_int(self.global_status.get("Innodb_row_lock_waits")) - last_waits
+        waited = coerce_int(self.global_status.get("Innodb_row_lock_time")) - last_time
+        # Both counters step backwards together on a server restart. That poll is a new baseline.
+        if waits <= 0 or waited < 0:
+            return 0.0
+        return waited / waits
 
     def calculate_checkpoint_age_data(self) -> tuple[int, int, int]:
         """Calculate raw checkpoint age data."""

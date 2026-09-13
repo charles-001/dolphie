@@ -5,6 +5,8 @@ socket   = /var/run/mysqld/mysqld.sock
 
 refresh_interval        = 2
 replay_retention_hours  = 48
+# Per-row summaries let Dolphie and other tools read timelines without decoding whole rows. Costs about a kilobyte per row
+# replay_summary        = true
 
 daemon_mode             = true
 daemon_mode_log_file    = /var/log/dolphie/daemon.log
