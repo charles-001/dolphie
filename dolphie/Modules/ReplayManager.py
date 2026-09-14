@@ -126,6 +126,7 @@ class ReplayManager:
             "Replica_SQL_Running",
             "Slave_SQL_Running",
             "Seconds_Behind",
+            "SQL_Delay",
             "Last_IO_Error",
             "Last_SQL_Error",
         ),
@@ -921,6 +922,12 @@ class ReplayManager:
             )
         else:
             data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = 0
+
+        # The age of the oldest statement in flight, so a timeline reader can find the long
+        # queries without the processlist, which the summary leaves out
+        data_dict["global_status"]["replay_longest_thread_time"] = max(
+            (coerce_int(thread.get("time")) for thread in data_dict["processlist"]), default=0
+        )
 
         # Add MySQL specific data to the dictionary
         data_dict.update(

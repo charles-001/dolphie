@@ -567,7 +567,8 @@ def make_recording_dolphie(replay_dir: Path, *, daemon_mode: bool = True, **over
                 "Source_Host": "primary",
                 "Replica_IO_Running": "Yes",
                 "Replica_SQL_Running": "Yes",
-                "Seconds_Behind": 1,
+                "Seconds_Behind": 3601,
+                "SQL_Delay": 3600,
                 "Executed_Gtid_Set": "uuid:1-100",
             }
         ],
@@ -618,6 +619,20 @@ def test_row_carries_the_seconds_its_rates_were_divided_by(tmp_path: Path) -> No
         manager.close()
     assert data_dict["global_status"]["replay_polling_interval"] == 2.04
     assert data_dict["global_status"]["replay_polling_latency"] == 0.05
+
+
+def test_row_carries_the_age_of_its_oldest_thread_for_readers_without_the_processlist(tmp_path: Path) -> None:
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    try:
+        data_dict = manager._build_base_data_dict(manager._prepare_processlist())
+        manager._add_mysql_specific_data(data_dict)
+        assert data_dict["global_status"]["replay_longest_thread_time"] == 42
+
+        empty = manager._build_base_data_dict([])
+        manager._add_mysql_specific_data(empty)
+        assert empty["global_status"]["replay_longest_thread_time"] == 0
+    finally:
+        manager.close()
 
 
 def test_rows_are_stamped_in_utc_like_the_metric_history(tmp_path: Path) -> None:
@@ -906,7 +921,8 @@ def test_replay_summary_keeps_the_timeline_subset_of_every_row(tmp_path: Path) -
                 "Source_Host": "primary",
                 "Replica_IO_Running": "Yes",
                 "Replica_SQL_Running": "Yes",
-                "Seconds_Behind": 1,
+                "Seconds_Behind": 3601,
+                "SQL_Delay": 3600,
             }
         ]
         # The full row is untouched, so detail readers lose nothing
