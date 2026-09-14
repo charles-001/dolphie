@@ -84,7 +84,7 @@ class GraphSpec:
     expanded_weight: int | None = None
     availability: GraphAvailability = GraphAvailability.ALWAYS
     # Heads the graph's own control row. Required when a tab has more than one graph, because
-    # the tab title alone no longer says what each graph shows.
+    # the tab title alone does not say what each graph shows.
     title: str | None = None
 
 

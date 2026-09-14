@@ -9,9 +9,10 @@ import subprocess
 import sys
 import time
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from pathlib import Path
 
+from tests.dolphie.replay_files import row_count
 from tests.integration.harness import shared_options
 from tests.integration.servers import Server
 
@@ -49,12 +50,9 @@ def daemon_replay_file(server: Server, tmp_path: Path) -> Path:
 
 
 def replay_row_count(replay_file: Path) -> int:
-    # Read-only mode refuses to create the file, so a daemon that has not written yet counts as zero.
-    # The connection is closed explicitly: `with connection` only ends the transaction, and on
-    # Python 3.14 the object lives on and keeps a WAL read lock that pins the daemon's shutdown checkpoint
+    # Read-only mode refuses to create the file, so a daemon that has not written yet counts as zero
     try:
-        with closing(sqlite3.connect(f"file:{replay_file}?mode=ro", uri=True)) as connection:
-            return connection.execute("SELECT COUNT(*) FROM replay_data").fetchone()[0]
+        return row_count(replay_file)
     except sqlite3.OperationalError:
         return 0
 

@@ -87,6 +87,11 @@ class Tab:
     def dolphie(self, value: Dolphie) -> None:
         self._dolphie = value
 
+    def close_replay_manager(self) -> None:
+        if self.replay_manager:
+            self.replay_manager.close()
+        self.replay_manager = None
+
     def save_references_to_components(self):
         app = self.dolphie.app
 
@@ -751,9 +756,7 @@ class TabManager:
                 # Reset all runtime state with the new connection details
                 dolphie.reset_runtime_variables()
                 tab.worker_cancel_error = None
-                if tab.replay_manager:
-                    tab.replay_manager.close()
-                tab.replay_manager = None
+                tab.close_replay_manager()
 
                 tab.loading_indicator.display = True
                 tab.dashboard_replay_container.display = False

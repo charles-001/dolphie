@@ -489,7 +489,8 @@ class MetricManager:
 
         waits = coerce_int(self.global_status.get("Innodb_row_lock_waits")) - last_waits
         waited = coerce_int(self.global_status.get("Innodb_row_lock_time")) - last_time
-        # Both counters step backwards together on a server restart. That poll is a new baseline.
+        # No new waits means no average. On a server restart both counters step backwards
+        # together, and that poll becomes the new baseline.
         if waits <= 0 or waited < 0:
             return 0.0
         return waited / waits

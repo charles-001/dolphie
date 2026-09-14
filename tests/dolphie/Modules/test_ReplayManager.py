@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,7 +16,14 @@ from dolphie.DataTypes import ConnectionSource, ProcesslistThread, ProxySQLProce
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules.Functions import coerce_int
 from dolphie.Modules.ReplayManager import MySQLReplayData, ReplayManager
-from tests.dolphie.replay_files import read_replay_rows
+from tests.dolphie.replay_files import (
+    journal_mode,
+    open_read_only,
+    read_compression_dict,
+    read_replay_rows,
+    row_count,
+    sidecars,
+)
 
 SCHEMA = """
 CREATE TABLE replay_data (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME, data BLOB);
@@ -349,7 +357,7 @@ def test_insert_failure_surfaces_the_original_error(tmp_path: Path) -> None:
     try:
         writer.execute("BEGIN IMMEDIATE")
         with pytest.raises(sqlite3.OperationalError, match="locked"):
-            manager._insert_replay_data("2026-01-01 00:00:00", b"{}")
+            manager._insert_replay_data("2026-01-01 00:00:00", b"{}", None)
     finally:
         writer.execute("ROLLBACK")
         writer.close()
@@ -367,7 +375,7 @@ def test_raw_content_dictionary_reads_rows_written_before_and_after_it(tmp_path:
         rows = [orjson.dumps(make_row(index)) for index in range(ReplayManager.COMPRESSION_DICT_SAMPLES + 3)]
         blobs: list[bytes] = []
         for payload in rows:
-            manager._handle_compression_training(payload)
+            manager._handle_compression_training(payload, None)
             blobs.append(manager._compressor.compress(payload))
 
         assert manager.compression_dict is not None
@@ -666,20 +674,9 @@ def seek_to(manager: ReplayManager, replay_id: int) -> None:
 def test_recording_is_unchanged_without_replay_summary(tmp_path: Path) -> None:
     replay_file = record_replay(tmp_path, polls=1)
 
-    connection = sqlite3.connect(replay_file)
-    try:
+    with closing(open_read_only(replay_file)) as connection:
         columns = [column[1] for column in connection.execute("PRAGMA table_info(replay_data)")]
-    finally:
-        connection.close()
     assert columns == ["id", "timestamp", "data"]
-
-
-def journal_mode(replay_file: Path) -> str:
-    connection = sqlite3.connect(f"file:{replay_file}?mode=ro", uri=True)
-    try:
-        return connection.execute("PRAGMA journal_mode").fetchone()[0]
-    finally:
-        connection.close()
 
 
 def test_recording_writes_in_wal_mode_and_playback_reads_it_read_only(tmp_path: Path) -> None:
@@ -695,7 +692,7 @@ def test_recording_writes_in_wal_mode_and_playback_reads_it_read_only(tmp_path: 
     # file that any reader opens without creating a -shm, so a stopped daemon's file reads from anywhere
     manager.close()
     assert journal_mode(replay_file) == "delete"
-    assert sorted(p.name for p in replay_file.parent.iterdir()) == [replay_file.name]
+    assert sidecars(replay_file) == set()
 
     dolphie, notifications = make_dolphie(replay_file)
     playback = ReplayManager(dolphie)
@@ -722,12 +719,8 @@ def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
     logged: list[str] = []
     sink = logger.add(lambda message: logged.append(str(message)), level="INFO", format="{level} {message}")
     manager = ReplayManager(make_recording_dolphie(tmp_path))
-    wal_file = Path(f"{manager.replay_file}-wal")
-
-    def rows() -> int:
-        row = manager._execute_select_one("SELECT count(*) FROM replay_data")
-        assert row is not None
-        return row[0]
+    replay_file = Path(manager.replay_file)
+    wal_file = replay_file.with_name(f"{replay_file.name}-wal")
 
     try:
         for _ in range(5):
@@ -745,13 +738,13 @@ def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
         force_purge(manager)
         pinned_size = wal_file.stat().st_size
         assert pinned_size > 0
-        written = rows()
+        written = row_count(replay_file)
 
         # Past the cap the daemon stops writing rows, so disk use is bounded, and says so once
         monkeypatch.setattr(ReplayManager, "WAL_MAX_BYTES", 1)
         for _ in range(3):
             manager.capture_state()
-        assert rows() == written
+        assert row_count(replay_file) == written
         assert wal_file.stat().st_size == pinned_size
         errors = [line for line in logged if line.startswith("ERROR")]
         assert len(errors) == 1
@@ -761,7 +754,7 @@ def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
         cursor.close()
         reader.close()
         manager.capture_state()
-        assert rows() == written + 1
+        assert row_count(replay_file) == written + 1
         assert [line for line in logged if "Recording resumes" in line]
         assert wal_file.stat().st_size < pinned_size
         force_purge(manager)
@@ -773,13 +766,13 @@ def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
         cursor = reader.execute("SELECT id FROM replay_data")
         cursor.fetchone()
         manager.close()
-        assert journal_mode(Path(manager.replay_file)) == "wal"
+        assert journal_mode(replay_file) == "wal"
         assert wal_file.exists()
         cursor.close()
         reader.close()
         manager = ReplayManager(manager.dolphie)
         manager.capture_state()
-        assert rows() == written + 2
+        assert row_count(replay_file) == written + 2
         manager.close()
         assert not wal_file.exists()
     finally:
@@ -799,7 +792,7 @@ def test_playback_opens_a_closed_file_in_a_directory_it_cannot_write(tmp_path: P
             assert sum(manager.get_next_refresh_interval() is not None for _ in range(3)) == 3
         finally:
             manager.close()
-        assert sorted(p.name for p in replay_file.parent.iterdir()) == [replay_file.name]
+        assert sidecars(replay_file) == set()
     finally:
         replay_file.parent.chmod(0o770)
 
@@ -839,12 +832,8 @@ def test_close_waits_for_a_poll_in_flight_on_the_worker_thread(tmp_path: Path, m
 
     # Both rows landed, the file is back in rollback mode, and nothing is left next to it
     assert journal_mode(replay_file) == "delete"
-    assert sorted(p.name for p in replay_file.parent.iterdir()) == [replay_file.name]
-    connection = sqlite3.connect(f"file:{replay_file}?mode=ro", uri=True)
-    try:
-        assert connection.execute("SELECT count(*) FROM replay_data").fetchone() == (2,)
-    finally:
-        connection.close()
+    assert sidecars(replay_file) == set()
+    assert row_count(replay_file) == 2
     # A poll that arrives after the close is a no-op rather than an error
     manager.capture_state()
 
@@ -873,24 +862,17 @@ def test_schema_rotation_closes_the_old_wal_file_before_renaming_it(
     assert {p.name for p in host_dir.iterdir()} == {"daemon.db", "daemon.db_old_schema_v1"}
 
     for name, schema_version, rows in (("daemon.db_old_schema_v1", 1, 10), ("daemon.db", 2, 5)):
-        connection = sqlite3.connect(f"{(host_dir / name).resolve().as_uri()}?mode=ro", uri=True)
-        try:
+        with closing(open_read_only(host_dir / name)) as connection:
             assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
             assert connection.execute("SELECT schema_version FROM metadata").fetchone() == (schema_version,)
-            assert connection.execute("SELECT count(*) FROM replay_data").fetchone() == (rows,)
-        finally:
-            connection.close()
+        assert row_count(host_dir / name) == rows
 
 
 def test_compression_dictionary_samples_summaries_alongside_rows(tmp_path: Path) -> None:
     polls = ReplayManager.COMPRESSION_DICT_SAMPLES + 1
     replay_file = record_replay(tmp_path, polls, replay_summary=True)
 
-    connection = sqlite3.connect(replay_file)
-    try:
-        (dictionary,) = connection.execute("SELECT compression_dict FROM metadata").fetchone()
-    finally:
-        connection.close()
+    dictionary = read_compression_dict(replay_file)
     rows = read_rows(replay_file)
     # The prefix is the sampled rows followed by their summaries, verbatim
     expected = b"".join(orjson.dumps(data) for _, data, _ in rows[:-1]) + b"".join(

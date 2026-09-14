@@ -511,8 +511,7 @@ class DolphieApp(App):
             elif tab.dolphie.replay_file:
                 tab.replay_manager = ReplayManager(tab.dolphie)
                 if not tab.replay_manager.verify_replay_file():
-                    tab.replay_manager.close()
-                    tab.replay_manager = None
+                    tab.close_replay_manager()
                     self.tab_manager.setup_host_tab(tab)
                     return
 
@@ -679,8 +678,7 @@ def main():
             for tab in app.tab_manager.tabs.values():
                 tab.dolphie.main_db_connection.close()
                 tab.dolphie.secondary_db_connection.close()
-                if tab.replay_manager:
-                    tab.replay_manager.close()
+                tab.close_replay_manager()
 
 
 if __name__ == "__main__":

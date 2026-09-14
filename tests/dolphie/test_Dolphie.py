@@ -6,18 +6,18 @@ from typing import cast
 
 import pytest
 
-from dolphie.Dolphie import Dolphie
+from dolphie.Dolphie import Dolphie, mount_holding
 
 DiskUsage = namedtuple("DiskUsage", "total used free percent")
 Partition = namedtuple("Partition", "device mountpoint fstype opts")
 
 
 def make_dolphie(global_variables: dict[str, str]) -> Dolphie:
+    mount_holding.cache_clear()
     dolphie = SimpleNamespace(
         enable_system_utilization=True,
         global_variables=global_variables,
         system_utilization={},
-        _datadir_mount=("", None),
     )
     return cast(Dolphie, dolphie)
 

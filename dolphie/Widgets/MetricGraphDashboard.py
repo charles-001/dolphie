@@ -112,14 +112,10 @@ class MetricGraphDashboard(Widget):
 
     def _graph_cell(self, graph_spec: GraphSpec, metric_keys: tuple[MetricKey, ...]) -> Vertical:
         """A graph under its own header: its title, then the switches for the series it draws."""
-        header: list[Widget] = []
-        if graph_spec.title:
-            header.append(Label(graph_spec.title, classes="metric-graph-title"))
-        header.append(
-            MetricControlsScroll(*(self.controls[metric] for metric in metric_keys), classes="metric-series-controls")
-        )
+        title = [Label(graph_spec.title, classes="metric-graph-title")] if graph_spec.title else []
         cell = Vertical(
-            *header,
+            *title,
+            MetricControlsScroll(*(self.controls[metric] for metric in metric_keys), classes="metric-series-controls"),
             self.graphs[graph_spec.id],
             id=f"metric-graph-cell-{graph_spec.id}",
             classes="metric-graph-cell",

@@ -12,7 +12,7 @@ import pytest
 from dolphie.DataTypes import ConnectionSource, ConnectionSourceType
 from dolphie.Modules.MetricDefinitions import METRIC_DATETIME_FORMAT
 from dolphie.Modules.ReplayManager import ReplayManager
-from tests.dolphie.replay_files import read_replay_rows
+from tests.dolphie.replay_files import journal_mode, read_replay_rows, sidecars
 from tests.integration.cli import daemon, daemon_replay_file, replay_row_count, run_daemon, wait_for_rows
 from tests.integration.harness import frontend_traffic, make_config, playback_config, query, run_dolphie, traffic
 from tests.integration.servers import Server
@@ -76,10 +76,9 @@ def test_daemon_stopped_by_systemd_closes_the_replay_file(server: Server, tmp_pa
         assert replay_file.with_name("daemon.db-wal").exists()
 
     assert "Shutting down" in (tmp_path / "daemon.log").read_text()
-    assert sorted(path.name for path in replay_file.parent.iterdir()) == ["daemon.db"]
-    with sqlite3.connect(f"file:{replay_file}?mode=ro", uri=True) as connection:
-        assert connection.execute("PRAGMA journal_mode").fetchone() == ("delete",)
-        assert connection.execute("SELECT COUNT(*) FROM replay_data").fetchone()[0] >= 3
+    assert sidecars(replay_file) == set()
+    assert journal_mode(replay_file) == "delete"
+    assert replay_row_count(replay_file) >= 3
 
 
 @pytest.mark.flavor_agnostic

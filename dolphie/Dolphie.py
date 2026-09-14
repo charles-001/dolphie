@@ -5,6 +5,7 @@ import os
 import socket
 import time
 from datetime import datetime
+from functools import cache
 from typing import TYPE_CHECKING, Any
 
 import psutil
@@ -25,8 +26,12 @@ if TYPE_CHECKING:
     from dolphie.App import DolphieApp
 
 
+@cache
 def mount_holding(path: str) -> str | None:
-    """The longest mount point that contains ``path``, or None when ``path`` is not on this host."""
+    """The longest mount point that contains ``path``, or None when ``path`` is not on this host.
+
+    Cached because the mount table does not change under a running server.
+    """
     real = os.path.realpath(path)
     # The root mount contains every path, so a path this host lacks must be ruled out before the
     # mount table is searched. Denied access still proves the path is here.
@@ -115,7 +120,6 @@ class Dolphie:
         self.ddl: list[DataTypes.DatabaseRow] = []
         self.disk_io_metrics: dict[str, int | str] = {}
         self.system_utilization: DataTypes.SystemUtilization = {}
-        self._datadir_mount: tuple[str, str | None] = ("", None)
         self.host_cache: dict[str, str] = {}
         self.proxysql_hostgroup_summary: list[DataTypes.DatabaseRow] = []
         self.proxysql_mysql_query_rules: list[DataTypes.DatabaseRow] = []
@@ -357,10 +361,7 @@ class Dolphie:
         # read at the mount point because the data directory itself is normally mysql-only.
         datadir = str(self.global_variables.get("datadir") or "")
         if datadir:
-            # The mount table does not change under a running server, so it is read once per datadir
-            if self._datadir_mount[0] != datadir:
-                self._datadir_mount = (datadir, mount_holding(datadir))
-            mount = self._datadir_mount[1]
+            mount = mount_holding(datadir)
             if mount is not None:
                 try:
                     usage = psutil.disk_usage(mount)

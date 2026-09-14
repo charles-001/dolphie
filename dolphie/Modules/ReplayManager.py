@@ -153,7 +153,7 @@ class ReplayManager:
         self.replay_file_size: int = 0
         self.dict_samples: list[bytes] = []
         self.summary_samples: list[bytes] = []
-        self.wal_pinned: bool = False
+        self._wal_pinned: bool = False
         self._write_lock = threading.Lock()
         self.global_variable_change_ids: list[int] = []
         self.has_summary: bool = False
@@ -248,8 +248,8 @@ class ReplayManager:
                 try:
                     self.connection.execute(f"PRAGMA busy_timeout = {self.CLOSE_BUSY_TIMEOUT_MS}")
                     self.connection.execute("PRAGMA journal_mode = DELETE")
-                except sqlite3.Error:
-                    pass
+                except sqlite3.OperationalError:
+                    pass  # A reader outlasted the busy timeout and keeps the file locked
             self.connection.close()
             self.connection = None
 
@@ -398,8 +398,7 @@ class ReplayManager:
         """Initializes the SQLite database and creates the necessary tables."""
         database_exists = bool(os.path.exists(self.replay_file))
         # A -wal left behind means the last run did not close the file. Opening it replays those rows
-        wal_left_behind = Path(f"{self.replay_file}-wal")
-        recovered_bytes = wal_left_behind.stat().st_size if wal_left_behind.exists() else 0
+        recovered_bytes = self._wal_size()
 
         self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
         if recovered_bytes:
@@ -424,8 +423,9 @@ class ReplayManager:
         # holds a statement open makes the daemon's commit fail. WAL appends one frame per poll, fsyncs
         # at checkpoint, and never blocks on readers. NORMAL survives a crash with at most the last
         # un-synced commits lost, never a corrupt file. Only the journal mode is stored in the file.
-        journal_mode = self._execute_select_one("PRAGMA journal_mode = WAL")
-        if journal_mode != ("wal",):
+        row = self._execute_select_one("PRAGMA journal_mode = WAL")
+        journal_mode = row[0] if row else "unknown"
+        if journal_mode != "wal":
             # SQLite refuses WAL on a filesystem without shared memory, such as NFS
             logger.warning(
                 f"SQLite could not switch the replay file to WAL mode and uses {journal_mode} journaling. Every poll "
@@ -531,19 +531,29 @@ class ReplayManager:
         result = self._execute_select_one("PRAGMA wal_checkpoint(TRUNCATE)")
         return result is not None and result[0] == 0
 
+    def _wal_size(self) -> int:
+        """Bytes in the -wal sidecar, or 0 when there is none."""
+        try:
+            return os.stat(f"{self.replay_file}-wal").st_size
+        except FileNotFoundError:
+            return 0
+
     def _wal_within_cap(self) -> bool:
-        """Whether a row may be written: the WAL is under WAL_MAX_BYTES or can be truncated now."""
-        wal_file = Path(f"{self.replay_file}-wal")
-        within = not wal_file.exists() or wal_file.stat().st_size < self.WAL_MAX_BYTES or self._truncate_wal()
-        if within and self.wal_pinned:
+        """Whether a row may be written: the WAL is under WAL_MAX_BYTES or can be truncated now.
+
+        Logs once when recording pauses and once when it resumes.
+        """
+        wal_size = self._wal_size()
+        within = wal_size < self.WAL_MAX_BYTES or self._truncate_wal()
+        if within and self._wal_pinned:
             logger.info("The connection holding the replay file open has closed. Recording resumes")
-        elif not within and not self.wal_pinned:
+        elif not within and not self._wal_pinned:
             logger.error(
-                f"The replay file's WAL reached {format_bytes(wal_file.stat().st_size, color=False)} and cannot be "
+                f"The replay file's WAL reached {format_bytes(wal_size, color=False)} and cannot be "
                 "checkpointed because another connection holds the replay file open. Recording is paused until "
                 f"the sqlite3 shell or GUI tool that has {self.replay_file} open closes"
             )
-        self.wal_pinned = not within
+        self._wal_pinned = not within
         return within
 
     def seek_relative(self, offset: int) -> bool:
@@ -979,7 +989,7 @@ class ReplayManager:
         SUMMARY_WHOLE_KEYS are kept whole. Per-entity collections are cut to the fields listed for
         them. Any other key is left out.
         """
-        # A delta row already holds one value per metric, so its metric_manager is passed by reference
+        # A delta row already holds one value per metric
         metric_manager = data_dict["metric_manager"]
         if not metric_manager.get("_delta"):
             metric_manager = cls._latest(metric_manager)
@@ -1010,7 +1020,7 @@ class ReplayManager:
 
         return [keep(row) for row in value] if isinstance(value, list) else keep(value)
 
-    def _handle_compression_training(self, data_dict_bytes: bytes, summary_bytes: bytes | None = None) -> None:
+    def _handle_compression_training(self, data_dict_bytes: bytes, summary_bytes: bytes | None) -> None:
         """Handles compression dictionary training by collecting samples and training when ready.
 
         Args:
@@ -1028,7 +1038,7 @@ class ReplayManager:
                 self.dict_samples = []
                 self.summary_samples = []
 
-    def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes, summary_bytes: bytes | None = None) -> None:
+    def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes, summary_bytes: bytes | None) -> None:
         """Inserts the replay data into the database and handles variable change linkage.
 
         Args:
@@ -1078,10 +1088,7 @@ class ReplayManager:
 
         if not self.dolphie.daemon_mode:
             # The newest rows sit in the -wal until a checkpoint, so the size shown counts it too
-            wal_file = Path(f"{self.replay_file}-wal")
-            self.replay_file_size = os.path.getsize(self.replay_file) + (
-                wal_file.stat().st_size if wal_file.exists() else 0
-            )
+            self.replay_file_size = os.path.getsize(self.replay_file) + self._wal_size()
 
     def capture_state(self):
         """Captures the current state of the Dolphie instance and stores it in the SQLite database."""
@@ -1097,13 +1104,14 @@ class ReplayManager:
             self._capture_state()
 
     @classmethod
-    def _row_timestamp(cls, moment: datetime) -> str:
+    def _row_timestamp(cls, moment: datetime | None = None) -> str:
+        moment = moment or datetime.now(timezone.utc)
         return moment.astimezone(timezone.utc).strftime(cls.ROW_TIMESTAMP_FORMAT)
 
     def _capture_state(self):
         # Prepare processlist data
         processlist = self._prepare_processlist()
-        timestamp = self._row_timestamp(datetime.now().astimezone())
+        timestamp = self._row_timestamp()
 
         # Build base data dictionary
         data_dict = self._build_base_data_dict(processlist)
@@ -1450,9 +1458,8 @@ class ReplayManager:
         # A delta row's summary carries the same metric_manager as the row at a tenth of the decode
         # cost, so a window rebuild decodes it first. A full-snapshot row (interactive recording) has
         # its history cut in the summary, so that row is decoded whole. A file holds one kind of row,
-        # so the first full-snapshot summary seen turns the summary path off for the rest.
+        # so the first full-snapshot summary seen turns the summary path off for the file.
         columns = "id, data, summary" if self.has_summary else "id, data, NULL"
-        try_summary = self.has_summary
         # SQLite caps the number of bound parameters per statement, so fetch in chunks.
         chunk_size = 900
         for start in range(0, len(replay_ids), chunk_size):
@@ -1464,10 +1471,10 @@ class ReplayManager:
             )
             for replay_id, data_blob, summary_blob in rows:
                 metric_manager = None
-                if try_summary and summary_blob is not None:
+                if self.has_summary and summary_blob is not None:
                     metric_manager = self._decode_metric_manager(summary_blob)
                     if metric_manager is not None and not metric_manager.get("_delta"):
-                        try_summary = False
+                        self.has_summary = False
                         metric_manager = None
                 if metric_manager is None:
                     metric_manager = self._decode_metric_manager(data_blob)
@@ -1535,7 +1542,7 @@ class ReplayManager:
         if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
-        timestamp = self._row_timestamp(datetime.now().astimezone())
+        timestamp = self._row_timestamp()
 
         with self._write_lock:
             if self.connection is None:
