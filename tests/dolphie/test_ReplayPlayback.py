@@ -101,6 +101,11 @@ async def test_a_held_key_scrubs_the_cursor_and_renders_one_frame_when_released(
         last_timestamp = replay_manager.max_replay_timestamp
         assert last_timestamp
         loaded_frames.clear()
+        # A loaded CI runner can stall the loop between two events for longer than the 90 ms
+        # release threshold or the 150 ms settle, which would turn a repeat into a tap or render
+        # a frame mid-scrub. The gap under test is 33 ms either way.
+        app.key_event_manager.replay_repeat_threshold = timedelta(seconds=1)
+        app.REPLAY_SCRUB_SETTLE_SECONDS = 1.0
 
         # Key auto-repeat: an event every 33 ms until the cursor runs off the end of the
         # eight-frame file, then a few more with the key still down
