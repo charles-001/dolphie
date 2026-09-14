@@ -218,6 +218,15 @@ def format_picoseconds(ps: Numeric) -> str:
     return "[$dark_gray]0"
 
 
+def is_sqlite_database(path: str) -> bool:
+    """True when the file starts with the SQLite header, which the -wal, -shm, and -journal beside a database do not."""
+    try:
+        with open(path, "rb") as file:
+            return file.read(16) == b"SQLite format 3\x00"
+    except OSError:
+        return False
+
+
 def load_host_cache_file(host_cache_file: str) -> dict[str, str]:
     host_cache: dict[str, str] = {}
     if os.path.exists(host_cache_file):

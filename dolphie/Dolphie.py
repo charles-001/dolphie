@@ -16,7 +16,7 @@ from packaging.version import parse as parse_version
 import dolphie.DataTypes as DataTypes
 import dolphie.Modules.MetricManager as MetricManager
 from dolphie.Modules.ArgumentParser import Config
-from dolphie.Modules.Functions import coerce_int, coerce_str, load_host_cache_file
+from dolphie.Modules.Functions import coerce_int, coerce_str, is_sqlite_database, load_host_cache_file
 from dolphie.Modules.MySQL import ConnectionSource, Database
 from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 from dolphie.Modules.Queries import MySQLQueries
@@ -503,7 +503,7 @@ class Dolphie:
                     if entry.is_dir():
                         entry_path = entry.path
                         for file in os.scandir(entry_path):
-                            if file.is_file():
+                            if file.is_file() and is_sqlite_database(file.path):
                                 # Get first 30 characters of the host name
                                 host_name = entry.name[:30]
 
