@@ -6,14 +6,16 @@ from typing import cast
 from unittest.mock import patch
 
 from textual.app import App, ComposeResult
-from textual.widgets import Switch
+from textual.widgets import Label, Switch
 
 from dolphie.DataTypes import ConnectionSource, Panels
 from dolphie.Dolphie import Dolphie
+from dolphie.Modules.MetricGraph import Graph
 from dolphie.Modules.MetricGraphDefinitions import GRAPH_TABS, GRAPHS_BY_ID, MetricKey
 from dolphie.Modules.MetricManager import MetricManager
 from dolphie.Modules.Theme import DOLPHIE_THEME
 from dolphie.Widgets.MetricGraphDashboard import MetricControlsScroll, MetricGraphDashboard
+from dolphie.Widgets.MetricSeriesControl import MetricSeriesControl
 
 CSS_PATH = Path(__file__).parents[3] / "dolphie" / "Dolphie.tcss"
 
@@ -65,8 +67,24 @@ async def test_dashboard_composes_registry_rows_controls_and_graphs() -> None:
         assert set(dashboard.graphs) == set(GRAPHS_BY_ID)
         assert len(dashboard.controls) == len(set(dashboard.controls))
         assert len(dashboard.query(".metric-graph-row")) == sum(len(tab.rows) for tab in GRAPH_TABS)
-        assert dashboard.query(".metric-control-group-label")
-        assert dashboard.query(".metric-controls-overflow")
+        assert set(dashboard.cells) == set(GRAPHS_BY_ID)
+
+
+async def test_each_graph_heads_its_own_controls_with_its_title() -> None:
+    async with DashboardTestApp().run_test(size=(120, 50)) as pilot:
+        dashboard = pilot.app.query_one(MetricGraphDashboard)
+        await pilot.pause()
+
+        cell = dashboard.cells["graph_connections"]
+        assert str(cell.query_one(".metric-graph-title", Label).render()) == "New Connections"
+        controls = cell.query_one(MetricControlsScroll)
+        assert [control.metric_key.metric for control in controls.query(MetricSeriesControl)] == [
+            "Connections",
+            "Threads_created",
+        ]
+        assert cell.query_one(Graph) is dashboard.graphs["graph_connections"]
+        # A tab with one graph is named by the tab, so its header holds only the switches
+        assert not dashboard.cells["graph_dml"].query(".metric-graph-title")
 
 
 async def test_dashboard_binds_two_hosts_before_first_poll_without_visibility_leakage() -> None:
@@ -118,20 +136,19 @@ async def test_redo_availability_updates_widths_and_clears_stale_control() -> No
         dashboard.bind_host(host)
         await pilot.pause()
 
-        active_graph = dashboard.graphs["graph_redo_log_active_count"]
-        data_graph = dashboard.graphs["graph_redo_log_data_written"]
+        active_cell = dashboard.cells["graph_redo_log_active_count"]
+        data_cell = dashboard.cells["graph_redo_log_data_written"]
         active_control = dashboard.controls[MetricKey("redo_log_active_count", "Active_redo_log_count")]
-        assert active_graph.display
-        assert str(data_graph.styles.width) == "55fr"
+        assert active_cell.display
+        assert str(data_cell.styles.width) == "55fr"
         assert active_control.series_visible
 
         host.global_status.clear()
         dashboard.refresh_active()
         await pilot.pause()
-        assert not active_graph.display
-        assert str(data_graph.styles.width) == "88fr"
+        assert not active_cell.display
+        assert str(data_cell.styles.width) == "88fr"
         assert not active_control.display
-        assert not dashboard.control_groups["graph_redo_log_active_count"].display
         assert host.metric_manager.metrics.redo_log_active_count.Active_redo_log_count.visible is False
 
 
@@ -144,15 +161,15 @@ async def test_locks_tab_stays_available_when_metadata_locks_are_off() -> None:
         await pilot.pause()
 
         assert dashboard._shown_tabs["locks"]
-        assert dashboard.graphs["graph_row_locks"].display
-        assert dashboard.graphs["graph_lock_failures"].display
-        assert not dashboard.graphs["graph_locks"].display
+        assert dashboard.cells["graph_row_locks"].display
+        assert dashboard.cells["graph_lock_failures"].display
+        assert not dashboard.cells["graph_locks"].display
         assert host.metric_manager.metrics.locks.metadata_lock_count.visible is False
 
         host.metadata_locks_enabled = True
         dashboard.refresh_active()
         await pilot.pause()
-        assert dashboard.graphs["graph_locks"].display
+        assert dashboard.cells["graph_locks"].display
         assert host.metric_manager.metrics.locks.metadata_lock_count.visible is True
 
 
@@ -163,8 +180,8 @@ async def test_replay_never_exposes_active_redo_graph() -> None:
         dashboard.bind_host(host)
         await pilot.pause()
 
-        assert not dashboard.graphs["graph_redo_log_active_count"].display
-        assert str(dashboard.graphs["graph_redo_log_data_written"].styles.width) == "88fr"
+        assert not dashboard.cells["graph_redo_log_active_count"].display
+        assert str(dashboard.cells["graph_redo_log_data_written"].styles.width) == "88fr"
 
 
 def test_control_strip_has_keyboard_horizontal_scrolling() -> None:

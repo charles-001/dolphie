@@ -83,7 +83,9 @@ class GraphSpec:
     weight: int = 1
     expanded_weight: int | None = None
     availability: GraphAvailability = GraphAvailability.ALWAYS
-    control_label: str | None = None
+    # Heads the graph's own control row. Required when a tab has more than one graph, because
+    # the tab title alone no longer says what each graph shows.
+    title: str | None = None
 
 
 @dataclass(frozen=True)
@@ -142,14 +144,14 @@ GRAPH_TABS = (
                         "graph_system_cpu",
                         "system_cpu",
                         (_key("system_cpu", "CPU_Percent"),),
-                        control_label="CPU",
+                        title="CPU Usage",
                     ),
                     GraphSpec(
                         "graph_system_memory",
                         "system_memory",
                         (_key("system_memory", "Memory_Used"),),
                         renderer=GraphRenderer.SYSTEM_MEMORY,
-                        control_label="Memory",
+                        title="Memory Usage",
                     ),
                 )
             ),
@@ -162,7 +164,7 @@ GRAPH_TABS = (
                             _key("system_disk_io", "Disk_Read"),
                             _key("system_disk_io", "Disk_Write"),
                         ),
-                        control_label="Disk",
+                        title="Host Disk I/O",
                     ),
                     GraphSpec(
                         "graph_system_network",
@@ -171,7 +173,7 @@ GRAPH_TABS = (
                             _key("system_network", "Network_Down"),
                             _key("system_network", "Network_Up"),
                         ),
-                        control_label="Network",
+                        title="Host Network",
                     ),
                 )
             ),
@@ -213,13 +215,13 @@ GRAPH_TABS = (
                             _key("connections", "Connections"),
                             _key("connections", "Threads_created"),
                         ),
-                        control_label="New",
+                        title="New Connections",
                     ),
                     GraphSpec(
                         "graph_slow_queries",
                         "slow_queries",
                         (_key("slow_queries", "Slow_queries"),),
-                        control_label="Slow",
+                        title="Slow Queries",
                     ),
                 )
             ),
@@ -233,7 +235,7 @@ GRAPH_TABS = (
                             _key("select_types", "Select_scan"),
                             _key("select_types", "Select_range"),
                         ),
-                        control_label="Selects",
+                        title="SELECT Access Types",
                     ),
                     GraphSpec(
                         "graph_sorts",
@@ -243,7 +245,7 @@ GRAPH_TABS = (
                             _key("sorts", "Sort_scan"),
                             _key("sorts", "Sort_rows"),
                         ),
-                        control_label="Sorts",
+                        title="Sorts",
                     ),
                 )
             ),
@@ -265,7 +267,7 @@ GRAPH_TABS = (
                             _key("innodb_rows", "Innodb_rows_updated"),
                             _key("innodb_rows", "Innodb_rows_deleted"),
                         ),
-                        control_label="Rows",
+                        title="InnoDB Row Operations",
                     ),
                     GraphSpec(
                         "graph_mysql_network",
@@ -274,7 +276,7 @@ GRAPH_TABS = (
                             _key("mysql_network", "Bytes_received"),
                             _key("mysql_network", "Bytes_sent"),
                         ),
-                        control_label="Network",
+                        title="MySQL Network Traffic",
                     ),
                 )
             ),
@@ -331,13 +333,13 @@ GRAPH_TABS = (
                             _key("adaptive_hash_index", "adaptive_hash_searches"),
                             _key("adaptive_hash_index", "adaptive_hash_searches_btree"),
                         ),
-                        control_label="Searches",
+                        title="AHI Searches",
                     ),
                     GraphSpec(
                         "graph_adaptive_hash_index_hit_ratio",
                         "adaptive_hash_index_hit_ratio",
                         (_key("adaptive_hash_index_hit_ratio", "hit_ratio"),),
-                        control_label="Ratio",
+                        title="AHI Hit Ratio",
                     ),
                 )
             ),
@@ -374,7 +376,7 @@ GRAPH_TABS = (
                         renderer=GraphRenderer.ACTIVE_REDO_LOG,
                         weight=33,
                         availability=GraphAvailability.ACTIVE_REDO_LOG,
-                        control_label="Active Logs",
+                        title="Active Redo Logs",
                     ),
                     GraphSpec(
                         "graph_redo_log_data_written",
@@ -383,7 +385,7 @@ GRAPH_TABS = (
                         renderer=GraphRenderer.REDO_LOG_LINE,
                         weight=55,
                         expanded_weight=88,
-                        control_label="Written",
+                        title="Redo Log Written",
                     ),
                     GraphSpec(
                         "graph_redo_log_bar",
@@ -391,7 +393,7 @@ GRAPH_TABS = (
                         (_key("redo_log", "Innodb_lsn_current"),),
                         renderer=GraphRenderer.REDO_LOG_BAR,
                         weight=12,
-                        control_label="Hourly",
+                        title="Hourly Rate",
                     ),
                 )
             ),
@@ -486,7 +488,7 @@ GRAPH_TABS = (
                         "graph_disk_io",
                         "disk_io",
                         (_key("disk_io", "io_read"), _key("disk_io", "io_write")),
-                        control_label="Bytes",
+                        title="MySQL File I/O",
                     ),
                     GraphSpec(
                         "graph_innodb_io_ops",
@@ -497,7 +499,7 @@ GRAPH_TABS = (
                             _key("innodb_io_ops", "Innodb_data_fsyncs"),
                             _key("innodb_io_ops", "Innodb_log_writes"),
                         ),
-                        control_label="Operations",
+                        title="InnoDB I/O Operations",
                     ),
                 )
             ),
@@ -514,13 +516,13 @@ GRAPH_TABS = (
                         "graph_row_locks",
                         "row_locks",
                         (_key("row_locks", "Innodb_row_lock_waits"),),
-                        control_label="Row Lock Waits",
+                        title="Row Lock Waits",
                     ),
                     GraphSpec(
                         "graph_row_lock_wait",
                         "row_lock_wait",
                         (_key("row_lock_wait", "avg_wait_ms"),),
-                        control_label="Avg Wait",
+                        title="Avg Row Lock Wait",
                     ),
                 )
             ),
@@ -533,14 +535,14 @@ GRAPH_TABS = (
                             _key("lock_failures", "lock_deadlocks"),
                             _key("lock_failures", "lock_timeouts"),
                         ),
-                        control_label="Failures",
+                        title="Deadlocks and Lock Timeouts",
                     ),
                     GraphSpec(
                         "graph_locks",
                         "locks",
                         (_key("locks", "metadata_lock_count"),),
                         availability=GraphAvailability.METADATA_LOCKS,
-                        control_label="Metadata",
+                        title="Metadata Locks",
                     ),
                 )
             ),
@@ -707,6 +709,10 @@ def validate_graph_definitions() -> None:
         tab_ids.add(tab.id)
         if not tab.rows:
             raise ValueError(f"Graph tab {tab.id} has no rows")
+        if len(tab.graphs) > 1:
+            for graph in tab.graphs:
+                if not graph.title:
+                    raise ValueError(f"Graph {graph.id} shares tab {tab.id} with other graphs and needs a title")
 
         for row in tab.rows:
             if not row.graphs:
