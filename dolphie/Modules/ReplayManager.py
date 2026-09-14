@@ -7,7 +7,7 @@ import threading
 from collections import OrderedDict
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -85,7 +85,7 @@ class ReplayManager:
     # every 256 pages (4 MB at PAGE_SIZE) keeps it small and bounds what a copy without the -wal loses,
     # the size limit trims it back to that on reset, and the purge truncates it to zero
     WAL_CHECKPOINT_PAGES = 256
-    WAL_SIZE_LIMIT_BYTES = 4 * 1024 * 1024
+    WAL_SIZE_LIMIT_BYTES = WAL_CHECKPOINT_PAGES * PAGE_SIZE
     # A connection that holds a read open (a sqlite3 shell or GUI left inside a query) blocks every
     # checkpoint, and the WAL then takes every new row. Past this size the daemon stops writing rows
     # until the reader lets go, so disk use stays bounded by retention plus this cap
@@ -101,18 +101,21 @@ class ReplayManager:
     METRIC_WINDOW_CACHE_SIZE = 1500
     # We will increment this to force a new replay file if the schema changes in future versions
     schema_version: int = 2
+    # Row timestamps are UTC, the zone metric_manager already stores, so a file reads the same on
+    # any host and a DST change never steps the timeline back an hour
+    ROW_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
     # A row a daemon could not finish writing, or one another version wrote in a shape this one cannot read
     UNREADABLE_ROW_ERRORS = (zstd.ZstdError, orjson.JSONDecodeError, TypeError)
     # What a row summary keeps besides metric_manager. The README documents the contract for other readers.
     # The summary keeps whole every flat section the recorder already filters at its query, so a
     # new status counter or system sample reaches readers with no change here. Only two kinds of
     # section are cut: `global_variables`, the one flat section fetched unfiltered (about 25 KB a
-    # row), and the per-entity lists, whose rows carry query text and dozens of columns. A reader
-    # that needs a variable the summary lacks reads it from `data` at the instant it inspects.
+    # row), and the per-entity lists, whose rows carry dozens of columns. The processlist is left
+    # out altogether: it is the one list that grows with load, and no timeline reads it. A reader
+    # that needs a thread or a variable the summary lacks reads `data` at the instant it inspects.
     SUMMARY_WHOLE_KEYS = ("global_status", "system_utilization", "innodb_metrics", "binlog_status")
     SUMMARY_FIELDS: dict[str, tuple[str, ...]] = {
         "global_variables": ("version", "read_only", "super_read_only", "max_connections"),
-        "processlist": ("time", "command"),
         "metadata_locks": ("LOCK_TYPE", "LOCK_STATUS"),
         "replication_status": (
             "Channel_Name",
@@ -139,7 +142,7 @@ class ReplayManager:
         self.current_replay_id: int = 0  # This is used to keep track of the last primary key read from the database
         self.min_replay_id: int = 0
         self.max_replay_id: int = 0
-        self.current_replay_timestamp: str | None = None  # Only used for dashboard replay section
+        self.current_replay_timestamp: str | None = None
         self.min_replay_timestamp: str | None = None
         self.max_replay_timestamp: str | None = None
         self.total_replay_rows: int = 0
@@ -506,9 +509,7 @@ class ReplayManager:
         if (current_time - self.last_purge_time) < timedelta(hours=self.PURGE_CHECK_INTERVAL_HOURS):
             return  # Skip purging if less than an hour has passed
 
-        retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        retention_date = self._row_timestamp(current_time - timedelta(hours=self.dolphie.replay_retention_hours))
 
         self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
         self._execute_modify("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
@@ -888,6 +889,9 @@ class ReplayManager:
         }
 
         data_dict["global_status"]["replay_polling_latency"] = self.dolphie.worker_processing_time
+        # The seconds every per-second rate in this row was divided by. Row timestamps hold whole
+        # seconds, so a reader that takes its own rate between two rows needs this to match ours
+        data_dict["global_status"]["replay_polling_interval"] = self.dolphie.polling_latency
 
         if self.dolphie.system_utilization:
             data_dict["system_utilization"] = self.dolphie.system_utilization
@@ -1092,10 +1096,14 @@ class ReplayManager:
                 return
             self._capture_state()
 
+    @classmethod
+    def _row_timestamp(cls, moment: datetime) -> str:
+        return moment.astimezone(timezone.utc).strftime(cls.ROW_TIMESTAMP_FORMAT)
+
     def _capture_state(self):
         # Prepare processlist data
         processlist = self._prepare_processlist()
-        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = self._row_timestamp(datetime.now().astimezone())
 
         # Build base data dictionary
         data_dict = self._build_base_data_dict(processlist)
@@ -1369,11 +1377,12 @@ class ReplayManager:
         # the timestamp index and the rows are then ranged on the primary key: given a
         # timestamp predicate plus `id <= ?` ordered by id, SQLite's planner walks the rowid
         # from the first row of the file instead, which costs hundreds of milliseconds per
-        # seek on a multi-day daemon file. Timestamps are wall-clock, so the start lookup
-        # keeps `id <= ?` to skip later rows written after the clock stepped back (DST).
+        # seek on a multi-day daemon file. Timestamps come from the wall clock, which a clock step
+        # (or local time in files older than this version) can move back, so the start lookup
+        # keeps `id <= ?` to skip later rows written after such a step.
         if window_minutes > 0:
             target_dt = datetime.fromisoformat(self.current_replay_timestamp)
-            window_start = (target_dt - timedelta(minutes=window_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+            window_start = (target_dt - timedelta(minutes=window_minutes)).strftime(self.ROW_TIMESTAMP_FORMAT)
             first_row = self._execute_select_one(
                 "SELECT id FROM replay_data WHERE timestamp >= ? AND id <= ? ORDER BY timestamp LIMIT 1",
                 (window_start, target_id),
@@ -1526,7 +1535,7 @@ class ReplayManager:
         if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
-        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = self._row_timestamp(datetime.now().astimezone())
 
         with self._write_lock:
             if self.connection is None:
