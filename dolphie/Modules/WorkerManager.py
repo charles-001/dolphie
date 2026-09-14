@@ -271,7 +271,7 @@ class WorkerManager:
                     connection_status=ConnectionStatus.connecting,
                 )
 
-                tab.replay_manager = None
+                tab.close_replay_manager()
                 if not dolphie.daemon_mode and tab == self.app.tab_manager.active_tab:
                     # Display property triggers UI updates, must be called from main thread
                     def show_loading():
@@ -283,7 +283,6 @@ class WorkerManager:
 
             worker_start_time = datetime.now().astimezone()
             dolphie.polling_latency = (worker_start_time - dolphie.worker_previous_start_time).total_seconds()
-            dolphie.worker_previous_start_time = worker_start_time
 
             dolphie.collect_system_utilization()
             if dolphie.connection_source == ConnectionSource.mysql:
@@ -305,6 +304,9 @@ class WorkerManager:
                 replication_status=dolphie.replication_status,
                 proxysql_command_stats=dolphie.proxysql_command_stats,
             )
+            # Only a poll that reached the metrics moves the baseline. A poll that raised above left
+            # every counter's last_value in place, so the next rate must span both intervals.
+            dolphie.worker_previous_start_time = worker_start_time
 
             # We initalize this here so we have the host version from process_{mysql,proxysql}_data
             if not tab.replay_manager:

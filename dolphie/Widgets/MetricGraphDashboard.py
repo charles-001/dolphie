@@ -5,9 +5,9 @@ from typing import TYPE_CHECKING
 from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, HorizontalScroll
+from textual.containers import Horizontal, HorizontalScroll, Vertical
 from textual.widget import Widget
-from textual.widgets import Label, Static, TabbedContent, TabPane
+from textual.widgets import Label, TabbedContent, TabPane
 
 from dolphie.Modules.MetricDefinitions import MetricData, MetricInstance, MetricInstances, create_metric_instances
 from dolphie.Modules.MetricGraph import Graph, get_number_format_function
@@ -52,7 +52,7 @@ class MetricGraphDashboard(Widget):
         self.marker = marker
         self.graphs: dict[str, Graph] = {}
         self.controls: dict[MetricKey, MetricSeriesControl] = {}
-        self.control_groups: dict[str, Horizontal] = {}
+        self.cells: dict[str, Vertical] = {}
         self._control_tabs: dict[MetricKey, str] = {}
         self._bound_dolphie: Dolphie | None = None
         # Change guards so per-tick availability syncs only touch the DOM on
@@ -100,38 +100,28 @@ class MetricGraphDashboard(Widget):
                     id=self._pane_id(tab_spec.id),
                     name=tab_spec.id,
                 ):
-                    groups = self._control_groups(tab_spec)
-                    yield Horizontal(
-                        MetricControlsScroll(
-                            *groups,
-                            id=f"metric-controls-{tab_spec.id}",
-                            classes="metric-series-controls",
-                        ),
-                        Static("⇆", classes="metric-controls-overflow"),
-                        classes="metric-controls-row",
-                    )
+                    series_by_graph = dict(tab_spec.unique_series_by_graph)
+                    # A shared tab names each graph over its controls, which takes a row
+                    row_classes = "metric-graph-row -titled" if len(tab_spec.graphs) > 1 else "metric-graph-row"
                     for row_index, row_spec in enumerate(tab_spec.rows):
                         yield Horizontal(
-                            *(self.graphs[graph.id] for graph in row_spec.graphs),
+                            *(self._graph_cell(graph, series_by_graph[graph]) for graph in row_spec.graphs),
                             id=f"metric-graph-row-{tab_spec.id}-{row_index}",
-                            classes="metric-graph-row",
+                            classes=row_classes,
                         )
 
-    def _control_groups(self, tab_spec: GraphTabSpec) -> list[Horizontal]:
-        groups: list[Horizontal] = []
-        show_group_labels = len(tab_spec.graphs) > 1
-        for graph_spec, metric_keys in tab_spec.unique_series_by_graph:
-            if not metric_keys:
-                continue
-
-            children: list[Widget] = []
-            if show_group_labels and graph_spec.control_label:
-                children.append(Label(graph_spec.control_label, classes="metric-control-group-label"))
-            children.extend(self.controls[metric] for metric in metric_keys)
-            group = Horizontal(*children, classes="metric-control-group")
-            self.control_groups[graph_spec.id] = group
-            groups.append(group)
-        return groups
+    def _graph_cell(self, graph_spec: GraphSpec, metric_keys: tuple[MetricKey, ...]) -> Vertical:
+        """A graph under its own header: its title, then the switches for the series it draws."""
+        title = [Label(graph_spec.title, classes="metric-graph-title")] if graph_spec.title else []
+        cell = Vertical(
+            *title,
+            MetricControlsScroll(*(self.controls[metric] for metric in metric_keys), classes="metric-series-controls"),
+            self.graphs[graph_spec.id],
+            id=f"metric-graph-cell-{graph_spec.id}",
+            classes="metric-graph-cell",
+        )
+        self.cells[graph_spec.id] = cell
+        return cell
 
     @property
     def active_tab_id(self) -> str | None:
@@ -186,7 +176,7 @@ class MetricGraphDashboard(Widget):
 
         for graph_spec in tab_spec.graphs:
             graph = self.graphs[graph_spec.id]
-            if not graph.display:
+            if not self.cells[graph_spec.id].display:
                 graph.render_graph(None)
                 continue
             metric_instance = getattr(dolphie.metric_manager.metrics, graph_spec.metric_group)
@@ -248,12 +238,9 @@ class MetricGraphDashboard(Widget):
                         continue
                     self._applied_graph_states[graph_spec.id] = (graph_available, weight)
 
-                    graph = self.graphs[graph_spec.id]
-                    graph.display = graph_available
-                    control_group = self.control_groups.get(graph_spec.id)
-                    if control_group is not None:
-                        control_group.display = graph_available
-                    graph.styles.width = f"{weight}fr"
+                    cell = self.cells[graph_spec.id]
+                    cell.display = graph_available
+                    cell.styles.width = f"{weight}fr"
                     if graph_spec.availability is not GraphAvailability.ALWAYS:
                         # Availability-gated series are not user-switchable, so their
                         # host visibility state follows graph availability.
@@ -290,10 +277,6 @@ class MetricGraphDashboard(Widget):
             return dolphie.global_variables.get("innodb_adaptive_hash_index") != "OFF"
         if availability is TabAvailability.REPLICATION:
             return bool(dolphie.replication_status)
-        if availability is TabAvailability.LOCKS:
-            return bool(
-                (dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible) or dolphie.replay_file
-            )
         return False
 
     @staticmethod
@@ -302,6 +285,10 @@ class MetricGraphDashboard(Widget):
             return True
         if graph_spec.availability is GraphAvailability.ACTIVE_REDO_LOG:
             return "Active_redo_log_count" in dolphie.global_status and not dolphie.replay_file
+        if graph_spec.availability is GraphAvailability.METADATA_LOCKS:
+            return bool(
+                (dolphie.metadata_locks_enabled and dolphie.panels.metadata_locks.visible) or dolphie.replay_file
+            )
         return False
 
     @on(MetricSeriesControl.VisibilityChanged)

@@ -54,10 +54,21 @@ def show_panels(app: SnapshotApp, *keys: str) -> Callable[[Pilot[Any]], Any]:
     return run_before
 
 
+SNAPSHOT_HINT = (
+    "The rendering changed. Open snapshot_report.html for the two images side by side. "
+    "If the change is intended, run `uv run pytest tests/dolphie/test_Snapshots.py --snapshot-update` "
+    "and commit the new snapshots."
+)
+
+
 @pytest.fixture
 def pinned_rendering(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    """Textual renders monochrome under NO_COLOR, and the graph's time axis follows the local zone."""
+    """Textual renders monochrome under NO_COLOR, Rich sizes a dumb terminal at 80 columns, and the graph's
+    time axis follows the local zone."""
     monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.delenv("COLUMNS", raising=False)
+    monkeypatch.delenv("LINES", raising=False)
     monkeypatch.setenv("TZ", "UTC")
     time.tzset()
     yield
@@ -84,4 +95,4 @@ def test_panel_snapshot(snap_compare: Any, source: str, keys: tuple[str, ...]) -
     # A paused replay still re-arms a worker timer every refresh interval. A long interval keeps
     # that timer from racing the seeks in show_panels, and nothing renders the interval itself.
     app = SnapshotApp(replay_config(REPLAYS / f"{source}.db", app_version="snapshot", refresh_interval=3600))
-    assert snap_compare(app, terminal_size=TERMINAL_SIZE, run_before=show_panels(app, *keys))
+    assert snap_compare(app, terminal_size=TERMINAL_SIZE, run_before=show_panels(app, *keys)), SNAPSHOT_HINT

@@ -1,6 +1,6 @@
 [project]
 name = "dolphie"
-version = "6.16.0"
+version = "6.17.0"
 description = "Your single pane of glass for real-time analytics into MySQL/MariaDB & ProxySQL"
 readme = "README.md"
 license = "GPL-3.0-or-later"

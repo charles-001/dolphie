@@ -362,41 +362,42 @@ Footer {
     }
 
     & .metric-graph-row {
-        height: 19;
+        height: 20;
+        margin-top: 1;
+
+        &.-titled {
+            height: 21;
+        }
+        &:first-of-type {
+            margin-top: 0;
+        }
     }
 
-    & .metric-controls-row {
-        height: 2;
-        width: 100%;
+    & .metric-graph-cell {
+        height: 100%;
+        width: 1fr;
+
+        & > Graph {
+            height: 1fr;
+        }
     }
 
     & .metric-series-controls {
-        align: center middle;
-        height: 2;
-        width: 1fr;
-        overflow-x: auto;
-        overflow-y: hidden;
-        scrollbar-size-horizontal: 1;
-    }
-
-    & .metric-controls-overflow {
-        color: $dark_gray;
-        content-align: right middle;
-        height: 2;
-        width: 3;
-    }
-
-    & .metric-control-group {
-        height: 1;
-        width: auto;
-    }
-
-    & .metric-control-group-label {
-        color: $dark_gray;
+        align-horizontal: center;
         height: 1;
         margin-right: 1;
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-size-horizontal: 0;
+    }
+
+    & .metric-graph-title {
+        color: $light_blue;
+        height: 1;
+        text-align: center;
         text-style: bold;
-        width: auto;
+        width: 100%;
     }
 }
 
@@ -419,6 +420,7 @@ MetricSeriesControl {
     & > .metric-series-switch {
         height: 1;
         margin-left: 1;
+        padding: 0 1;
         width: auto;
     }
 }

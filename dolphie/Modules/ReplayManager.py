@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import threading
 from collections import OrderedDict
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -24,6 +25,7 @@ from dolphie.DataTypes import (
     ProcesslistThread,
     ProxySQLProcesslistThread,
     ReplicaRow,
+    SystemUtilization,
 )
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules import MetricManager
@@ -34,7 +36,7 @@ from dolphie.Modules.PerformanceSchemaMetrics import PerformanceSchemaMetrics
 @dataclass
 class MySQLReplayData:
     timestamp: str
-    system_utilization: dict[str, int | float | tuple[float, float, float]]
+    system_utilization: SystemUtilization
     global_status: DatabaseRow
     global_variables: DatabaseRow
     binlog_status: DatabaseRow
@@ -57,7 +59,7 @@ class MySQLReplayData:
 @dataclass
 class ProxySQLReplayData:
     timestamp: str
-    system_utilization: dict[str, int | float | tuple[float, float, float]]
+    system_utilization: SystemUtilization
     global_status: DatabaseRow
     global_variables: DatabaseRow
     command_stats: list[DatabaseRow]
@@ -74,15 +76,61 @@ class ReplayManager:
 
     # Constants
     PURGE_CHECK_INTERVAL_HOURS = 1
-    COMPRESSION_LEVEL = 5
+    # With the raw-content prefix dictionary, level 9 writes rows 7% smaller than level 5 at 0.1 ms a
+    # row. Level 19 takes another 10% but costs 30 ms on a 1000-thread row
+    COMPRESSION_LEVEL = 9
     COMPRESSION_DICT_SAMPLES = 3
     PAGE_SIZE = 16384
+    # The WAL is reused from its start after each checkpoint but never shrinks by itself. A checkpoint
+    # every 256 pages (4 MB at PAGE_SIZE) keeps it small and bounds what a copy without the -wal loses,
+    # the size limit trims it back to that on reset, and the purge truncates it to zero
+    WAL_CHECKPOINT_PAGES = 256
+    WAL_SIZE_LIMIT_BYTES = WAL_CHECKPOINT_PAGES * PAGE_SIZE
+    # A connection that holds a read open (a sqlite3 shell or GUI left inside a query) blocks every
+    # checkpoint, and the WAL then takes every new row. Past this size the daemon stops writing rows
+    # until the reader lets go, so disk use stays bounded by retention plus this cap
+    WAL_MAX_BYTES = 64 * 1024 * 1024
+    # How long a close waits for a reader inside a query before it leaves the file in WAL mode. Long
+    # enough for a single-statement read, short enough that a stuck sqlite3 shell does not delay shutdown
+    CLOSE_BUSY_TIMEOUT_MS = 250
     # Cap on unreadable rows skipped in one step, so one refresh cannot scan a whole corrupt stretch
     MAX_SKIPPED_ROWS = 100
     # Floor for the number of decompressed metric_manager payloads kept in memory to
     # speed up backward/seek navigation. The effective cap scales with the rolling
     # window so a single window always fits (see fetch_delta_metrics_for_window).
     METRIC_WINDOW_CACHE_SIZE = 1500
+    # We will increment this to force a new replay file if the schema changes in future versions
+    schema_version: int = 2
+    # Row timestamps are UTC, the zone metric_manager already stores, so a file reads the same on
+    # any host and a DST change never steps the timeline back an hour
+    ROW_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
+    # A row a daemon could not finish writing, or one another version wrote in a shape this one cannot read
+    UNREADABLE_ROW_ERRORS = (zstd.ZstdError, orjson.JSONDecodeError, TypeError)
+    # What a row summary keeps besides metric_manager. The README documents the contract for other readers.
+    # The summary keeps whole every flat section the recorder already filters at its query, so a
+    # new status counter or system sample reaches readers with no change here. Only two kinds of
+    # section are cut: `global_variables`, the one flat section fetched unfiltered (about 25 KB a
+    # row), and the per-entity lists, whose rows carry dozens of columns. The processlist is left
+    # out altogether: it is the one list that grows with load, and no timeline reads it. A reader
+    # that needs a thread or a variable the summary lacks reads `data` at the instant it inspects.
+    SUMMARY_WHOLE_KEYS = ("global_status", "system_utilization", "innodb_metrics", "binlog_status")
+    SUMMARY_FIELDS: dict[str, tuple[str, ...]] = {
+        "global_variables": ("version", "read_only", "super_read_only", "max_connections"),
+        "metadata_locks": ("LOCK_TYPE", "LOCK_STATUS"),
+        "replication_status": (
+            "Channel_Name",
+            "Source_Host",
+            "Master_Host",
+            "Replica_IO_Running",
+            "Slave_IO_Running",
+            "Replica_SQL_Running",
+            "Slave_SQL_Running",
+            "Seconds_Behind",
+            "SQL_Delay",
+            "Last_IO_Error",
+            "Last_SQL_Error",
+        ),
+    }
 
     def __init__(self, dolphie: Dolphie):
         """Initializes the ReplayManager with Dolphie instance and SQLite database settings.
@@ -91,13 +139,11 @@ class ReplayManager:
             dolphie: The Dolphie instance.
         """
         self.dolphie = dolphie
-        # We will increment this to force a new replay file if the schema changes in future versions
-        self.schema_version: int = 2
         self.connection: sqlite3.Connection | None = None
         self.current_replay_id: int = 0  # This is used to keep track of the last primary key read from the database
         self.min_replay_id: int = 0
         self.max_replay_id: int = 0
-        self.current_replay_timestamp: str | None = None  # Only used for dashboard replay section
+        self.current_replay_timestamp: str | None = None
         self.min_replay_timestamp: str | None = None
         self.max_replay_timestamp: str | None = None
         self.total_replay_rows: int = 0
@@ -107,7 +153,11 @@ class ReplayManager:
         )  # Initialize to an hour ago
         self.replay_file_size: int = 0
         self.dict_samples: list[bytes] = []
+        self.summary_samples: list[bytes] = []
+        self._wal_pinned: bool = False
+        self._write_lock = threading.Lock()
         self.global_variable_change_ids: list[int] = []
+        self.has_summary: bool = False
 
         # Cache of decompressed metric_manager payloads keyed by replay id. Row data is
         # immutable for a given id, so entries never go stale; consecutive backward/seek
@@ -185,8 +235,22 @@ class ReplayManager:
         return self.connection
 
     def close(self) -> None:
-        """Close the underlying SQLite connection, if open."""
-        if self.connection is not None:
+        """Close the underlying SQLite connection, if open.
+
+        A recording leaves the file in rollback-journal mode. A WAL file needs a -shm even to read, and
+        a reader that cannot create one (``sqlite3 -readonly`` in a directory it cannot write, a read-only
+        mount) would fail on a stopped daemon's file. The switch waits for readers inside a
+        query and gives up on one that stays, which leaves the WAL sidecars in place for the next start.
+        """
+        with self._write_lock:
+            if self.connection is None:
+                return
+            if self.dolphie.record_for_replay and not self.dolphie.replay_file:
+                try:
+                    self.connection.execute(f"PRAGMA busy_timeout = {self.CLOSE_BUSY_TIMEOUT_MS}")
+                    self.connection.execute("PRAGMA journal_mode = DELETE")
+                except sqlite3.OperationalError:
+                    pass  # A reader outlasted the busy timeout and keeps the file locked
             self.connection.close()
             self.connection = None
 
@@ -334,19 +398,43 @@ class ReplayManager:
     def _initialize_sqlite(self):
         """Initializes the SQLite database and creates the necessary tables."""
         database_exists = bool(os.path.exists(self.replay_file))
+        # A -wal left behind means the last run did not close the file. Opening it replays those rows
+        recovered_bytes = self._wal_size()
 
         self.connection = sqlite3.connect(self.replay_file, isolation_level=None, check_same_thread=False)
+        if recovered_bytes:
+            logger.warning(
+                "The last run did not close the replay file. Recovering its "
+                f"{format_bytes(recovered_bytes, color=False)} write-ahead log"
+            )
 
         # Lock down the permissions of the replay file
         os.chmod(self.replay_file, 0o660)
 
         if not database_exists:
             # Rows are about 1.25 KB. With 4 KB pages a leaf holds three rows and wastes a quarter of
-            # the file; 16 KB pages bring that under a tenth. Only takes effect before the first table.
+            # the file; 16 KB pages bring that under a tenth. Only takes effect before the first table,
+            # and before WAL mode fixes the page size for good.
             self._execute_modify(f"PRAGMA page_size = {self.PAGE_SIZE}")
             logger.info("Created new SQLite database and connected to it")
         else:
             logger.info("Connected to SQLite")
+
+        # A rollback journal costs four fsyncs and a journal unlink for every poll, and a reader that
+        # holds a statement open makes the daemon's commit fail. WAL appends one frame per poll, fsyncs
+        # at checkpoint, and never blocks on readers. NORMAL survives a crash with at most the last
+        # un-synced commits lost, never a corrupt file. Only the journal mode is stored in the file.
+        row = self._execute_select_one("PRAGMA journal_mode = WAL")
+        journal_mode = row[0] if row else "unknown"
+        if journal_mode != "wal":
+            # SQLite refuses WAL on a filesystem without shared memory, such as NFS
+            logger.warning(
+                f"SQLite could not switch the replay file to WAL mode and uses {journal_mode} journaling. Every poll "
+                "now costs several fsyncs, and a reader can block the daemon's writes"
+            )
+        self._execute_modify("PRAGMA synchronous = NORMAL")
+        self._execute_modify(f"PRAGMA wal_autocheckpoint = {self.WAL_CHECKPOINT_PAGES}")
+        self._execute_modify(f"PRAGMA journal_size_limit = {self.WAL_SIZE_LIMIT_BYTES}")
 
         # Create replay_data table if it doesn't exist
         self._execute_modify(
@@ -358,6 +446,12 @@ class ReplayManager:
             )"""
         )
         self._execute_modify("CREATE INDEX IF NOT EXISTS idx_replay_data_timestamp ON replay_data (timestamp)")
+
+        # The summary column is additive: readers select columns by name, so a file with it stays
+        # readable by versions that never heard of it, and rows written before it was added stay NULL
+        if self.dolphie.replay_summary and not self._has_summary_column():
+            self._execute_modify("ALTER TABLE replay_data ADD COLUMN summary BLOB")
+            logger.info("Added the summary column to replay_data")
 
         # Create metadata table if it doesn't exist
         self._execute_modify(
@@ -400,6 +494,10 @@ class ReplayManager:
 
         self.purge_old_data()
 
+    def _has_summary_column(self) -> bool:
+        columns = self._execute_select_all("PRAGMA table_info(replay_data)")
+        return any(column[1] == "summary" for column in columns)
+
     def purge_old_data(self):
         """Purges data older than the retention period specified by hours_of_retention.
         Only runs if at least an hour has passed since the last purge.
@@ -412,14 +510,52 @@ class ReplayManager:
         if (current_time - self.last_purge_time) < timedelta(hours=self.PURGE_CHECK_INTERVAL_HOURS):
             return  # Skip purging if less than an hour has passed
 
-        retention_date = (current_time - timedelta(hours=self.dolphie.replay_retention_hours)).strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        retention_date = self._row_timestamp(current_time - timedelta(hours=self.dolphie.replay_retention_hours))
 
         self._execute_modify("DELETE FROM replay_data WHERE timestamp < ?", (retention_date,))
         self._execute_modify("DELETE FROM variable_changes WHERE timestamp < ?", (retention_date,))
+        # Fold the WAL into the file and truncate it, so the purge frees disk instead of moving it
+        self._truncate_wal()
 
         self.last_purge_time = current_time
+
+    def _truncate_wal(self) -> bool:
+        """Checkpoint and truncate the WAL. False when a reader's open snapshot pins frames in it.
+
+        A PASSIVE checkpoint never waits, and reports how many frames a reader kept it from folding
+        in. Only when it folded them all is TRUNCATE asked to reset the file, so a pinned reader
+        costs a probe rather than the connection's busy timeout on every poll.
+        """
+        result = self._execute_select_one("PRAGMA wal_checkpoint(PASSIVE)")
+        if result is None or result[0] == 1 or result[1] != result[2]:
+            return False
+        result = self._execute_select_one("PRAGMA wal_checkpoint(TRUNCATE)")
+        return result is not None and result[0] == 0
+
+    def _wal_size(self) -> int:
+        """Bytes in the -wal sidecar, or 0 when there is none."""
+        try:
+            return os.stat(f"{self.replay_file}-wal").st_size
+        except FileNotFoundError:
+            return 0
+
+    def _wal_within_cap(self) -> bool:
+        """Whether a row may be written: the WAL is under WAL_MAX_BYTES or can be truncated now.
+
+        Logs once when recording pauses and once when it resumes.
+        """
+        wal_size = self._wal_size()
+        within = wal_size < self.WAL_MAX_BYTES or self._truncate_wal()
+        if within and self._wal_pinned:
+            logger.info("The connection holding the replay file open has closed. Recording resumes")
+        elif not within and not self._wal_pinned:
+            logger.error(
+                f"The replay file's WAL reached {format_bytes(wal_size, color=False)} and cannot be "
+                "checkpointed because another connection holds the replay file open. Recording is paused until "
+                f"the sqlite3 shell or GUI tool that has {self.replay_file} open closes"
+            )
+        self._wal_pinned = not within
+        return within
 
     def seek_relative(self, offset: int) -> bool:
         """Moves the replay cursor by ``offset`` rows. Gap-safe and range-clamped.
@@ -507,6 +643,9 @@ class ReplayManager:
     def _create_new_replay_file(self, new_replay_file: str):
         logger.info(f"Renaming replay file to: {new_replay_file}")
 
+        # Closing first folds the WAL into the file and removes the -wal and -shm sidecars, which are named
+        # after the file. Renamed while open, the old file's sidecars would carry the new file's name
+        self.close()
         os.rename(self.replay_file, new_replay_file)
 
         # Reset compression dict if it's already been set or else the replay file will be corrupted
@@ -634,6 +773,8 @@ class ReplayManager:
         if row[6]:
             self.compression_dict = zstd.ZstdCompressionDict(row[6])
 
+        self.has_summary = self._has_summary_column()
+
         return True
 
     @staticmethod
@@ -672,13 +813,17 @@ class ReplayManager:
         The samples are used verbatim as a raw-content prefix. Consecutive rows repeat nearly all of
         their content (global variables alone are half of a row), and long matches into the prefix
         compress a row about five times smaller than a dictionary trained from the same samples.
-        Readers load the bytes with ZstdCompressionDict's auto-detection, so this stays compatible
-        with files that hold a trained dictionary.
+        Summaries have their own shape, so their samples follow the rows in the same prefix and
+        compress 15% smaller than against rows alone, at no cost to the rows. Readers load the bytes
+        with ZstdCompressionDict's auto-detection, so this stays compatible with files that hold a
+        trained dictionary.
 
         Returns:
             zstd.ZstdCompressionDict: The created compression dictionary.
         """
-        compression_dict = zstd.ZstdCompressionDict(b"".join(self.dict_samples), dict_type=zstd.DICT_TYPE_RAWCONTENT)
+        compression_dict = zstd.ZstdCompressionDict(
+            b"".join(self.dict_samples + self.summary_samples), dict_type=zstd.DICT_TYPE_RAWCONTENT
+        )
 
         logger.info(
             f"ZSTD compression dictionary built from {len(self.dict_samples)} samples "
@@ -755,6 +900,9 @@ class ReplayManager:
         }
 
         data_dict["global_status"]["replay_polling_latency"] = self.dolphie.worker_processing_time
+        # The seconds every per-second rate in this row was divided by. Row timestamps hold whole
+        # seconds, so a reader that takes its own rate between two rows needs this to match ours
+        data_dict["global_status"]["replay_polling_interval"] = self.dolphie.polling_latency
 
         if self.dolphie.system_utilization:
             data_dict["system_utilization"] = self.dolphie.system_utilization
@@ -774,6 +922,12 @@ class ReplayManager:
             )
         else:
             data_dict["global_status"]["replay_pfs_metrics_last_reset_time"] = 0
+
+        # The age of the oldest statement in flight, so a timeline reader can find the long
+        # queries without the processlist, which the summary leaves out
+        data_dict["global_status"]["replay_longest_thread_time"] = max(
+            (coerce_int(thread.get("time")) for thread in data_dict["processlist"]), default=0
+        )
 
         # Add MySQL specific data to the dictionary
         data_dict.update(
@@ -834,39 +988,86 @@ class ReplayManager:
                 return json.dumps(data_dict).encode()
             raise
 
-    def _handle_compression_training(self, data_dict_bytes: bytes) -> None:
+    @classmethod
+    def _summarize(cls, data_dict: dict[str, Any]) -> dict[str, Any]:
+        """The subset of a row a timeline reads, in the row's own shape so one reader serves both.
+
+        Every metric in metric_manager is kept at its latest value. Per-server tables named in
+        SUMMARY_WHOLE_KEYS are kept whole. Per-entity collections are cut to the fields listed for
+        them. Any other key is left out.
+        """
+        # A delta row already holds one value per metric
+        metric_manager = data_dict["metric_manager"]
+        if not metric_manager.get("_delta"):
+            metric_manager = cls._latest(metric_manager)
+        summary: dict[str, Any] = {"metric_manager": metric_manager}
+        for key in cls.SUMMARY_WHOLE_KEYS:
+            if key in data_dict:
+                summary[key] = data_dict[key]
+        for key, fields in cls.SUMMARY_FIELDS.items():
+            if key in data_dict:
+                summary[key] = cls._project(data_dict[key], fields)
+        return summary
+
+    @classmethod
+    def _latest(cls, value: object) -> object:
+        """Cut every history list, however deeply nested, to its last value. Anything else passes through."""
+        if isinstance(value, dict):
+            return {key: cls._latest(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return value[-1:]
+        return value
+
+    @staticmethod
+    def _project(value: object, fields: tuple[str, ...]) -> object:
+        """Keep only ``fields`` of a row, or of each row in a list. Anything else passes through."""
+
+        def keep(row: object) -> object:
+            return {field: row[field] for field in fields if field in row} if isinstance(row, dict) else row
+
+        return [keep(row) for row in value] if isinstance(value, list) else keep(value)
+
+    def _handle_compression_training(self, data_dict_bytes: bytes, summary_bytes: bytes | None) -> None:
         """Handles compression dictionary training by collecting samples and training when ready.
 
         Args:
             data_dict_bytes: The serialized data to use as a training sample.
+            summary_bytes: The serialized row summary, sampled alongside when the summary column is enabled.
         """
         if not self.compression_dict:
             if len(self.dict_samples) < self.COMPRESSION_DICT_SAMPLES:
                 self.dict_samples.append(data_dict_bytes)
+                if summary_bytes is not None:
+                    self.summary_samples.append(summary_bytes)
             else:
                 self.compression_dict = self._build_compression_dict()
                 # Release the samples; a rotated file starts sampling again from an empty list
                 self.dict_samples = []
+                self.summary_samples = []
 
-    def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes) -> None:
+    def _insert_replay_data(self, timestamp: str, data_dict_bytes: bytes, summary_bytes: bytes | None) -> None:
         """Inserts the replay data into the database and handles variable change linkage.
 
         Args:
             timestamp: The timestamp of the capture.
-            data_dict_bytes: The serialized and compressed data to insert.
+            data_dict_bytes: The serialized data to insert; compressed here.
+            summary_bytes: The serialized row summary, when the summary column is enabled.
         """
         try:
             # Begin transaction for atomic insert and update
             self._begin_transaction()
 
             # Execute the SQL insert using the constructed dictionary
-            self.current_replay_id = self._execute_insert(
-                "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
-                (
-                    timestamp,
-                    self._compressor.compress(data_dict_bytes),
-                ),
-            )
+            if summary_bytes is None:
+                self.current_replay_id = self._execute_insert(
+                    "INSERT INTO replay_data (timestamp, data) VALUES (?, ?)",
+                    (timestamp, self._compressor.compress(data_dict_bytes)),
+                )
+            else:
+                self.current_replay_id = self._execute_insert(
+                    "INSERT INTO replay_data (timestamp, data, summary) VALUES (?, ?, ?)",
+                    (timestamp, self._compressor.compress(data_dict_bytes), self._compressor.compress(summary_bytes)),
+                )
 
             # Update the variable_changes table with the data of the replay row so they're linked
             if self.global_variable_change_ids:
@@ -893,7 +1094,8 @@ class ReplayManager:
         self.purge_old_data()
 
         if not self.dolphie.daemon_mode:
-            self.replay_file_size = os.path.getsize(self.replay_file)
+            # The newest rows sit in the -wal until a checkpoint, so the size shown counts it too
+            self.replay_file_size = os.path.getsize(self.replay_file) + self._wal_size()
 
     def capture_state(self):
         """Captures the current state of the Dolphie instance and stores it in the SQLite database."""
@@ -901,9 +1103,22 @@ class ReplayManager:
         if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
+        # The poll worker is a thread that app exit does not wait for, so a close from the main thread
+        # can land in the middle of a poll. The lock makes the close wait for the row instead
+        with self._write_lock:
+            if self.connection is None or not self._wal_within_cap():
+                return
+            self._capture_state()
+
+    @classmethod
+    def _row_timestamp(cls, moment: datetime | None = None) -> str:
+        moment = moment or datetime.now(timezone.utc)
+        return moment.astimezone(timezone.utc).strftime(cls.ROW_TIMESTAMP_FORMAT)
+
+    def _capture_state(self):
         # Prepare processlist data
         processlist = self._prepare_processlist()
-        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = self._row_timestamp()
 
         # Build base data dictionary
         data_dict = self._build_base_data_dict(processlist)
@@ -921,10 +1136,11 @@ class ReplayManager:
 
         # Serialize and compress the data
         data_dict_bytes = self._serialize_data_dict(data_dict)
-        self._handle_compression_training(data_dict_bytes)
+        summary_bytes = self._serialize_data_dict(self._summarize(data_dict)) if self.dolphie.replay_summary else None
+        self._handle_compression_training(data_dict_bytes, summary_bytes)
 
         # Insert into database
-        self._insert_replay_data(timestamp, data_dict_bytes)
+        self._insert_replay_data(timestamp, data_dict_bytes, summary_bytes)
 
     def _update_replay_metadata_cache(self) -> bool:
         """Updates the replay metadata (min/max timestamps and IDs, total rows).
@@ -986,10 +1202,8 @@ class ReplayManager:
             self.current_replay_timestamp = row[1]
 
             try:
-                data = orjson.loads(self._decompressor.decompress(row[2]))
-                if not isinstance(data, dict):
-                    raise TypeError(f"expected a JSON object, got {type(data).__name__}")
-            except (zstd.ZstdError, orjson.JSONDecodeError, TypeError) as e:
+                data = self._decode_row(row[2])
+            except self.UNREADABLE_ROW_ERRORS as e:
                 skipped += 1
                 logger.error(f"Skipping unreadable replay row {row[0]} ({row[1]}): {e}")
                 if skipped == 1:
@@ -1178,11 +1392,12 @@ class ReplayManager:
         # the timestamp index and the rows are then ranged on the primary key: given a
         # timestamp predicate plus `id <= ?` ordered by id, SQLite's planner walks the rowid
         # from the first row of the file instead, which costs hundreds of milliseconds per
-        # seek on a multi-day daemon file. Timestamps are wall-clock, so the start lookup
-        # keeps `id <= ?` to skip later rows written after the clock stepped back (DST).
+        # seek on a multi-day daemon file. Timestamps come from the wall clock, which a clock step
+        # (or local time in files older than this version) can move back, so the start lookup
+        # keeps `id <= ?` to skip later rows written after such a step.
         if window_minutes > 0:
             target_dt = datetime.fromisoformat(self.current_replay_timestamp)
-            window_start = (target_dt - timedelta(minutes=window_minutes)).strftime("%Y-%m-%d %H:%M:%S")
+            window_start = (target_dt - timedelta(minutes=window_minutes)).strftime(self.ROW_TIMESTAMP_FORMAT)
             first_row = self._execute_select_one(
                 "SELECT id FROM replay_data WHERE timestamp >= ? AND id <= ? ORDER BY timestamp LIMIT 1",
                 (window_start, target_id),
@@ -1247,22 +1462,45 @@ class ReplayManager:
         Args:
             replay_ids: The replay ids whose metric_manager data should be loaded.
         """
+        # A delta row's summary carries the same metric_manager as the row at a tenth of the decode
+        # cost, so a window rebuild decodes it first. A full-snapshot row (interactive recording) has
+        # its history cut in the summary, so that row is decoded whole. A file holds one kind of row,
+        # so the first full-snapshot summary seen turns the summary path off for the file.
+        columns = "id, data, summary" if self.has_summary else "id, data, NULL"
         # SQLite caps the number of bound parameters per statement, so fetch in chunks.
         chunk_size = 900
         for start in range(0, len(replay_ids), chunk_size):
             chunk = replay_ids[start : start + chunk_size]
             placeholders = ",".join("?" * len(chunk))
             rows = self._execute_select_all(
-                f"SELECT id, data FROM replay_data WHERE id IN ({placeholders})",
+                f"SELECT {columns} FROM replay_data WHERE id IN ({placeholders})",
                 tuple(chunk),
             )
-            for replay_id, data_blob in rows:
-                try:
-                    data = orjson.loads(self._decompressor.decompress(data_blob))
-                except Exception:
-                    continue
-                if isinstance(data, dict) and isinstance(data.get("metric_manager"), dict):
-                    self._remember_metric_manager(replay_id, data["metric_manager"])
+            for replay_id, data_blob, summary_blob in rows:
+                metric_manager = None
+                if self.has_summary and summary_blob is not None:
+                    metric_manager = self._decode_metric_manager(summary_blob)
+                    if metric_manager is not None and not metric_manager.get("_delta"):
+                        self.has_summary = False
+                        metric_manager = None
+                if metric_manager is None:
+                    metric_manager = self._decode_metric_manager(data_blob)
+                if metric_manager is not None:
+                    self._remember_metric_manager(replay_id, metric_manager)
+
+    def _decode_row(self, blob: bytes) -> dict[str, Any]:
+        """Decompress and parse one stored row. Raises one of UNREADABLE_ROW_ERRORS when it cannot."""
+        data = orjson.loads(self._decompressor.decompress(blob))
+        if not isinstance(data, dict):
+            raise TypeError(f"expected a JSON object, got {type(data).__name__}")
+        return data
+
+    def _decode_metric_manager(self, blob: bytes) -> dict[str, Any] | None:
+        try:
+            metric_manager = self._decode_row(blob).get("metric_manager")
+        except self.UNREADABLE_ROW_ERRORS:
+            return None
+        return metric_manager if isinstance(metric_manager, dict) else None
 
     def fetch_global_variable_changes_for_current_replay_id(self):
         """Fetches global variable changes for the current replay ID."""
@@ -1311,12 +1549,15 @@ class ReplayManager:
         if not self.dolphie.record_for_replay or self.dolphie.replay_file:
             return
 
-        timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
+        timestamp = self._row_timestamp()
 
-        last_row_id = self._execute_insert(
-            "INSERT INTO variable_changes (timestamp, variable_name, old_value, new_value) VALUES (?, ?, ?, ?)",
-            (timestamp, variable_name, old_value, new_value),
-        )
+        with self._write_lock:
+            if self.connection is None:
+                return
+            last_row_id = self._execute_insert(
+                "INSERT INTO variable_changes (timestamp, variable_name, old_value, new_value) VALUES (?, ?, ?, ?)",
+                (timestamp, variable_name, old_value, new_value),
+            )
 
         # Keep track of the primary key of the global variable change so we can link it to the replay data
         self.global_variable_change_ids.append(last_row_id)

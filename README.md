@@ -85,6 +85,7 @@ options:
   --replay-dir          Directory to store replay data files
   --replay-retention-hours
                         Number of hours to keep replay data. Data will be purged every hour [default: 48]
+  --replay-summary      Store a compact summary next to each replay row: every metric's latest value, status values, system utilization, lock states, and replication state. Dolphie and other readers build timelines and rebuild graphs from it without decoding whole rows. Costs roughly a kilobyte per row
   --exclude-notify-vars
                         Dolphie will let you know when a global variable has been changed. If you have variables that change frequently and you don't want to see them, you can specify which ones with this option separated by a comma (i.e. --exclude-notify-vars=variable1,variable2)
   --filters             Start with filters applied to threads, separated by a comma in the format name=value. Supports: user, host, db, hostgroup, time (minimum query time), query (partial query text). Prefix a value with ! to exclude what it matches (i.e. --filters user=!azure_superuser,time=5). Filters set by Dolphie's config, a credential profile and this option are merged, with the more specific source winning for the filters it sets. A name with no value (i.e. time=) unsets an inherited filter
@@ -181,6 +182,7 @@ Dolphie's config supports these options under [dolphie] section:
 	(str) replay_file
 	(str) replay_dir
 	(int) replay_retention_hours
+	(bool) replay_summary
 	(comma-separated str) exclude_notify_global_vars
 ```
 
@@ -248,6 +250,39 @@ Example log messages in daemon mode:
 [WARNING] Read-only mode changed: R/W -> RO
 [INFO] Global variable innodb_io_capacity changed: 1000 -> 2000
 ```
+
+## Reading replay files from other tools
+
+A replay file is a SQLite database that any SQLite client can open. Open it read-only (`sqlite3 -readonly` or a `file:...?mode=ro` URI) so a daemon writing to it is never blocked.
+
+While it records, the daemon keeps the file in WAL mode with `daemon.db-wal` and `daemon.db-shm` next to it. A clean stop folds the WAL back into the file and switches it to a plain rollback-journal database, so a stopped daemon's file has no sidecars and opens read-only from anywhere, including a directory the reader cannot write. These rules follow from that:
+
+- Copy the file only after the daemon stops, or copy `daemon.db-wal` with it. The main file alone is missing everything since the last checkpoint, up to about 4 MB of the newest rows.
+- Do not leave a `sqlite3` shell or a GUI tool sitting inside a query on a live file. An open read blocks every checkpoint, so the WAL takes every new row instead of the database file. Once the WAL reaches 64 MB the daemon logs an error and stops writing rows until the reader closes, so disk use never exceeds the retention window plus 64 MB. Recording resumes on its own.
+- A reader that is still inside a query when the daemon stops keeps the file in WAL mode with its sidecars, the same state an unclean stop leaves. The next start recovers it. Readers open that state as long as they can read the `-shm`, which Dolphie creates with the same group permissions as the file.
+- Apple's `/usr/bin/sqlite3 -readonly` cannot open a WAL file that has no `-shm` next to it, such as a `daemon.db` copied together with its `-wal`. Use the `file:...?immutable=1` URI or open it without `-readonly`.
+
+The daemon logs a warning when it recovers rows from a `-wal` that the previous run left behind (an unclean stop), and when the filesystem refuses WAL mode (NFS).
+
+When a new Dolphie version changes the replay schema, the daemon closes the old file, renames it to `daemon.db_old_schema_v<N>`, and starts a new `daemon.db`. The renamed file is complete and has no sidecars. Replay it with the Dolphie version that wrote it.
+
+- `metadata` has one row: `schema_version` (currently 2), `host`, `port`, `host_distro`, `connection_source`, `dolphie_version`, and `compression_dict`.
+- `replay_data` has one row per poll: `id`, `timestamp` (`YYYY-MM-DD HH:MM:SS` in UTC, to the second), `data`, and, when `replay_summary` is on, `summary`. Files written before 6.17 hold the host's local time.
+- `variable_changes` records global variable changes, linked to `replay_data.id` through `replay_id`.
+
+`data` and `summary` are zstd frames of a JSON object. Decompress them with the `compression_dict` bytes loaded as a zstd dictionary with type auto-detection (a raw-content dictionary in current files, a trained one in older files). The first three rows of a file were written before the dictionary existed and decode with it all the same. `compression_dict` is NULL until the fourth row is written.
+
+`data` is the whole snapshot: `global_status`, `global_variables`, `processlist`, `metric_manager`, `system_utilization`, and the tables each panel recorded. `summary` is a subset in the same shape, so one reader serves both columns:
+
+- `metric_manager`: every metric Dolphie graphs, cut to its latest value. Daemon files carry `_delta: true`. Dolphie has already converted counters into per-second rates
+- `global_status`, `system_utilization`, `innodb_metrics`, `binlog_status`: kept whole. Dolphie fetches a fixed list of status values: the ones its dashboard and graphs read, plus raw counters kept for readers, such as buffer pool page counts, read-ahead, and change buffer merges. A value added to that list reaches the summary with no change to the contract. Three keys are Dolphie's own: `replay_polling_interval` is the seconds between this poll and the one before it, the divisor of every per-second rate in the row, `replay_polling_latency` is how long the poll itself took, and `replay_longest_thread_time` is the `Time` of the oldest thread in the recorded processlist, in seconds, 0 when none was recorded. A reader that takes its own rate between two adjacent rows divides by `replay_polling_interval`, because `timestamp` holds whole seconds
+- `global_variables`: `version`, `read_only`, `super_read_only`, `max_connections`. The full set is about 25 KB a row, so a reader that needs another variable takes it from `data` at the instant it inspects
+- `metadata_locks`: `LOCK_TYPE` and `LOCK_STATUS` per lock
+- `replication_status`: channel, source host, the IO and SQL running flags, `Seconds_Behind`, `SQL_Delay`, and the last errors per channel. `Seconds_Behind` counts a configured delay, so the lag a reader rates is `Seconds_Behind` minus `SQL_Delay`
+
+A summary is about a tenth of the row's decoded size, so a tool that draws a timeline or samples metrics across a file reads `COALESCE(summary, data)` and falls back to the whole row where a summary is NULL. The column only exists in files written with `--replay-summary`, and rows written before it was turned on have no summary. Dolphie itself reads the summary to rebuild the graph window when a replay seeks backwards. The processlist is not summarized. A tool that needs full detail for one instant, such as the threads and their query text, reads `data`.
+
+`SUMMARY_WHOLE_KEYS` and `SUMMARY_FIELDS` in `dolphie/Modules/ReplayManager.py` name what the summary keeps. A top-level key that is not named there is left out. A new metric in `metric_manager` is summarized automatically.
 
 ## System Utilization in the Dashboard Panel
 

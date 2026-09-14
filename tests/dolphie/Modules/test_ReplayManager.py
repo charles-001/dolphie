@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,14 @@ from dolphie.DataTypes import ConnectionSource, ProcesslistThread, ProxySQLProce
 from dolphie.Dolphie import Dolphie
 from dolphie.Modules.Functions import coerce_int
 from dolphie.Modules.ReplayManager import MySQLReplayData, ReplayManager
+from tests.dolphie.replay_files import (
+    journal_mode,
+    open_read_only,
+    read_compression_dict,
+    read_replay_rows,
+    row_count,
+    sidecars,
+)
 
 SCHEMA = """
 CREATE TABLE replay_data (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp DATETIME, data BLOB);
@@ -82,6 +91,7 @@ def make_dolphie(replay_file: Path | None, **overrides: Any) -> tuple[Dolphie, l
         daemon_mode=False,
         record_for_replay=False,
         replay_retention_hours=48,
+        replay_summary=False,
         app_version="6.16.0",
         app=app,
     )
@@ -347,7 +357,7 @@ def test_insert_failure_surfaces_the_original_error(tmp_path: Path) -> None:
     try:
         writer.execute("BEGIN IMMEDIATE")
         with pytest.raises(sqlite3.OperationalError, match="locked"):
-            manager._insert_replay_data("2026-01-01 00:00:00", b"{}")
+            manager._insert_replay_data("2026-01-01 00:00:00", b"{}", None)
     finally:
         writer.execute("ROLLBACK")
         writer.close()
@@ -365,7 +375,7 @@ def test_raw_content_dictionary_reads_rows_written_before_and_after_it(tmp_path:
         rows = [orjson.dumps(make_row(index)) for index in range(ReplayManager.COMPRESSION_DICT_SAMPLES + 3)]
         blobs: list[bytes] = []
         for payload in rows:
-            manager._handle_compression_training(payload)
+            manager._handle_compression_training(payload, None)
             blobs.append(manager._compressor.compress(payload))
 
         assert manager.compression_dict is not None
@@ -491,3 +501,521 @@ def test_seek_to_timestamp_lands_on_the_exact_or_closest_earlier_frame(tmp_path:
         assert uptime_of_next_frame(manager) == 1004
     finally:
         manager.close()
+
+
+class RecordingMetricManager:
+    """Stands in for MetricManager.snapshot_history with two groups and a growing history."""
+
+    def __init__(self) -> None:
+        self.polls = 0
+
+    def snapshot_history(
+        self, connection_source: str, latest_only: bool
+    ) -> tuple[list[str], list[tuple[str, list[tuple[str, list[float]]]]]]:
+        self.polls += 1
+        datetimes = [f"poll-{index}" for index in range(self.polls)]
+        history = [
+            ("dml", [("Queries", [10.0 * index for index in range(self.polls)])]),
+            ("threads", [("Threads_running", [float(index) for index in range(self.polls)])]),
+        ]
+        if latest_only:
+            return datetimes[-1:], [
+                (name, [(metric, values[-1:]) for metric, values in series]) for name, series in history
+            ]
+        return datetimes, history
+
+
+def make_recording_dolphie(replay_dir: Path, *, daemon_mode: bool = True, **overrides: Any) -> Dolphie:
+    """A Dolphie mid-poll, with the state capture_state serializes."""
+    threads = {
+        7: SimpleNamespace(thread_data={"id": 7, "user": "app", "command": "Query", "time": 42, "query": "SELECT   1"}),
+        8: SimpleNamespace(thread_data={"id": 8, "user": "app", "command": "Sleep", "time": 3, "query": ""}),
+    }
+    dolphie, _ = make_dolphie(
+        None,
+        host="db1",
+        port=3306,
+        replay_dir=str(replay_dir),
+        daemon_mode=daemon_mode,
+        record_for_replay=True,
+        worker_processing_time=0.05,
+        polling_latency=2.04,
+        processlist_threads=threads,
+        global_status={"Uptime": 1000, "Threads_running": 2},
+        global_variables={
+            "version": "8.4.7",
+            "max_connections": 151,
+            "read_only": "OFF",
+            "server_uuid": "abc",
+        },
+        metric_manager=RecordingMetricManager(),
+        system_utilization={"CPU_Percent": 12.5, "CPU_Count": 8},
+        pfs_metrics_last_reset_time=None,
+        binlog_status={"File": "binlog.000001", "Position": 4},
+        innodb_metrics={"trx_rseg_history_len": 5},
+        metadata_locks=[
+            {
+                "OBJECT_NAME": "orders",
+                "LOCK_TYPE": "SHARED_WRITE",
+                "LOCK_STATUS": "PENDING",
+                "PROCESSLIST_INFO": "UPDATE",
+            }
+        ],
+        replication_status=[
+            {
+                "Channel_Name": "",
+                "Source_Host": "primary",
+                "Replica_IO_Running": "Yes",
+                "Replica_SQL_Running": "Yes",
+                "Seconds_Behind": 3601,
+                "SQL_Delay": 3600,
+                "Executed_Gtid_Set": "uuid:1-100",
+            }
+        ],
+        replication_applier_status={},
+        replica_manager=SimpleNamespace(available_replicas=[]),
+        group_replication=False,
+        innodb_cluster=False,
+        innodb_cluster_read_replica=False,
+        galera_cluster=False,
+        file_io_data=None,
+        table_io_waits_data=None,
+        statements_summary_data=None,
+        **overrides,
+    )
+    return dolphie
+
+
+def read_rows(replay_file: Path) -> list[tuple[int, dict[str, Any], dict[str, Any] | None]]:
+    """Every row's id, data, and summary (None where the row has none)."""
+    return cast(
+        "list[tuple[int, dict[str, Any], dict[str, Any] | None]]",
+        read_replay_rows(replay_file, "id, data, summary"),
+    )
+
+
+def test_summary_names_only_keys_the_recorder_writes(tmp_path: Path) -> None:
+    """A rename of a recorded section must reach the summary contract, or external readers lose it."""
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    try:
+        data_dict = manager._build_base_data_dict(manager._prepare_processlist())
+        manager._add_mysql_specific_data(data_dict)
+    finally:
+        manager.close()
+
+    summary_keys = {*ReplayManager.SUMMARY_WHOLE_KEYS, *ReplayManager.SUMMARY_FIELDS}
+    assert summary_keys <= set(data_dict), summary_keys - set(data_dict)
+    assert "metric_manager" not in summary_keys
+    # The processlist grows with load and no timeline reads it, so it stays out of the summary
+    assert "processlist" not in summary_keys
+
+
+def test_row_carries_the_seconds_its_rates_were_divided_by(tmp_path: Path) -> None:
+    """Row timestamps hold whole seconds, so a reader's own rate needs the poll interval."""
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    try:
+        data_dict = manager._build_base_data_dict(manager._prepare_processlist())
+    finally:
+        manager.close()
+    assert data_dict["global_status"]["replay_polling_interval"] == 2.04
+    assert data_dict["global_status"]["replay_polling_latency"] == 0.05
+
+
+def test_row_carries_the_age_of_its_oldest_thread_for_readers_without_the_processlist(tmp_path: Path) -> None:
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    try:
+        data_dict = manager._build_base_data_dict(manager._prepare_processlist())
+        manager._add_mysql_specific_data(data_dict)
+        assert data_dict["global_status"]["replay_longest_thread_time"] == 42
+
+        empty = manager._build_base_data_dict([])
+        manager._add_mysql_specific_data(empty)
+        assert empty["global_status"]["replay_longest_thread_time"] == 0
+    finally:
+        manager.close()
+
+
+def test_rows_are_stamped_in_utc_like_the_metric_history(tmp_path: Path) -> None:
+    before = datetime.now(timezone.utc).replace(microsecond=0)
+    replay_file = record_replay(tmp_path, polls=1)
+    after = datetime.now(timezone.utc)
+
+    ((_, stamp),) = read_replay_rows(replay_file, "id, timestamp")
+    stamped = datetime.strptime(stamp, ReplayManager.ROW_TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
+    assert before <= stamped <= after
+
+
+def test_readme_documents_every_summary_key_for_external_readers() -> None:
+    readme = (Path(__file__).parents[3] / "README.md").read_text()
+    section = readme.split("## Reading replay files from other tools", 1)[1].split("\n## ", 1)[0]
+    assert f"`schema_version` (currently {ReplayManager.schema_version})" in section
+    for key in (*ReplayManager.SUMMARY_WHOLE_KEYS, *ReplayManager.SUMMARY_FIELDS):
+        assert f"`{key}`" in section, key
+
+
+def test_summary_cuts_nested_metric_groups_without_knowing_their_shape() -> None:
+    metric_manager = {
+        "datetimes": ["a", "b"],
+        "flat": {"Queries": [1.0, 2.0]},
+        "nested": {"by_host": {"db1": [3.0, 4.0]}, "note": "text"},
+    }
+    assert ReplayManager._summarize({"metric_manager": metric_manager})["metric_manager"] == {
+        "datetimes": ["b"],
+        "flat": {"Queries": [2.0]},
+        "nested": {"by_host": {"db1": [4.0]}, "note": "text"},
+    }
+
+
+def record_replay(replay_dir: Path, polls: int, **overrides: Any) -> Path:
+    """Record ``polls`` frames into a new replay file under ``replay_dir`` and return its path."""
+    manager = ReplayManager(make_recording_dolphie(replay_dir, **overrides))
+    try:
+        for _ in range(polls):
+            manager.capture_state()
+    finally:
+        manager.close()
+    (replay_file,) = (replay_dir / "db1_3306").glob("*.db")
+    return replay_file
+
+
+def seek_to(manager: ReplayManager, replay_id: int) -> None:
+    """Position a playback manager on a row the way its own seek does."""
+    row = manager._execute_select_one("SELECT timestamp FROM replay_data WHERE id = ?", (replay_id,))
+    assert row is not None
+    manager.current_replay_id = replay_id
+    manager.current_replay_timestamp = row[0]
+
+
+def test_recording_is_unchanged_without_replay_summary(tmp_path: Path) -> None:
+    replay_file = record_replay(tmp_path, polls=1)
+
+    with closing(open_read_only(replay_file)) as connection:
+        columns = [column[1] for column in connection.execute("PRAGMA table_info(replay_data)")]
+    assert columns == ["id", "timestamp", "data"]
+
+
+def test_recording_writes_in_wal_mode_and_playback_reads_it_read_only(tmp_path: Path) -> None:
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    replay_file = Path(manager.replay_file)
+    for _ in range(2):
+        manager.capture_state()
+    # The page size must have been set before the switch to WAL, or it stays 4 KB
+    assert journal_mode(replay_file) == "wal"
+    assert manager._execute_select_one("PRAGMA page_size") == (ReplayManager.PAGE_SIZE,)
+
+    # A clean close folds the WAL into the file, removes the sidecars, and leaves a rollback-journal
+    # file that any reader opens without creating a -shm, so a stopped daemon's file reads from anywhere
+    manager.close()
+    assert journal_mode(replay_file) == "delete"
+    assert sidecars(replay_file) == set()
+
+    dolphie, notifications = make_dolphie(replay_file)
+    playback = ReplayManager(dolphie)
+    try:
+        assert playback.verify_replay_file(), notifications
+        assert isinstance(playback.get_next_refresh_interval(), MySQLReplayData)
+        assert isinstance(playback.get_next_refresh_interval(), MySQLReplayData)
+    finally:
+        playback.close()
+
+
+def force_purge(manager: ReplayManager) -> None:
+    """Run the hourly purge now, with every row older than this second expired."""
+    manager.dolphie.replay_retention_hours = 0
+    manager.last_purge_time = datetime.now().astimezone() - timedelta(hours=2)
+    manager.purge_old_data()
+
+
+def test_purge_truncates_the_wal_and_a_pinned_wal_pauses_recording_at_the_cap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loguru import logger
+
+    logged: list[str] = []
+    sink = logger.add(lambda message: logged.append(str(message)), level="INFO", format="{level} {message}")
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    replay_file = Path(manager.replay_file)
+    wal_file = replay_file.with_name(f"{replay_file.name}-wal")
+
+    try:
+        for _ in range(5):
+            manager.capture_state()
+        assert wal_file.stat().st_size > 0
+        force_purge(manager)
+        assert wal_file.stat().st_size == 0
+
+        # A sqlite3 shell or GUI left inside a query holds a read transaction open, which blocks every checkpoint
+        reader = sqlite3.connect(manager.replay_file, isolation_level=None)
+        cursor = reader.execute("SELECT id FROM replay_data")
+        cursor.fetchone()
+        for _ in range(3):
+            manager.capture_state()
+        force_purge(manager)
+        pinned_size = wal_file.stat().st_size
+        assert pinned_size > 0
+        written = row_count(replay_file)
+
+        # Past the cap the daemon stops writing rows, so disk use is bounded, and says so once
+        monkeypatch.setattr(ReplayManager, "WAL_MAX_BYTES", 1)
+        for _ in range(3):
+            manager.capture_state()
+        assert row_count(replay_file) == written
+        assert wal_file.stat().st_size == pinned_size
+        errors = [line for line in logged if line.startswith("ERROR")]
+        assert len(errors) == 1
+        assert "Recording is paused" in errors[0]
+
+        # Once the reader lets go, the next poll truncates the WAL and recording resumes
+        cursor.close()
+        reader.close()
+        manager.capture_state()
+        assert row_count(replay_file) == written + 1
+        assert [line for line in logged if "Recording resumes" in line]
+        assert wal_file.stat().st_size < pinned_size
+        force_purge(manager)
+        assert wal_file.stat().st_size == 0
+
+        # A reader that stays inside a query through the close keeps the file in WAL mode with its
+        # sidecars, which the next start recovers. The close must not fail on it
+        reader = sqlite3.connect(manager.replay_file, isolation_level=None, timeout=0)
+        cursor = reader.execute("SELECT id FROM replay_data")
+        cursor.fetchone()
+        manager.close()
+        assert journal_mode(replay_file) == "wal"
+        assert wal_file.exists()
+        cursor.close()
+        reader.close()
+        manager = ReplayManager(manager.dolphie)
+        manager.capture_state()
+        assert row_count(replay_file) == written + 2
+        manager.close()
+        assert not wal_file.exists()
+    finally:
+        logger.remove(sink)
+        manager.close()
+
+
+def test_playback_opens_a_closed_file_in_a_directory_it_cannot_write(tmp_path: Path) -> None:
+    """A read-only mount or another user's directory: a stopped daemon's file must need no -shm to read."""
+    replay_file = record_replay(tmp_path, polls=3)
+    replay_file.parent.chmod(0o555)
+    try:
+        dolphie, notifications = make_dolphie(replay_file)
+        manager = ReplayManager(dolphie)
+        try:
+            assert manager.verify_replay_file(), notifications
+            assert sum(manager.get_next_refresh_interval() is not None for _ in range(3)) == 3
+        finally:
+            manager.close()
+        assert sidecars(replay_file) == set()
+    finally:
+        replay_file.parent.chmod(0o770)
+
+
+def test_close_waits_for_a_poll_in_flight_on_the_worker_thread(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """App exit does not wait for the poll thread, so a close during a poll must wait for the row, not race it."""
+    import threading
+
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    replay_file = Path(manager.replay_file)
+    manager.capture_state()
+
+    inside_poll = threading.Event()
+    release_poll = threading.Event()
+    real_insert = manager._insert_replay_data
+
+    def slow_insert(*args: Any, **kwargs: Any) -> None:
+        inside_poll.set()
+        assert release_poll.wait(5)
+        real_insert(*args, **kwargs)
+
+    monkeypatch.setattr(manager, "_insert_replay_data", slow_insert)
+    poll = threading.Thread(target=manager.capture_state)
+    poll.start()
+    assert inside_poll.wait(5)
+
+    closer = threading.Thread(target=manager.close)
+    closer.start()
+    closer.join(0.5)
+    assert closer.is_alive(), "close returned while the poll still held the connection"
+
+    release_poll.set()
+    poll.join(5)
+    closer.join(5)
+    assert not poll.is_alive()
+    assert not closer.is_alive()
+
+    # Both rows landed, the file is back in rollback mode, and nothing is left next to it
+    assert journal_mode(replay_file) == "delete"
+    assert sidecars(replay_file) == set()
+    assert row_count(replay_file) == 2
+    # A poll that arrives after the close is a no-op rather than an error
+    manager.capture_state()
+
+
+def test_schema_rotation_closes_the_old_wal_file_before_renaming_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    host_dir = tmp_path / "db1_3306"
+    monkeypatch.setattr(ReplayManager, "schema_version", 1)
+    record_replay(tmp_path, polls=10)
+    monkeypatch.setattr(ReplayManager, "schema_version", 2)
+
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    try:
+        for _ in range(5):
+            manager.capture_state()
+        # The sidecars belong to the new file. The renamed file was closed first, so it has none
+        assert {p.name for p in host_dir.iterdir()} == {
+            "daemon.db",
+            "daemon.db-wal",
+            "daemon.db-shm",
+            "daemon.db_old_schema_v1",
+        }
+    finally:
+        manager.close()
+    assert {p.name for p in host_dir.iterdir()} == {"daemon.db", "daemon.db_old_schema_v1"}
+
+    for name, schema_version, rows in (("daemon.db_old_schema_v1", 1, 10), ("daemon.db", 2, 5)):
+        with closing(open_read_only(host_dir / name)) as connection:
+            assert connection.execute("PRAGMA integrity_check").fetchone() == ("ok",)
+            assert connection.execute("SELECT schema_version FROM metadata").fetchone() == (schema_version,)
+        assert row_count(host_dir / name) == rows
+
+
+def test_compression_dictionary_samples_summaries_alongside_rows(tmp_path: Path) -> None:
+    polls = ReplayManager.COMPRESSION_DICT_SAMPLES + 1
+    replay_file = record_replay(tmp_path, polls, replay_summary=True)
+
+    dictionary = read_compression_dict(replay_file)
+    rows = read_rows(replay_file)
+    # The prefix is the sampled rows followed by their summaries, verbatim
+    expected = b"".join(orjson.dumps(data) for _, data, _ in rows[:-1]) + b"".join(
+        orjson.dumps(summary) for _, _, summary in rows[:-1]
+    )
+    assert dictionary == expected
+
+
+def test_replay_summary_keeps_the_timeline_subset_of_every_row(tmp_path: Path) -> None:
+    # Past the dictionary samples, so both columns are compressed with the dictionary
+    polls = ReplayManager.COMPRESSION_DICT_SAMPLES + 2
+    rows = read_rows(record_replay(tmp_path, polls, replay_summary=True))
+    assert len(rows) == polls
+    for _, data, summary in rows:
+        assert summary is not None
+        # Delta rows already hold one value per metric, so the summary carries metric_manager unchanged
+        assert summary["metric_manager"] == data["metric_manager"]
+        assert set(summary) == {
+            "metric_manager",
+            *ReplayManager.SUMMARY_WHOLE_KEYS,
+            *ReplayManager.SUMMARY_FIELDS,
+        }
+        for key in ReplayManager.SUMMARY_WHOLE_KEYS:
+            assert summary[key] == data[key]
+        assert "processlist" not in summary
+        assert summary["metadata_locks"] == [{"LOCK_TYPE": "SHARED_WRITE", "LOCK_STATUS": "PENDING"}]
+        assert summary["global_variables"] == {"version": "8.4.7", "read_only": "OFF", "max_connections": 151}
+        assert summary["replication_status"] == [
+            {
+                "Channel_Name": "",
+                "Source_Host": "primary",
+                "Replica_IO_Running": "Yes",
+                "Replica_SQL_Running": "Yes",
+                "Seconds_Behind": 3601,
+                "SQL_Delay": 3600,
+            }
+        ]
+        # The full row is untouched, so detail readers lose nothing
+        assert data["processlist"][0]["query"] == "SELECT 1"
+        assert data["global_variables"]["server_uuid"] == "abc"
+
+
+def test_replay_summary_cuts_a_full_metric_history_to_its_latest_value(tmp_path: Path) -> None:
+    replay_file = record_replay(tmp_path, polls=3, daemon_mode=False, replay_summary=True)
+
+    _, data, summary = read_rows(replay_file)[-1]
+    assert summary is not None
+    assert data["metric_manager"]["dml"]["Queries"] == [0.0, 10.0, 20.0]
+    assert data["metric_manager"]["datetimes"] == ["poll-0", "poll-1", "poll-2"]
+    assert summary["metric_manager"]["dml"]["Queries"] == [20.0]
+    assert summary["metric_manager"]["datetimes"] == ["poll-2"]
+    assert "_delta" not in summary["metric_manager"]
+
+
+def test_replay_summary_is_added_to_an_existing_file_and_older_rows_stay_null(tmp_path: Path) -> None:
+    replay_file = tmp_path / "db1_3306" / "daemon.db"
+    replay_file.parent.mkdir()
+    # Recent rows, so the retention purge on startup leaves them in place
+    write_replay_file(replay_file, row_count=2, start=datetime.now(timezone.utc))
+
+    assert record_replay(tmp_path, polls=1, replay_summary=True) == replay_file
+
+    rows = read_rows(replay_file)
+    assert [(replay_id, summary is None) for replay_id, _, summary in rows] == [(1, True), (2, True), (3, False)]
+
+
+def test_playback_reads_a_file_with_summaries_and_rebuilds_the_graph_window_from_them(tmp_path: Path) -> None:
+    replay_file = record_replay(tmp_path, polls=6, replay_summary=True)
+
+    # Break the full row of one frame. A window rebuild that read the row would lose the frame
+    connection = sqlite3.connect(replay_file)
+    try:
+        connection.execute("UPDATE replay_data SET data = ? WHERE id = 4", (b"garbage",))
+        connection.commit()
+    finally:
+        connection.close()
+
+    dolphie, notifications = make_dolphie(replay_file)
+    manager = ReplayManager(dolphie)
+    try:
+        assert manager.verify_replay_file()
+        assert manager.has_summary is True
+        seek_to(manager, 6)
+
+        window = manager.fetch_delta_metrics_for_window(6, window_minutes=0)
+        assert [entry["dml"]["Queries"] for entry in window] == [[0.0], [10.0], [20.0], [30.0], [40.0], [50.0]]
+
+        # Linear playback still reads the full row, so the broken frame is the one skipped
+        manager.current_replay_id = 0
+        uptimes = []
+        while (data := manager.get_next_refresh_interval()) is not None:
+            uptimes.append(data.global_status["Uptime"])
+    finally:
+        manager.close()
+
+    assert uptimes == [1000] * 5
+    assert [kwargs.get("title") for _, kwargs in notifications] == ["Unreadable replay data"]
+
+
+def test_a_seek_in_an_interactive_recording_with_summaries_keeps_the_full_metric_history(tmp_path: Path) -> None:
+    replay_file = record_replay(tmp_path, polls=3, daemon_mode=False, replay_summary=True)
+
+    dolphie, _ = make_dolphie(replay_file)
+    manager = ReplayManager(dolphie)
+    try:
+        assert manager.verify_replay_file()
+        seek_to(manager, 3)
+        window = manager.fetch_delta_metrics_for_window(3, window_minutes=0)
+    finally:
+        manager.close()
+
+    # A full-snapshot row holds the whole history, and the summary's single value must not replace it
+    assert window[-1]["dml"]["Queries"] == [0.0, 10.0, 20.0]
+    assert "_delta" not in window[-1]
+
+
+def test_playback_of_a_file_without_summaries_reads_rows_for_the_graph_window(tmp_path: Path) -> None:
+    replay_file = tmp_path / "daemon.db"
+    write_replay_file(replay_file, row_count=4)
+    dolphie, _ = make_dolphie(replay_file)
+
+    manager = ReplayManager(dolphie)
+    try:
+        assert manager.verify_replay_file()
+        assert manager.has_summary is False
+        seek_to(manager, 4)
+        window = manager.fetch_delta_metrics_for_window(4, window_minutes=0)
+    finally:
+        manager.close()
+
+    assert [entry["datetimes"] for entry in window] == [["row-0"], ["row-1"], ["row-2"], ["row-3"]]

@@ -95,6 +95,7 @@ class Config:
     replay_file: str | None = None
     replay_dir: str | None = None
     replay_retention_hours: int = 48
+    replay_summary: bool = False
     exclude_notify_global_vars: str | list[str] | None = None
 
 
@@ -479,6 +480,17 @@ Dolphie's config supports these options under [dolphie] section:
                 f"[default: {self.config.replay_retention_hours}]"
             ),
             metavar="",
+        )
+        self.parser.add_argument(
+            "--replay-summary",
+            dest="replay_summary",
+            action="store_true",
+            help=(
+                "Store a compact summary next to each replay row: every metric's latest value, status values, "
+                "system utilization, lock states, and replication state. Dolphie and other readers "
+                "build timelines and rebuild graphs from it without decoding whole rows. Costs roughly a "
+                "kilobyte per row"
+            ),
         )
         self.parser.add_argument(
             "--exclude-notify-vars",

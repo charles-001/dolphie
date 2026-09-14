@@ -87,6 +87,11 @@ class Tab:
     def dolphie(self, value: Dolphie) -> None:
         self._dolphie = value
 
+    def close_replay_manager(self) -> None:
+        if self.replay_manager:
+            self.replay_manager.close()
+        self.replay_manager = None
+
     def save_references_to_components(self):
         app = self.dolphie.app
 
@@ -191,7 +196,7 @@ class Tab:
 
         # Update the dashboard title with the timestamp of the replay event
         self.dashboard_replay.update(
-            f"[b]Replay[/b] ([$dark_gray]{os.path.basename(self.dolphie.replay_file)}[/$dark_gray])"
+            f"[b]Replay[/b] ([$dark_gray]{os.path.basename(self.dolphie.replay_file)} · UTC[/$dark_gray])"
         )
         self.dashboard_replay_start_end.update(
             f"{min_timestamp} [$b_highlight]<-[/$b_highlight] "
@@ -751,7 +756,7 @@ class TabManager:
                 # Reset all runtime state with the new connection details
                 dolphie.reset_runtime_variables()
                 tab.worker_cancel_error = None
-                tab.replay_manager = None
+                tab.close_replay_manager()
 
                 tab.loading_indicator.display = True
                 tab.dashboard_replay_container.display = False

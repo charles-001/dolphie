@@ -12,6 +12,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from tests.dolphie.replay_files import row_count
 from tests.integration.harness import shared_options
 from tests.integration.servers import Server
 
@@ -49,10 +50,9 @@ def daemon_replay_file(server: Server, tmp_path: Path) -> Path:
 
 
 def replay_row_count(replay_file: Path) -> int:
-    # Read-only mode refuses to create the file, so a daemon that has not written yet counts as zero.
+    # Read-only mode refuses to create the file, so a daemon that has not written yet counts as zero
     try:
-        with sqlite3.connect(f"file:{replay_file}?mode=ro", uri=True) as connection:
-            return connection.execute("SELECT COUNT(*) FROM replay_data").fetchone()[0]
+        return row_count(replay_file)
     except sqlite3.OperationalError:
         return 0
 
@@ -62,8 +62,10 @@ def _output(process: subprocess.Popen[str]) -> str:
 
 
 @contextmanager
-def daemon(server: Server, tmp_path: Path, *extra_args: str) -> Iterator[tuple[subprocess.Popen[str], Path]]:
-    """Run `dolphie --daemon` from the real CLI, then stop it with SIGINT and require a clean exit."""
+def daemon(
+    server: Server, tmp_path: Path, *extra_args: str, stop_signal: signal.Signals = signal.SIGINT
+) -> Iterator[tuple[subprocess.Popen[str], Path]]:
+    """Run `dolphie --daemon` from the real CLI, then stop it with ``stop_signal`` and require a clean exit."""
     config = write_config(server, tmp_path)
     process = subprocess.Popen(
         dolphie_command(config, "--daemon", *extra_args),
@@ -77,7 +79,7 @@ def daemon(server: Server, tmp_path: Path, *extra_args: str) -> Iterator[tuple[s
         yield process, daemon_replay_file(server, tmp_path)
     finally:
         if process.poll() is None:
-            process.send_signal(signal.SIGINT)
+            process.send_signal(stop_signal)
             try:
                 process.wait(timeout=30)
             except subprocess.TimeoutExpired:

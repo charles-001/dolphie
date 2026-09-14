@@ -67,6 +67,15 @@ jobs:
       - name: Test
         run: uv run pytest
 
+      # Side-by-side images of every failed panel snapshot, written by pytest-textual-snapshot.
+      - name: Upload snapshot report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: snapshot-report-py${{ matrix.python-version }}
+          path: snapshot_report.html
+          if-no-files-found: ignore
+
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20

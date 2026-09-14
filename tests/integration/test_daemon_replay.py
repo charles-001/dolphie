@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import signal
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from dolphie.DataTypes import ConnectionSource, ConnectionSourceType
+from dolphie.Modules.MetricDefinitions import METRIC_DATETIME_FORMAT
+from dolphie.Modules.ReplayManager import ReplayManager
+from tests.dolphie.replay_files import journal_mode, read_replay_rows, sidecars
 from tests.integration.cli import daemon, daemon_replay_file, replay_row_count, run_daemon, wait_for_rows
-from tests.integration.harness import frontend_traffic, make_config, playback_config, query, run_dolphie
+from tests.integration.harness import frontend_traffic, make_config, playback_config, query, run_dolphie, traffic
 from tests.integration.servers import Server
 
 
@@ -33,6 +38,47 @@ def test_daemon_mode_records_polls_to_a_replay_file(server: Server, tmp_path: Pa
     assert metadata[4] == ConnectionSource.mysql
     assert rows[0] >= 5
     assert rows[1] < rows[2]
+
+
+def test_daemon_rows_carry_utc_timestamps_and_the_interval_behind_their_rates(server: Server, tmp_path: Path) -> None:
+    """A reader can rebuild any per-second rate from two adjacent rows and the interval the later one carries."""
+    with traffic(server, "SELECT 1"):
+        run_daemon(server, tmp_path, min_rows=6)
+    started = datetime.now(timezone.utc)
+    rows = read_replay_rows(daemon_replay_file(server, tmp_path), "id, timestamp, data")
+
+    previous = None
+    for _, stamp, data in rows:
+        # Row timestamps are UTC, the zone the metric history already uses
+        row_time = datetime.strptime(stamp, ReplayManager.ROW_TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
+        assert 0 <= (started - row_time).total_seconds() < 300, stamp
+        datetimes = data["metric_manager"]["datetimes"]
+        if datetimes:
+            metric_time = datetime.strptime(datetimes[-1], METRIC_DATETIME_FORMAT).replace(tzinfo=timezone.utc)
+            assert 0 <= (row_time - metric_time).total_seconds() <= 2, (stamp, datetimes)
+
+        status = data["global_status"]
+        interval = status["replay_polling_interval"]
+        assert interval > 0
+        if previous is not None:
+            # Dolphie divided this row's rates by the interval it wrote into the row
+            assert interval > 0.5, interval
+            delta = status["Queries"] - previous["Queries"]
+            assert data["metric_manager"]["dml"]["Queries"][-1] == pytest.approx(delta / interval)
+        previous = status
+
+
+@pytest.mark.flavor_agnostic
+def test_daemon_stopped_by_systemd_closes_the_replay_file(server: Server, tmp_path: Path) -> None:
+    """SIGTERM, which systemd sends, must end in the same clean close as SIGINT: WAL folded, no sidecars."""
+    with daemon(server, tmp_path, stop_signal=signal.SIGTERM) as (process, replay_file):
+        wait_for_rows(process, replay_file, 3)
+        assert replay_file.with_name("daemon.db-wal").exists()
+
+    assert "Shutting down" in (tmp_path / "daemon.log").read_text()
+    assert sidecars(replay_file) == set()
+    assert journal_mode(replay_file) == "delete"
+    assert replay_row_count(replay_file) >= 3
 
 
 @pytest.mark.flavor_agnostic

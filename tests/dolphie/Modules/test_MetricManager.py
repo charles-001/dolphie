@@ -219,6 +219,44 @@ def test_snapshots_wait_for_a_writer_holding_the_lock() -> None:
     )
 
 
+def refresh_row_locks(manager: MetricManager, *, at: datetime, waits: int, waited_ms: int) -> None:
+    manager.refresh_data(
+        at,
+        polling_latency=1,
+        global_status={"Innodb_row_lock_waits": waits, "Innodb_row_lock_time": waited_ms},
+    )
+
+
+def test_row_lock_average_wait_divides_new_time_by_new_waits() -> None:
+    manager = MetricManager(None)
+    refresh_row_locks(manager, at=BASE_TIME, waits=10, waited_ms=1000)
+
+    refresh_row_locks(manager, at=BASE_TIME + timedelta(seconds=1), waits=14, waited_ms=1300)
+    refresh_row_locks(manager, at=BASE_TIME + timedelta(seconds=2), waits=14, waited_ms=1300)
+
+    assert metric_values(manager.metrics.row_lock_wait.avg_wait_ms) == pytest.approx([75.0, 0.0])
+    assert metric_values(manager.metrics.row_locks.Innodb_row_lock_waits) == pytest.approx([4.0, 0.0])
+
+
+def test_row_lock_average_wait_treats_counter_reset_as_a_new_baseline() -> None:
+    manager = MetricManager(None)
+    refresh_row_locks(manager, at=BASE_TIME, waits=10, waited_ms=1000)
+    refresh_row_locks(manager, at=BASE_TIME + timedelta(seconds=1), waits=2, waited_ms=50)
+
+    refresh_row_locks(manager, at=BASE_TIME + timedelta(seconds=2), waits=4, waited_ms=250)
+
+    assert metric_values(manager.metrics.row_lock_wait.avg_wait_ms) == pytest.approx([0.0, 100.0])
+
+
+def test_row_lock_average_wait_is_skipped_when_the_server_lacks_the_counters() -> None:
+    manager = MetricManager(None)
+    refresh(manager, at=BASE_TIME, queries=100)
+
+    refresh(manager, at=BASE_TIME + timedelta(seconds=1), queries=101)
+
+    assert metric_values(manager.metrics.row_lock_wait.avg_wait_ms) == []
+
+
 def test_returning_counter_establishes_new_baseline_after_missing_sample() -> None:
     manager = MetricManager(None)
     refresh(manager, at=BASE_TIME, queries=100)
