@@ -26,8 +26,16 @@ if TYPE_CHECKING:
 
 
 def mount_holding(path: str) -> str | None:
-    """The longest mount point that contains ``path``, after resolving symlinks."""
+    """The longest mount point that contains ``path``, or None when ``path`` is not on this host."""
     real = os.path.realpath(path)
+    # The root mount contains every path, so a path this host lacks must be ruled out before the
+    # mount table is searched. Denied access still proves the path is here.
+    try:
+        os.stat(real)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        pass
     mounts = sorted((partition.mountpoint for partition in psutil.disk_partitions(all=True)), key=len, reverse=True)
     return next((mount for mount in mounts if real == mount or real.startswith(f"{mount.rstrip('/')}/")), None)
 
@@ -353,14 +361,14 @@ class Dolphie:
             if self._datadir_mount[0] != datadir:
                 self._datadir_mount = (datadir, mount_holding(datadir))
             mount = self._datadir_mount[1]
-            try:
-                usage = psutil.disk_usage(mount or datadir)
-            except OSError:
-                pass
-            else:
-                self.system_utilization["Datadir_Total"] = usage.total
-                self.system_utilization["Datadir_Used"] = usage.used
-                if mount is not None:
+            if mount is not None:
+                try:
+                    usage = psutil.disk_usage(mount)
+                except OSError:
+                    pass
+                else:
+                    self.system_utilization["Datadir_Total"] = usage.total
+                    self.system_utilization["Datadir_Used"] = usage.used
                     self.system_utilization["Datadir_Mount"] = mount
 
     def get_group_replication_metadata(self):
