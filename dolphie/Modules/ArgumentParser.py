@@ -487,7 +487,7 @@ Dolphie's config supports these options under [dolphie] section:
             action="store_true",
             help=(
                 "Store a compact summary next to each replay row: every metric's latest value, status values, "
-                "system utilization, thread ages, lock states, and replication state. Dolphie and other readers "
+                "system utilization, lock states, and replication state. Dolphie and other readers "
                 "build timelines and rebuild graphs from it without decoding whole rows. Costs roughly a "
                 "kilobyte per row"
             ),

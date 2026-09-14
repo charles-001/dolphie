@@ -531,6 +531,7 @@ def make_recording_dolphie(replay_dir: Path, *, daemon_mode: bool = True, **over
         daemon_mode=daemon_mode,
         record_for_replay=True,
         worker_processing_time=0.05,
+        polling_latency=2.04,
         processlist_threads=threads,
         global_status={"Uptime": 1000, "Threads_running": 2},
         global_variables={
@@ -596,9 +597,29 @@ def test_summary_names_only_keys_the_recorder_writes(tmp_path: Path) -> None:
     summary_keys = {*ReplayManager.SUMMARY_WHOLE_KEYS, *ReplayManager.SUMMARY_FIELDS}
     assert summary_keys <= set(data_dict), summary_keys - set(data_dict)
     assert "metric_manager" not in summary_keys
-    # Thread fields come from Dolphie's own processlist shape, so they are checked against a recorded thread
-    thread = data_dict["processlist"][0]
-    assert set(ReplayManager.SUMMARY_FIELDS["processlist"]) <= set(thread)
+    # The processlist grows with load and no timeline reads it, so it stays out of the summary
+    assert "processlist" not in summary_keys
+
+
+def test_row_carries_the_seconds_its_rates_were_divided_by(tmp_path: Path) -> None:
+    """Row timestamps hold whole seconds, so a reader's own rate needs the poll interval."""
+    manager = ReplayManager(make_recording_dolphie(tmp_path))
+    try:
+        data_dict = manager._build_base_data_dict(manager._prepare_processlist())
+    finally:
+        manager.close()
+    assert data_dict["global_status"]["replay_polling_interval"] == 2.04
+    assert data_dict["global_status"]["replay_polling_latency"] == 0.05
+
+
+def test_rows_are_stamped_in_utc_like_the_metric_history(tmp_path: Path) -> None:
+    before = datetime.now(timezone.utc).replace(microsecond=0)
+    replay_file = record_replay(tmp_path, polls=1)
+    after = datetime.now(timezone.utc)
+
+    ((_, stamp),) = read_replay_rows(replay_file, "id, timestamp")
+    stamped = datetime.strptime(stamp, ReplayManager.ROW_TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
+    assert before <= stamped <= after
 
 
 def test_readme_documents_every_summary_key_for_external_readers() -> None:
@@ -894,7 +915,7 @@ def test_replay_summary_keeps_the_timeline_subset_of_every_row(tmp_path: Path) -
         }
         for key in ReplayManager.SUMMARY_WHOLE_KEYS:
             assert summary[key] == data[key]
-        assert summary["processlist"] == [{"time": 42, "command": "Query"}, {"time": 3, "command": "Sleep"}]
+        assert "processlist" not in summary
         assert summary["metadata_locks"] == [{"LOCK_TYPE": "SHARED_WRITE", "LOCK_STATUS": "PENDING"}]
         assert summary["global_variables"] == {"version": "8.4.7", "read_only": "OFF", "max_connections": 151}
         assert summary["replication_status"] == [

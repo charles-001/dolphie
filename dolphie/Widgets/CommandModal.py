@@ -278,7 +278,7 @@ class CommandModal(ModalScreen):
         elif self.command == HotkeyCommands.replay_seek:
             if self.max_replay_timestamp:
                 input.value = self.max_replay_timestamp
-            input.border_title = "Timestamp"
+            input.border_title = "Timestamp [$dark_gray](UTC)"
             input.placeholder = "Format: 2024-07-25 13:00:00"
             input.focus()
         else:

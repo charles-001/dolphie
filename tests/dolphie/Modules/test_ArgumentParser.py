@@ -128,6 +128,7 @@ def test_debug_options_shows_the_filters_each_hostgroup_host_starts_with(parse_c
     # Hosts merge their credential profile's filters when their tab is created, which is after
     # debug options are printed, so the merged option alone doesn't cover them
     monkeypatch.setenv("COLUMNS", "300")  # Wide enough that the table doesn't wrap or truncate
+    monkeypatch.delenv("TERM", raising=False)  # Rich ignores COLUMNS and fixes a dumb terminal at 80
 
     with pytest.raises(SystemExit):
         parse_config("-H", "myhostgroup", "--debug-options")

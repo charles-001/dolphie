@@ -191,7 +191,7 @@ class Tab:
 
         # Update the dashboard title with the timestamp of the replay event
         self.dashboard_replay.update(
-            f"[b]Replay[/b] ([$dark_gray]{os.path.basename(self.dolphie.replay_file)}[/$dark_gray])"
+            f"[b]Replay[/b] ([$dark_gray]{os.path.basename(self.dolphie.replay_file)} · UTC[/$dark_gray])"
         )
         self.dashboard_replay_start_end.update(
             f"{min_timestamp} [$b_highlight]<-[/$b_highlight] "
