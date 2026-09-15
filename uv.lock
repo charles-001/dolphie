@@ -373,7 +373,7 @@ wheels = [
 
 [[package]]
 name = "dolphie"
-version = "6.17.1"
+version = "6.18.0"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },
