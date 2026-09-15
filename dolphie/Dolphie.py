@@ -45,6 +45,50 @@ def mount_holding(path: str) -> str | None:
     return next((mount for mount in mounts if real == mount or real.startswith(f"{mount.rstrip('/')}/")), None)
 
 
+@cache
+def mounted_devices() -> frozenset[str]:
+    """Every block device that carries a mounted filesystem, named as the IO counters key it.
+
+    ``/dev/mapper/vg0-root`` is a link to ``/dev/dm-0``, and the counters know only the latter.
+    Cached because the mount table does not change under a running server.
+    """
+    return frozenset(
+        os.path.basename(os.path.realpath(partition.device))
+        for partition in psutil.disk_partitions()
+        if partition.device.startswith("/dev/")
+    )
+
+
+def disk_io_counts() -> tuple[int, int]:
+    """Reads and writes across the host, each IO counted once.
+
+    The sum runs over the devices that carry a filesystem. psutil's own total counts an IO at a
+    RAID or LVM device and again at each member under it, and adds every loop device, so it is
+    several times the real figure and the multiple depends on the host's layout.
+    """
+    per_disk = psutil.disk_io_counters(perdisk=True)
+    mounted = [per_disk[name] for name in mounted_devices() if name in per_disk]
+    if not mounted:
+        # A platform whose counter names do not match its mount table, such as macOS
+        total = psutil.disk_io_counters()
+        return (total.read_count, total.write_count) if total else (0, 0)
+    return sum(io.read_count for io in mounted), sum(io.write_count for io in mounted)
+
+
+def network_io_bytes() -> tuple[int, int]:
+    """Bytes sent and received over the interfaces that carry traffic once.
+
+    Loopback is left out. So is a bond or bridge member, whose bytes the master counts again.
+    """
+    sent = received = 0
+    for nic, io in psutil.net_io_counters(pernic=True).items():
+        if nic in ("lo", "lo0") or os.path.exists(f"/sys/class/net/{nic}/master"):
+            continue
+        sent += io.bytes_sent
+        received += io.bytes_recv
+    return sent, received
+
+
 class Dolphie:
     def __init__(self, config: Config, app: DolphieApp) -> None:
         self.config = config
@@ -332,8 +376,8 @@ class Dolphie:
 
         virtual_memory = psutil.virtual_memory()
         swap_memory = psutil.swap_memory()
-        network_io = psutil.net_io_counters()
-        disk_io = psutil.disk_io_counters()
+        network_up, network_down = network_io_bytes()
+        disk_read, disk_write = disk_io_counts()
 
         self.system_utilization = {
             "Uptime": int(time.time() - psutil.boot_time()),
@@ -343,10 +387,10 @@ class Dolphie:
             "Memory_Used": virtual_memory.used,
             "Swap_Total": swap_memory.total,
             "Swap_Used": swap_memory.used,
-            "Network_Up": network_io.bytes_sent,
-            "Network_Down": network_io.bytes_recv,
-            "Disk_Read": disk_io.read_count if disk_io else 0,
-            "Disk_Write": disk_io.write_count if disk_io else 0,
+            "Network_Up": network_up,
+            "Network_Down": network_down,
+            "Disk_Read": disk_read,
+            "Disk_Write": disk_write,
         }
 
         # Include the load average if it's available

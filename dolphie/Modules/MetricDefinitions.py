@@ -73,8 +73,8 @@ class MetricData:
     last_value: int | float | None = None
     graphable: bool = True
     create_switch: bool = True
-    # Smooth transient extreme samples (sensor glitches) using recent history.
-    smooth_extreme_values: bool = False
+    # The source's first reading is a meaningless zero that the second reading overwrites.
+    replace_first_zero: bool = False
     _values: deque[MetricValue] = field(default_factory=deque, init=False, repr=False)
     _datetimes: deque[str] = field(default_factory=deque, init=False, repr=False)
     _polling_intervals: deque[float] = field(default_factory=deque, init=False, repr=False)
@@ -670,7 +670,7 @@ def create_metric_instances() -> MetricInstances:
                 color=MetricColor.blue,
                 per_second_calculation=False,
                 create_switch=False,
-                smooth_extreme_values=True,
+                replace_first_zero=True,
             ),
         ),
         system_memory=SystemMemoryMetrics(
