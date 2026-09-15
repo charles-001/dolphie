@@ -30,9 +30,6 @@ class MetricManager:
     DEFAULT_ROLLING_WINDOW_MINUTES: int = 10
     CHECKPOINT_SYNC_FLUSH_RATIO: float = 0.825
     AHI_SMOOTHING_FACTOR: float = 0.5
-    EXTREME_VALUES: frozenset[int] = frozenset({0, 100})
-    SMOOTHING_THRESHOLD: int = 10
-    SMOOTHING_SAMPLE_COUNT: int = 3
 
     def __init__(
         self,
@@ -413,17 +410,6 @@ class MetricManager:
                 )
             else:
                 metric_value = current_value
-
-            if metric_data.smooth_extreme_values:
-                recent_values, total_count = metric_data.recent_values(self.SMOOTHING_SAMPLE_COUNT)
-                if total_count == 1 and recent_values[0] == 0:
-                    metric_data.replace_latest_sample(metric_value)
-                elif (
-                    metric_value in self.EXTREME_VALUES
-                    and abs(metric_value - (recent_values[-1] if recent_values else 0)) > self.SMOOTHING_THRESHOLD
-                ):
-                    if recent_values:
-                        metric_value = sum(recent_values) / len(recent_values)
 
             self.add_metric(metric_data, metric_value)
 
