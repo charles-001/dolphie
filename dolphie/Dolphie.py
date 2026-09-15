@@ -4,6 +4,7 @@ import ipaddress
 import os
 import socket
 import time
+from collections.abc import Mapping
 from datetime import datetime
 from functools import cache
 from typing import TYPE_CHECKING, Any
@@ -73,6 +74,30 @@ def disk_io_counts() -> tuple[int, int]:
         total = psutil.disk_io_counters()
         return (total.read_count, total.write_count) if total else (0, 0)
     return sum(io.read_count for io in mounted), sum(io.write_count for io in mounted)
+
+
+def cpu_percent_between(previous: Mapping[str, float], current: Mapping[str, float]) -> float | None:
+    """The busy share of the CPU time that passed between two ``psutil.cpu_times()`` readings.
+
+    Same arithmetic as ``psutil.cpu_percent``, on readings the caller holds as ``_asdict()``.
+    psutil keeps its previous reading per thread, and a poll can run on any thread of the worker
+    pool, so its figure would span a different window on each thread and start every thread at
+    0. None when no CPU time passed between the readings.
+    """
+
+    def total(times: Mapping[str, float]) -> float:
+        # Linux counts guest time inside user and nice already. Other platforms have no such field.
+        return sum(times.values()) - times.get("guest", 0.0) - times.get("guest_nice", 0.0)
+
+    def idle(times: Mapping[str, float]) -> float:
+        # Linux keeps IO wait out of idle. Other platforms have no such field.
+        return times["idle"] + times.get("iowait", 0.0)
+
+    elapsed = total(current) - total(previous)
+    if elapsed <= 0:
+        return None
+    busy = elapsed - (idle(current) - idle(previous))
+    return round(min(max(busy / elapsed * 100, 0.0), 100.0), 1)
 
 
 def network_io_bytes() -> tuple[int, int]:
@@ -164,6 +189,7 @@ class Dolphie:
         self.ddl: list[DataTypes.DatabaseRow] = []
         self.disk_io_metrics: dict[str, int | str] = {}
         self.system_utilization: DataTypes.SystemUtilization = {}
+        self.cpu_times: dict[str, float] | None = None
         self.host_cache: dict[str, str] = {}
         self.proxysql_hostgroup_summary: list[DataTypes.DatabaseRow] = []
         self.proxysql_mysql_query_rules: list[DataTypes.DatabaseRow] = []
@@ -378,11 +404,11 @@ class Dolphie:
         swap_memory = psutil.swap_memory()
         network_up, network_down = network_io_bytes()
         disk_read, disk_write = disk_io_counts()
+        cpu_times, self.cpu_times = self.cpu_times, psutil.cpu_times()._asdict()
 
         self.system_utilization = {
             "Uptime": int(time.time() - psutil.boot_time()),
             "CPU_Count": psutil.cpu_count(logical=True) or 0,
-            "CPU_Percent": psutil.cpu_percent(interval=0),
             "Memory_Total": virtual_memory.total,
             "Memory_Used": virtual_memory.used,
             "Swap_Total": swap_memory.total,
@@ -392,6 +418,12 @@ class Dolphie:
             "Disk_Read": disk_read,
             "Disk_Write": disk_write,
         }
+
+        # The first poll has nothing to measure against, like every counter-based metric
+        if cpu_times is not None:
+            cpu_percent = cpu_percent_between(cpu_times, self.cpu_times)
+            if cpu_percent is not None:
+                self.system_utilization["CPU_Percent"] = cpu_percent
 
         # Include the load average if it's available
         try:

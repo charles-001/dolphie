@@ -8,11 +8,21 @@ from typing import cast
 
 import pytest
 
-from dolphie.Dolphie import Dolphie, disk_io_counts, mount_holding, mounted_devices, network_io_bytes
+from dolphie.Dolphie import (
+    Dolphie,
+    cpu_percent_between,
+    disk_io_counts,
+    mount_holding,
+    mounted_devices,
+    network_io_bytes,
+)
 
 DiskUsage = namedtuple("DiskUsage", "total used free percent")
 Partition = namedtuple("Partition", "device mountpoint fstype opts")
 DiskIO = namedtuple("DiskIO", "read_count write_count")
+LinuxCpu = namedtuple("LinuxCpu", "user nice system idle iowait irq softirq steal guest guest_nice")
+WindowsCpu = namedtuple("WindowsCpu", "user system idle interrupt dpc")
+MacCpu = namedtuple("MacCpu", "user nice system idle")
 NetIO = namedtuple("NetIO", "bytes_sent bytes_recv")
 
 
@@ -23,6 +33,7 @@ def make_dolphie(global_variables: dict[str, str]) -> Dolphie:
         enable_system_utilization=True,
         global_variables=global_variables,
         system_utilization={},
+        cpu_times=None,
     )
     return cast(Dolphie, dolphie)
 
@@ -118,7 +129,6 @@ def test_leaves_disk_usage_out_before_variables_arrive_or_when_the_path_is_not_o
     first_poll = make_dolphie({})
     Dolphie.collect_system_utilization(first_poll)
     assert "Datadir_Total" not in first_poll.system_utilization
-    assert "CPU_Percent" in first_poll.system_utilization
 
     remote = make_dolphie({"datadir": "/container/only/"})
     Dolphie.collect_system_utilization(remote)
@@ -189,3 +199,50 @@ def test_counts_a_bond_once_and_leaves_loopback_out(monkeypatch: pytest.MonkeyPa
     )
 
     assert network_io_bytes() == (15_966_098, 5_375_957)
+
+
+def test_cpu_percent_is_the_busy_share_of_the_time_between_two_readings() -> None:
+    # 100 seconds of CPU time passed: 30 busy, 60 idle, 10 in IO wait. IO wait is not busy.
+    before = LinuxCpu(
+        user=100, nice=0, system=50, idle=1000, iowait=20, irq=0, softirq=0, steal=0, guest=0, guest_nice=0
+    )
+    after = LinuxCpu(
+        user=120, nice=0, system=60, idle=1060, iowait=30, irq=0, softirq=0, steal=0, guest=0, guest_nice=0
+    )
+    assert cpu_percent_between(before._asdict(), after._asdict()) == 30.0
+
+
+def test_cpu_percent_leaves_guest_time_out_of_the_total_because_linux_counts_it_inside_user() -> None:
+    before = LinuxCpu(user=0, nice=0, system=0, idle=0, iowait=0, irq=0, softirq=0, steal=0, guest=0, guest_nice=0)
+    after = LinuxCpu(user=50, nice=0, system=0, idle=50, iowait=0, irq=0, softirq=0, steal=0, guest=50, guest_nice=0)
+    assert cpu_percent_between(before._asdict(), after._asdict()) == 50.0
+
+
+def test_cpu_percent_reads_windows_and_macos_tuples_which_have_no_iowait_or_guest() -> None:
+    assert cpu_percent_between(WindowsCpu(10, 10, 80, 0, 0)._asdict(), WindowsCpu(38, 20, 120, 1, 1)._asdict()) == 50.0
+    assert cpu_percent_between(MacCpu(10, 0, 10, 80)._asdict(), MacCpu(10, 0, 10, 180)._asdict()) == 0.0
+
+
+def test_cpu_percent_shows_a_pegged_host_as_100_and_no_elapsed_time_as_unknown() -> None:
+    assert cpu_percent_between(MacCpu(0, 0, 0, 0)._asdict(), MacCpu(80, 0, 20, 0)._asdict()) == 100.0
+    assert cpu_percent_between(MacCpu(5, 0, 5, 90)._asdict(), MacCpu(5, 0, 5, 90)._asdict()) is None
+
+
+def test_cpu_percent_comes_from_the_instance_and_not_from_the_polling_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    readings = iter(
+        [
+            LinuxCpu(user=0, nice=0, system=0, idle=0, iowait=0, irq=0, softirq=0, steal=0, guest=0, guest_nice=0),
+            LinuxCpu(user=25, nice=0, system=0, idle=75, iowait=0, irq=0, softirq=0, steal=0, guest=0, guest_nice=0),
+            LinuxCpu(user=105, nice=0, system=0, idle=95, iowait=0, irq=0, softirq=0, steal=0, guest=0, guest_nice=0),
+        ]
+    )
+    monkeypatch.setattr("dolphie.Dolphie.psutil.cpu_times", lambda: next(readings))
+    monkeypatch.setattr("dolphie.Dolphie.psutil.disk_partitions", lambda **_: [])
+    dolphie = make_dolphie({})
+
+    Dolphie.collect_system_utilization(dolphie)
+    assert "CPU_Percent" not in dolphie.system_utilization
+    Dolphie.collect_system_utilization(dolphie)
+    assert dolphie.system_utilization["CPU_Percent"] == 25.0
+    Dolphie.collect_system_utilization(dolphie)
+    assert dolphie.system_utilization["CPU_Percent"] == 80.0

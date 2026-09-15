@@ -411,13 +411,6 @@ class MetricManager:
             else:
                 metric_value = current_value
 
-            # psutil's first CPU reading is a meaningless zero. The second reading overwrites it.
-            # A later 0 or 100 is kept as read: a pegged host must show as one.
-            if metric_data.replace_first_zero:
-                recent_values, total_count = metric_data.recent_values(1)
-                if total_count == 1 and recent_values[0] == 0:
-                    metric_data.replace_latest_sample(metric_value)
-
             self.add_metric(metric_data, metric_value)
 
     def update_metrics_last_value(self) -> None:

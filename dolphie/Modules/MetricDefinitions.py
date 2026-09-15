@@ -73,8 +73,6 @@ class MetricData:
     last_value: int | float | None = None
     graphable: bool = True
     create_switch: bool = True
-    # The source's first reading is a meaningless zero that the second reading overwrites.
-    replace_first_zero: bool = False
     _values: deque[MetricValue] = field(default_factory=deque, init=False, repr=False)
     _datetimes: deque[str] = field(default_factory=deque, init=False, repr=False)
     _polling_intervals: deque[float] = field(default_factory=deque, init=False, repr=False)
@@ -97,12 +95,6 @@ class MetricData:
             self._values.append(value)
             self._datetimes.append(timestamp)
             self._polling_intervals.append(max(polling_interval, 0))
-
-    def replace_latest_sample(self, value: MetricValue) -> None:
-        """Replace the latest value while retaining its timestamp metadata."""
-        with self._lock:
-            if self._values:
-                self._values[-1] = value
 
     def replace_history(self, values: list[MetricValue], datetimes: list[str]) -> None:
         """Replace history from replay data, tail-aligning values with timestamps."""
@@ -151,13 +143,6 @@ class MetricData:
         """Return an atomic copy of only the stored values."""
         with self._lock:
             return list(self._values)
-
-    def recent_values(self, count: int) -> tuple[list[MetricValue], int]:
-        """Return up to the newest count values and the total stored sample count."""
-        with self._lock:
-            total = len(self._values)
-            start = max(total - count, 0)
-            return [self._values[index] for index in range(start, total)], total
 
     def clear_history(self) -> None:
         """Clear values and all matching sample metadata."""
@@ -670,7 +655,6 @@ def create_metric_instances() -> MetricInstances:
                 color=MetricColor.blue,
                 per_second_calculation=False,
                 create_switch=False,
-                replace_first_zero=True,
             ),
         ),
         system_memory=SystemMemoryMetrics(

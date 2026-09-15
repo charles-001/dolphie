@@ -284,9 +284,3 @@ def cpu_polls(readings: list[float]) -> list[MetricValue]:
 def test_cpu_keeps_a_pegged_host_at_100_and_an_idle_one_at_0() -> None:
     # A reading equal to 0 or 100 is a real reading, not a glitch to smooth into the recent mean.
     assert cpu_polls([0.0, 12.0, 15.0, 100.0, 100.0, 100.0, 0.0]) == [12.0, 15.0, 100.0, 100.0, 100.0, 0.0]
-
-
-def test_cpu_replaces_the_meaningless_first_zero_reading_with_the_second() -> None:
-    # The first poll only sets a baseline, so psutil's first zero reaches the history when the
-    # second poll reads zero too. The third reading stands in for it.
-    assert cpu_polls([0.0, 0.0, 37.5, 40.0]) == [37.5, 37.5, 40.0]
