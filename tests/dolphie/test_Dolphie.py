@@ -1,5 +1,7 @@
 import os
+import sqlite3
 from collections import namedtuple
+from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -20,6 +22,25 @@ def make_dolphie(global_variables: dict[str, str]) -> Dolphie:
         system_utilization={},
     )
     return cast(Dolphie, dolphie)
+
+
+def test_lists_the_sqlite_databases_and_not_the_files_sqlite_keeps_beside_them(tmp_path: Path) -> None:
+    host_dir = tmp_path / "localhost_3306"
+    host_dir.mkdir()
+    # A daemon recording in WAL mode, an old-schema file it renamed, and a stray operator copy
+    with closing(sqlite3.connect(host_dir / "daemon.db")) as connection:
+        connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute("CREATE TABLE replay_data (id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO replay_data DEFAULT VALUES")
+        assert {p.name for p in host_dir.iterdir()} >= {"daemon.db", "daemon.db-wal", "daemon.db-shm"}
+        with closing(sqlite3.connect(host_dir / "daemon.db_old_schema_v1")) as old:
+            old.execute("CREATE TABLE replay_data (id INTEGER PRIMARY KEY)")
+        (host_dir / "notes.txt").write_text("not a replay")
+        dolphie = cast(Dolphie, SimpleNamespace(replay_dir=str(tmp_path)))
+
+        listed = [path for path, _ in Dolphie.get_replay_files(dolphie)]
+
+    assert listed == [str(host_dir / "daemon.db"), str(host_dir / "daemon.db_old_schema_v1")]
 
 
 def test_records_the_filesystem_holding_the_data_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
